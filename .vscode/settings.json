@@ -1,0 +1,4 @@
+{
+    "css.lint.unknownAtRules": "ignore",
+    "chat.tools.terminal.ignoreDefaultAutoApproveRules": false
+}

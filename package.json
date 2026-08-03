@@ -1,0 +1,44 @@
+{
+  "name": "muscle-fitness",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@radix-ui/react-accordion": "^1.2.20",
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@stripe/stripe-js": "^9.12.1",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.111.0",
+    "@tensorflow-models/pose-detection": "^2.1.3",
+    "@tensorflow/tfjs-backend-webgl": "^4.22.0",
+    "framer-motion": "^12.43.0",
+    "googleapis": "^173.0.0",
+    "lucide-react": "^1.28.0",
+    "motion": "^12.43.0",
+    "next": "16.2.12",
+    "next-themes": "^0.4.6",
+    "openai": "^7.1.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-hot-toast": "^2.6.0",
+    "react-webcam": "^7.2.0",
+    "recharts": "^3.10.1",
+    "stripe": "^22.3.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.12",
+    "supabase": "^2.111.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

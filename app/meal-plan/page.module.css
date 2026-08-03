@@ -1,0 +1,1454 @@
+/* =========================================================
+   MEAL PLAN PAGE
+========================================================= */
+
+.page {
+  --background: #050505;
+  --surface: #0a0a0a;
+
+  --white: #f3f3ef;
+  --white-soft: #d6d6d1;
+
+  --text: #999994;
+  --muted: #6f6f6a;
+
+  --border: rgba(255, 255, 255, 0.13);
+
+  position: relative;
+
+  width: 100%;
+  min-height: 100vh;
+
+  overflow-x: hidden;
+
+  background: var(--background);
+  color: var(--white);
+
+  isolation: isolate;
+}
+
+/* =========================================================
+   BACKGROUND
+========================================================= */
+
+.background {
+  position: fixed;
+
+  inset: -4%;
+
+  z-index: -10;
+
+  background-image:
+    url("/images/meal-plan-bg.jpg");
+
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+
+  background-color: #060606;
+
+  filter:
+    grayscale(85%)
+    contrast(1.08)
+    brightness(0.32);
+
+  transform: scale(1.06);
+}
+
+.overlay {
+  position: fixed;
+
+  inset: 0;
+
+  z-index: -8;
+
+  pointer-events: none;
+
+  background:
+    radial-gradient(
+      circle at 70% 35%,
+      rgba(255, 255, 255, 0.035),
+      transparent 30%
+    ),
+    linear-gradient(
+      90deg,
+      rgba(5, 5, 5, 0.96),
+      rgba(5, 5, 5, 0.82) 48%,
+      rgba(5, 5, 5, 0.62)
+    ),
+    linear-gradient(
+      to bottom,
+      #050505,
+      transparent 25%,
+      #050505
+    );
+}
+
+.grid {
+  position: fixed;
+
+  inset: 0;
+
+  z-index: -6;
+
+  pointer-events: none;
+
+  opacity: 0.075;
+
+  background-image:
+    linear-gradient(
+      rgba(255, 255, 255, 0.06) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.06) 1px,
+      transparent 1px
+    );
+
+  background-size: 90px 90px;
+
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent,
+      #000 15%,
+      #000 85%,
+      transparent
+    );
+}
+
+/* =========================================================
+   NAVBAR
+========================================================= */
+
+.navbar {
+  position: fixed;
+
+  top: 0;
+  left: 50%;
+
+  z-index: 100;
+
+  width:
+    min(
+      1440px,
+      calc(100% - 80px)
+    );
+
+  height: 80px;
+
+  transform: translateX(-50%);
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border-bottom:
+    1px solid rgba(255, 255, 255, 0.1);
+
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(5, 5, 5, 0.9),
+      rgba(5, 5, 5, 0.25)
+    );
+
+  backdrop-filter: blur(12px);
+}
+
+.logo {
+  color: var(--white);
+
+  font-size: 17px;
+  font-weight: 800;
+
+  letter-spacing: 2.6px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+
+  gap: 28px;
+}
+
+.nav a {
+  color: #90908b;
+
+  font-size: 9px;
+  font-weight: 700;
+
+  letter-spacing: 1.4px;
+
+  transition: color 0.25s ease;
+}
+
+.nav a:hover {
+  color: #ffffff;
+}
+
+/* =========================================================
+   SHARED
+========================================================= */
+
+.chapter {
+  display: flex;
+  align-items: center;
+
+  gap: 13px;
+
+  color: #747470;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  letter-spacing: 2.8px;
+}
+
+.chapter i {
+  width: 38px;
+  height: 1px;
+
+  background: #5d5d59;
+}
+
+.eyebrow {
+  margin: 25px 0 22px;
+
+  color: #aaa9a4;
+
+  font-size: 9px;
+  font-weight: 700;
+
+  letter-spacing: 5px;
+}
+
+/* =========================================================
+   HERO
+========================================================= */
+
+.hero {
+  position: relative;
+
+  min-height: 100svh;
+
+  padding:
+    125px clamp(25px, 8vw, 150px)
+    55px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.heroContent {
+  position: relative;
+
+  z-index: 10;
+
+  width: min(1150px, 100%);
+}
+
+.hero h1 {
+  margin: 0;
+
+  color: var(--white);
+
+  font-size:
+    clamp(62px, 7vw, 128px);
+
+  font-weight: 800;
+
+  line-height: 0.88;
+
+  letter-spacing:
+    clamp(-8px, -0.42vw, -4px);
+}
+
+.hero h1 span {
+  color: transparent;
+
+  -webkit-text-stroke:
+    1.35px rgba(243, 243, 239, 0.78);
+}
+
+.heroDescription {
+  max-width: 650px;
+
+  margin: 37px 0 0;
+
+  color: var(--text);
+
+  font-size: 14px;
+
+  line-height: 1.85;
+}
+
+.heroButton {
+  width: fit-content;
+  min-height: 54px;
+
+  margin-top: 34px;
+  padding: 0 25px;
+
+  display: inline-flex;
+  align-items: center;
+
+  gap: 30px;
+
+  border: 1px solid var(--white);
+
+  background: var(--white);
+  color: #050505;
+
+  font-size: 9px;
+  font-weight: 800;
+
+  letter-spacing: 1.6px;
+
+  transition:
+    transform 0.3s ease,
+    background 0.3s ease,
+    color 0.3s ease;
+}
+
+.heroButton:hover {
+  transform: translateY(-4px);
+
+  background: transparent;
+  color: var(--white);
+}
+
+.heroStats {
+  width: min(1150px, 100%);
+
+  margin-top: 70px;
+
+  display: grid;
+  grid-template-columns:
+    repeat(4, 1fr);
+
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.heroStats > div {
+  min-height: 90px;
+
+  padding: 22px;
+
+  border-right: 1px solid var(--border);
+}
+
+.heroStats > div:last-child {
+  border-right: none;
+}
+
+.heroStats strong {
+  color: #efefec;
+
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.heroStats span {
+  display: block;
+
+  margin-top: 11px;
+
+  color: #72726e;
+
+  font-size: 7px;
+  font-weight: 700;
+
+  letter-spacing: 2px;
+}
+
+/* =========================================================
+   CALCULATOR
+========================================================= */
+
+.calculator {
+  position: relative;
+
+  min-height: 100vh;
+
+  padding:
+    140px clamp(25px, 8vw, 150px);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(7, 7, 7, 0.97),
+      rgba(10, 10, 10, 0.93)
+    );
+
+  scroll-margin-top: 80px;
+}
+
+.calculatorHeading {
+  max-width: 1050px;
+}
+
+.calculatorHeading h2,
+.generatedHeader h2 {
+  margin: 30px 0 0;
+
+  color: var(--white);
+
+  font-size:
+    clamp(55px, 6.5vw, 115px);
+
+  font-weight: 800;
+
+  line-height: 0.88;
+
+  letter-spacing:
+    clamp(-7px, -0.4vw, -3px);
+}
+
+.calculatorHeading h2 span,
+.generatedHeader h2 span {
+  color: transparent;
+
+  -webkit-text-stroke:
+    1.25px rgba(243, 243, 239, 0.75);
+}
+
+.calculatorHeading > p,
+.generatedHeader > p {
+  max-width: 700px;
+
+  margin: 34px 0 0;
+
+  color: var(--text);
+
+  font-size: 13px;
+
+  line-height: 1.9;
+}
+
+/* =========================================================
+   FORM
+========================================================= */
+
+.form {
+  width: min(1320px, 100%);
+
+  margin-top: 70px;
+}
+
+.formSection {
+  position: relative;
+
+  margin-top: 20px;
+  padding:
+    clamp(25px, 3vw, 40px);
+
+  border: 1px solid var(--border);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.035),
+      rgba(255, 255, 255, 0.01)
+    );
+
+  backdrop-filter: blur(10px);
+}
+
+.formSection:first-child {
+  margin-top: 0;
+}
+
+.formSectionHeader {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 22px;
+}
+
+.formSectionHeader > span {
+  color: #656561;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  letter-spacing: 2px;
+}
+
+.formSectionHeader h3 {
+  margin: 0;
+
+  color: #ecece8;
+
+  font-size: 15px;
+  font-weight: 800;
+
+  letter-spacing: 1.6px;
+}
+
+.formSectionHeader p {
+  margin: 7px 0 0;
+
+  color: #80807b;
+
+  font-size: 11px;
+
+  line-height: 1.65;
+}
+
+/* =========================================================
+   GENDER
+========================================================= */
+
+.genderGrid {
+  margin-top: 32px;
+
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+
+  gap: 14px;
+}
+
+.genderCard {
+  position: relative;
+
+  min-height: 180px;
+
+  padding: 27px;
+
+  border: 1px solid var(--border);
+
+  background: rgba(255, 255, 255, 0.012);
+
+  cursor: pointer;
+
+  transition:
+    border-color 0.3s ease,
+    background 0.3s ease,
+    transform 0.3s ease;
+}
+
+.genderCard:hover {
+  transform: translateY(-4px);
+
+  border-color:
+    rgba(255, 255, 255, 0.4);
+
+  background:
+    rgba(255, 255, 255, 0.035);
+}
+
+.genderCard input {
+  position: absolute;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+.genderCard > span {
+  color: #686864;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  letter-spacing: 2px;
+}
+
+.genderCard h4 {
+  margin: 37px 0 12px;
+
+  color: #efefec;
+
+  font-size: 25px;
+  font-weight: 800;
+
+  letter-spacing: -0.5px;
+}
+
+.genderCard p {
+  max-width: 430px;
+
+  margin: 0;
+
+  color: #888883;
+
+  font-size: 11px;
+
+  line-height: 1.75;
+}
+
+.cardCheck {
+  position: absolute;
+
+  right: 25px;
+  top: 25px;
+
+  width: 12px;
+  height: 12px;
+
+  border: 1px solid #62625e;
+  border-radius: 50%;
+}
+
+.selectedCard {
+  border-color: var(--white);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    );
+}
+
+.selectedCard .cardCheck {
+  border-color: var(--white);
+
+  background: var(--white);
+
+  box-shadow:
+    0 0 15px rgba(255, 255, 255, 0.35);
+}
+
+.selectedCard::before {
+  content: "";
+
+  position: absolute;
+
+  top: -1px;
+  left: -1px;
+
+  width: 70px;
+  height: 2px;
+
+  background: var(--white);
+}
+
+/* =========================================================
+   AGE GROUP
+========================================================= */
+
+.ageGroupGrid {
+  margin-top: 32px;
+
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 14px;
+}
+
+.ageGroupCard {
+  position: relative;
+
+  min-height: 180px;
+
+  padding: 26px;
+
+  display: flex;
+  flex-direction: column;
+
+  border: 1px solid var(--border);
+
+  background:
+    rgba(255, 255, 255, 0.012);
+
+  cursor: pointer;
+
+  transition:
+    border-color 0.3s ease,
+    background 0.3s ease,
+    transform 0.3s ease;
+}
+
+.ageGroupCard:hover {
+  transform: translateY(-4px);
+
+  border-color:
+    rgba(255, 255, 255, 0.4);
+
+  background:
+    rgba(255, 255, 255, 0.035);
+}
+
+.ageGroupCard input {
+  position: absolute;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+.ageGroupCard > span {
+  color: #72726e;
+
+  font-size: 10px;
+  font-weight: 800;
+
+  letter-spacing: 2px;
+}
+
+.ageGroupCard > strong {
+  margin-top: 32px;
+
+  color: #efefec;
+
+  font-size: 17px;
+  font-weight: 800;
+
+  letter-spacing: 0.7px;
+}
+
+.ageGroupCard > small {
+  margin-top: 10px;
+
+  color: #858581;
+
+  font-size: 10px;
+
+  line-height: 1.65;
+}
+
+.ageGroupSelected {
+  border-color: var(--white);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    );
+}
+
+.ageGroupSelected::before {
+  content: "";
+
+  position: absolute;
+
+  top: -1px;
+  left: -1px;
+
+  width: 68px;
+  height: 2px;
+
+  background: var(--white);
+}
+
+/* =========================================================
+   INPUTS
+========================================================= */
+
+.fieldGrid {
+  margin-top: 32px;
+
+  display: grid;
+  grid-template-columns:
+    repeat(4, 1fr);
+
+  gap: 14px;
+}
+
+.field label {
+  display: block;
+
+  margin-bottom: 9px;
+
+  color: #81817c;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  letter-spacing: 1.8px;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  height: 54px;
+
+  padding: 0 15px;
+
+  border: 1px solid var(--border);
+  border-radius: 0;
+
+  outline: none;
+
+  background: rgba(0, 0, 0, 0.32);
+
+  color: #efefec;
+
+  font-size: 12px;
+
+  transition:
+    border-color 0.25s ease,
+    background 0.25s ease;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color:
+    rgba(255, 255, 255, 0.5);
+
+  background:
+    rgba(255, 255, 255, 0.025);
+}
+
+.field select option {
+  background: #080808;
+  color: #efefec;
+}
+
+.field > small {
+  display: block;
+
+  margin-top: 8px;
+
+  color: #666662;
+
+  font-size: 8px;
+}
+
+/* =========================================================
+   GOALS
+========================================================= */
+
+.goalGrid {
+  margin-top: 32px;
+
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 14px;
+}
+
+.goalCard {
+  position: relative;
+
+  min-height: 190px;
+
+  padding: 27px;
+
+  border: 1px solid var(--border);
+
+  background:
+    rgba(255, 255, 255, 0.012);
+
+  cursor: pointer;
+
+  transition:
+    border-color 0.3s ease,
+    background 0.3s ease,
+    transform 0.3s ease;
+}
+
+.goalCard:hover {
+  transform: translateY(-4px);
+
+  border-color:
+    rgba(255, 255, 255, 0.4);
+}
+
+.goalCard input {
+  position: absolute;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+.goalCard > span {
+  color: #696965;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  letter-spacing: 2px;
+}
+
+.goalCard h4 {
+  margin: 40px 0 13px;
+
+  color: #eeeeea;
+
+  font-size: 21px;
+  font-weight: 800;
+
+  letter-spacing: -0.5px;
+}
+
+.goalCard p {
+  margin: 0;
+
+  color: #858581;
+
+  font-size: 11px;
+
+  line-height: 1.75;
+}
+
+.selected {
+  border-color: var(--white);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    );
+}
+
+.disabledCard {
+  opacity: 0.32;
+
+  cursor: not-allowed;
+}
+
+.disabledCard:hover {
+  transform: none;
+
+  border-color: var(--border);
+}
+
+/* =========================================================
+   YOUTH NOTICE
+========================================================= */
+
+.safetyNotice {
+  margin-top: 18px;
+  padding: 18px 20px;
+
+  display: grid;
+  grid-template-columns: 140px 1fr;
+
+  gap: 20px;
+
+  border:
+    1px solid rgba(225, 185, 100, 0.28);
+
+  background:
+    rgba(220, 180, 90, 0.035);
+}
+
+.safetyNotice > span {
+  color: #d5b778;
+
+  font-size: 8px;
+  font-weight: 800;
+
+  letter-spacing: 2px;
+}
+
+.safetyNotice p {
+  margin: 0;
+
+  color: #aaa49a;
+
+  font-size: 10px;
+
+  line-height: 1.75;
+}
+
+/* =========================================================
+   PROFILE
+========================================================= */
+
+.profileStrip {
+  margin-top: 35px;
+
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+
+  background:
+    rgba(255, 255, 255, 0.015);
+}
+
+.profileStrip > div {
+  min-height: 90px;
+
+  padding: 21px 23px;
+
+  border-right: 1px solid var(--border);
+}
+
+.profileStrip > div:last-child {
+  border-right: none;
+}
+
+.profileStrip span {
+  display: block;
+
+  color: #686864;
+
+  font-size: 7px;
+  font-weight: 700;
+
+  letter-spacing: 2px;
+}
+
+.profileStrip strong {
+  display: block;
+
+  margin-top: 14px;
+
+  color: #dededa;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  letter-spacing: 1.1px;
+}
+
+.estimateNote {
+  margin: 18px 0 0;
+
+  color: #7f7f7a;
+
+  font-size: 10px;
+
+  line-height: 1.75;
+}
+
+/* =========================================================
+   LIVE RESULT
+========================================================= */
+
+.livePreview,
+.summaryBar {
+  margin-top: 25px;
+
+  display: grid;
+  grid-template-columns:
+    repeat(5, 1fr);
+
+  border: 1px solid var(--border);
+
+  background:
+    rgba(0, 0, 0, 0.25);
+}
+
+.livePreview > div,
+.summaryBar > div {
+  min-height: 125px;
+
+  padding: 24px;
+
+  border-right: 1px solid var(--border);
+}
+
+.livePreview > div:last-child,
+.summaryBar > div:last-child {
+  border-right: none;
+}
+
+.livePreview span,
+.summaryBar span {
+  display: block;
+
+  color: #70706b;
+
+  font-size: 7px;
+  font-weight: 700;
+
+  letter-spacing: 1.8px;
+}
+
+.livePreview strong,
+.summaryBar strong {
+  display: inline-block;
+
+  margin-top: 21px;
+
+  color: #f0f0ed;
+
+  font-size:
+    clamp(28px, 3vw, 45px);
+
+  font-weight: 800;
+
+  line-height: 1;
+
+  letter-spacing: -2px;
+}
+
+.livePreview small,
+.summaryBar small {
+  margin-left: 7px;
+
+  color: #777772;
+
+  font-size: 8px;
+  font-weight: 700;
+}
+
+/* =========================================================
+   SUBMIT
+========================================================= */
+
+.submitButton {
+  width: 100%;
+  min-height: 60px;
+
+  margin-top: 24px;
+  padding: 0 25px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border: 1px solid var(--white);
+
+  background: var(--white);
+  color: #050505;
+
+  cursor: pointer;
+
+  font-size: 10px;
+  font-weight: 800;
+
+  letter-spacing: 1.7px;
+
+  transition:
+    transform 0.3s ease,
+    background 0.3s ease,
+    color 0.3s ease;
+}
+
+.submitButton span {
+  font-size: 18px;
+  font-weight: 400;
+
+  transition: transform 0.3s ease;
+}
+
+.submitButton:hover {
+  transform: translateY(-4px);
+
+  background: transparent;
+  color: var(--white);
+}
+
+.submitButton:hover span {
+  transform: translateX(6px);
+}
+
+/* =========================================================
+   GENERATED PLAN
+========================================================= */
+
+.generatedPlan {
+  position: relative;
+
+  min-height: 100vh;
+
+  padding:
+    140px clamp(25px, 8vw, 150px);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(5, 5, 5, 0.99),
+      rgba(9, 9, 9, 0.96)
+    );
+
+  scroll-margin-top: 80px;
+}
+
+.generatedHeader {
+  max-width: 1000px;
+}
+
+.generatedGrid {
+  margin-top: 40px;
+
+  display: grid;
+  grid-template-columns:
+    repeat(2, 1fr);
+
+  gap: 16px;
+}
+
+.generatedMeal {
+  position: relative;
+
+  min-height: 310px;
+
+  padding: 29px;
+
+  border: 1px solid var(--border);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.035),
+      rgba(255, 255, 255, 0.01)
+    );
+
+  transition:
+    transform 0.3s ease,
+    background 0.3s ease,
+    border-color 0.3s ease;
+}
+
+.generatedMeal:hover {
+  transform: translateY(-5px);
+
+  border-color:
+    rgba(255, 255, 255, 0.35);
+
+  background:
+    rgba(255, 255, 255, 0.04);
+}
+
+.generatedMealTop {
+  display: flex;
+  justify-content: space-between;
+
+  color: #71716d;
+
+  font-size: 7px;
+  font-weight: 700;
+
+  letter-spacing: 2px;
+}
+
+.generatedMeal h3 {
+  margin: 50px 0 15px;
+
+  color: #eeeeea;
+
+  font-size:
+    clamp(24px, 2.5vw, 39px);
+
+  font-weight: 800;
+
+  line-height: 1;
+
+  letter-spacing: -1.5px;
+}
+
+.generatedMeal > p {
+  max-width: 500px;
+
+  margin: 0;
+
+  color: #8f8f8a;
+
+  font-size: 11px;
+
+  line-height: 1.8;
+}
+
+.generatedMealMacros {
+  position: absolute;
+
+  left: 29px;
+  right: 29px;
+  bottom: 26px;
+
+  padding-top: 20px;
+
+  display: grid;
+  grid-template-columns:
+    repeat(4, 1fr);
+
+  border-top: 1px solid var(--border);
+}
+
+.generatedMealMacros strong {
+  color: #dededa;
+
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.generatedMealMacros span {
+  margin-left: 5px;
+
+  color: #6e6e69;
+
+  font-size: 7px;
+  font-weight: 700;
+}
+
+/* =========================================================
+   PLAN ACTIONS
+========================================================= */
+
+.planActions {
+  margin-top: 30px;
+
+  display: flex;
+
+  gap: 12px;
+}
+
+.planActions button {
+  min-height: 55px;
+
+  padding: 0 24px;
+
+  border: 1px solid var(--border);
+
+  background:
+    rgba(255, 255, 255, 0.015);
+
+  color: #d5d5d0;
+
+  cursor: pointer;
+
+  font-size: 9px;
+  font-weight: 800;
+
+  letter-spacing: 1.4px;
+
+  transition:
+    transform 0.3s ease,
+    border-color 0.3s ease,
+    background 0.3s ease;
+}
+
+.planActions button:first-child {
+  background: var(--white);
+  color: #050505;
+}
+
+.planActions button:hover {
+  transform: translateY(-3px);
+
+  border-color:
+    rgba(255, 255, 255, 0.5);
+}
+
+.finalNotice {
+  max-width: 850px;
+
+  margin: 27px 0 0;
+
+  color: #696965;
+
+  font-size: 9px;
+
+  line-height: 1.8;
+}
+
+/* =========================================================
+   TABLET
+========================================================= */
+
+@media (max-width: 1050px) {
+  .navbar {
+    width:
+      calc(100% - 40px);
+  }
+
+  .nav {
+    gap: 15px;
+  }
+
+  .nav a {
+    font-size: 8px;
+  }
+
+  .fieldGrid {
+    grid-template-columns:
+      repeat(2, 1fr);
+  }
+
+  .livePreview,
+  .summaryBar {
+    grid-template-columns:
+      repeat(3, 1fr);
+  }
+
+  .livePreview > div,
+  .summaryBar > div {
+    border-bottom:
+      1px solid var(--border);
+  }
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 720px) {
+  .navbar {
+    width:
+      calc(100% - 30px);
+
+    height: 70px;
+  }
+
+  .logo {
+    font-size: 14px;
+  }
+
+  .nav {
+    display: none;
+  }
+
+  .hero,
+  .calculator,
+  .generatedPlan {
+    padding:
+      110px 18px 80px;
+  }
+
+  .hero h1,
+  .calculatorHeading h2,
+  .generatedHeader h2 {
+    font-size:
+      clamp(49px, 14vw, 76px);
+
+    letter-spacing: -4px;
+  }
+
+  .heroStats,
+  .genderGrid,
+  .ageGroupGrid,
+  .goalGrid,
+  .fieldGrid,
+  .profileStrip,
+  .livePreview,
+  .summaryBar,
+  .generatedGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .heroStats > div,
+  .profileStrip > div,
+  .livePreview > div,
+  .summaryBar > div {
+    border-right: none;
+
+    border-bottom:
+      1px solid var(--border);
+  }
+
+  .safetyNotice {
+    grid-template-columns: 1fr;
+
+    gap: 9px;
+  }
+
+  .generatedMeal {
+    min-height: 340px;
+  }
+
+  .planActions {
+    flex-direction: column;
+  }
+
+  .planActions button {
+    width: 100%;
+  }
+}   

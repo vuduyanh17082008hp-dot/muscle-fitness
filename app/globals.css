@@ -1,0 +1,542 @@
+@import "tailwindcss";
+
+/* =========================================================
+   MUSCLE FITNESS DESIGN SYSTEM
+   ========================================================= */
+
+:root {
+  /* Background */
+  --color-background: #070707;
+  --color-background-soft: #0d0d0d;
+  --color-surface: #131313;
+  --color-surface-light: #191919;
+  --color-surface-hover: #202020;
+
+  /* Steel */
+  --color-steel-dark: #242424;
+  --color-steel: #4a4a4a;
+  --color-steel-light: #8b8b8b;
+
+  /* Text */
+  --color-text-primary: #f7f7f7;
+  --color-text-secondary: #b5b5b5;
+  --color-text-muted: #7d7d7d;
+  --color-text-dark: #090909;
+
+  /* Brand accent */
+  --color-accent: #b87333;
+  --color-accent-light: #d59659;
+  --color-accent-dark: #7c431e;
+  --color-accent-soft: rgba(184, 115, 51, 0.12);
+
+  /* Status */
+  --color-success: #22c55e;
+  --color-danger: #dc2626;
+  --color-warning: #f59e0b;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-light: rgba(255, 255, 255, 0.17);
+  --color-border-accent: rgba(184, 115, 51, 0.5);
+
+  /* Fonts */
+  --font-body: var(--font-inter), Arial, Helvetica, sans-serif;
+  --font-heading: var(--font-bebas), Impact, sans-serif;
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+  --space-10: 8rem;
+
+  /* Layout */
+  --container-width: 1280px;
+  --navbar-height: 80px;
+
+  /* Shadows */
+  --shadow-card:
+    0 20px 50px rgba(0, 0, 0, 0.45);
+
+  --shadow-card-hover:
+    0 28px 70px rgba(0, 0, 0, 0.62);
+
+  --shadow-accent:
+    0 0 35px rgba(184, 115, 51, 0.24);
+
+  --shadow-accent-strong:
+    0 0 55px rgba(184, 115, 51, 0.35);
+
+  /* Transitions */
+  --transition-fast: 180ms ease;
+  --transition-normal: 300ms ease;
+  --transition-slow: 500ms ease;
+}
+
+/* =========================================================
+   RESET
+   ========================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border-color: var(--color-border);
+}
+
+html {
+  min-width: 320px;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+  background: var(--color-background);
+}
+
+body {
+  position: relative;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: clip;
+
+  color: var(--color-text-primary);
+  background:
+    radial-gradient(
+      circle at 10% 0%,
+      rgba(184, 115, 51, 0.12),
+      transparent 28rem
+    ),
+    radial-gradient(
+      circle at 90% 30%,
+      rgba(255, 255, 255, 0.035),
+      transparent 32rem
+    ),
+    linear-gradient(
+      180deg,
+      #080808 0%,
+      #050505 100%
+    );
+
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Steel grid texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background-image:
+    linear-gradient(
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px
+    );
+
+  background-size: 56px 56px;
+  mask-image: linear-gradient(
+    to bottom,
+    black,
+    transparent 85%
+  );
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+img,
+video,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  color: #070707;
+  background: var(--color-accent);
+}
+
+/* =========================================================
+   TYPOGRAPHY
+   ========================================================= */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-heading);
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+p {
+  margin: 0;
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+.text-gradient-bronze {
+  color: transparent;
+  background:
+    linear-gradient(
+      110deg,
+      #f0c28f 0%,
+      var(--color-accent-light) 35%,
+      var(--color-accent) 65%,
+      #7c431e 100%
+    );
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+/* =========================================================
+   REUSABLE BACKGROUNDS
+   ========================================================= */
+
+.steel-panel {
+  position: relative;
+  overflow: hidden;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.015)
+    ),
+    var(--color-surface);
+
+  box-shadow: var(--shadow-card);
+}
+
+.steel-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
+  background:
+    linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0.045),
+      transparent 35%
+    );
+}
+
+.safe-text-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.94) 0%,
+      rgba(0, 0, 0, 0.75) 48%,
+      rgba(0, 0, 0, 0.18) 100%
+    );
+}
+
+.section-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
+  background-image:
+    linear-gradient(
+      rgba(255, 255, 255, 0.025) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.025) 1px,
+      transparent 1px
+    );
+
+  background-size: 40px 40px;
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent,
+      black 20%,
+      black 80%,
+      transparent
+    );
+}
+
+/* =========================================================
+   FORM
+   ========================================================= */
+
+input,
+textarea,
+select {
+  color: var(--color-text-primary);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Removes white background from browser autofill */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text-primary);
+  box-shadow:
+    0 0 0 1000px var(--color-surface) inset;
+  transition:
+    background-color 9999s ease-in-out 0s;
+}
+
+/* =========================================================
+   ACCESSIBILITY
+   ========================================================= */
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/* =========================================================
+   SCROLLBAR
+   ========================================================= */
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid var(--color-background);
+  border-radius: 999px;
+  background: var(--color-steel);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 640px) {
+  :root {
+    --navbar-height: 72px;
+  }
+
+  body {
+    font-size: 15px;
+  }
+
+  .safe-text-overlay {
+    background:
+      linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0.45) 0%,
+        rgba(0, 0, 0, 0.95) 65%,
+        #070707 100%
+      );
+  }
+}
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+html {
+  scroll-behavior: smooth;
+  background: #0d0b0a;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: #0d0b0a;
+  color: #f3eadf;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: #c7a06b;
+  color: #17100a;
+}
+
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+/* My Story page */
+
+html {
+  scroll-padding-top: 80px;
+  scroll-behavior: smooth;
+}
+
+.story-page {
+  isolation: isolate;
+}
+
+.story-page ::selection {
+  background: rgba(217, 119, 6, 0.45);
+  color: white;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .story-page *,
+  .story-page *::before,
+  .story-page *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+/* =========================================================
+   MY STORY — GLOBAL FIXES
+========================================================= */
+
+html {
+  scroll-padding-top: 88px;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: #000;
+}
+
+.story-page {
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+}
+
+.story-page section {
+  position: relative;
+}
+
+.story-page ::selection {
+  background: rgba(180, 83, 9, 0.55);
+  color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  html {
+    scroll-padding-top: 72px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .story-page *,
+  .story-page *::before,
+  .story-page *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
