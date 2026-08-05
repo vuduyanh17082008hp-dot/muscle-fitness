@@ -1,83 +1,66 @@
-import {
-  createServerClient,
-} from "@supabase/ssr";
-import { cookies } from "next/headers";
-
-import type { Database } from "@/types/app-database.types";
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 
 function getSupabaseConfig() {
-  const supabaseUrl =
-    process.env
-      .NEXT_PUBLIC_SUPABASE_URL
-      ?.trim();
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL
 
-  const supabaseKey =
-    process.env
-      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-      ?.trim() ||
-    process.env
-      .NEXT_PUBLIC_SUPABASE_ANON_KEY
-      ?.trim();
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (!supabaseUrl) {
+  if (!url) {
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL in .env.local",
-    );
+      "Missing NEXT_PUBLIC_SUPABASE_URL."
+    )
   }
 
-  if (!supabaseKey) {
+  if (!key) {
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local",
-    );
+      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY."
+    )
   }
 
   return {
-    supabaseUrl,
-    supabaseKey,
-  };
+    url,
+    key,
+  }
 }
 
 export async function createClient() {
-  const cookieStore = await cookies();
+  const cookieStore = await cookies()
+  const { url, key } = getSupabaseConfig()
 
-  const {
-    supabaseUrl,
-    supabaseKey,
-  } = getSupabaseConfig();
-
-  return createServerClient<Database>(
-    supabaseUrl,
-    supabaseKey,
+  return createServerClient(
+    url,
+    key,
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return cookieStore.getAll()
         },
 
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet, _headersToSet) {
           try {
             cookiesToSet.forEach(
-              ({
-                name,
-                value,
-                options,
-              }) => {
+              ({ name, value, options }) => {
                 cookieStore.set(
                   name,
                   value,
-                  options,
-                );
-              },
-            );
+                  options
+                )
+              }
+            )
           } catch {
             /*
              * Server Components không phải lúc nào
-             * cũng được phép thay đổi cookie.
-             * proxy.ts sẽ xử lý refresh session.
+             * cũng có quyền ghi cookie.
+             *
+             * Proxy sẽ đảm nhiệm việc refresh cookie.
              */
           }
         },
       },
-    },
-  );
+    }
+  )
 }
