@@ -1,85 +1,115 @@
-import {
-  NextResponse,
-} from 'next/server'
+import type { User } from "@supabase/supabase-js"
+import { NextResponse } from "next/server"
 
-import {
-  createClient,
-} from '@/lib/supabase/server'
+import { syncAuthUserProfile } from "@/lib/auth/profile"
+import { createClient } from "@/lib/supabase/server"
 
-function safeNextPath(
-  value:
-    | string
-    | null,
-) {
-  if (
-    !value ||
-    !value.startsWith('/') ||
-    value.startsWith('//')
-  ) {
-    return '/onboarding'
+function getSafeNextPath(value: string | null): string {
+  if (!value) {
+    return "/dashboard"
+  }
+
+  /*
+   * Chỉ cho redirect nội bộ.
+   * Ngăn URL như //malicious-site.com.
+   */
+  if (!value.startsWith("/") || value.startsWith("//")) {
+    return "/dashboard"
   }
 
   return value
 }
 
-export async function GET(
-  request: Request,
-) {
-  const requestUrl =
-    new URL(
-      request.url,
-    )
+export async function GET(request: Request) {
+  const requestUrl = new URL(request.url)
 
-  const code =
-    requestUrl
-      .searchParams
-      .get('code')
-
-  const next =
-    safeNextPath(
-      requestUrl
-        .searchParams
-        .get('next'),
-    )
+  const code = requestUrl.searchParams.get("code")
+  const nextPath = getSafeNextPath(
+    requestUrl.searchParams.get("next")
+  )
 
   if (!code) {
-    return NextResponse.redirect(
-      new URL(
-        '/login?error=missing_auth_code',
-        requestUrl.origin,
-      ),
+    const loginUrl = new URL("/login", requestUrl.origin)
+
+    loginUrl.searchParams.set(
+      "error",
+      "Authentication code was not found."
     )
+
+    return NextResponse.redirect(loginUrl)
   }
 
-  const supabase =
-    await createClient()
+  const supabase = await createClient()
 
   const {
-    error,
-  } =
-    await supabase.auth
-      .exchangeCodeForSession(
-        code,
-      )
+    data: sessionData,
+    error: exchangeError,
+  } = await supabase.auth.exchangeCodeForSession(code)
 
-  if (error) {
-    console.error(
-      'Auth callback exchange failed:',
-      error,
+  if (exchangeError) {
+    console.error("OAuth callback error:", exchangeError)
+
+    const loginUrl = new URL("/login", requestUrl.origin)
+
+    loginUrl.searchParams.set("error", exchangeError.message)
+
+    return NextResponse.redirect(loginUrl)
+  }
+
+  /*
+   * Khai báo rõ User | null.
+   *
+   * Đây là phần sửa lỗi:
+   * Type 'User | null' is not assignable to type 'User'.
+   */
+  let user: User | null = sessionData.user ?? null
+
+  /*
+   * Một số trường hợp exchangeCodeForSession không trả user trực tiếp.
+   * Khi đó lấy user lại từ session cookie vừa được tạo.
+   */
+  if (!user) {
+    const {
+      data: currentUserData,
+      error: currentUserError,
+    } = await supabase.auth.getUser()
+
+    if (currentUserError) {
+      console.error(
+        "Could not read user after OAuth callback:",
+        currentUserError
+      )
+    }
+
+    user = currentUserData.user
+  }
+
+  if (!user) {
+    const loginUrl = new URL("/login", requestUrl.origin)
+
+    loginUrl.searchParams.set(
+      "error",
+      "Authentication succeeded but the user account could not be loaded."
     )
 
-    return NextResponse.redirect(
-      new URL(
-        '/login?error=auth_callback_failed',
-        requestUrl.origin,
-      ),
+    return NextResponse.redirect(loginUrl)
+  }
+
+  /*
+   * Tạo hoặc cập nhật profile sau khi đăng nhập.
+   *
+   * Profile sync lỗi không được làm client mất session.
+   */
+  try {
+    await syncAuthUserProfile(supabase, user)
+  } catch (profileError) {
+    console.error(
+      "Profile synchronization failed after login:",
+      profileError
     )
   }
 
   return NextResponse.redirect(
-    new URL(
-      next,
-      requestUrl.origin,
-    ),
+    new URL(nextPath, requestUrl.origin)
   )
 }

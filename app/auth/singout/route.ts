@@ -1,49 +1,33 @@
-import {
-  NextResponse,
-  type NextRequest,
-} from "next/server"
+import { NextResponse } from "next/server"
 
 import { createClient } from "@/lib/supabase/server"
 
-export async function POST() {
+export async function POST(request: Request) {
+  const requestUrl = new URL(request.url)
   const supabase = await createClient()
 
-  const { error } =
-    await supabase.auth.signOut()
-
-  if (error) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: error.message,
-      },
-      {
-        status: 500,
-      }
-    )
-  }
-
-  return NextResponse.json({
-    success: true,
+  const { error } = await supabase.auth.signOut({
+    scope: "local",
   })
-}
-
-export async function GET(
-  request: NextRequest
-) {
-  const supabase = await createClient()
-
-  await supabase.auth.signOut()
 
   const loginUrl = new URL(
     "/login",
-    request.url
+    requestUrl.origin
   )
 
-  loginUrl.searchParams.set(
-    "message",
-    "logged-out"
-  )
+  if (error) {
+    loginUrl.searchParams.set(
+      "error",
+      error.message
+    )
+  } else {
+    loginUrl.searchParams.set(
+      "message",
+      "You have been signed out."
+    )
+  }
 
-  return NextResponse.redirect(loginUrl)
+  return NextResponse.redirect(loginUrl, {
+    status: 303,
+  })
 }

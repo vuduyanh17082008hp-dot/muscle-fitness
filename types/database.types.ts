@@ -302,6 +302,45 @@ export type Database = {
         Returns: Json
       }
 
+      has_entitlement: {
+        Args: {
+          p_key: string
+        }
+        Returns: boolean
+      }
+
+      write_audit_log: {
+        Args: {
+          p_action: string
+          p_entity_type: string
+          p_entity_id?: string | null
+          p_metadata?: Json
+        }
+        Returns: string
+      }
+
+      current_app_role: {
+        Args: Record<PropertyKey, never>
+        Returns: Database['public']['Enums']['app_role']
+      }
+
+      is_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+
+      is_staff: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+
+      is_assigned_coach: {
+        Args: {
+          p_client_id: string
+        }
+        Returns: boolean
+      }
+
       list_my_assigned_clients: {
         Args: Record<PropertyKey, never>
         Returns: Json
@@ -318,8 +357,11 @@ export type Database = {
 
       app_role:
         | 'user'
+        | 'client'
         | 'coach'
+        | 'support'
         | 'admin'
+        | 'super_admin'
 
       fitness_goal:
         | 'lose_fat'
