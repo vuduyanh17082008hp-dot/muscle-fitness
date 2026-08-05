@@ -1,21 +1,27 @@
 export default function WorkoutsLoading() {
   return (
-    <main className="min-h-screen bg-[#070707] px-4 py-8 text-white sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-7xl animate-pulse">
-        <div className="h-4 w-32 rounded bg-white/10" />
+    <main className="mx-auto w-full max-w-7xl animate-pulse space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="space-y-3">
+        <div className="h-3 w-28 rounded bg-white/5" />
+        <div className="h-10 w-72 rounded-xl bg-white/5" />
+        <div className="h-4 w-full max-w-xl rounded bg-white/5" />
+      </div>
 
-        <div className="mt-4 h-12 w-72 rounded bg-white/10" />
+      <div className="h-72 rounded-3xl border border-white/5 bg-white/[0.025]" />
 
-        <div className="mt-4 h-5 w-full max-w-xl rounded bg-white/5" />
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={index}
+            className="h-44 rounded-3xl border border-white/5 bg-white/[0.025]"
+          />
+        ))}
+      </div>
 
-        <div className="mt-10 h-72 rounded-3xl border border-white/10 bg-white/[0.03]" />
-
-        <div className="mt-8 space-y-5">
-          <div className="h-80 rounded-3xl border border-white/10 bg-white/[0.03]" />
-
-          <div className="h-80 rounded-3xl border border-white/10 bg-white/[0.03]" />
-        </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <div className="h-96 rounded-3xl border border-white/5 bg-white/[0.025]" />
+        <div className="h-96 rounded-3xl border border-white/5 bg-white/[0.025]" />
       </div>
     </main>
-  );
+  )
 }

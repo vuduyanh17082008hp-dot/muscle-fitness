@@ -9,7 +9,7 @@ import {
   archiveWorkoutPlanAction,
   createWorkoutDayAction,
   createWorkoutExerciseAction,
-  createWorkoutPlanAction,
+  createWorkoutPlanFormAction,
   deleteWorkoutDayAction,
   deleteWorkoutExerciseAction,
   deleteWorkoutPlanAction,
@@ -498,9 +498,9 @@ export default async function WorkoutsPage({
           </div>
 
           <form
-            action={createWorkoutPlanAction}
-            className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4"
-          >
+  action={createWorkoutPlanFormAction}
+  className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4"
+>
             <input
               type="hidden"
               name="client_id"

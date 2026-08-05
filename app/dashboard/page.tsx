@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import { Home } from "lucide-react"
 
 import { createClient } from "@/lib/supabase/server"
 
@@ -234,16 +235,30 @@ export default async function DashboardPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
+              {/* RETURN TO HOMEPAGE BUTTON */}
+
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-5 py-3 text-sm font-semibold text-amber-400 transition hover:border-amber-500/50 hover:bg-amber-500/20 hover:text-amber-300"
+              >
+                <Home
+                  aria-hidden="true"
+                  className="h-4 w-4"
+                />
+
+                Return home
+              </Link>
+
               <Link
                 href="/onboarding"
-                className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.08]"
+                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.08]"
               >
                 Edit profile
               </Link>
 
               <Link
                 href="/training"
-                className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-black uppercase tracking-wider text-black transition hover:bg-amber-400"
+                className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-5 py-3 text-sm font-black uppercase tracking-wider text-black transition hover:bg-amber-400"
               >
                 Open training
               </Link>
