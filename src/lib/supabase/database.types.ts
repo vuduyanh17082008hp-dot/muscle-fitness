@@ -221,30 +221,48 @@ export type Database = {
         Row: {
           id: string;
           user_id: string | null;
-          client_id: string | null;
+          client_id: string;
           coach_id: string | null;
+          created_by: string | null;
           name: string;
-          description: string;
+          description: string | null;
+          goal: string | null;
+          weeks: number;
+          days_per_week: number;
+          session_duration_minutes: number;
+          status: "draft" | "active" | "archived";
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
           user_id?: string | null;
-          client_id?: string | null;
+          client_id: string;
           coach_id?: string | null;
+          created_by?: string | null;
           name: string;
-          description?: string;
+          description?: string | null;
+          goal?: string | null;
+          weeks?: number;
+          days_per_week?: number;
+          session_duration_minutes?: number;
+          status?: "draft" | "active" | "archived";
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
           user_id?: string | null;
-          client_id?: string | null;
+          client_id?: string;
           coach_id?: string | null;
+          created_by?: string | null;
           name?: string;
-          description?: string;
+          description?: string | null;
+          goal?: string | null;
+          weeks?: number;
+          days_per_week?: number;
+          session_duration_minutes?: number;
+          status?: "draft" | "active" | "archived";
           created_at?: string;
           updated_at?: string;
         };
@@ -254,20 +272,32 @@ export type Database = {
         Row: {
           id: string;
           workout_plan_id: string;
+          day_number: number;
           name: string;
-          day_order: number;
+          focus: string | null;
+          notes: string | null;
+          rest_day: boolean;
+          day_order: number | null;
         };
         Insert: {
           id?: string;
           workout_plan_id: string;
+          day_number: number;
           name: string;
-          day_order?: number;
+          focus?: string | null;
+          notes?: string | null;
+          rest_day?: boolean;
+          day_order?: number | null;
         };
         Update: {
           id?: string;
           workout_plan_id?: string;
+          day_number?: number;
           name?: string;
-          day_order?: number;
+          focus?: string | null;
+          notes?: string | null;
+          rest_day?: boolean;
+          day_order?: number | null;
         };
         Relationships: [
           {
@@ -283,43 +313,55 @@ export type Database = {
         Row: {
           id: string;
           workout_day_id: string;
-          exercise_id: string;
+          exercise_id: string | null;
+          exercise_name: string;
           exercise_order: number;
-          sets: number;
+          target_sets: number;
+          sets: number | null;
           rep_min: number;
           rep_max: number;
+          rir: number | null;
           target_rir: number | null;
           target_rpe: number | null;
           rest_seconds: number;
           tempo: string | null;
+          notes: string | null;
           coach_notes: string | null;
         };
         Insert: {
           id?: string;
           workout_day_id: string;
-          exercise_id: string;
+          exercise_id?: string | null;
+          exercise_name: string;
           exercise_order?: number;
-          sets: number;
+          target_sets: number;
+          sets?: number | null;
           rep_min: number;
           rep_max: number;
+          rir?: number | null;
           target_rir?: number | null;
           target_rpe?: number | null;
           rest_seconds?: number;
           tempo?: string | null;
+          notes?: string | null;
           coach_notes?: string | null;
         };
         Update: {
           id?: string;
           workout_day_id?: string;
-          exercise_id?: string;
+          exercise_id?: string | null;
+          exercise_name?: string;
           exercise_order?: number;
-          sets?: number;
+          target_sets?: number;
+          sets?: number | null;
           rep_min?: number;
           rep_max?: number;
+          rir?: number | null;
           target_rir?: number | null;
           target_rpe?: number | null;
           rest_seconds?: number;
           tempo?: string | null;
+          notes?: string | null;
           coach_notes?: string | null;
         };
         Relationships: [
@@ -474,6 +516,10 @@ export type Database = {
       };
       has_permission: {
         Args: { requested_permission: AppPermission };
+        Returns: boolean;
+      };
+      can_manage_workout_client: {
+        Args: { target_client_id: string };
         Returns: boolean;
       };
     };
