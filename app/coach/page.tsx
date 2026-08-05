@@ -26,7 +26,7 @@ export default function CoachPage() {
 
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
-            href="/chatbot"
+            href="/ai-coach"
             className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
           >
             Open coach chat

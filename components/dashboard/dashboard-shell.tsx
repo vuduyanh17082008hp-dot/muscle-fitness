@@ -188,7 +188,7 @@ function SidebarContent({
         </Link>
 
         <Link
-          href="/dashboard/ai-coach"
+          href="/ai-coach"
           className="mb-3 flex items-center gap-3 rounded-xl border border-violet-400/20 bg-violet-400/10 p-3 text-sm text-violet-100 transition hover:bg-violet-400/15"
         >
           <span className="grid size-9 place-items-center rounded-lg bg-violet-300/10">

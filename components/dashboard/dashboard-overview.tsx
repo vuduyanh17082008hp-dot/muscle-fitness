@@ -242,7 +242,7 @@ export function DashboardOverview({
             </Link>
 
             <Link
-              href="/dashboard/ai-coach"
+              href="/ai-coach"
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold text-white transition hover:bg-white/[0.08]"
             >
               <Sparkles className="size-4 text-violet-300" />
@@ -690,7 +690,7 @@ export function DashboardOverview({
             </p>
 
             <Link
-              href="/dashboard/ai-coach"
+              href="/ai-coach"
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-200 px-4 py-3 text-sm font-black text-violet-950 transition hover:bg-white"
             >
               Open AI Coach

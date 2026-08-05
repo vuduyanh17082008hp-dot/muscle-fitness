@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { AiCoachClient } from "@/features/ai-coach/ai-coach-client";
+import { AiCoachClient } from "@/features/ai-coach/ai-coach-clients";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";

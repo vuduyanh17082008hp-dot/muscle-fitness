@@ -54,7 +54,7 @@ npm run build
 8. **Session player** — `/dashboard/workouts/session/[sessionId]`
 9. **History** — `/dashboard/workouts/history`
 10. **Nutrition / Progress / AI Coach nav** — `/dashboard/nutrition`, `/dashboard/progress`, `/dashboard/ai-coach`
-11. **Coach chat** — `/chatbot`
+11. **Coach chat** — `/ai-coach` (legacy `/chatbot` redirects here)
 12. **Meal plan calculator** — `/meal-plan`
 
 ## Source of truth
