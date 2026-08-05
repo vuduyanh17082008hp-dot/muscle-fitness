@@ -1,44 +1,137 @@
-import * as poseDetection from '@tensorflow-models/pose-detection';
-import '@tensorflow/tfjs-backend-webgl';
+import type {
+  Keypoint,
+  PoseDetector,
+} from "@tensorflow-models/pose-detection";
 
-let detector: poseDetection.PoseDetector | null = null;
+type Point = {
+  x: number;
+  y: number;
+  score?: number;
+};
 
-export async function loadPoseDetector() {
-  if (detector) return detector;
-  const model = poseDetection.SupportedModels.MoveNet;
-  detector = await poseDetection.createDetector(model, {
-    modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
-  });
-  return detector;
-}
+export type RepCounterState = {
+  count: number;
+  stage: "up" | "down";
+};
 
-// Tính góc giữa 3 điểm (theo radian, sau đó đổi ra độ)
-export function calculateAngle(a: {x:number,y:number}, b: {x:number,y:number}, c: {x:number,y:number}) {
-  const ab = Math.sqrt(Math.pow(b.x - a.x, 2) + Math.pow(b.y - a.y, 2));
-  const bc = Math.sqrt(Math.pow(b.x - c.x, 2) + Math.pow(b.y - c.y, 2));
-  const ac = Math.sqrt(Math.pow(c.x - a.x, 2) + Math.pow(c.y - a.y, 2));
-  const angleRad = Math.acos((ab * ab + bc * bc - ac * ac) / (2 * ab * bc));
-  return angleRad * (180 / Math.PI);
-}
+let detector: PoseDetector | null = null;
+let detectorPromise: Promise<PoseDetector> | null = null;
 
-// Đếm rep đơn giản cho Squat (theo dõi góc gối trái)
-export function repCounter(
-  keypoints: poseDetection.Keypoint[],
-  state: { count: number; stage: 'up' | 'down' }
-) {
-  const leftHip = keypoints.find(k => k.name === 'left_hip');
-  const leftKnee = keypoints.find(k => k.name === 'left_knee');
-  const leftAnkle = keypoints.find(k => k.name === 'left_ankle');
-
-  if (leftHip && leftKnee && leftAnkle && leftHip.score! > 0.5 && leftKnee.score! > 0.5 && leftAnkle.score! > 0.5) {
-    const angle = calculateAngle(leftHip, leftKnee, leftAnkle);
-    if (angle < 90 && state.stage === 'up') {
-      state.stage = 'down';
-    }
-    if (angle > 160 && state.stage === 'down') {
-      state.count++;
-      state.stage = 'up';
-    }
+export async function loadPoseDetector(): Promise<PoseDetector> {
+  if (typeof window === "undefined") {
+    throw new Error("Pose detector can only run in the browser.");
   }
-  return state;
+
+  if (detector) {
+    return detector;
+  }
+
+  if (detectorPromise) {
+    return detectorPromise;
+  }
+
+  detectorPromise = (async () => {
+    const tf = await import("@tensorflow/tfjs-core");
+
+    await import("@tensorflow/tfjs-backend-webgl");
+
+    const poseDetection = await import(
+      "@tensorflow-models/pose-detection"
+    );
+
+    const backendReady = await tf.setBackend("webgl");
+
+    if (!backendReady) {
+      throw new Error("Unable to initialise the WebGL backend.");
+    }
+
+    await tf.ready();
+
+    const loadedDetector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      {
+        modelType:
+          poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+        enableSmoothing: true,
+      },
+    );
+
+    detector = loadedDetector;
+
+    return loadedDetector;
+  })().catch((error: unknown) => {
+    detectorPromise = null;
+    throw error;
+  });
+
+  return detectorPromise;
+}
+
+export function calculateAngle(
+  pointA: Point,
+  pointB: Point,
+  pointC: Point,
+): number {
+  const radians =
+    Math.atan2(pointC.y - pointB.y, pointC.x - pointB.x) -
+    Math.atan2(pointA.y - pointB.y, pointA.x - pointB.x);
+
+  let angle = Math.abs((radians * 180) / Math.PI);
+
+  if (angle > 180) {
+    angle = 360 - angle;
+  }
+
+  return angle;
+}
+
+export function repCounter(
+  keypoints: Keypoint[],
+  currentState: RepCounterState,
+): RepCounterState {
+  const leftHip = keypoints.find(
+    (keypoint) => keypoint.name === "left_hip",
+  );
+
+  const leftKnee = keypoints.find(
+    (keypoint) => keypoint.name === "left_knee",
+  );
+
+  const leftAnkle = keypoints.find(
+    (keypoint) => keypoint.name === "left_ankle",
+  );
+
+  if (!leftHip || !leftKnee || !leftAnkle) {
+    return currentState;
+  }
+
+  const hipScore = leftHip.score ?? 0;
+  const kneeScore = leftKnee.score ?? 0;
+  const ankleScore = leftAnkle.score ?? 0;
+
+  if (hipScore < 0.5 || kneeScore < 0.5 || ankleScore < 0.5) {
+    return currentState;
+  }
+
+  const kneeAngle = calculateAngle(
+    leftHip,
+    leftKnee,
+    leftAnkle,
+  );
+
+  if (kneeAngle < 95 && currentState.stage === "up") {
+    return {
+      ...currentState,
+      stage: "down",
+    };
+  }
+
+  if (kneeAngle > 155 && currentState.stage === "down") {
+    return {
+      count: currentState.count + 1,
+      stage: "up",
+    };
+  }
+
+  return currentState;
 }
