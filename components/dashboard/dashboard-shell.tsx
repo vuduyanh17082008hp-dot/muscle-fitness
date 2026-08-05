@@ -18,6 +18,7 @@ import {
   CheckSquare2,
   ChevronRight,
   Dumbbell,
+  Home,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -179,6 +180,14 @@ function SidebarContent({
 
       <div className="border-t border-white/10 p-3">
         <Link
+          href="/"
+          className="mb-3 flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-amber-400/30 hover:bg-amber-400/10 hover:text-amber-200"
+        >
+          <Home className="size-4 shrink-0" />
+          Back to homepage
+        </Link>
+
+        <Link
           href="/dashboard/ai-coach"
           className="mb-3 flex items-center gap-3 rounded-xl border border-violet-400/20 bg-violet-400/10 p-3 text-sm text-violet-100 transition hover:bg-violet-400/15"
         >
@@ -236,30 +245,41 @@ export function DashboardShell({
         />
       </aside>
 
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/10 bg-[#08090b]/90 px-4 backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/10 bg-[#08090b]/90 px-4 backdrop-blur-xl lg:hidden">
         <Link
           href="/dashboard"
-          className="flex items-center gap-2.5"
+          className="flex min-w-0 items-center gap-2.5"
         >
           <span className="grid size-9 place-items-center rounded-xl border border-amber-400/30 bg-amber-400/10 text-amber-300">
             <Dumbbell className="size-4" />
           </span>
 
-          <span className="text-xs font-black tracking-[0.16em]">
+          <span className="truncate text-xs font-black tracking-[0.16em]">
             MUSCLE FITNESS
           </span>
         </Link>
 
-        <button
-          type="button"
-          onClick={() =>
-            setMobileOpen(true)
-          }
-          aria-label="Open dashboard navigation"
-          className="grid size-10 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-zinc-300"
-        >
-          <Menu className="size-5" />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/"
+            aria-label="Back to homepage"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-zinc-300 transition hover:border-amber-400/30 hover:text-amber-200"
+          >
+            <Home className="size-3.5" />
+            Home
+          </Link>
+
+          <button
+            type="button"
+            onClick={() =>
+              setMobileOpen(true)
+            }
+            aria-label="Open dashboard navigation"
+            className="grid size-10 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-zinc-300"
+          >
+            <Menu className="size-5" />
+          </button>
+        </div>
       </header>
 
       {mobileOpen ? (

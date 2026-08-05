@@ -47,6 +47,8 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-hook-form": "^7.62.0",
+    "react-hot-toast": "^2.6.0",
+    "react-webcam": "^7.2.0",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "stripe": "^18.5.0",

@@ -1,33 +1,9 @@
-export const siteConfig = {
-  name: "MuscleFitness",
-  description:
-    "Nền tảng luyện tập, dinh dưỡng và AI Coach được cá nhân hóa.",
+import type { NextConfig } from "next";
 
-  navigation: {
-    marketing: [
-      {
-        href: "/",
-        label: "Trang chủ",
-      },
-      {
-        href: "/story",
-        label: "Câu chuyện",
-      },
-    ],
-
-    dashboard: [
-      {
-        href: "/dashboard",
-        label: "Tổng quan",
-      },
-      {
-        href: "/meal-plan",
-        label: "Dinh dưỡng",
-      },
-      {
-        href: "/coach",
-        label: "AI Coach",
-      },
-    ],
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [],
   },
-} as const;
+};
+
+export default nextConfig;

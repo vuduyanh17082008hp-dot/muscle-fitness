@@ -69,6 +69,30 @@ const themeClasses: Record<
     quoteBorder:
       "border-red-500",
   },
+
+  crimson: {
+    section:
+      "border-red-500/20 bg-gradient-to-br from-[#150808] via-[#0a0707] to-black",
+    glow:
+      "bg-[radial-gradient(circle_at_top_right,rgba(220,38,38,0.14),transparent_45%)]",
+    accent: "text-red-400",
+    badge:
+      "border-red-500/30 bg-red-500/10 text-red-300",
+    quoteBorder:
+      "border-red-500",
+  },
+
+  gold: {
+    section:
+      "border-amber-500/20 bg-gradient-to-br from-[#130d07] via-[#090807] to-black",
+    glow:
+      "bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.14),transparent_45%)]",
+    accent: "text-amber-500",
+    badge:
+      "border-amber-500/30 bg-amber-500/10 text-amber-400",
+    quoteBorder:
+      "border-amber-500",
+  },
 }
 
 function ChapterVisual({

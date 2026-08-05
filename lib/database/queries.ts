@@ -1,6 +1,7 @@
 import { cache } from 'react'
 
 import { createClient } from '@/lib/supabase/server'
+import type { Json } from '@/types/database.types'
 import {
   asAssignedClients,
   asFoundationData,
@@ -40,7 +41,7 @@ export const getCurrentUserFoundation =
         )
       }
 
-      return asFoundationData(data)
+      return asFoundationData(data as Json)
     },
   )
 
@@ -65,7 +66,7 @@ export async function getUserFoundation(
     )
   }
 
-  return asFoundationData(data)
+  return asFoundationData(data as Json)
 }
 
 export const getAssignedClients =
@@ -88,6 +89,6 @@ export const getAssignedClients =
         )
       }
 
-      return asAssignedClients(data)
+      return asAssignedClients(data as Json)
     },
   )

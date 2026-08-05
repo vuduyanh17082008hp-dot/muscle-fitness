@@ -3,6 +3,20 @@ export type StoryTheme =
   | "steel"
   | "bronze"
   | "red"
+  | "crimson"
+  | "gold"
+
+export type StoryMedia = {
+  src: string
+  alt: string
+  type?: "image" | "video"
+  autoplay?: boolean
+  poster?: string
+  loop?: boolean
+  controls?: boolean
+  objectPosition?: string
+  caption?: string
+}
 
 export type StoryIdentity = {
   eyebrow: string
@@ -397,5 +411,26 @@ export const storyData: StoryContent = {
     },
   ],
 }
+
+export const storyChapters = storyData.chapters
+
+export const fourDPillars = [
+  {
+    title: "Dedication",
+    text: "Showing up when the result is still invisible.",
+  },
+  {
+    title: "Determination",
+    text: "Continuing after the first wave of motivation fades.",
+  },
+  {
+    title: "Drive",
+    text: "Choosing the harder path because it builds the stronger self.",
+  },
+  {
+    title: "Discipline",
+    text: "Keeping the promise when nobody is watching.",
+  },
+] as const
 
 export default storyData

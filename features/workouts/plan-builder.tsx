@@ -17,6 +17,8 @@ import {
 import { createWorkoutPlanAction } from '@/app/dashboard/workouts/actions'
 import type { ExerciseLibraryItem } from './types'
 
+export type { ExerciseLibraryItem }
+
 type BuilderExercise = {
   localId: string
   exerciseId: string
@@ -762,3 +764,6 @@ function NumberField({
     </label>
   )
 }
+
+export { WorkoutPlanBuilder as PlanBuilder }
+export default WorkoutPlanBuilder

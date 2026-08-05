@@ -26,7 +26,7 @@ function redirectToLoginWithError(
   message: string,
 ) {
   const loginUrl = new URL(
-    "/auth/login",
+    "/login",
     request.url,
   );
 
@@ -66,20 +66,25 @@ export async function GET(
   if (!code) {
     return redirectToLoginWithError(
       request,
-      "Không nhận được mã xác thực từ Google.",
+      "Authentication code was not received.",
     );
   }
 
   const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 
-  const supabaseAnonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseKey =
+    process.env
+      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+      ?.trim() ||
+    process.env
+      .NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ?.trim();
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl || !supabaseKey) {
     return redirectToLoginWithError(
       request,
-      "Thiếu cấu hình Supabase trong .env.local.",
+      "Missing Supabase configuration in .env.local.",
     );
   }
 
@@ -89,7 +94,7 @@ export async function GET(
 
   const supabase = createServerClient(
     supabaseUrl,
-    supabaseAnonKey,
+    supabaseKey,
     {
       cookies: {
         getAll() {

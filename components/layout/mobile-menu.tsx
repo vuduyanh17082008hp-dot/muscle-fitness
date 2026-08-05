@@ -9,7 +9,7 @@ import Link from "next/link";
 import {
   AnimatePresence,
   motion,
-} from "motion/react";
+} from "framer-motion";
 import {
   ArrowRight,
   LogIn,

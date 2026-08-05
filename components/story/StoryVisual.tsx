@@ -17,8 +17,10 @@ type StoryVisualProps = {
 
 const fallbackStyles: Record<StoryTheme, string> = {
   dark: "from-zinc-950 via-zinc-900 to-black",
-  crimson: "from-red-950 via-zinc-950 to-black",
   steel: "from-slate-700 via-zinc-900 to-black",
+  bronze: "from-amber-900 via-zinc-900 to-black",
+  red: "from-red-950 via-zinc-950 to-black",
+  crimson: "from-red-950 via-zinc-950 to-black",
   gold: "from-amber-900 via-zinc-900 to-black",
 };
 

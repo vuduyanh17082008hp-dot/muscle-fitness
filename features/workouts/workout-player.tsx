@@ -164,6 +164,7 @@ export function WorkoutPlayer({
 
     startTransition(async () => {
       const result = await saveWorkoutSetAction({
+        sessionId,
         setId: nextSet.id,
         weightKg: nextSet.weightKg,
         reps: nextSet.reps,
@@ -206,10 +207,11 @@ export function WorkoutPlayer({
     )
 
     startTransition(async () => {
-      const result = await skipSessionExerciseAction(
-        exercise.id,
-        nextSkipped,
-      )
+      const result = await skipSessionExerciseAction({
+        sessionId,
+        sessionExerciseId: exercise.id,
+        isSkipped: nextSkipped,
+      })
 
       if (!result.success) {
         setExercises((current) =>
@@ -250,6 +252,7 @@ export function WorkoutPlayer({
 
     startTransition(async () => {
       const result = await replaceSessionExerciseAction({
+        sessionId,
         sessionExerciseId: exercise.id,
         replacementExerciseId,
       })

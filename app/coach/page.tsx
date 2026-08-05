@@ -1,50 +1,52 @@
 import type { Metadata } from "next";
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "@/components/ui/card";
+import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "AI Coach",
+  title: "AI Coach | Muscle Fitness",
 };
 
 export default function CoachPage() {
   return (
-    <section className="space-y-6">
-      <div>
-        <p className="text-sm font-medium text-primary">
-          AI COACH
+    <main className="min-h-screen bg-[#070707] px-4 py-10 text-white sm:px-6">
+      <section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-500">
+          AI Coach
         </p>
 
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">
-          Huấn luyện viên cá nhân
+        <h1 className="mt-4 text-4xl font-black tracking-tight">
+          Personal coaching guidance
         </h1>
 
-        <p className="mt-2 text-muted-foreground">
-          Khu vực tư vấn luyện tập và dinh dưỡng dựa trên mục
-          tiêu của người dùng.
+        <p className="mt-4 text-sm leading-7 text-zinc-400">
+          Use the coach chat for general training and nutrition
+          questions. Answers are educational only and are not
+          medical advice. For authenticated dashboard access, open
+          AI Coach from your client dashboard.
         </p>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-lg font-semibold">
-            Chưa có cuộc trò chuyện
-          </h2>
-        </CardHeader>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link
+            href="/chatbot"
+            className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
+          >
+            Open coach chat
+          </Link>
 
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Kết nối feature{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5">
-              ai-coach
-            </code>{" "}
-            vào trang này sau khi API hoàn thiện.
-          </p>
-        </CardContent>
-      </Card>
-    </section>
+          <Link
+            href="/dashboard/ai-coach"
+            className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:border-white/20"
+          >
+            Dashboard AI Coach
+          </Link>
+
+          <Link
+            href="/login"
+            className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:border-white/20"
+          >
+            Sign in
+          </Link>
+        </div>
+      </section>
+    </main>
   );
 }

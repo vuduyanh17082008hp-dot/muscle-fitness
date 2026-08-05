@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import {
   motion,
   useReducedMotion,
-} from "motion/react";
+} from "framer-motion";
 
 type RevealProps = {
   children: ReactNode;

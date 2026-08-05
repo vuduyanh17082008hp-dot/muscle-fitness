@@ -34,19 +34,9 @@ export async function POST(
   const { actionName, payload } =
     parseActionPayload(body);
 
-  if (!actionName) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Missing action name.",
-      },
-      { status: 400 },
-    );
-  }
-
   const result = await handleSessionAction(
     id,
-    actionName,
+    actionName || "save_set",
     payload,
   );
 
