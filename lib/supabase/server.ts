@@ -1,17 +1,23 @@
-import { createServerClient } from "@supabase/ssr";
+import {
+  createServerClient,
+} from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-import type { Database } from "@/database.types";
+import type { Database } from "@/types/app-database.types";
 
 function getSupabaseConfig() {
   const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+    process.env
+      .NEXT_PUBLIC_SUPABASE_URL
+      ?.trim();
 
   const supabaseKey =
     process.env
-      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+      ?.trim() ||
     process.env
-      .NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+      .NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ?.trim();
 
   if (!supabaseUrl) {
     throw new Error(
@@ -65,8 +71,9 @@ export async function createClient() {
             );
           } catch {
             /*
-             * Server Components cannot always write cookies.
-             * proxy.ts handles session refresh.
+             * Server Components không phải lúc nào
+             * cũng được phép thay đổi cookie.
+             * proxy.ts sẽ xử lý refresh session.
              */
           }
         },

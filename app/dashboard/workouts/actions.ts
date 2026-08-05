@@ -1,54 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-import type { Database } from "@/database.types";
 import { createClient } from "@/lib/supabase/server";
 
 type AppSupabaseClient =
-  SupabaseClient<Database>;
+  Awaited<ReturnType<typeof createClient>>;
 
 const uuidSchema = z
   .string()
   .uuid("ID không hợp lệ.");
-
-const optionalText = (
-  maximumLength: number,
-) =>
-  z
-    .string()
-    .trim()
-    .max(maximumLength)
-    .transform((value) =>
-      value.length > 0 ? value : null,
-    );
-
-const optionalInteger = (
-  minimum: number,
-  maximum: number,
-) =>
-  z.preprocess(
-    (value) => {
-      if (
-        value === "" ||
-        value === null ||
-        value === undefined
-      ) {
-        return null;
-      }
-
-      return value;
-    },
-    z
-      .coerce
-      .number()
-      .int()
-      .min(minimum)
-      .max(maximum)
-      .nullable(),
-  );
 
 const createPlanSchema = z.object({
   client_id: uuidSchema,
@@ -62,37 +24,46 @@ const createPlanSchema = z.object({
     )
     .max(120),
 
-  description: optionalText(2000),
+  description: z
+    .string()
+    .trim()
+    .max(2000)
+    .transform((value) =>
+      value.length > 0 ? value : null,
+    ),
 
-  goal: optionalText(500),
+  goal: z
+    .string()
+    .trim()
+    .max(500)
+    .transform((value) =>
+      value.length > 0 ? value : null,
+    ),
 
-  weeks: z
-    .coerce
+  weeks: z.coerce
     .number()
     .int()
     .min(1)
     .max(52),
 
-  days_per_week: z
-    .coerce
+  days_per_week: z.coerce
     .number()
     .int()
     .min(1)
     .max(7),
 
-  session_duration_minutes: z
-    .coerce
-    .number()
-    .int()
-    .min(15)
-    .max(300),
+  session_duration_minutes:
+    z.coerce
+      .number()
+      .int()
+      .min(15)
+      .max(300),
 });
 
 const createDaySchema = z.object({
   workout_plan_id: uuidSchema,
 
-  day_number: z
-    .coerce
+  day_number: z.coerce
     .number()
     .int()
     .min(1)
@@ -107,9 +78,21 @@ const createDaySchema = z.object({
     )
     .max(120),
 
-  focus: optionalText(300),
+  focus: z
+    .string()
+    .trim()
+    .max(300)
+    .transform((value) =>
+      value.length > 0 ? value : null,
+    ),
 
-  notes: optionalText(2000),
+  notes: z
+    .string()
+    .trim()
+    .max(2000)
+    .transform((value) =>
+      value.length > 0 ? value : null,
+    ),
 
   rest_day: z.boolean(),
 });
@@ -127,57 +110,98 @@ const createExerciseSchema = z
       )
       .max(160),
 
-    exercise_order: z
-      .coerce
+    exercise_order: z.coerce
       .number()
       .int()
       .min(1)
       .max(100),
 
-    target_sets: z
-      .coerce
+    target_sets: z.coerce
       .number()
       .int()
       .min(1)
       .max(20),
 
-    rep_min: z
-      .coerce
+    rep_min: z.coerce
       .number()
       .int()
       .min(1)
       .max(100),
 
-    rep_max: z
-      .coerce
+    rep_max: z.coerce
       .number()
       .int()
       .min(1)
       .max(100),
 
-    rest_seconds: z
-      .coerce
+    rest_seconds: z.coerce
       .number()
       .int()
       .min(0)
       .max(900),
 
-    tempo: optionalText(30),
+    tempo: z
+      .string()
+      .trim()
+      .max(30)
+      .transform((value) =>
+        value.length > 0
+          ? value
+          : null,
+      ),
 
-    rir: optionalInteger(0, 5),
+    rir: z
+      .union([
+        z.literal(""),
+        z.coerce
+          .number()
+          .int()
+          .min(0)
+          .max(5),
+      ])
+      .transform((value) =>
+        value === "" ? null : value,
+      ),
 
-    notes: optionalText(1000),
+    notes: z
+      .string()
+      .trim()
+      .max(1000)
+      .transform((value) =>
+        value.length > 0
+          ? value
+          : null,
+      ),
   })
-  .superRefine((value, context) => {
-    if (value.rep_max < value.rep_min) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["rep_max"],
-        message:
-          "Rep tối đa không được nhỏ hơn rep tối thiểu.",
-      });
-    }
-  });
+  .superRefine(
+    (value, context) => {
+      if (
+        value.rep_max <
+        value.rep_min
+      ) {
+        context.addIssue({
+          code:
+            z.ZodIssueCode.custom,
+
+          path: ["rep_max"],
+
+          message:
+            "Rep tối đa không được nhỏ hơn rep tối thiểu.",
+        });
+      }
+    },
+  );
+
+function getFormValue(
+  formData: FormData,
+  key: string,
+): string {
+  const value = formData.get(key);
+
+  return typeof value === "string"
+    ? value
+    : "";
+}
 
 function getValidationMessage(
   error: z.ZodError,
@@ -211,20 +235,25 @@ function getDatabaseMessage(
   return `${context}: ${message}`;
 }
 
-async function requireAuthenticatedUser(): Promise<{
+async function requireUser(): Promise<{
   supabase: AppSupabaseClient;
   userId: string;
 }> {
-  const supabase = await createClient();
+  const supabase =
+    await createClient();
 
   const {
-    data,
+    data: {
+      user,
+    },
     error,
-  } = await supabase.auth.getClaims();
+  } =
+    await supabase.auth.getUser();
 
-  const userId = data?.claims?.sub;
-
-  if (error || !userId) {
+  if (
+    error ||
+    !user
+  ) {
     throw new Error(
       "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
     );
@@ -232,7 +261,7 @@ async function requireAuthenticatedUser(): Promise<{
 
   return {
     supabase,
-    userId,
+    userId: user.id,
   };
 }
 
@@ -246,7 +275,8 @@ async function assertCanManageClient(
   } = await supabase.rpc(
     "can_manage_workout_client",
     {
-      target_client_id: clientId,
+      target_client_id:
+        clientId,
     },
   );
 
@@ -276,12 +306,13 @@ async function getPlanClientId(
     .eq("id", planId)
     .single();
 
-  if (error || !data) {
+  if (
+    error ||
+    !data
+  ) {
     throw new Error(
-      `Không tìm thấy workout plan: ${
-        error?.message ??
-        "Plan không tồn tại."
-      }`,
+      error?.message ??
+        "Không tìm thấy workout plan.",
     );
   }
 
@@ -293,67 +324,90 @@ async function getDayClientId(
   dayId: string,
 ): Promise<string> {
   const {
-    data: day,
-    error: dayError,
+    data,
+    error,
   } = await supabase
     .from("workout_days")
     .select("workout_plan_id")
     .eq("id", dayId)
     .single();
 
-  if (dayError || !day) {
+  if (
+    error ||
+    !data
+  ) {
     throw new Error(
-      `Không tìm thấy ngày tập: ${
-        dayError?.message ??
-        "Ngày tập không tồn tại."
-      }`,
+      error?.message ??
+        "Không tìm thấy ngày tập.",
     );
   }
 
   return getPlanClientId(
     supabase,
-    day.workout_plan_id,
+    data.workout_plan_id,
   );
 }
 
 export async function createWorkoutPlanAction(
   formData: FormData,
 ): Promise<void> {
-  const parsed = createPlanSchema.safeParse({
-    client_id:
-      formData.get("client_id"),
+  const parsed =
+    createPlanSchema.safeParse({
+      client_id:
+        getFormValue(
+          formData,
+          "client_id",
+        ),
 
-    name:
-      formData.get("name"),
+      name:
+        getFormValue(
+          formData,
+          "name",
+        ),
 
-    description:
-      formData.get("description") ?? "",
+      description:
+        getFormValue(
+          formData,
+          "description",
+        ),
 
-    goal:
-      formData.get("goal") ?? "",
+      goal:
+        getFormValue(
+          formData,
+          "goal",
+        ),
 
-    weeks:
-      formData.get("weeks"),
+      weeks:
+        getFormValue(
+          formData,
+          "weeks",
+        ),
 
-    days_per_week:
-      formData.get("days_per_week"),
+      days_per_week:
+        getFormValue(
+          formData,
+          "days_per_week",
+        ),
 
-    session_duration_minutes:
-      formData.get(
-        "session_duration_minutes",
-      ),
-  });
+      session_duration_minutes:
+        getFormValue(
+          formData,
+          "session_duration_minutes",
+        ),
+    });
 
   if (!parsed.success) {
     throw new Error(
-      getValidationMessage(parsed.error),
+      getValidationMessage(
+        parsed.error,
+      ),
     );
   }
 
   const {
     supabase,
     userId,
-  } = await requireAuthenticatedUser();
+  } = await requireUser();
 
   await assertCanManageClient(
     supabase,
@@ -411,41 +465,61 @@ export async function createWorkoutPlanAction(
 export async function createWorkoutDayAction(
   formData: FormData,
 ): Promise<void> {
-  const parsed = createDaySchema.safeParse({
-    workout_plan_id:
-      formData.get("workout_plan_id"),
+  const parsed =
+    createDaySchema.safeParse({
+      workout_plan_id:
+        getFormValue(
+          formData,
+          "workout_plan_id",
+        ),
 
-    day_number:
-      formData.get("day_number"),
+      day_number:
+        getFormValue(
+          formData,
+          "day_number",
+        ),
 
-    name:
-      formData.get("name"),
+      name:
+        getFormValue(
+          formData,
+          "name",
+        ),
 
-    focus:
-      formData.get("focus") ?? "",
+      focus:
+        getFormValue(
+          formData,
+          "focus",
+        ),
 
-    notes:
-      formData.get("notes") ?? "",
+      notes:
+        getFormValue(
+          formData,
+          "notes",
+        ),
 
-    rest_day:
-      formData.get("rest_day") ===
-      "on",
-  });
+      rest_day:
+        formData.get(
+          "rest_day",
+        ) === "on",
+    });
 
   if (!parsed.success) {
     throw new Error(
-      getValidationMessage(parsed.error),
+      getValidationMessage(
+        parsed.error,
+      ),
     );
   }
 
   const {
     supabase,
-  } = await requireAuthenticatedUser();
+  } = await requireUser();
 
   const clientId =
     await getPlanClientId(
       supabase,
-      parsed.data.workout_plan_id,
+      parsed.data
+        .workout_plan_id,
     );
 
   await assertCanManageClient(
@@ -459,7 +533,8 @@ export async function createWorkoutDayAction(
     .from("workout_days")
     .insert({
       workout_plan_id:
-        parsed.data.workout_plan_id,
+        parsed.data
+          .workout_plan_id,
 
       day_number:
         parsed.data.day_number,
@@ -497,50 +572,83 @@ export async function createWorkoutExerciseAction(
   const parsed =
     createExerciseSchema.safeParse({
       workout_day_id:
-        formData.get("workout_day_id"),
+        getFormValue(
+          formData,
+          "workout_day_id",
+        ),
 
       exercise_name:
-        formData.get("exercise_name"),
+        getFormValue(
+          formData,
+          "exercise_name",
+        ),
 
       exercise_order:
-        formData.get("exercise_order"),
+        getFormValue(
+          formData,
+          "exercise_order",
+        ),
 
       target_sets:
-        formData.get("target_sets"),
+        getFormValue(
+          formData,
+          "target_sets",
+        ),
 
       rep_min:
-        formData.get("rep_min"),
+        getFormValue(
+          formData,
+          "rep_min",
+        ),
 
       rep_max:
-        formData.get("rep_max"),
+        getFormValue(
+          formData,
+          "rep_max",
+        ),
 
       rest_seconds:
-        formData.get("rest_seconds"),
+        getFormValue(
+          formData,
+          "rest_seconds",
+        ),
 
       tempo:
-        formData.get("tempo") ?? "",
+        getFormValue(
+          formData,
+          "tempo",
+        ),
 
       rir:
-        formData.get("rir"),
+        getFormValue(
+          formData,
+          "rir",
+        ),
 
       notes:
-        formData.get("notes") ?? "",
+        getFormValue(
+          formData,
+          "notes",
+        ),
     });
 
   if (!parsed.success) {
     throw new Error(
-      getValidationMessage(parsed.error),
+      getValidationMessage(
+        parsed.error,
+      ),
     );
   }
 
   const {
     supabase,
-  } = await requireAuthenticatedUser();
+  } = await requireUser();
 
   const clientId =
     await getDayClientId(
       supabase,
-      parsed.data.workout_day_id,
+      parsed.data
+        .workout_day_id,
     );
 
   await assertCanManageClient(
@@ -554,19 +662,23 @@ export async function createWorkoutExerciseAction(
     .from("workout_exercises")
     .insert({
       workout_day_id:
-        parsed.data.workout_day_id,
+        parsed.data
+          .workout_day_id,
 
       exercise_id:
         null,
 
       exercise_name:
-        parsed.data.exercise_name,
+        parsed.data
+          .exercise_name,
 
       exercise_order:
-        parsed.data.exercise_order,
+        parsed.data
+          .exercise_order,
 
       target_sets:
-        parsed.data.target_sets,
+        parsed.data
+          .target_sets,
 
       rep_min:
         parsed.data.rep_min,
@@ -575,7 +687,8 @@ export async function createWorkoutExerciseAction(
         parsed.data.rep_max,
 
       rest_seconds:
-        parsed.data.rest_seconds,
+        parsed.data
+          .rest_seconds,
 
       tempo:
         parsed.data.tempo,
@@ -604,9 +717,13 @@ export async function createWorkoutExerciseAction(
 export async function activateWorkoutPlanAction(
   formData: FormData,
 ): Promise<void> {
-  const parsed = uuidSchema.safeParse(
-    formData.get("plan_id"),
-  );
+  const parsed =
+    uuidSchema.safeParse(
+      getFormValue(
+        formData,
+        "plan_id",
+      ),
+    );
 
   if (!parsed.success) {
     throw new Error(
@@ -616,7 +733,7 @@ export async function activateWorkoutPlanAction(
 
   const {
     supabase,
-  } = await requireAuthenticatedUser();
+  } = await requireUser();
 
   const clientId =
     await getPlanClientId(
@@ -636,9 +753,18 @@ export async function activateWorkoutPlanAction(
     .update({
       status: "archived",
     })
-    .eq("client_id", clientId)
-    .eq("status", "active")
-    .neq("id", parsed.data);
+    .eq(
+      "client_id",
+      clientId,
+    )
+    .eq(
+      "status",
+      "active",
+    )
+    .neq(
+      "id",
+      parsed.data,
+    );
 
   if (archiveError) {
     throw new Error(
@@ -653,7 +779,10 @@ export async function activateWorkoutPlanAction(
     .update({
       status: "active",
     })
-    .eq("id", parsed.data);
+    .eq(
+      "id",
+      parsed.data,
+    );
 
   if (error) {
     throw new Error(
@@ -669,9 +798,13 @@ export async function activateWorkoutPlanAction(
 export async function archiveWorkoutPlanAction(
   formData: FormData,
 ): Promise<void> {
-  const parsed = uuidSchema.safeParse(
-    formData.get("plan_id"),
-  );
+  const parsed =
+    uuidSchema.safeParse(
+      getFormValue(
+        formData,
+        "plan_id",
+      ),
+    );
 
   if (!parsed.success) {
     throw new Error(
@@ -681,7 +814,7 @@ export async function archiveWorkoutPlanAction(
 
   const {
     supabase,
-  } = await requireAuthenticatedUser();
+  } = await requireUser();
 
   const clientId =
     await getPlanClientId(
@@ -701,11 +834,14 @@ export async function archiveWorkoutPlanAction(
     .update({
       status: "archived",
     })
-    .eq("id", parsed.data);
+    .eq(
+      "id",
+      parsed.data,
+    );
 
   if (error) {
     throw new Error(
-      `Không thể archive workout plan: ${error.message}`,
+      `Không thể archive plan: ${error.message}`,
     );
   }
 
@@ -717,9 +853,13 @@ export async function archiveWorkoutPlanAction(
 export async function deleteWorkoutPlanAction(
   formData: FormData,
 ): Promise<void> {
-  const parsed = uuidSchema.safeParse(
-    formData.get("plan_id"),
-  );
+  const parsed =
+    uuidSchema.safeParse(
+      getFormValue(
+        formData,
+        "plan_id",
+      ),
+    );
 
   if (!parsed.success) {
     throw new Error(
@@ -729,7 +869,7 @@ export async function deleteWorkoutPlanAction(
 
   const {
     supabase,
-  } = await requireAuthenticatedUser();
+  } = await requireUser();
 
   const clientId =
     await getPlanClientId(
@@ -747,7 +887,10 @@ export async function deleteWorkoutPlanAction(
   } = await supabase
     .from("workout_plans")
     .delete()
-    .eq("id", parsed.data);
+    .eq(
+      "id",
+      parsed.data,
+    );
 
   if (error) {
     throw new Error(
@@ -763,9 +906,13 @@ export async function deleteWorkoutPlanAction(
 export async function deleteWorkoutDayAction(
   formData: FormData,
 ): Promise<void> {
-  const parsed = uuidSchema.safeParse(
-    formData.get("day_id"),
-  );
+  const parsed =
+    uuidSchema.safeParse(
+      getFormValue(
+        formData,
+        "day_id",
+      ),
+    );
 
   if (!parsed.success) {
     throw new Error(
@@ -775,7 +922,7 @@ export async function deleteWorkoutDayAction(
 
   const {
     supabase,
-  } = await requireAuthenticatedUser();
+  } = await requireUser();
 
   const clientId =
     await getDayClientId(
@@ -793,7 +940,10 @@ export async function deleteWorkoutDayAction(
   } = await supabase
     .from("workout_days")
     .delete()
-    .eq("id", parsed.data);
+    .eq(
+      "id",
+      parsed.data,
+    );
 
   if (error) {
     throw new Error(
@@ -809,9 +959,13 @@ export async function deleteWorkoutDayAction(
 export async function deleteWorkoutExerciseAction(
   formData: FormData,
 ): Promise<void> {
-  const parsed = uuidSchema.safeParse(
-    formData.get("exercise_id"),
-  );
+  const parsed =
+    uuidSchema.safeParse(
+      getFormValue(
+        formData,
+        "exercise_id",
+      ),
+    );
 
   if (!parsed.success) {
     throw new Error(
@@ -821,33 +975,34 @@ export async function deleteWorkoutExerciseAction(
 
   const {
     supabase,
-  } = await requireAuthenticatedUser();
+  } = await requireUser();
 
   const {
-    data: exercise,
-    error: exerciseError,
+    data,
+    error: findError,
   } = await supabase
     .from("workout_exercises")
     .select("workout_day_id")
-    .eq("id", parsed.data)
+    .eq(
+      "id",
+      parsed.data,
+    )
     .single();
 
   if (
-    exerciseError ||
-    !exercise
+    findError ||
+    !data
   ) {
     throw new Error(
-      `Không tìm thấy bài tập: ${
-        exerciseError?.message ??
-        "Bài tập không tồn tại."
-      }`,
+      findError?.message ??
+        "Không tìm thấy bài tập.",
     );
   }
 
   const clientId =
     await getDayClientId(
       supabase,
-      exercise.workout_day_id,
+      data.workout_day_id,
     );
 
   await assertCanManageClient(
@@ -860,7 +1015,10 @@ export async function deleteWorkoutExerciseAction(
   } = await supabase
     .from("workout_exercises")
     .delete()
-    .eq("id", parsed.data);
+    .eq(
+      "id",
+      parsed.data,
+    );
 
   if (error) {
     throw new Error(

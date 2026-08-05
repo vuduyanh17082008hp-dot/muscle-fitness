@@ -1,14 +1,26 @@
 import { createBrowserClient } from "@supabase/ssr";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
-let supabaseClient: SupabaseClient | undefined;
+import type { Database } from "@/types/app-database.types";
 
-export function createClient(): SupabaseClient {
+let browserClient:
+  | ReturnType<
+      typeof createBrowserClient<Database>
+    >
+  | undefined;
+
+function getSupabaseConfig() {
   const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
+    process.env
+      .NEXT_PUBLIC_SUPABASE_URL
+      ?.trim();
 
-  const supabaseAnonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseKey =
+    process.env
+      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+      ?.trim() ||
+    process.env
+      .NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ?.trim();
 
   if (!supabaseUrl) {
     throw new Error(
@@ -16,18 +28,33 @@ export function createClient(): SupabaseClient {
     );
   }
 
-  if (!supabaseAnonKey) {
+  if (!supabaseKey) {
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local",
+      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local",
     );
   }
 
-  if (!supabaseClient) {
-    supabaseClient = createBrowserClient(
+  return {
+    supabaseUrl,
+    supabaseKey,
+  };
+}
+
+export function createClient() {
+  if (browserClient) {
+    return browserClient;
+  }
+
+  const {
+    supabaseUrl,
+    supabaseKey,
+  } = getSupabaseConfig();
+
+  browserClient =
+    createBrowserClient<Database>(
       supabaseUrl,
-      supabaseAnonKey,
+      supabaseKey,
     );
-  }
 
-  return supabaseClient;
+  return browserClient;
 }
