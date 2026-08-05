@@ -1,67 +1,46 @@
-import 'server-only'
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { google } from 'googleapis'
+let browserClient: SupabaseClient | undefined;
 
-let cachedDrive:
-  | ReturnType<typeof google.drive>
-  | null = null
+function getSupabaseConfig() {
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 
-function requiredEnvironmentVariable(
-  name: string,
-): string {
-  const value =
-    process.env[name]?.trim()
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
-  if (!value) {
+  if (!supabaseUrl) {
     throw new Error(
-      `Missing environment variable: ${name}`,
-    )
+      "Missing NEXT_PUBLIC_SUPABASE_URL in .env.local",
+    );
   }
 
-  return value
-}
-
-export function getGoogleDriveFolderId() {
-  return requiredEnvironmentVariable(
-    'GOOGLE_DRIVE_FOLDER_ID',
-  )
-}
-
-export function getGoogleDriveClient() {
-  if (cachedDrive) {
-    return cachedDrive
+  if (!supabaseKey) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local",
+    );
   }
 
-  const clientId =
-    requiredEnvironmentVariable(
-      'GOOGLE_DRIVE_CLIENT_ID',
-    )
+  return {
+    supabaseUrl,
+    supabaseKey,
+  };
+}
 
-  const clientSecret =
-    requiredEnvironmentVariable(
-      'GOOGLE_DRIVE_CLIENT_SECRET',
-    )
+export function createClient(): SupabaseClient {
+  if (browserClient) {
+    return browserClient;
+  }
 
-  const refreshToken =
-    requiredEnvironmentVariable(
-      'GOOGLE_DRIVE_REFRESH_TOKEN',
-    )
+  const { supabaseUrl, supabaseKey } =
+    getSupabaseConfig();
 
-  const oauth2Client =
-    new google.auth.OAuth2(
-      clientId,
-      clientSecret,
-    )
+  browserClient = createBrowserClient(
+    supabaseUrl,
+    supabaseKey,
+  );
 
-  oauth2Client.setCredentials({
-    refresh_token: refreshToken,
-  })
-
-  cachedDrive =
-    google.drive({
-      version: 'v3',
-      auth: oauth2Client,
-    })
-
-  return cachedDrive
+  return browserClient;
 }

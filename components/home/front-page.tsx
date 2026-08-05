@@ -577,7 +577,7 @@ export default function FrontPage() {
             </Reveal>
 
             <Reveal className="mt-9">
-              <PrimaryButton href="/training-course">
+              <PrimaryButton href="/training">
                 EXPLORE TRAINING
               </PrimaryButton>
             </Reveal>

@@ -1,13 +1,32 @@
-import type { Metadata } from "next";
-
-import StoryPageClient from "@/components/story/StoryPageClient";
-
-export const metadata: Metadata = {
-  title: "My Story | Muscle Fitness",
-  description:
-    "The story of rebuilding my body, confidence and purpose—from 88 kilograms to 68 kilograms.",
-};
+import StoryChapter from "@/components/story/StoryChapter"
+import StoryLidentity from "@/components/story/StoryLidentity"
+import StoryTimeline from "@/components/story/StoryTimeline"
+import TransformationComparison from "@/components/story/TransformationComparison"
+import TransformationStats from "@/components/story/TransformationStats"
+import storyData from "@/data/storyContent"
 
 export default function StoryPage() {
-  return <StoryPageClient />;
+  return (
+    <main className="min-h-screen bg-[#070707] text-white">
+      <StoryLidentity />
+
+      <TransformationStats />
+
+      <TransformationComparison />
+
+      <StoryTimeline />
+
+      <div>
+        {storyData.chapters.map(
+          (chapter, index) => (
+            <StoryChapter
+              key={chapter.id}
+              chapter={chapter}
+              index={index}
+            />
+          ),
+        )}
+      </div>
+    </main>
+  )
 }

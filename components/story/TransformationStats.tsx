@@ -1,49 +1,113 @@
-"use client";
-import { useEffect, useRef, useState } from "react";
-import { useInView } from "framer-motion";
-import storyData from "@/data/storyContent";
+"use client"
 
-const TransformationStats = () => {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true });
-  const [counts, setCounts] = useState(storyData.stats.map(() => 0));
+import {
+  useEffect,
+  useState,
+} from "react"
+
+import storyData, {
+  type StoryStat,
+} from "@/data/storyContent"
+
+export default function TransformationStats() {
+  const stats = storyData.stats
+
+  const [counts, setCounts] =
+    useState<number[]>(
+      () => stats.map(() => 0),
+    )
 
   useEffect(() => {
-    if (!isInView) return;
-    const intervals = storyData.stats.map((stat, i) => {
-      const step = Math.ceil(stat.value / 30);
-      const timer = setInterval(() => {
-        setCounts((prev) => {
-          const newCounts = [...prev];
-          if (newCounts[i] < stat.value) {
-            newCounts[i] = Math.min(stat.value, newCounts[i] + step);
+    const timers: Array<
+      ReturnType<typeof setInterval>
+    > = []
+
+    stats.forEach(
+      (
+        stat: StoryStat,
+        index: number,
+      ) => {
+        const duration = 900
+        const totalSteps = 30
+        const increment =
+          stat.value / totalSteps
+
+        let currentValue = 0
+
+        const timer = setInterval(() => {
+          currentValue += increment
+
+          const nextValue = Math.min(
+            stat.value,
+            Math.round(currentValue),
+          )
+
+          setCounts(
+            (
+              previousCounts: number[],
+            ) => {
+              const nextCounts = [
+                ...previousCounts,
+              ]
+
+              nextCounts[index] =
+                nextValue
+
+              return nextCounts
+            },
+          )
+
+          if (
+            nextValue >= stat.value
+          ) {
+            clearInterval(timer)
           }
-          return newCounts;
-        });
-      }, 30);
-      return timer;
-    });
-    return () => intervals.forEach(clearInterval);
-  }, [isInView]);
+        }, duration / totalSteps)
+
+        timers.push(timer)
+      },
+    )
+
+    return () => {
+      timers.forEach((timer) => {
+        clearInterval(timer)
+      })
+    }
+  }, [stats])
 
   return (
-    <section ref={ref} className="py-24 bg-charcoal">
-      <div className="max-w-5xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-        {storyData.stats.map((stat, i) => (
-          <div key={i}>
-            <div className="text-5xl font-bold text-white">
-              {counts[i]}
-              <span className="text-gold">{stat.suffix}</span>
-            </div>
-            <p className="text-gray-400 mt-2">{stat.label}</p>
-          </div>
-        ))}
-      </div>
-      <p className="text-center text-gray-500 italic mt-10 max-w-md mx-auto">
-        “The scale measured what I lost. It could never measure everything I gained.”
-      </p>
-    </section>
-  );
-};
+    <section className="bg-[#070707] px-4 py-20 text-white sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {stats.map(
+            (
+              stat: StoryStat,
+              index: number,
+            ) => (
+              <article
+                key={stat.label}
+                className="rounded-[24px] border border-white/10 bg-white/[0.025] p-6 transition hover:border-amber-500/20 hover:bg-white/[0.04]"
+              >
+                <p className="text-xs font-black uppercase tracking-[0.25em] text-zinc-600">
+                  {stat.label}
+                </p>
 
-export default TransformationStats;
+                <p className="mt-4 text-4xl font-black text-white">
+                  {counts[index] ?? 0}
+
+                  <span className="text-amber-500">
+                    {stat.suffix}
+                  </span>
+                </p>
+
+                <p className="mt-4 text-sm leading-6 text-zinc-500">
+                  {stat.description}
+                </p>
+              </article>
+            ),
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}

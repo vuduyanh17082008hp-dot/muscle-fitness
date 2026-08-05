@@ -1,225 +1,164 @@
-import { redirect } from "next/navigation"
+import 'server-only'
 
-import type {
-  AppRole,
-  Tables,
-} from "@/lib/database/types"
+import { cache } from 'react'
+import { redirect } from 'next/navigation'
 
-import { createClient } from "@/lib/supabase/server"
+import type { User } from '@supabase/supabase-js'
 
-export type AuthenticatedUser = {
-  id: string
-  email: string | null
-  userMetadata: Record<string, unknown>
+import { createClient } from '@/lib/supabase/server'
+
+type SupabaseServerClient = Awaited<
+  ReturnType<typeof createClient>
+>
+
+export type AuthenticatedProfile = {
+  user_id: string
+  full_name: string | null
+  onboarding_completed: boolean
 }
 
-export type AuthContext = {
-  user: AuthenticatedUser
-  profile: Tables<"profiles"> | null
+export type RequireUserResult = {
+  supabase: SupabaseServerClient
+  user: User
+  userId: string
 }
 
-function createAuthenticatedUser(user: {
-  id: string
-  email?: string
-  user_metadata?: Record<string, unknown>
-}): AuthenticatedUser {
-  return {
-    id: user.id,
-    email: user.email ?? null,
-    userMetadata: user.user_metadata ?? {},
+export type RequireCompletedOnboardingResult =
+  RequireUserResult & {
+    profile: AuthenticatedProfile
+  }
+
+type DashboardRpcPayload = {
+  profile?: {
+    fullName?: string | null
+    onboardingCompleted?: boolean
   }
 }
 
-export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
-
-  if (error || !user) {
-    return null
-  }
-
-  return createAuthenticatedUser(user)
+type DashboardRpcError = {
+  message: string
+  details?: string | null
+  hint?: string | null
+  code?: string
 }
 
-export async function getCurrentProfile(): Promise<Tables<"profiles"> | null> {
-  const supabase = await createClient()
+type DashboardRpcResult = {
+  data: DashboardRpcPayload | null
+  error: DashboardRpcError | null
+}
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
+type DashboardRpcClient = {
+  rpc: (
+    functionName: 'get_client_dashboard',
+  ) => PromiseLike<DashboardRpcResult>
+}
 
-  if (userError || !user) {
-    return null
-  }
+/**
+ * Chỉ kiểm tra Supabase Auth.
+ *
+ * Không query bảng profiles trong function này để tránh:
+ * - Sai tên cột user_id hoặc id.
+ * - RLS profiles chưa đồng bộ.
+ * - Query profile bị lặp lại nhiều lần.
+ */
+export const requireUser = cache(
+  async (): Promise<RequireUserResult> => {
+    const supabase = await createClient()
 
-  const {
-    data: profile,
-    error: profileError,
-  } = await supabase
-    .from("profiles")
-    .select(
-      `
-        user_id,
-        full_name,
-        avatar_url,
-        date_of_birth,
-        gender,
-        timezone,
-        role,
-        onboarding_completed,
-        created_at,
-        updated_at
-      `,
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
+
+    if (error || !user) {
+      redirect('/login?next=/dashboard')
+    }
+
+    return {
+      supabase,
+      user,
+      userId: user.id,
+    }
+  },
+)
+
+/**
+ * Function tương thích cho những trang cũ vẫn đang import
+ * requireCompletedOnboarding.
+ *
+ * Profile được đọc từ get_client_dashboard() thay vì query
+ * trực tiếp bảng profiles.
+ */
+export const requireCompletedOnboarding = cache(
+  async (
+    nextPath = '/dashboard',
+  ): Promise<RequireCompletedOnboardingResult> => {
+    const {
+      supabase,
+      user,
+      userId,
+    } = await requireUser()
+
+    const dashboardRpcClient =
+      supabase as unknown as DashboardRpcClient
+
+    const {
+      data,
+      error,
+    } = await dashboardRpcClient.rpc(
+      'get_client_dashboard',
     )
-    .eq("user_id", user.id)
-    .maybeSingle()
 
-  if (profileError) {
-    console.error(
-      "Unable to load current profile:",
-      profileError,
-    )
+    if (error) {
+      console.error(
+        'Unable to load dashboard authentication context:',
+        {
+          message: error.message,
+          details: error.details ?? null,
+          hint: error.hint ?? null,
+          code: error.code ?? null,
+        },
+      )
 
-    return null
-  }
+      throw new Error(
+        'Unable to load your Muscle Fitness profile.',
+      )
+    }
 
-  return profile
-}
+    const dashboardProfile =
+      data?.profile
 
-export async function requireUser(
-  nextPath = "/dashboard",
-): Promise<AuthContext> {
-  const supabase = await createClient()
+    if (
+      dashboardProfile?.onboardingCompleted !== true
+    ) {
+      redirect(
+        `/onboarding?next=${encodeURIComponent(
+          nextPath,
+        )}`,
+      )
+    }
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
+    const metadataName =
+      typeof user.user_metadata?.full_name ===
+      'string'
+        ? user.user_metadata.full_name
+        : null
 
-  if (userError || !user) {
-    redirect(
-      `/login?next=${encodeURIComponent(nextPath)}`,
-    )
-  }
+    return {
+      supabase,
+      user,
+      userId,
 
-  const {
-    data: profile,
-    error: profileError,
-  } = await supabase
-    .from("profiles")
-    .select(
-      `
-        user_id,
-        full_name,
-        avatar_url,
-        date_of_birth,
-        gender,
-        timezone,
-        role,
-        onboarding_completed,
-        created_at,
-        updated_at
-      `,
-    )
-    .eq("user_id", user.id)
-    .maybeSingle()
+      profile: {
+        user_id: userId,
 
-  if (profileError) {
-    console.error(
-      "Unable to load authenticated profile:",
-      profileError,
-    )
-  }
+        full_name:
+          dashboardProfile.fullName?.trim() ||
+          metadataName?.trim() ||
+          null,
 
-  return {
-    user: createAuthenticatedUser(user),
-    profile,
-  }
-}
-
-export async function requireAuthenticatedUser(
-  nextPath = "/dashboard",
-): Promise<AuthContext> {
-  return requireUser(nextPath)
-}
-
-export async function requireCompletedOnboarding(
-  nextPath = "/dashboard",
-): Promise<AuthContext> {
-  const context = await requireUser(nextPath)
-
-  if (!context.profile?.onboarding_completed) {
-    redirect("/onboarding")
-  }
-
-  return context
-}
-
-function normalizeRole(
-  role: string | null | undefined,
-): AppRole {
-  if (role === "admin") {
-    return "admin"
-  }
-
-  if (role === "coach") {
-    return "coach"
-  }
-
-  if (role === "client") {
-    return "client"
-  }
-
-  return "user"
-}
-
-export async function requireRole(
-  roles: AppRole[],
-  nextPath = "/dashboard",
-): Promise<AuthContext> {
-  const context =
-    await requireCompletedOnboarding(nextPath)
-
-  const role = normalizeRole(context.profile?.role)
-
-  if (!roles.includes(role)) {
-    redirect("/unauthorized")
-  }
-
-  return context
-}
-
-export async function requireAdmin(
-  nextPath = "/admin",
-): Promise<AuthContext> {
-  return requireRole(["admin"], nextPath)
-}
-
-export async function requireCoach(
-  nextPath = "/coach",
-): Promise<AuthContext> {
-  return requireRole(
-    ["coach", "admin"],
-    nextPath,
-  )
-}
-
-export async function isAdmin(): Promise<boolean> {
-  const profile = await getCurrentProfile()
-
-  return profile?.role === "admin"
-}
-
-export async function isCoach(): Promise<boolean> {
-  const profile = await getCurrentProfile()
-
-  return (
-    profile?.role === "coach" ||
-    profile?.role === "admin"
-  )
-}
+        onboarding_completed: true,
+      },
+    }
+  },
+)

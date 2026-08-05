@@ -1,28 +1,70 @@
 export type NavigationItem = {
-  title: string;
-  href: string;
-};
+  title: string
+  href: string
+}
 
-export const siteConfig = {
-  name: "MuscleFitness",
+export type SiteConfig = {
+  name: string
+  description: string
+  navigation: {
+    marketing: NavigationItem[]
+    dashboard: NavigationItem[]
+  }
+}
+
+export const siteConfig: SiteConfig = {
+  name: "Muscle Fitness",
 
   description:
-    "Nền tảng luyện tập, dinh dưỡng và AI Coach được cá nhân hóa.",
+    "A modern fitness coaching platform for training, nutrition, progress tracking and long-term transformation.",
 
   navigation: {
+    marketing: [
+      {
+        title: "Home",
+        href: "/",
+      },
+      {
+        title: "My Story",
+        href: "/story",
+      },
+      {
+        title: "Training",
+        href: "/training",
+      },
+      {
+        title: "Nutrition",
+        href: "/nutrition",
+      },
+      {
+        title: "Pricing",
+        href: "/#pricing",
+      },
+    ],
+
     dashboard: [
       {
-        title: "Tổng quan",
+        title: "Overview",
         href: "/dashboard",
       },
       {
-        title: "Kế hoạch ăn uống",
-        href: "/meal-plan",
+        title: "Training",
+        href: "/dashboard/training",
+      },
+      {
+        title: "Nutrition",
+        href: "/dashboard/nutrition",
+      },
+      {
+        title: "Progress",
+        href: "/dashboard/progress",
       },
       {
         title: "AI Coach",
         href: "/coach",
       },
-    ] satisfies readonly NavigationItem[],
+    ],
   },
-} as const;
+}
+
+export default siteConfig

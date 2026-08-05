@@ -1,81 +1,136 @@
-import { NextResponse } from "next/server"
+import { createServerClient } from "@supabase/ssr";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
 
-import { createClient } from "@/lib/supabase/server"
-
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url)
-
-  const code = requestUrl.searchParams.get("code")
-  const error = requestUrl.searchParams.get("error")
-  const errorDescription =
-    requestUrl.searchParams.get("error_description")
-
-  let next = requestUrl.searchParams.get("next") ?? "/dashboard"
-
-  // Ngăn open redirect.
-  if (!next.startsWith("/")) {
-    next = "/dashboard"
+function getSafeRedirect(
+  value: string | null,
+): string {
+  if (!value) {
+    return "/dashboard";
   }
 
-  if (error) {
-    const loginUrl = new URL("/login", requestUrl.origin)
+  if (
+    !value.startsWith("/") ||
+    value.startsWith("//")
+  ) {
+    return "/dashboard";
+  }
 
-    loginUrl.searchParams.set(
-      "error",
-      errorDescription ?? error
-    )
+  return value;
+}
 
-    return NextResponse.redirect(loginUrl)
+function redirectToLoginWithError(
+  request: NextRequest,
+  message: string,
+) {
+  const loginUrl = new URL(
+    "/auth/login",
+    request.url,
+  );
+
+  loginUrl.searchParams.set(
+    "error",
+    message,
+  );
+
+  return NextResponse.redirect(loginUrl);
+}
+
+export async function GET(
+  request: NextRequest,
+) {
+  const requestUrl = new URL(request.url);
+
+  const code =
+    requestUrl.searchParams.get("code");
+
+  const oauthError =
+    requestUrl.searchParams.get(
+      "error_description",
+    ) ??
+    requestUrl.searchParams.get("error");
+
+  const next = getSafeRedirect(
+    requestUrl.searchParams.get("next"),
+  );
+
+  if (oauthError) {
+    return redirectToLoginWithError(
+      request,
+      oauthError,
+    );
   }
 
   if (!code) {
-    const loginUrl = new URL("/login", requestUrl.origin)
-
-    loginUrl.searchParams.set(
-      "error",
-      "Google không trả về authorization code."
-    )
-
-    return NextResponse.redirect(loginUrl)
+    return redirectToLoginWithError(
+      request,
+      "Không nhận được mã xác thực từ Google.",
+    );
   }
 
-  const supabase = await createClient()
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-  const { error: exchangeError } =
-    await supabase.auth.exchangeCodeForSession(code)
+  const supabaseAnonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (exchangeError) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return redirectToLoginWithError(
+      request,
+      "Thiếu cấu hình Supabase trong .env.local.",
+    );
+  }
+
+  const response = NextResponse.redirect(
+    new URL(next, request.url),
+  );
+
+  const supabase = createServerClient(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(
+            ({
+              name,
+              value,
+              options,
+            }) => {
+              response.cookies.set(
+                name,
+                value,
+                options,
+              );
+            },
+          );
+        },
+      },
+    },
+  );
+
+  const { error } =
+    await supabase.auth.exchangeCodeForSession(
+      code,
+    );
+
+  if (error) {
     console.error(
-      "OAuth code exchange failed:",
-      exchangeError
-    )
+      "OAuth callback error:",
+      error,
+    );
 
-    const loginUrl = new URL("/login", requestUrl.origin)
-
-    loginUrl.searchParams.set(
-      "error",
-      "Không thể hoàn tất đăng nhập Google."
-    )
-
-    return NextResponse.redirect(loginUrl)
+    return redirectToLoginWithError(
+      request,
+      error.message,
+    );
   }
 
-  const forwardedHost =
-    request.headers.get("x-forwarded-host")
-
-  const forwardedProtocol =
-    request.headers.get("x-forwarded-proto") ?? "https"
-
-  if (
-    process.env.NODE_ENV === "production" &&
-    forwardedHost
-  ) {
-    return NextResponse.redirect(
-      `${forwardedProtocol}://${forwardedHost}${next}`
-    )
-  }
-
-  return NextResponse.redirect(
-    new URL(next, requestUrl.origin)
-  )
+  return response;
 }
