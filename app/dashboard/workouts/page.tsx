@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import type { Database } from "@/database.types";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/app-database.types";
 
 import {
   activateWorkoutPlanAction,
@@ -16,6 +16,11 @@ import {
 } from "./actions";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+/* =========================================================
+   DATABASE TYPES
+========================================================= */
 
 type WorkoutPlan =
   Database["public"]["Tables"]["workout_plans"]["Row"];
@@ -26,15 +31,13 @@ type WorkoutDay =
 type WorkoutExercise =
   Database["public"]["Tables"]["workout_exercises"]["Row"];
 
-type WorkoutDayWithExercises =
-  WorkoutDay & {
-    exercises: WorkoutExercise[];
-  };
+type WorkoutDayWithExercises = WorkoutDay & {
+  exercises: WorkoutExercise[];
+};
 
-type WorkoutPlanWithDays =
-  WorkoutPlan & {
-    days: WorkoutDayWithExercises[];
-  };
+type WorkoutPlanWithDays = WorkoutPlan & {
+  days: WorkoutDayWithExercises[];
+};
 
 type WorkoutsPageProps = {
   searchParams: Promise<{
@@ -42,408 +45,549 @@ type WorkoutsPageProps = {
   }>;
 };
 
+/* =========================================================
+   HELPERS
+========================================================= */
+
 const uuidSchema = z.string().uuid();
 
-function sortByNumber<T>(
-  items: T[],
-  getNumber: (item: T) => number,
-): T[] {
-  return [...items].sort(
-    (first, second) =>
-      getNumber(first) -
-      getNumber(second),
-  );
-}
-
-function formatDate(
-  value: string,
-): string {
-  return new Intl.DateTimeFormat(
-    "en-SG",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    },
-  ).format(new Date(value));
-}
-
-function getStatusClasses(
-  status: string,
-): string {
-  switch (status) {
-    case "active":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-
-    case "archived":
-      return "border-zinc-700 bg-zinc-900 text-zinc-400";
-
-    default:
-      return "border-orange-500/30 bg-orange-500/10 text-orange-300";
-  }
-}
-
-function inputClasses(): string {
+function getInputClasses(): string {
   return [
-    "h-11 w-full rounded-xl",
+    "h-12 w-full rounded-xl",
     "border border-white/10",
-    "bg-black/40 px-3",
+    "bg-black/40 px-4",
     "text-sm text-white",
     "outline-none transition",
     "placeholder:text-zinc-700",
-    "focus:border-orange-500/60",
+    "hover:border-white/20",
+    "focus:border-orange-400/70",
+    "focus:ring-4",
+    "focus:ring-orange-500/10",
+    "disabled:cursor-not-allowed",
+    "disabled:opacity-50",
+  ].join(" ");
+}
+
+function getTextareaClasses(): string {
+  return [
+    "min-h-28 w-full resize-y rounded-xl",
+    "border border-white/10",
+    "bg-black/40 px-4 py-3",
+    "text-sm leading-6 text-white",
+    "outline-none transition",
+    "placeholder:text-zinc-700",
+    "hover:border-white/20",
+    "focus:border-orange-400/70",
     "focus:ring-4",
     "focus:ring-orange-500/10",
   ].join(" ");
 }
+
+function sortByNumber<T>(
+  items: T[],
+  getValue: (item: T) => number,
+): T[] {
+  return [...items].sort(
+    (firstItem, secondItem) =>
+      getValue(firstItem) - getValue(secondItem),
+  );
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown date";
+  }
+
+  return new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function getStatusClasses(status: string): string {
+  switch (status) {
+    case "active":
+      return [
+        "border-emerald-500/30",
+        "bg-emerald-500/10",
+        "text-emerald-300",
+      ].join(" ");
+
+    case "archived":
+      return [
+        "border-zinc-700",
+        "bg-zinc-900",
+        "text-zinc-400",
+      ].join(" ");
+
+    default:
+      return [
+        "border-orange-500/30",
+        "bg-orange-500/10",
+        "text-orange-300",
+      ].join(" ");
+  }
+}
+
+function getStatusLabel(status: string): string {
+  switch (status) {
+    case "active":
+      return "Active";
+
+    case "archived":
+      return "Archived";
+
+    default:
+      return "Draft";
+  }
+}
+
+/* =========================================================
+   PAGE
+========================================================= */
 
 export default async function WorkoutsPage({
   searchParams,
 }: WorkoutsPageProps) {
   const supabase = await createClient();
 
+  /* =======================================================
+     AUTHENTICATION
+  ======================================================= */
+
   const {
-    data: claimsData,
-    error: claimsError,
-  } = await supabase.auth.getClaims();
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-  const userId =
-    claimsData?.claims?.sub;
-
-  if (
-    claimsError ||
-    !userId
-  ) {
-    redirect(
-      "/login?next=/dashboard/workouts",
-    );
+  if (userError || !user) {
+    redirect("/login?next=/dashboard/workouts");
   }
 
-  const resolvedSearchParams =
-    await searchParams;
+  /* =======================================================
+     RESOLVE CLIENT
+  ======================================================= */
 
-  const rawClient =
-    Array.isArray(
-      resolvedSearchParams.client,
-    )
-      ? resolvedSearchParams.client[0]
-      : resolvedSearchParams.client;
+  const resolvedSearchParams = await searchParams;
 
-  const validClientId =
-    rawClient &&
-    uuidSchema.safeParse(rawClient).success
-      ? rawClient
-      : userId;
+  const rawClientId = Array.isArray(
+    resolvedSearchParams.client,
+  )
+    ? resolvedSearchParams.client[0]
+    : resolvedSearchParams.client;
+
+  const parsedClientId = rawClientId
+    ? uuidSchema.safeParse(rawClientId)
+    : null;
+
+  const clientId =
+    parsedClientId?.success === true
+      ? parsedClientId.data
+      : user.id;
+
+  /* =======================================================
+     PERMISSION CHECK
+  ======================================================= */
 
   const {
-    data: canManage,
+    data: canManageClient,
     error: permissionError,
   } = await supabase.rpc(
     "can_manage_workout_client",
     {
-      target_client_id:
-        validClientId,
+      target_client_id: clientId,
     },
   );
 
-  if (
-    permissionError ||
-    !canManage
-  ) {
+  if (permissionError) {
     throw new Error(
-      "Bạn không có quyền xem workout của người dùng này.",
+      `Không thể kiểm tra quyền truy cập: ${permissionError.message}`,
     );
   }
 
+  if (!canManageClient) {
+    throw new Error(
+      "Bạn không có quyền xem hoặc quản lý workout của người dùng này.",
+    );
+  }
+
+  /* =======================================================
+     LOAD WORKOUT PLANS
+  ======================================================= */
+
   const {
-    data: plansData,
-    error: plansError,
+    data: workoutPlansData,
+    error: workoutPlansError,
   } = await supabase
     .from("workout_plans")
     .select("*")
-    .eq(
-      "client_id",
-      validClientId,
-    )
-    .order(
-      "created_at",
-      {
-        ascending: false,
-      },
-    );
+    .eq("client_id", clientId)
+    .order("created_at", {
+      ascending: false,
+    });
 
-  if (plansError) {
+  if (workoutPlansError) {
     throw new Error(
-      `Không thể tải workout plans: ${plansError.message}`,
+      `Không thể tải workout plans: ${workoutPlansError.message}`,
     );
   }
 
-  const plans =
-    plansData ?? [];
+  const workoutPlans: WorkoutPlan[] =
+    workoutPlansData ?? [];
 
-  const planIds =
-    plans.map(
-      (plan) => plan.id,
-    );
+  const workoutPlanIds = workoutPlans.map(
+    (plan) => plan.id,
+  );
 
-  let days: WorkoutDay[] = [];
+  /* =======================================================
+     LOAD WORKOUT DAYS
+  ======================================================= */
 
-  if (planIds.length > 0) {
+  let workoutDays: WorkoutDay[] = [];
+
+  if (workoutPlanIds.length > 0) {
     const {
-      data,
-      error,
+      data: workoutDaysData,
+      error: workoutDaysError,
     } = await supabase
       .from("workout_days")
       .select("*")
-      .in(
-        "workout_plan_id",
-        planIds,
-      )
-      .order(
-        "day_number",
-        {
-          ascending: true,
-        },
-      );
+      .in("workout_plan_id", workoutPlanIds)
+      .order("day_number", {
+        ascending: true,
+      });
 
-    if (error) {
+    if (workoutDaysError) {
       throw new Error(
-        `Không thể tải workout days: ${error.message}`,
+        `Không thể tải workout days: ${workoutDaysError.message}`,
       );
     }
 
-    days = data ?? [];
+    workoutDays = workoutDaysData ?? [];
   }
 
-  const dayIds =
-    days.map(
-      (day) => day.id,
-    );
+  const workoutDayIds = workoutDays.map(
+    (day) => day.id,
+  );
 
-  let exercises: WorkoutExercise[] =
-    [];
+  /* =======================================================
+     LOAD EXERCISES
+  ======================================================= */
 
-  if (dayIds.length > 0) {
+  let workoutExercises: WorkoutExercise[] = [];
+
+  if (workoutDayIds.length > 0) {
     const {
-      data,
-      error,
+      data: workoutExercisesData,
+      error: workoutExercisesError,
     } = await supabase
       .from("workout_exercises")
       .select("*")
-      .in(
-        "workout_day_id",
-        dayIds,
-      )
-      .order(
-        "exercise_order",
-        {
-          ascending: true,
-        },
-      );
+      .in("workout_day_id", workoutDayIds)
+      .order("exercise_order", {
+        ascending: true,
+      });
 
-    if (error) {
+    if (workoutExercisesError) {
       throw new Error(
-        `Không thể tải exercises: ${error.message}`,
+        `Không thể tải workout exercises: ${workoutExercisesError.message}`,
       );
     }
 
-    exercises = data ?? [];
+    workoutExercises =
+      workoutExercisesData ?? [];
   }
 
-  const exercisesByDay =
-    new Map<
-      string,
-      WorkoutExercise[]
-    >();
+  /* =======================================================
+     GROUP EXERCISES BY DAY
+  ======================================================= */
 
-  exercises.forEach(
-    (exercise) => {
-      const current =
-        exercisesByDay.get(
-          exercise.workout_day_id,
-        ) ?? [];
+  const exercisesByDay = new Map<
+    string,
+    WorkoutExercise[]
+  >();
 
-      current.push(exercise);
-
-      exercisesByDay.set(
+  for (const exercise of workoutExercises) {
+    const currentExercises =
+      exercisesByDay.get(
         exercise.workout_day_id,
-        current,
-      );
-    },
-  );
-
-  const daysByPlan =
-    new Map<
-      string,
-      WorkoutDayWithExercises[]
-    >();
-
-  days.forEach((day) => {
-    const current =
-      daysByPlan.get(
-        day.workout_plan_id,
       ) ?? [];
 
-    current.push({
+    currentExercises.push(exercise);
+
+    exercisesByDay.set(
+      exercise.workout_day_id,
+      currentExercises,
+    );
+  }
+
+  /* =======================================================
+     GROUP DAYS BY PLAN
+  ======================================================= */
+
+  const daysByPlan = new Map<
+    string,
+    WorkoutDayWithExercises[]
+  >();
+
+  for (const day of workoutDays) {
+    const currentDays =
+      daysByPlan.get(day.workout_plan_id) ??
+      [];
+
+    const dayExercises = sortByNumber(
+      exercisesByDay.get(day.id) ?? [],
+      (exercise) => exercise.exercise_order,
+    );
+
+    currentDays.push({
       ...day,
-
-      exercises:
-        sortByNumber(
-          exercisesByDay.get(day.id) ??
-            [],
-
-          (exercise) =>
-            exercise.exercise_order,
-        ),
+      exercises: dayExercises,
     });
 
     daysByPlan.set(
       day.workout_plan_id,
-      current,
+      currentDays,
     );
-  });
+  }
 
-  const plansWithDays:
-    WorkoutPlanWithDays[] =
-    plans.map((plan) => ({
+  /* =======================================================
+     FINAL STRUCTURE
+  ======================================================= */
+
+  const plansWithDays: WorkoutPlanWithDays[] =
+    workoutPlans.map((plan) => ({
       ...plan,
 
-      days:
-        sortByNumber(
-          daysByPlan.get(plan.id) ??
-            [],
-
-          (day) =>
-            day.day_number,
-        ),
+      days: sortByNumber(
+        daysByPlan.get(plan.id) ?? [],
+        (day) => day.day_number,
+      ),
     }));
+
+  const activePlan = plansWithDays.find(
+    (plan) => plan.status === "active",
+  );
+
+  const totalWorkoutDays = plansWithDays.reduce(
+    (total, plan) => total + plan.days.length,
+    0,
+  );
+
+  const totalExercises = plansWithDays.reduce(
+    (planTotal, plan) =>
+      planTotal +
+      plan.days.reduce(
+        (dayTotal, day) =>
+          dayTotal + day.exercises.length,
+        0,
+      ),
+    0,
+  );
 
   return (
     <main className="min-h-screen bg-[#070707] px-4 py-8 text-white sm:px-6 lg:px-10">
       <div className="mx-auto max-w-7xl">
+        {/* =================================================
+            HEADER
+        ================================================= */}
+
         <header className="mb-10">
-          <p className="text-xs font-black uppercase tracking-[0.3em] text-orange-400">
+          <p className="text-xs font-black uppercase tracking-[0.32em] text-orange-400">
             Training system
           </p>
 
-          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
-            Workout Plans
-          </h1>
+          <div className="mt-3 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+            <div>
+              <h1 className="text-3xl font-black tracking-[-0.04em] sm:text-5xl">
+                Workout Plans
+              </h1>
 
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-500 sm:text-base">
-            Create personalised training
-            plans, organise workout days
-            and assign exercises.
-          </p>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-500 sm:text-base">
+                Create personalised training
+                plans, organise workout days and
+                build complete exercise sessions.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <StatCard
+                value={plansWithDays.length}
+                label="Plans"
+              />
+
+              <StatCard
+                value={totalWorkoutDays}
+                label="Days"
+              />
+
+              <StatCard
+                value={totalExercises}
+                label="Exercises"
+              />
+            </div>
+          </div>
         </header>
 
-        <section className="rounded-3xl border border-white/10 bg-white/[0.035] p-5 sm:p-7">
-          <h2 className="text-xl font-black">
-            Create a new plan
-          </h2>
+        {/* =================================================
+            ACTIVE PLAN
+        ================================================= */}
+
+        {activePlan ? (
+          <section className="mb-8 overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-white/[0.025] to-transparent p-5 sm:p-7">
+            <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+              <div>
+                <div className="flex items-center gap-3">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]" />
+
+                  <p className="text-xs font-black uppercase tracking-[0.25em] text-emerald-300">
+                    Current active plan
+                  </p>
+                </div>
+
+                <h2 className="mt-3 text-2xl font-black sm:text-3xl">
+                  {activePlan.name}
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-zinc-400">
+                  {activePlan.days.length} workout
+                  days · {activePlan.weeks} weeks ·{" "}
+                  {
+                    activePlan.session_duration_minutes
+                  }{" "}
+                  minutes per session
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/30 px-5 py-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-zinc-600">
+                  Goal
+                </p>
+
+                <p className="mt-1 font-bold text-zinc-200">
+                  {activePlan.goal ||
+                    "General fitness"}
+                </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* =================================================
+            CREATE PLAN
+        ================================================= */}
+
+        <section className="rounded-3xl border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.25)] sm:p-7">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.25em] text-orange-400">
+              New programme
+            </p>
+
+            <h2 className="mt-2 text-xl font-black sm:text-2xl">
+              Create a workout plan
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-zinc-600">
+              Start with the general programme
+              details. Workout days and exercises
+              can be added afterwards.
+            </p>
+          </div>
 
           <form
-            action={
-              createWorkoutPlanAction
-            }
-            className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+            action={createWorkoutPlanAction}
+            className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4"
           >
             <input
               type="hidden"
               name="client_id"
-              value={validClientId}
+              value={clientId}
             />
 
-            <label className="space-y-2 xl:col-span-2">
-              <span className="text-sm font-semibold text-zinc-300">
-                Plan name
-              </span>
-
+            <Field
+              label="Plan name"
+              className="md:col-span-2"
+            >
               <input
                 name="name"
                 required
                 minLength={2}
                 maxLength={120}
                 placeholder="12-week hypertrophy plan"
-                className={inputClasses()}
+                className={getInputClasses()}
               />
-            </label>
+            </Field>
 
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-zinc-300">
-                Goal
-              </span>
-
+            <Field label="Primary goal">
               <input
                 name="goal"
                 maxLength={500}
                 placeholder="Muscle gain"
-                className={inputClasses()}
+                className={getInputClasses()}
               />
-            </label>
+            </Field>
 
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-zinc-300">
-                Number of weeks
-              </span>
-
+            <Field label="Number of weeks">
               <input
                 name="weeks"
                 type="number"
                 min={1}
                 max={52}
                 defaultValue={4}
-                className={inputClasses()}
+                required
+                className={getInputClasses()}
               />
-            </label>
+            </Field>
 
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-zinc-300">
-                Days per week
-              </span>
-
+            <Field label="Days per week">
               <input
                 name="days_per_week"
                 type="number"
                 min={1}
                 max={7}
                 defaultValue={3}
-                className={inputClasses()}
+                required
+                className={getInputClasses()}
               />
-            </label>
+            </Field>
 
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-zinc-300">
-                Session duration
-              </span>
+            <Field label="Session duration">
+              <div className="relative">
+                <input
+                  name="session_duration_minutes"
+                  type="number"
+                  min={15}
+                  max={300}
+                  defaultValue={60}
+                  required
+                  className={`${getInputClasses()} pr-20`}
+                />
 
-              <input
-                name="session_duration_minutes"
-                type="number"
-                min={15}
-                max={300}
-                defaultValue={60}
-                className={inputClasses()}
-              />
-            </label>
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-zinc-600">
+                  minutes
+                </span>
+              </div>
+            </Field>
 
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-sm font-semibold text-zinc-300">
-                Description
-              </span>
-
-              <input
+            <Field
+              label="Description"
+              className="md:col-span-2"
+            >
+              <textarea
                 name="description"
                 maxLength={2000}
-                placeholder="Plan description"
-                className={inputClasses()}
+                placeholder="Describe the purpose, structure and progression of this programme."
+                className={getTextareaClasses()}
               />
-            </label>
+            </Field>
 
-            <div className="flex items-end xl:col-span-4">
+            <div className="flex items-end md:col-span-2 xl:col-span-4">
               <button
                 type="submit"
-                className="h-12 w-full rounded-xl bg-orange-400 px-6 text-sm font-black uppercase tracking-[0.14em] text-black transition hover:bg-orange-300 sm:w-auto"
+                className="h-12 w-full rounded-xl bg-orange-400 px-7 text-sm font-black uppercase tracking-[0.15em] text-black transition hover:bg-orange-300 focus:outline-none focus:ring-4 focus:ring-orange-500/20 sm:w-auto"
               >
                 Create workout plan
               </button>
@@ -451,500 +595,624 @@ export default async function WorkoutsPage({
           </form>
         </section>
 
+        {/* =================================================
+            PLAN LIST
+        ================================================= */}
+
         <section className="mt-8 space-y-6">
-          {plansWithDays.length ===
-          0 ? (
-            <div className="rounded-3xl border border-dashed border-white/10 px-6 py-16 text-center">
-              <p className="text-lg font-bold text-zinc-300">
-                No workout plan yet
-              </p>
-
-              <p className="mt-2 text-sm text-zinc-600">
-                Create the first plan
-                using the form above.
-              </p>
-            </div>
+          {plansWithDays.length === 0 ? (
+            <EmptyPlans />
           ) : (
-            plansWithDays.map(
-              (plan) => (
-                <article
-                  key={plan.id}
-                  className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d]"
-                >
-                  <div className="border-b border-white/10 p-5 sm:p-7">
-                    <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h2 className="text-2xl font-black">
-                            {plan.name}
-                          </h2>
+            plansWithDays.map((plan) => (
+              <article
+                key={plan.id}
+                className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d] shadow-[0_24px_80px_rgba(0,0,0,0.2)]"
+              >
+                {/* Plan header */}
 
-                          <span
-                            className={`rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider ${getStatusClasses(
-                              plan.status,
-                            )}`}
-                          >
-                            {plan.status}
-                          </span>
-                        </div>
+                <div className="border-b border-white/10 p-5 sm:p-7">
+                  <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-start">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h2 className="break-words text-2xl font-black tracking-tight">
+                          {plan.name}
+                        </h2>
 
-                        {plan.description ? (
-                          <p className="mt-3 max-w-3xl text-sm leading-7 text-zinc-500">
-                            {
-                              plan.description
-                            }
-                          </p>
-                        ) : null}
-
-                        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs font-semibold uppercase tracking-wider text-zinc-600">
-                          <span>
-                            {
-                              plan.weeks
-                            }{" "}
-                            weeks
-                          </span>
-
-                          <span>
-                            {
-                              plan.days_per_week
-                            }{" "}
-                            days/week
-                          </span>
-
-                          <span>
-                            {
-                              plan.session_duration_minutes
-                            }{" "}
-                            min/session
-                          </span>
-
-                          <span>
-                            Created{" "}
-                            {formatDate(
-                              plan.created_at,
-                            )}
-                          </span>
-                        </div>
+                        <span
+                          className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${getStatusClasses(
+                            plan.status,
+                          )}`}
+                        >
+                          {getStatusLabel(
+                            plan.status,
+                          )}
+                        </span>
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        {plan.status !==
-                        "active" ? (
-                          <form
-                            action={
-                              activateWorkoutPlanAction
-                            }
-                          >
-                            <input
-                              type="hidden"
-                              name="plan_id"
-                              value={
-                                plan.id
-                              }
-                            />
+                      {plan.description ? (
+                        <p className="mt-3 max-w-3xl text-sm leading-7 text-zinc-500">
+                          {plan.description}
+                        </p>
+                      ) : null}
 
-                            <button
-                              type="submit"
-                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-black uppercase tracking-wider text-emerald-300 transition hover:bg-emerald-500/20"
-                            >
-                              Activate
-                            </button>
-                          </form>
-                        ) : null}
+                      <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold uppercase tracking-wider text-zinc-600">
+                        <span>
+                          {plan.weeks} weeks
+                        </span>
 
-                        {plan.status !==
-                        "archived" ? (
-                          <form
-                            action={
-                              archiveWorkoutPlanAction
-                            }
-                          >
-                            <input
-                              type="hidden"
-                              name="plan_id"
-                              value={
-                                plan.id
-                              }
-                            />
+                        <span>
+                          {plan.days_per_week}{" "}
+                          days/week
+                        </span>
 
-                            <button
-                              type="submit"
-                              className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-black uppercase tracking-wider text-zinc-400 transition hover:bg-white/[0.08]"
-                            >
-                              Archive
-                            </button>
-                          </form>
-                        ) : null}
+                        <span>
+                          {
+                            plan.session_duration_minutes
+                          }{" "}
+                          min/session
+                        </span>
 
+                        <span>
+                          {plan.days.length} days
+                          created
+                        </span>
+
+                        <span>
+                          Created{" "}
+                          {formatDate(
+                            plan.created_at,
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      {plan.status !== "active" ? (
                         <form
                           action={
-                            deleteWorkoutPlanAction
+                            activateWorkoutPlanAction
                           }
                         >
                           <input
                             type="hidden"
                             name="plan_id"
-                            value={
-                              plan.id
-                            }
+                            value={plan.id}
                           />
 
                           <button
                             type="submit"
-                            className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-black uppercase tracking-wider text-red-300 transition hover:bg-red-500/20"
+                            className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-emerald-300 transition hover:bg-emerald-500/20"
                           >
-                            Delete
+                            Activate
                           </button>
                         </form>
-                      </div>
-                    </div>
+                      ) : null}
 
-                    <details className="mt-7 rounded-2xl border border-white/10 bg-black/30">
-                      <summary className="cursor-pointer px-5 py-4 text-sm font-black uppercase tracking-wider text-orange-300">
-                        Add training day
-                      </summary>
+                      {plan.status !==
+                      "archived" ? (
+                        <form
+                          action={
+                            archiveWorkoutPlanAction
+                          }
+                        >
+                          <input
+                            type="hidden"
+                            name="plan_id"
+                            value={plan.id}
+                          />
+
+                          <button
+                            type="submit"
+                            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-black uppercase tracking-wider text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
+                          >
+                            Archive
+                          </button>
+                        </form>
+                      ) : null}
 
                       <form
                         action={
-                          createWorkoutDayAction
+                          deleteWorkoutPlanAction
                         }
-                        className="grid gap-4 border-t border-white/10 p-5 md:grid-cols-2 xl:grid-cols-4"
                       >
                         <input
                           type="hidden"
-                          name="workout_plan_id"
-                          value={
-                            plan.id
-                          }
+                          name="plan_id"
+                          value={plan.id}
                         />
 
+                        <button
+                          type="submit"
+                          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-red-300 transition hover:bg-red-500/20"
+                        >
+                          Delete
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  {/* Add day */}
+
+                  <details className="group mt-7 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                    <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-sm font-black uppercase tracking-wider text-orange-300">
+                      Add training day
+
+                      <span className="text-xl font-light transition group-open:rotate-45">
+                        +
+                      </span>
+                    </summary>
+
+                    <form
+                      action={
+                        createWorkoutDayAction
+                      }
+                      className="grid gap-4 border-t border-white/10 p-5 md:grid-cols-2 xl:grid-cols-4"
+                    >
+                      <input
+                        type="hidden"
+                        name="workout_plan_id"
+                        value={plan.id}
+                      />
+
+                      <Field label="Day number">
                         <input
                           name="day_number"
                           type="number"
                           min={1}
                           max={7}
                           required
-                          placeholder="Day number"
-                          className={inputClasses()}
+                          placeholder="1"
+                          className={getInputClasses()}
                         />
+                      </Field>
 
+                      <Field label="Day name">
                         <input
                           name="name"
                           required
+                          minLength={2}
+                          maxLength={120}
                           placeholder="Push day"
-                          className={inputClasses()}
+                          className={getInputClasses()}
                         />
+                      </Field>
 
+                      <Field label="Training focus">
                         <input
                           name="focus"
+                          maxLength={300}
                           placeholder="Chest, shoulders, triceps"
-                          className={inputClasses()}
+                          className={getInputClasses()}
                         />
+                      </Field>
 
+                      <Field label="Notes">
                         <input
                           name="notes"
-                          placeholder="Day notes"
-                          className={inputClasses()}
+                          maxLength={2000}
+                          placeholder="Heavy compound focus"
+                          className={getInputClasses()}
+                        />
+                      </Field>
+
+                      <label className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-zinc-400">
+                        <input
+                          type="checkbox"
+                          name="rest_day"
+                          className="h-4 w-4 accent-orange-400"
                         />
 
-                        <label className="flex items-center gap-3 text-sm text-zinc-400">
-                          <input
-                            type="checkbox"
-                            name="rest_day"
-                            className="h-4 w-4 accent-orange-400"
-                          />
+                        Mark as rest day
+                      </label>
 
-                          Rest day
-                        </label>
-
+                      <div className="flex items-end md:col-span-2 xl:col-span-3">
                         <button
                           type="submit"
-                          className="h-11 rounded-xl bg-white px-5 text-xs font-black uppercase tracking-wider text-black transition hover:bg-orange-300"
+                          className="h-12 w-full rounded-xl bg-white px-6 text-xs font-black uppercase tracking-[0.15em] text-black transition hover:bg-orange-300 sm:w-auto"
                         >
-                          Add day
+                          Add training day
                         </button>
-                      </form>
-                    </details>
-                  </div>
+                      </div>
+                    </form>
+                  </details>
+                </div>
 
-                  <div className="space-y-4 p-5 sm:p-7">
-                    {plan.days.length ===
-                    0 ? (
-                      <p className="rounded-2xl border border-dashed border-white/10 px-5 py-10 text-center text-sm text-zinc-600">
-                        This plan does not
-                        contain any workout
-                        days.
+                {/* Workout days */}
+
+                <div className="space-y-4 p-5 sm:p-7">
+                  {plan.days.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 px-6 py-12 text-center">
+                      <p className="font-bold text-zinc-400">
+                        No training days yet
                       </p>
-                    ) : (
-                      plan.days.map(
-                        (day) => (
-                          <section
-                            key={
-                              day.id
-                            }
-                            className="rounded-2xl border border-white/10 bg-black/30 p-5"
-                          >
-                            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-                              <div>
-                                <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-400">
-                                  Day{" "}
-                                  {
-                                    day.day_number
-                                  }
-                                </p>
 
-                                <h3 className="mt-1 text-xl font-black">
-                                  {
-                                    day.name
-                                  }
-                                </h3>
+                      <p className="mt-2 text-sm text-zinc-700">
+                        Open “Add training
+                        day” to begin building
+                        this programme.
+                      </p>
+                    </div>
+                  ) : (
+                    plan.days.map((day) => (
+                      <section
+                        key={day.id}
+                        className="rounded-2xl border border-white/10 bg-black/30 p-5"
+                      >
+                        {/* Day header */}
 
-                                {day.focus ? (
-                                  <p className="mt-2 text-sm text-zinc-500">
-                                    {
-                                      day.focus
-                                    }
-                                  </p>
-                                ) : null}
-                              </div>
+                        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">
+                                Day{" "}
+                                {day.day_number}
+                              </p>
 
-                              <form
-                                action={
-                                  deleteWorkoutDayAction
-                                }
-                              >
-                                <input
-                                  type="hidden"
-                                  name="day_id"
-                                  value={
-                                    day.id
-                                  }
-                                />
-
-                                <button
-                                  type="submit"
-                                  className="text-xs font-bold text-red-400 transition hover:text-red-300"
-                                >
-                                  Delete day
-                                </button>
-                              </form>
+                              {day.rest_day ? (
+                                <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-300">
+                                  Recovery
+                                </span>
+                              ) : null}
                             </div>
 
-                            <div className="mt-5 space-y-2">
-                              {day
-                                .exercises
-                                .length ===
-                              0 ? (
-                                <p className="text-sm text-zinc-700">
-                                  No
-                                  exercise
-                                  added.
-                                </p>
-                              ) : (
-                                day.exercises.map(
-                                  (
-                                    exercise,
-                                  ) => (
-                                    <div
-                                      key={
+                            <h3 className="mt-2 text-xl font-black">
+                              {day.name}
+                            </h3>
+
+                            {day.focus ? (
+                              <p className="mt-2 text-sm text-zinc-500">
+                                {day.focus}
+                              </p>
+                            ) : null}
+
+                            {day.notes ? (
+                              <p className="mt-2 text-xs leading-6 text-zinc-700">
+                                {day.notes}
+                              </p>
+                            ) : null}
+                          </div>
+
+                          <form
+                            action={
+                              deleteWorkoutDayAction
+                            }
+                          >
+                            <input
+                              type="hidden"
+                              name="day_id"
+                              value={day.id}
+                            />
+
+                            <button
+                              type="submit"
+                              className="text-xs font-bold text-red-400 transition hover:text-red-300"
+                            >
+                              Delete day
+                            </button>
+                          </form>
+                        </div>
+
+                        {/* Exercise list */}
+
+                        <div className="mt-6 space-y-2">
+                          {day.exercises.length ===
+                          0 ? (
+                            <p className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-zinc-700">
+                              No exercises added
+                              to this day.
+                            </p>
+                          ) : (
+                            day.exercises.map(
+                              (exercise) => (
+                                <div
+                                  key={
+                                    exercise.id
+                                  }
+                                  className="flex flex-col justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.025] px-4 py-4 sm:flex-row sm:items-center"
+                                >
+                                  <div className="flex min-w-0 items-start gap-4">
+                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-xs font-black text-orange-300">
+                                      {
+                                        exercise.exercise_order
+                                      }
+                                    </span>
+
+                                    <div className="min-w-0">
+                                      <p className="break-words font-bold text-zinc-200">
+                                        {
+                                          exercise.exercise_name
+                                        }
+                                      </p>
+
+                                      <p className="mt-1 text-xs leading-6 text-zinc-600">
+                                        {
+                                          exercise.target_sets
+                                        }{" "}
+                                        sets ·{" "}
+                                        {
+                                          exercise.rep_min
+                                        }
+                                        –
+                                        {
+                                          exercise.rep_max
+                                        }{" "}
+                                        reps ·{" "}
+                                        {
+                                          exercise.rest_seconds
+                                        }
+                                        s rest
+                                        {exercise.rir !==
+                                        null
+                                          ? ` · RIR ${exercise.rir}`
+                                          : ""}
+                                        {exercise.tempo
+                                          ? ` · Tempo ${exercise.tempo}`
+                                          : ""}
+                                      </p>
+
+                                      {exercise.notes ? (
+                                        <p className="mt-1 text-xs leading-5 text-zinc-700">
+                                          {
+                                            exercise.notes
+                                          }
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  </div>
+
+                                  <form
+                                    action={
+                                      deleteWorkoutExerciseAction
+                                    }
+                                  >
+                                    <input
+                                      type="hidden"
+                                      name="exercise_id"
+                                      value={
                                         exercise.id
                                       }
-                                      className="flex flex-col justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3 sm:flex-row sm:items-center"
+                                    />
+
+                                    <button
+                                      type="submit"
+                                      className="text-xs font-bold text-red-400 transition hover:text-red-300"
                                     >
-                                      <div>
-                                        <p className="font-bold text-zinc-200">
-                                          {
-                                            exercise.exercise_order
-                                          }
+                                      Remove
+                                    </button>
+                                  </form>
+                                </div>
+                              ),
+                            )
+                          )}
+                        </div>
 
-                                          .{" "}
+                        {/* Add exercise */}
 
-                                          {
-                                            exercise.exercise_name
-                                          }
-                                        </p>
+                        {!day.rest_day ? (
+                          <details className="group mt-5 overflow-hidden rounded-xl border border-white/10">
+                            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs font-black uppercase tracking-wider text-zinc-400">
+                              Add exercise
 
-                                        <p className="mt-1 text-xs text-zinc-600">
-                                          {
-                                            exercise.target_sets
-                                          }{" "}
-                                          sets
-                                          ·{" "}
+                              <span className="text-lg transition group-open:rotate-45">
+                                +
+                              </span>
+                            </summary>
 
-                                          {
-                                            exercise.rep_min
-                                          }
+                            <form
+                              action={
+                                createWorkoutExerciseAction
+                              }
+                              className="grid gap-4 border-t border-white/10 p-4 md:grid-cols-2 xl:grid-cols-4"
+                            >
+                              <input
+                                type="hidden"
+                                name="workout_day_id"
+                                value={day.id}
+                              />
 
-                                          –
+                              <Field
+                                label="Exercise name"
+                                className="md:col-span-2"
+                              >
+                                <input
+                                  name="exercise_name"
+                                  required
+                                  minLength={2}
+                                  maxLength={160}
+                                  placeholder="Incline dumbbell press"
+                                  className={getInputClasses()}
+                                />
+                              </Field>
 
-                                          {
-                                            exercise.rep_max
-                                          }{" "}
-                                          reps
-                                          ·{" "}
-
-                                          {
-                                            exercise.rest_seconds
-                                          }
-
-                                          s
-                                          rest
-                                          {exercise.rir !==
-                                          null
-                                            ? ` · RIR ${exercise.rir}`
-                                            : ""}
-                                        </p>
-                                      </div>
-
-                                      <form
-                                        action={
-                                          deleteWorkoutExerciseAction
-                                        }
-                                      >
-                                        <input
-                                          type="hidden"
-                                          name="exercise_id"
-                                          value={
-                                            exercise.id
-                                          }
-                                        />
-
-                                        <button
-                                          type="submit"
-                                          className="text-xs font-bold text-red-400 transition hover:text-red-300"
-                                        >
-                                          Remove
-                                        </button>
-                                      </form>
-                                    </div>
-                                  ),
-                                )
-                              )}
-                            </div>
-
-                            {!day.rest_day ? (
-                              <details className="mt-5 rounded-xl border border-white/10">
-                                <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-wider text-zinc-400">
-                                  Add exercise
-                                </summary>
-
-                                <form
-                                  action={
-                                    createWorkoutExerciseAction
+                              <Field label="Order">
+                                <input
+                                  name="exercise_order"
+                                  type="number"
+                                  min={1}
+                                  max={100}
+                                  defaultValue={
+                                    day.exercises
+                                      .length + 1
                                   }
-                                  className="grid gap-3 border-t border-white/10 p-4 md:grid-cols-3 xl:grid-cols-6"
+                                  required
+                                  className={getInputClasses()}
+                                />
+                              </Field>
+
+                              <Field label="Sets">
+                                <input
+                                  name="target_sets"
+                                  type="number"
+                                  min={1}
+                                  max={20}
+                                  defaultValue={3}
+                                  required
+                                  className={getInputClasses()}
+                                />
+                              </Field>
+
+                              <Field label="Minimum reps">
+                                <input
+                                  name="rep_min"
+                                  type="number"
+                                  min={1}
+                                  max={100}
+                                  defaultValue={8}
+                                  required
+                                  className={getInputClasses()}
+                                />
+                              </Field>
+
+                              <Field label="Maximum reps">
+                                <input
+                                  name="rep_max"
+                                  type="number"
+                                  min={1}
+                                  max={100}
+                                  defaultValue={12}
+                                  required
+                                  className={getInputClasses()}
+                                />
+                              </Field>
+
+                              <Field label="Rest seconds">
+                                <input
+                                  name="rest_seconds"
+                                  type="number"
+                                  min={0}
+                                  max={900}
+                                  defaultValue={90}
+                                  required
+                                  className={getInputClasses()}
+                                />
+                              </Field>
+
+                              <Field label="RIR">
+                                <input
+                                  name="rir"
+                                  type="number"
+                                  min={0}
+                                  max={5}
+                                  placeholder="2"
+                                  className={getInputClasses()}
+                                />
+                              </Field>
+
+                              <Field label="Tempo">
+                                <input
+                                  name="tempo"
+                                  maxLength={30}
+                                  placeholder="3-1-1"
+                                  className={getInputClasses()}
+                                />
+                              </Field>
+
+                              <Field
+                                label="Exercise notes"
+                                className="md:col-span-2"
+                              >
+                                <input
+                                  name="notes"
+                                  maxLength={1000}
+                                  placeholder="Control the eccentric and avoid locking out."
+                                  className={getInputClasses()}
+                                />
+                              </Field>
+
+                              <div className="flex items-end md:col-span-2 xl:col-span-4">
+                                <button
+                                  type="submit"
+                                  className="h-12 w-full rounded-xl bg-orange-400 px-6 text-xs font-black uppercase tracking-[0.15em] text-black transition hover:bg-orange-300 sm:w-auto"
                                 >
-                                  <input
-                                    type="hidden"
-                                    name="workout_day_id"
-                                    value={
-                                      day.id
-                                    }
-                                  />
-
-                                  <input
-                                    name="exercise_name"
-                                    required
-                                    placeholder="Exercise"
-                                    className={inputClasses()}
-                                  />
-
-                                  <input
-                                    name="exercise_order"
-                                    type="number"
-                                    min={1}
-                                    max={100}
-                                    defaultValue={
-                                      day
-                                        .exercises
-                                        .length +
-                                      1
-                                    }
-                                    className={inputClasses()}
-                                  />
-
-                                  <input
-                                    name="target_sets"
-                                    type="number"
-                                    min={1}
-                                    max={20}
-                                    defaultValue={3}
-                                    className={inputClasses()}
-                                  />
-
-                                  <input
-                                    name="rep_min"
-                                    type="number"
-                                    min={1}
-                                    max={100}
-                                    defaultValue={8}
-                                    className={inputClasses()}
-                                  />
-
-                                  <input
-                                    name="rep_max"
-                                    type="number"
-                                    min={1}
-                                    max={100}
-                                    defaultValue={12}
-                                    className={inputClasses()}
-                                  />
-
-                                  <input
-                                    name="rest_seconds"
-                                    type="number"
-                                    min={0}
-                                    max={900}
-                                    defaultValue={90}
-                                    className={inputClasses()}
-                                  />
-
-                                  <input
-                                    name="tempo"
-                                    placeholder="Tempo 3-1-1"
-                                    className={inputClasses()}
-                                  />
-
-                                  <input
-                                    name="rir"
-                                    type="number"
-                                    min={0}
-                                    max={5}
-                                    placeholder="RIR"
-                                    className={inputClasses()}
-                                  />
-
-                                  <input
-                                    name="notes"
-                                    placeholder="Exercise notes"
-                                    className={inputClasses()}
-                                  />
-
-                                  <button
-                                    type="submit"
-                                    className="h-11 rounded-xl bg-orange-400 px-5 text-xs font-black uppercase tracking-wider text-black transition hover:bg-orange-300"
-                                  >
-                                    Add exercise
-                                  </button>
-                                </form>
-                              </details>
-                            ) : (
-                              <p className="mt-5 rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-300">
-                                Recovery / rest
-                                day
-                              </p>
-                            )}
-                          </section>
-                        ),
-                      )
-                    )}
-                  </div>
-                </article>
-              ),
-            )
+                                  Add exercise
+                                </button>
+                              </div>
+                            </form>
+                          </details>
+                        ) : (
+                          <div className="mt-5 rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-300">
+                            This is a recovery
+                            day. Exercise entry is
+                            disabled.
+                          </div>
+                        )}
+                      </section>
+                    ))
+                  )}
+                </div>
+              </article>
+            ))
           )}
         </section>
       </div>
     </main>
+  );
+}
+
+/* =========================================================
+   COMPONENTS
+========================================================= */
+
+type FieldProps = {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+};
+
+function Field({
+  label,
+  children,
+  className = "",
+}: FieldProps) {
+  return (
+    <label className={`space-y-2 ${className}`}>
+      <span className="block text-sm font-semibold text-zinc-300">
+        {label}
+      </span>
+
+      {children}
+    </label>
+  );
+}
+
+type StatCardProps = {
+  value: number;
+  label: string;
+};
+
+function StatCard({
+  value,
+  label,
+}: StatCardProps) {
+  return (
+    <div className="min-w-20 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-center">
+      <p className="text-xl font-black text-white">
+        {value}
+      </p>
+
+      <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function EmptyPlans() {
+  return (
+    <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.015] px-6 py-20 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-orange-500/20 bg-orange-500/10 text-xl font-black text-orange-300">
+        MF
+      </div>
+
+      <h2 className="mt-5 text-xl font-black text-zinc-200">
+        No workout plan yet
+      </h2>
+
+      <p className="mx-auto mt-2 max-w-md text-sm leading-7 text-zinc-600">
+        Create your first plan using the
+        form above. You can then add training
+        days and exercises.
+      </p>
+    </div>
   );
 }
