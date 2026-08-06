@@ -1,10 +1,8 @@
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-/*
- * Legacy test-mode chat UI. Production coach lives at /ai-coach.
- */
-export default function ChatbotPage() {
+export default function LegacyChatbotPage() {
   redirect("/ai-coach");
 }

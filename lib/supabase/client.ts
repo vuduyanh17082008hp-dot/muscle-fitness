@@ -1,17 +1,40 @@
-import { createBrowserClient } from "@supabase/ssr"
+import { createBrowserClient } from "@supabase/ssr";
 
-import { getSupabaseConfig } from "@/lib/supabase/config"
+function getSupabaseEnvironment() {
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-let browserClient: ReturnType<typeof createBrowserClient> | undefined
+  const supabaseKey =
+    process.env
+      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export function createClient() {
-  if (browserClient) {
-    return browserClient
+  if (!supabaseUrl) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL.",
+    );
   }
 
-  const { url, key } = getSupabaseConfig()
+  if (!supabaseKey) {
+    throw new Error(
+      "Missing Supabase publishable or anon key.",
+    );
+  }
 
-  browserClient = createBrowserClient(url, key)
+  return {
+    supabaseUrl,
+    supabaseKey,
+  };
+}
 
-  return browserClient
+export function createClient() {
+  const {
+    supabaseUrl,
+    supabaseKey,
+  } = getSupabaseEnvironment();
+
+  return createBrowserClient(
+    supabaseUrl,
+    supabaseKey,
+  );
 }
