@@ -2,17 +2,23 @@ import Link from "next/link";
 
 import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
 import { loadDashboardPageData } from "@/features/dashboard/load-page-data";
+import type { DashboardData } from "@/features/dashboard/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  let data: DashboardData | null = null;
+  let loadError: unknown = null;
+
   try {
-    const { data } = await loadDashboardPageData();
-
-    return <DashboardOverview data={data} />;
+    const result = await loadDashboardPageData();
+    data = result.data;
   } catch (error) {
+    loadError = error;
     console.error("Dashboard page failed:", error);
+  }
 
+  if (!data || loadError) {
     return (
       <div className="mx-auto flex min-h-[50vh] max-w-lg flex-col items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.025] px-6 py-12 text-center">
         <h1 className="text-xl font-semibold text-white">
@@ -31,4 +37,6 @@ export default async function DashboardPage() {
       </div>
     );
   }
+
+  return <DashboardOverview data={data} />;
 }

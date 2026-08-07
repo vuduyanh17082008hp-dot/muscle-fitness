@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useState,
   type ReactNode,
 } from "react";
@@ -203,10 +202,6 @@ export function DashboardShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
-
   return (
     <div className="min-h-screen bg-[#050505] text-[var(--color-text-primary)]">
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#080808]/85 backdrop-blur-xl">
@@ -224,7 +219,10 @@ export function DashboardShell({
           </Link>
 
           <div className="hidden min-w-0 flex-1 justify-center md:flex">
-            <NavPills pathname={pathname} />
+            <NavPills
+              pathname={pathname}
+              onNavigate={() => setMobileOpen(false)}
+            />
           </div>
 
           <div className="flex items-center gap-2">
