@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
-    "check": "npm run type-check && npm run lint"
+    "check": "npm run type-check && npm run lint",
+    "ai:check": "node scripts/ai-check.mjs",
+    "ai:health": "node scripts/ai-health.mjs",
+    "ai:up": "docker compose -f infra/ai/docker-compose.yml --env-file infra/ai/.env up -d",
+    "ai:down": "docker compose -f infra/ai/docker-compose.yml --env-file infra/ai/.env down"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",

@@ -128,19 +128,28 @@ export async function planCoachToolCalls(args: {
       tool_calls: rawToolCalls,
     };
 
-  const toolCalls: CoachFunctionCall[] = rawToolCalls
-    .filter(
-      (call) =>
-        typeof call.id === "string" &&
-        typeof call.function?.name === "string" &&
-        typeof call.function?.arguments === "string",
-    )
-    .map((call) => ({
-      type: "function_call" as const,
-      name: call.function.name,
-      arguments: call.function.arguments,
-      call_id: call.id,
-    }));
+  const toolCalls: CoachFunctionCall[] = rawToolCalls.flatMap((call) => {
+    if (
+      !call ||
+      typeof call !== "object" ||
+      call.type !== "function" ||
+      typeof call.id !== "string" ||
+      !call.function ||
+      typeof call.function.name !== "string" ||
+      typeof call.function.arguments !== "string"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        type: "function_call" as const,
+        name: call.function.name,
+        arguments: call.function.arguments,
+        call_id: call.id,
+      },
+    ];
+  });
 
   return {
     toolCalls,
