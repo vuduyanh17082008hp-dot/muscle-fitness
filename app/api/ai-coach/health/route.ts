@@ -1,9 +1,7 @@
+import { mapAiErrorToUserMessage } from "@/lib/ai-coach/errors";
 import {
-  getAiModelName,
-  getOpenAI,
-} from "@/lib/ai-coach/server";
-import {
-  getAiProviderConfig,
+  getAiClient,
+  getSafeProviderInfo,
   usesResponsesApi,
 } from "@/lib/ai-coach/provider";
 
@@ -11,43 +9,49 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unknown AI provider error.";
-}
-
 export async function GET() {
+  const info = getSafeProviderInfo();
+
   /*
-   * Không để health test công khai trên production
-   * vì mỗi lần gọi sẽ sử dụng API.
+   * Production health stays lightweight — no inference call.
    */
   if (process.env.NODE_ENV === "production") {
-    return Response.json(
-      {
-        error: "Not found.",
-      },
-      {
-        status: 404,
-      },
-    );
+    try {
+      // Validate config without leaking secrets.
+      getAiClient();
+
+      return Response.json({
+        ok: true,
+        provider: info.provider,
+        model: info.model,
+        baseUrlConfigured: info.baseUrlConfigured,
+        transport: info.transport,
+      });
+    } catch (error) {
+      console.error("AI Coach health config failed:", error);
+
+      return Response.json(
+        {
+          ok: false,
+          provider: info.provider,
+          model: info.model,
+          baseUrlConfigured: info.baseUrlConfigured,
+          transport: info.transport,
+          error: mapAiErrorToUserMessage(error),
+        },
+        {
+          status: 500,
+        },
+      );
+    }
   }
 
-  let model = "unknown";
-  let provider = "unknown";
-
   try {
-    const config = getAiProviderConfig();
-    model = config.model;
-    provider = config.name;
-
-    const openai = getOpenAI();
+    const client = getAiClient();
 
     if (usesResponsesApi()) {
-      const response = await openai.responses.create({
-        model,
+      const response = await client.responses.create({
+        model: info.model,
         store: false,
         input: "Reply with exactly: AI_COACH_CONNECTED",
         max_output_tokens: 32,
@@ -57,16 +61,15 @@ export async function GET() {
 
       return Response.json({
         ok: output.includes("AI_COACH_CONNECTED"),
-        provider,
-        model,
-        mode: "responses",
-        output,
-        responseId: response.id,
+        provider: info.provider,
+        model: info.model,
+        baseUrlConfigured: info.baseUrlConfigured,
+        transport: info.transport,
       });
     }
 
-    const response = await openai.chat.completions.create({
-      model,
+    const response = await client.chat.completions.create({
+      model: info.model,
       messages: [
         {
           role: "user",
@@ -81,11 +84,10 @@ export async function GET() {
 
     return Response.json({
       ok: output.includes("AI_COACH_CONNECTED"),
-      provider,
-      model,
-      mode: "chat.completions",
-      output,
-      responseId: response.id,
+      provider: info.provider,
+      model: info.model,
+      baseUrlConfigured: info.baseUrlConfigured,
+      transport: info.transport,
     });
   } catch (error) {
     console.error("AI Coach health check failed:", error);
@@ -93,21 +95,15 @@ export async function GET() {
     return Response.json(
       {
         ok: false,
-        provider,
-        model: model || getAiModelNameFallback(),
-        error: getErrorMessage(error),
+        provider: info.provider,
+        model: info.model,
+        baseUrlConfigured: info.baseUrlConfigured,
+        transport: info.transport,
+        error: mapAiErrorToUserMessage(error),
       },
       {
         status: 500,
       },
     );
-  }
-}
-
-function getAiModelNameFallback(): string {
-  try {
-    return getAiModelName();
-  } catch {
-    return "unknown";
   }
 }

@@ -1,12 +1,10 @@
 import {
   buildCoachInstructions,
   DEFAULT_COACH_SETTINGS,
-  getAiModelName,
-  getOpenAI,
   runToolCall,
   type CoachSettings,
 } from "@/lib/ai-coach/server";
-import { usesResponsesApi } from "@/lib/ai-coach/provider";
+import { completeCoachText } from "@/lib/ai-coach/transport";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -202,8 +200,6 @@ export async function GET(request: Request) {
   }
 
   const db = createAdminClient() as any;
-  const openai = getOpenAI();
-
   let delivered = 0;
   const errors: string[] = [];
 
@@ -478,39 +474,11 @@ Keep it practical and under 500 words.
             nutrition: nutrition.result,
           });
 
-          const model = getAiModelName();
-          let weeklyContent = "";
-
-          if (usesResponsesApi()) {
-            const response = await openai.responses.create({
-              model,
-              store: false,
-              instructions: weeklyPrompt,
-              input: weeklyPayload,
-              max_output_tokens: 800,
-            });
-
-            weeklyContent = response.output_text.trim();
-          } else {
-            const response = await openai.chat.completions.create({
-              model,
-              messages: [
-                {
-                  role: "system",
-                  content: weeklyPrompt,
-                },
-                {
-                  role: "user",
-                  content: weeklyPayload,
-                },
-              ],
-              max_tokens: 800,
-            });
-
-            weeklyContent =
-              response.choices[0]?.message?.content?.trim() ??
-              "";
-          }
+          const weeklyContent = await completeCoachText({
+            instructions: weeklyPrompt,
+            input: weeklyPayload,
+            maxTokens: 800,
+          });
 
           const wasDelivered =
             await deliverReminder({

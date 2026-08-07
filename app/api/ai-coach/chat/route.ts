@@ -1,21 +1,22 @@
 import {
-  buildChatMessages,
+  getDevAiErrorDetail,
+  mapAiErrorToUserMessage,
+} from "@/lib/ai-coach/errors";
+import {
   buildCoachInstructions,
-  buildModelInput,
   chatRequestSchema,
-  COACH_CHAT_TOOLS,
-  COACH_TOOLS,
   DEFAULT_COACH_SETTINGS,
   getAiModelName,
-  getOpenAI,
   maybeSummarizeThread,
   runToolCall,
   type CoachSettings,
-  usageFromResponse,
 } from "@/lib/ai-coach/server";
-import { usesResponsesApi } from "@/lib/ai-coach/provider";
+import {
+  planCoachToolCalls,
+  streamCoachFinalAnswer,
+  type HistoryMessage,
+} from "@/lib/ai-coach/transport";
 import { createClient } from "@/lib/supabase/server";
-import type OpenAI from "openai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,19 +30,6 @@ type UsageRow = {
   messages_used: number;
   daily_limit: number;
   remaining: number;
-};
-
-type FunctionCallItem = {
-  type: "function_call";
-  name: string;
-  arguments: string;
-  call_id: string;
-};
-
-type HistoryMessage = {
-  id: string;
-  role: string;
-  content: string;
 };
 
 function getFirstRpcRow<T>(data: unknown): T | null {
@@ -66,13 +54,15 @@ function createThreadTitle(message: string): string {
   return `${normalized.slice(0, 61)}...`;
 }
 
-function getErrorMessage(
-  error: unknown,
-  fallback: string,
-): string {
-  return error instanceof Error
-    ? error.message
-    : fallback;
+function getClientErrorMessage(error: unknown): string {
+  const mapped = mapAiErrorToUserMessage(error);
+  const detail = getDevAiErrorDetail(error);
+
+  if (detail && process.env.NODE_ENV === "development") {
+    return `${mapped} (${detail})`;
+  }
+
+  return mapped;
 }
 
 export async function POST(request: Request) {
@@ -87,8 +77,7 @@ export async function POST(request: Request) {
   if (authError || !user) {
     return Response.json(
       {
-        error:
-          "Bạn cần đăng nhập để sử dụng AI Coach.",
+        error: "Bạn cần đăng nhập để sử dụng AI Coach.",
       },
       {
         status: 401,
@@ -100,15 +89,12 @@ export async function POST(request: Request) {
 
   try {
     const rawBody: unknown = await request.json();
-
-    const parsedBody =
-      chatRequestSchema.safeParse(rawBody);
+    const parsedBody = chatRequestSchema.safeParse(rawBody);
 
     if (!parsedBody.success) {
       return Response.json(
         {
-          error:
-            "Nội dung gửi lên không hợp lệ.",
+          error: "Nội dung gửi lên không hợp lệ.",
           details: parsedBody.error.flatten(),
         },
         {
@@ -117,17 +103,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const {
-      message,
-      attachment = null,
-    } = parsedBody.data;
+    const { message, attachment = null } = parsedBody.data;
+    let threadId: string | null = parsedBody.data.threadId ?? null;
 
-    let threadId: string | null =
-      parsedBody.data.threadId ?? null;
-
-    /*
-     * Kiểm tra thread cũ có thuộc user hiện tại không.
-     */
     if (threadId) {
       const threadResult = await db
         .from("ai_threads")
@@ -137,14 +115,10 @@ export async function POST(request: Request) {
         .eq("thread_type", "chat")
         .maybeSingle();
 
-      if (
-        threadResult.error ||
-        !threadResult.data
-      ) {
+      if (threadResult.error || !threadResult.data) {
         return Response.json(
           {
-            error:
-              "Không tìm thấy cuộc trò chuyện này.",
+            error: "Không tìm thấy cuộc trò chuyện này.",
           },
           {
             status: 404,
@@ -152,9 +126,6 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      /*
-       * Tạo thread mới.
-       */
       const createThreadResult = await db
         .from("ai_threads")
         .insert({
@@ -162,70 +133,45 @@ export async function POST(request: Request) {
           title: createThreadTitle(message),
           thread_type: "chat",
           status: "active",
-          last_message_at:
-            new Date().toISOString(),
+          last_message_at: new Date().toISOString(),
         })
         .select("id")
         .single();
 
-      if (
-        createThreadResult.error ||
-        !createThreadResult.data?.id
-      ) {
+      if (createThreadResult.error || !createThreadResult.data?.id) {
         throw new Error(
           createThreadResult.error?.message ??
             "Không thể tạo cuộc trò chuyện.",
         );
       }
 
-      threadId = String(
-        createThreadResult.data.id,
-      );
+      threadId = String(createThreadResult.data.id);
     }
 
-    /*
-     * Tạo biến string cố định để loại bỏ string | null.
-     */
     if (!threadId) {
-      throw new Error(
-        "Không thể xác định conversation thread.",
-      );
+      throw new Error("Không thể xác định conversation thread.");
     }
 
     const resolvedThreadId: string = threadId;
 
-    /*
-     * Trừ một lượt AI bằng RPC atomic.
-     */
-    const usageResult = await db.rpc(
-      "consume_ai_usage",
-      {
-        p_thread_id: resolvedThreadId,
-      },
-    );
+    const usageResult = await db.rpc("consume_ai_usage", {
+      p_thread_id: resolvedThreadId,
+    });
 
     if (usageResult.error) {
-      throw new Error(
-        usageResult.error.message,
-      );
+      throw new Error(usageResult.error.message);
     }
 
-    const usage =
-      getFirstRpcRow<UsageRow>(
-        usageResult.data,
-      );
+    const usage = getFirstRpcRow<UsageRow>(usageResult.data);
 
     if (!usage) {
-      throw new Error(
-        "Không thể xác định lượt sử dụng AI.",
-      );
+      throw new Error("Không thể xác định lượt sử dụng AI.");
     }
 
     if (!usage.allowed) {
       return Response.json(
         {
-          error:
-            "Bạn đã sử dụng hết lượt AI hôm nay.",
+          error: "Bạn đã sử dụng hết lượt AI hôm nay.",
           usage,
         },
         {
@@ -236,10 +182,6 @@ export async function POST(request: Request) {
 
     usageConsumed = true;
 
-    /*
-     * Không lưu Base64 của file vào database.
-     * Chỉ lưu metadata.
-     */
     const attachmentMetadata = attachment
       ? [
           {
@@ -251,9 +193,6 @@ export async function POST(request: Request) {
         ]
       : [];
 
-    /*
-     * Lưu tin nhắn của user.
-     */
     const userMessageResult = await db
       .from("ai_messages")
       .insert({
@@ -266,68 +205,49 @@ export async function POST(request: Request) {
       .select("id")
       .single();
 
-    if (
-      userMessageResult.error ||
-      !userMessageResult.data?.id
-    ) {
+    if (userMessageResult.error || !userMessageResult.data?.id) {
       throw new Error(
-        userMessageResult.error?.message ??
-          "Không thể lưu tin nhắn.",
+        userMessageResult.error?.message ?? "Không thể lưu tin nhắn.",
       );
     }
 
-    const currentMessageId = String(
-      userMessageResult.data.id,
-    );
+    const currentMessageId = String(userMessageResult.data.id);
 
     await db
       .from("ai_threads")
       .update({
-        last_message_at:
-          new Date().toISOString(),
+        last_message_at: new Date().toISOString(),
       })
       .eq("id", resolvedThreadId)
       .eq("user_id", user.id);
 
-    /*
-     * Lấy settings, summary và lịch sử cùng lúc.
-     */
-    const [
-      settingsResult,
-      summaryResult,
-      messagesResult,
-    ] = await Promise.all([
-      db
-        .from("ai_user_settings")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle(),
-
-      db
-        .from("ai_thread_summaries")
-        .select("summary")
-        .eq("thread_id", resolvedThreadId)
-        .eq("user_id", user.id)
-        .maybeSingle(),
-
-      db
-        .from("ai_messages")
-        .select(
-          "id, role, content, created_at",
-        )
-        .eq("thread_id", resolvedThreadId)
-        .eq("user_id", user.id)
-        .in("role", ["user", "assistant"])
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(24),
-    ]);
+    const [settingsResult, summaryResult, messagesResult] =
+      await Promise.all([
+        db
+          .from("ai_user_settings")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        db
+          .from("ai_thread_summaries")
+          .select("summary")
+          .eq("thread_id", resolvedThreadId)
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        db
+          .from("ai_messages")
+          .select("id, role, content, created_at")
+          .eq("thread_id", resolvedThreadId)
+          .eq("user_id", user.id)
+          .in("role", ["user", "assistant"])
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(24),
+      ]);
 
     if (messagesResult.error) {
-      throw new Error(
-        messagesResult.error.message,
-      );
+      throw new Error(messagesResult.error.message);
     }
 
     const settings: CoachSettings = {
@@ -340,23 +260,17 @@ export async function POST(request: Request) {
     ]
       .reverse()
       .map(
-        (item: {
-          id: string;
-          role: string;
-          content: string;
-        }) => ({
+        (item: { id: string; role: string; content: string }) => ({
           id: String(item.id),
           role: String(item.role),
           content: String(item.content ?? ""),
         }),
       );
 
-    const memorySummary =
-      settings.allow_conversation_memory
-        ? summaryResult.data?.summary ?? null
-        : null;
+    const memorySummary = settings.allow_conversation_memory
+      ? summaryResult.data?.summary ?? null
+      : null;
 
-    const openai = getOpenAI();
     const model = getAiModelName();
     const baseInstructions = buildCoachInstructions(settings);
     const planningInstructions = `
@@ -375,115 +289,22 @@ DATA COLLECTION TURN
 - Collect all required data in this turn when possible.
 `.trim();
 
-    type ExecutedTool = Awaited<ReturnType<typeof runToolCall>>;
+    const planning = await planCoachToolCalls({
+      instructions: planningInstructions,
+      messages: historyMessages,
+      summary: memorySummary,
+      attachment,
+      currentMessageId,
+    });
 
-    let toolCalls: FunctionCallItem[] = [];
-    let planningResponse: any = null;
-    let planningOutput: any[] = [];
-    let chatPlanningMessages:
-      | OpenAI.Chat.ChatCompletionMessageParam[]
-      | null = null;
-    let chatAssistantToolMessage:
-      | OpenAI.Chat.ChatCompletionAssistantMessageParam
-      | null = null;
-
-    if (usesResponsesApi()) {
-      const planningInput = buildModelInput({
-        messages: historyMessages,
-        summary: memorySummary,
-        attachment,
-        currentMessageId,
-      });
-
-      planningResponse = await openai.responses.create({
-        model,
-        store: false,
-        instructions: planningInstructions,
-        input: planningInput as any,
-        tools: COACH_TOOLS as any,
-        tool_choice: "required",
-        parallel_tool_calls: true,
-        max_output_tokens: 500,
-      });
-
-      planningOutput = Array.isArray(planningResponse.output)
-        ? planningResponse.output
-        : [];
-
-      toolCalls = planningOutput.filter(
-        (item: unknown): item is FunctionCallItem => {
-          if (!item || typeof item !== "object") {
-            return false;
-          }
-
-          const candidate = item as Record<string, unknown>;
-
-          return (
-            candidate.type === "function_call" &&
-            typeof candidate.name === "string" &&
-            typeof candidate.arguments === "string" &&
-            typeof candidate.call_id === "string"
-          );
-        },
-      );
-    } else {
-      chatPlanningMessages = buildChatMessages({
-        instructions: planningInstructions,
-        messages: historyMessages,
-        summary: memorySummary,
-        attachment,
-        currentMessageId,
-      });
-
-      planningResponse = await openai.chat.completions.create({
-        model,
-        messages: chatPlanningMessages,
-        tools: COACH_CHAT_TOOLS as any,
-        tool_choice: "required",
-        parallel_tool_calls: true,
-        max_tokens: 500,
-      });
-
-      const assistantMessage = planningResponse.choices?.[0]?.message;
-      const rawToolCalls = assistantMessage?.tool_calls ?? [];
-
-      chatAssistantToolMessage = {
-        role: "assistant",
-        content: assistantMessage?.content ?? null,
-        tool_calls: rawToolCalls,
-      };
-
-      toolCalls = rawToolCalls
-        .filter(
-          (call: {
-            id?: string;
-            function?: { name?: string; arguments?: string };
-          }) =>
-            typeof call.id === "string" &&
-            typeof call.function?.name === "string" &&
-            typeof call.function?.arguments === "string",
-        )
-        .map(
-          (call: {
-            id: string;
-            function: { name: string; arguments: string };
-          }) => ({
-            type: "function_call" as const,
-            name: call.function.name,
-            arguments: call.function.arguments,
-            call_id: call.id,
-          }),
-        );
-    }
-
-    if (toolCalls.length === 0) {
+    if (planning.toolCalls.length === 0) {
       throw new Error(
         "AI không yêu cầu được dữ liệu khách hàng cần thiết.",
       );
     }
 
-    const executedTools: ExecutedTool[] = await Promise.all(
-      toolCalls.map((call) =>
+    const executedTools = await Promise.all(
+      planning.toolCalls.map((call) =>
         runToolCall({
           db,
           userId: user.id,
@@ -499,51 +320,6 @@ DATA COLLECTION TURN
       ),
     );
 
-    const responsesFinalInput = usesResponsesApi()
-      ? [
-          ...buildModelInput({
-            messages: historyMessages,
-            summary: memorySummary,
-            attachment,
-            currentMessageId,
-          }),
-          ...planningOutput,
-          ...executedTools.map((tool) => ({
-            type: "function_call_output" as const,
-            call_id: tool.callId,
-            output: JSON.stringify(tool.result),
-          })),
-        ]
-      : null;
-
-    const chatFinalMessages: OpenAI.Chat.ChatCompletionMessageParam[] | null =
-      !usesResponsesApi() &&
-      chatPlanningMessages &&
-      chatAssistantToolMessage
-        ? [
-            ...chatPlanningMessages,
-            chatAssistantToolMessage,
-            ...executedTools.map(
-              (tool): OpenAI.Chat.ChatCompletionToolMessageParam => ({
-                role: "tool",
-                tool_call_id: tool.callId,
-                content: JSON.stringify(tool.result),
-              }),
-            ),
-            {
-              role: "system",
-              content: `
-${baseInstructions}
-
-FINAL ANSWER TURN
-- Use the tool results above.
-- Produce the final natural-language answer for the client now.
-- Do not call more tools.
-`.trim(),
-            },
-          ]
-        : null;
-
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream<Uint8Array>({
@@ -557,7 +333,12 @@ FINAL ANSWER TURN
         }
 
         let assistantText = "";
-        let finalResponse: any = null;
+        let finalResponseId: string | null = null;
+        let finalUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        };
         let streamClosed = false;
 
         function closeStream() {
@@ -587,75 +368,23 @@ FINAL ANSWER TURN
         }
 
         try {
-          if (usesResponsesApi()) {
-            const responseStream = await openai.responses.create({
-              model,
-              store: false,
-              instructions: baseInstructions,
-              input: responsesFinalInput as any,
-              stream: true as const,
-              max_output_tokens: 1600,
-            });
-
-            for await (const rawEvent of responseStream) {
-              const event = rawEvent as any;
-
-              if (event.type === "response.output_text.delta") {
-                const delta =
-                  typeof event.delta === "string" ? event.delta : "";
-
-                if (!delta) {
-                  continue;
-                }
-
-                assistantText += delta;
-                sendEvent("delta", { text: delta });
-              }
-
-              if (event.type === "response.completed") {
-                finalResponse = event.response ?? null;
-              }
-
-              if (event.type === "response.failed") {
-                throw new Error(
-                  event.response?.error?.message ??
-                    "OpenAI response failed.",
-                );
-              }
-
-              if (event.type === "error") {
-                throw new Error(
-                  event.error?.message ??
-                    event.message ??
-                    "OpenAI streaming failed.",
-                );
-              }
+          for await (const event of streamCoachFinalAnswer({
+            baseInstructions,
+            messages: historyMessages,
+            summary: memorySummary,
+            attachment,
+            currentMessageId,
+            planning,
+            executedTools,
+          })) {
+            if (event.type === "delta") {
+              assistantText += event.text;
+              sendEvent("delta", { text: event.text });
             }
-          } else {
-            const responseStream = await openai.chat.completions.create({
-              model,
-              messages: chatFinalMessages as OpenAI.Chat.ChatCompletionMessageParam[],
-              stream: true as const,
-              stream_options: { include_usage: true },
-              max_tokens: 1600,
-            });
 
-            for await (const chunk of responseStream) {
-              const delta = chunk.choices?.[0]?.delta?.content;
-
-              if (typeof delta === "string" && delta) {
-                assistantText += delta;
-                sendEvent("delta", { text: delta });
-              }
-
-              if (chunk.usage) {
-                finalResponse = {
-                  id: chunk.id,
-                  usage: chunk.usage,
-                };
-              } else if (!finalResponse) {
-                finalResponse = { id: chunk.id };
-              }
+            if (event.type === "completed") {
+              finalResponseId = event.responseId;
+              finalUsage = event.usage;
             }
           }
 
@@ -663,15 +392,12 @@ FINAL ANSWER TURN
             assistantText.trim() ||
             "Mình chưa thể tạo câu trả lời lúc này.";
 
-          const planningUsage = usageFromResponse(planningResponse);
-          const finalUsage = usageFromResponse(finalResponse);
-
           const totalInputTokens =
-            planningUsage.inputTokens + finalUsage.inputTokens;
+            planning.planningUsage.inputTokens + finalUsage.inputTokens;
           const totalOutputTokens =
-            planningUsage.outputTokens + finalUsage.outputTokens;
+            planning.planningUsage.outputTokens + finalUsage.outputTokens;
           const totalTokens =
-            planningUsage.totalTokens + finalUsage.totalTokens;
+            planning.planningUsage.totalTokens + finalUsage.totalTokens;
 
           const assistantMessageResult = await db
             .from("ai_messages")
@@ -685,7 +411,7 @@ FINAL ANSWER TURN
                 arguments: tool.arguments,
                 result: tool.result,
               })),
-              openai_response_id: finalResponse?.id ?? null,
+              openai_response_id: finalResponseId,
               model,
               input_tokens: totalInputTokens,
               output_tokens: totalOutputTokens,
@@ -785,10 +511,7 @@ FINAL ANSWER TURN
           }
 
           sendEvent("error", {
-            message: getErrorMessage(
-              streamError,
-              "AI Coach gặp lỗi khi tạo câu trả lời. Lượt sử dụng đã được hoàn lại.",
-            ),
+            message: getClientErrorMessage(streamError),
           });
 
           closeStream();
@@ -806,16 +529,11 @@ FINAL ANSWER TURN
       },
     });
   } catch (error) {
-    console.error(
-      "AI Coach route failed:",
-      error,
-    );
+    console.error("AI Coach route failed:", error);
 
     if (usageConsumed) {
       try {
-        const refundResult = await db.rpc(
-          "refund_ai_usage",
-        );
+        const refundResult = await db.rpc("refund_ai_usage");
 
         if (refundResult.error) {
           console.error(
@@ -824,19 +542,13 @@ FINAL ANSWER TURN
           );
         }
       } catch (refundError) {
-        console.error(
-          "Unable to refund AI usage:",
-          refundError,
-        );
+        console.error("Unable to refund AI usage:", refundError);
       }
     }
 
     return Response.json(
       {
-        error: getErrorMessage(
-          error,
-          "AI Coach gặp lỗi không xác định.",
-        ),
+        error: getClientErrorMessage(error),
       },
       {
         status: 500,

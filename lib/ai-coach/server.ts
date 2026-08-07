@@ -75,9 +75,12 @@ export function getAiSummaryModelName(): string {
 }
 
 /** @deprecated Use getAiModelName() — kept for existing imports. */
-export const AI_MODEL = process.env.OPENAI_MODEL || "openrouter/free";
+export const AI_MODEL =
+  process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
 export const AI_SUMMARY_MODEL =
-  process.env.OPENAI_SUMMARY_MODEL || AI_MODEL;
+  process.env.AI_SUMMARY_MODEL ||
+  process.env.OPENAI_SUMMARY_MODEL ||
+  AI_MODEL;
 
 export const PLAN_AI_LIMITS = {
   free: 10,
@@ -1582,7 +1585,6 @@ export async function maybeSummarizeThread(args: {
     )
     .join("\n\n");
 
-  const openai = getOpenAI();
   const summaryModel = getAiSummaryModelName();
   const summaryPrompt = `
 Summarize this fitness coaching conversation for future context.
@@ -1598,10 +1600,12 @@ Include only:
 Do not add facts. Do not include hidden reasoning. Keep the summary under 500 words.
 `.trim();
 
+  // Inline completion to avoid circular import with transport.ts.
+  const client = getOpenAI();
   let summary = "";
 
   if (usesResponsesApi()) {
-    const response = await openai.responses.create({
+    const response = await client.responses.create({
       model: summaryModel,
       store: false,
       instructions: summaryPrompt,
@@ -1611,7 +1615,7 @@ Do not add facts. Do not include hidden reasoning. Keep the summary under 500 wo
 
     summary = response.output_text.trim();
   } else {
-    const response = await openai.chat.completions.create({
+    const response = await client.chat.completions.create({
       model: summaryModel,
       messages: [
         {

@@ -408,8 +408,14 @@ export function AiCoachClient({
         }
       }
     } catch (requestError) {
-      const errorMessage =
+      const rawErrorMessage =
         getErrorMessage(requestError);
+      const errorMessage =
+        /openai\.com|no credits|incorrect api key|econnrefused|sk-/i.test(
+          rawErrorMessage,
+        )
+          ? "AI Coach hiện chưa sẵn sàng. Vui lòng thử lại sau."
+          : rawErrorMessage;
 
       setError(errorMessage);
       setStatus("");
