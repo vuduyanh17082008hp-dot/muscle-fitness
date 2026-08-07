@@ -29,7 +29,7 @@ export type HistoryMessage = {
 export type PlanningResult = {
   toolCalls: CoachFunctionCall[];
   planningUsage: ReturnType<typeof usageFromResponse>;
-  responsesPlanningOutput: any[];
+  responsesPlanningOutput: unknown[];
   chatPlanningMessages: OpenAI.Chat.ChatCompletionMessageParam[] | null;
   chatAssistantToolMessage: OpenAI.Chat.ChatCompletionAssistantMessageParam | null;
 };
@@ -60,18 +60,19 @@ export async function planCoachToolCalls(args: {
       currentMessageId: args.currentMessageId,
     });
 
-    const planningResponse: any = await client.responses.create({
+    const planningResponse = await client.responses.create({
       model,
       store: false,
       instructions: args.instructions,
-      input: planningInput as any,
-      tools: COACH_TOOLS as any,
+      // SDK boundary: Responses input/tools shapes vary by provider.
+      input: planningInput as never,
+      tools: COACH_TOOLS as never,
       tool_choice: "required",
       parallel_tool_calls: true,
       max_output_tokens: 500,
     });
 
-    const planningOutput: any[] = Array.isArray(planningResponse.output)
+    const planningOutput: unknown[] = Array.isArray(planningResponse.output)
       ? planningResponse.output
       : [];
 
@@ -112,7 +113,7 @@ export async function planCoachToolCalls(args: {
   const planningResponse = await client.chat.completions.create({
     model,
     messages: chatPlanningMessages,
-    tools: COACH_CHAT_TOOLS as any,
+    tools: COACH_CHAT_TOOLS as never,
     tool_choice: "required",
     parallel_tool_calls: true,
     max_tokens: 500,
@@ -195,15 +196,31 @@ export async function* streamCoachFinalAnswer(args: {
       model,
       store: false,
       instructions: args.baseInstructions,
-      input: finalInput as any,
+      input: finalInput as never,
       stream: true as const,
       max_output_tokens: 1600,
     });
 
-    let finalResponse: any = null;
+    type FinalResponsePayload = {
+      id?: string;
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        total_tokens?: number;
+      } | null;
+      error?: { message?: string } | null;
+    };
+
+    let finalResponse: FinalResponsePayload | null = null;
 
     for await (const rawEvent of responseStream) {
-      const event = rawEvent as any;
+      const event = rawEvent as {
+        type?: string;
+        delta?: string;
+        response?: FinalResponsePayload | null;
+        error?: { message?: string };
+        message?: string;
+      };
 
       if (event.type === "response.output_text.delta") {
         const delta = typeof event.delta === "string" ? event.delta : "";
@@ -278,7 +295,14 @@ FINAL ANSWER TURN
   });
 
   let responseId: string | null = null;
-  let usagePayload: any = null;
+  let usagePayload: {
+    id?: string;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+    } | null;
+  } | null = null;
 
   for await (const chunk of responseStream) {
     if (chunk.id) {

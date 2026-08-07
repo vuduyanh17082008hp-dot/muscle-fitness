@@ -16,9 +16,19 @@ Providers (choose one — no automatic paid fallback):
 
 | `AI_PROVIDER` | When to use |
 |---|---|
-| `self_hosted` (default) | Local vLLM / Ollama / any OpenAI-compatible HTTPS server |
-| `openrouter` | Explicit OpenRouter only |
+| `openrouter` (default) | Free OpenRouter models — recommended to avoid OpenAI billing 429s |
+| `self_hosted` | Local vLLM / Ollama / any OpenAI-compatible HTTPS server |
 | `openai` | Legacy optional OpenAI only |
+
+## Quick start (OpenRouter)
+
+```env
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY
+OPENAI_MODEL=openrouter/free
+```
+
+Get a key: https://openrouter.ai/keys
 
 ## Local development
 

@@ -94,9 +94,7 @@ export function AiCoachClient({
     );
 
   const [usage, setUsage] =
-    useState<AiCoachUsage | null>(
-      initialUsage,
-    );
+    useState<AiCoachUsage | null>(initialUsage);
 
   const [input, setInput] = useState("");
   const [sending, setSending] =
@@ -190,11 +188,8 @@ export function AiCoachClient({
       return;
     }
 
-    const temporaryUserId =
-      `user-${Date.now()}`;
-
-    const temporaryAssistantId =
-      `assistant-${Date.now()}`;
+    const temporaryUserId = `user-${crypto.randomUUID()}`;
+    const temporaryAssistantId = `assistant-${crypto.randomUUID()}`;
 
     const createdAt =
       new Date().toISOString();
@@ -573,6 +568,12 @@ export function AiCoachClient({
 
         <div className="border-t border-white/10 bg-black/40 p-4 sm:p-6">
           <div className="mx-auto max-w-4xl">
+            {usage ? (
+              <p className="mb-3 text-xs text-zinc-500">
+                Còn {usage.remaining}/{usage.daily_limit} lượt AI hôm nay
+              </p>
+            ) : null}
+
             {status ? (
               <p className="mb-3 text-xs font-semibold text-amber-300">
                 {status}

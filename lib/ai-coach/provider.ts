@@ -34,14 +34,11 @@ export class AiProviderConfigError extends Error {
 function normalizeProvider(
   value: string | undefined,
 ): AiProviderName {
-  const normalized = (value || "self_hosted").trim().toLowerCase();
+  // Default: OpenRouter free models (avoids OpenAI billing 429s).
+  const normalized = (value || "openrouter").trim().toLowerCase();
 
   if (normalized === "openai") {
     return "openai";
-  }
-
-  if (normalized === "openrouter") {
-    return "openrouter";
   }
 
   if (
@@ -54,7 +51,7 @@ function normalizeProvider(
     return "self_hosted";
   }
 
-  return "self_hosted";
+  return "openrouter";
 }
 
 function resolveModelId(fallback?: string): string {
@@ -157,23 +154,17 @@ export function getAiProviderConfig(): AiProviderConfig {
   if (name === "openrouter") {
     const apiKey =
       process.env.OPENROUTER_API_KEY?.trim() ||
-      process.env.AI_API_KEY?.trim();
+      process.env.AI_API_KEY?.trim() ||
+      process.env.OPENAI_API_KEY?.trim();
 
     if (!apiKey) {
       throw new AiProviderConfigError(
         "missing_key",
-        "OPENROUTER_API_KEY is missing for AI_PROVIDER=openrouter.",
+        "OPENROUTER_API_KEY is missing. Get a free key at https://openrouter.ai/keys",
       );
     }
 
-    const model = resolveModelId();
-
-    if (!model) {
-      throw new AiProviderConfigError(
-        "missing_model",
-        "AI_MODEL is required for AI_PROVIDER=openrouter.",
-      );
-    }
+    const model = resolveModelId("openrouter/free");
 
     const siteUrl =
       process.env.NEXT_PUBLIC_SITE_URL?.trim() ||

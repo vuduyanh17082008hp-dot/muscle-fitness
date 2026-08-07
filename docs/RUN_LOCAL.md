@@ -24,18 +24,24 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_KEY
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Optional / AI Coach (self-hosted by default — see [AI_PROVIDER_SETUP.md](./AI_PROVIDER_SETUP.md)):
+Optional / AI Coach (OpenRouter free models by default — avoids OpenAI billing 429s):
 
 ```env
-AI_PROVIDER=self_hosted
-AI_BASE_URL=http://localhost:8000/v1
-AI_API_KEY=replace-with-private-server-token
-AI_MODEL=replace-with-model-id
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY
+OPENAI_MODEL=openrouter/free
+# or: AI_MODEL=openrouter/free
 
-# Optional explicit OpenRouter only:
-# AI_PROVIDER=openrouter
-# OPENROUTER_API_KEY=sk-or-v1-...
-# AI_MODEL=your-openrouter-model-id
+# Optional paid OpenAI instead:
+# AI_PROVIDER=openai
+# OPENAI_API_KEY=sk-...
+# OPENAI_MODEL=gpt-4.1-mini
+
+# Optional self-hosted OpenAI-compatible server:
+# AI_PROVIDER=self_hosted
+# AI_BASE_URL=http://localhost:8000/v1
+# AI_API_KEY=replace-with-private-server-token
+# AI_MODEL=replace-with-model-id
 
 GOOGLE_DRIVE_CLIENT_ID=
 GOOGLE_DRIVE_CLIENT_SECRET=
@@ -43,13 +49,10 @@ GOOGLE_DRIVE_REFRESH_TOKEN=
 GOOGLE_DRIVE_FOLDER_ID=
 ```
 
-```bash
-npm run ai:check
-npm run ai:up    # Docker + NVIDIA vLLM when available
-npm run dev
-```
+Get a free OpenRouter key: [https://openrouter.ai/keys](https://openrouter.ai/keys)  
+Then restart `npm run dev`. Dev health check: [http://localhost:3000/api/ai-coach/health](http://localhost:3000/api/ai-coach/health)
 
-Dev health check: [http://localhost:3000/api/ai-coach/health](http://localhost:3000/api/ai-coach/health)
+More providers: [AI_PROVIDER_SETUP.md](./AI_PROVIDER_SETUP.md)
 
 ## Validation commands
 

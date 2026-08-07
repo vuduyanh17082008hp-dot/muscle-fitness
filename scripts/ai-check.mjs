@@ -30,12 +30,20 @@ const transportSource = readFileSync(
 );
 
 assert(
+  providerSource.includes('"openrouter"'),
+  "provider supports openrouter",
+);
+assert(
   providerSource.includes('"self_hosted"'),
   "provider supports self_hosted",
 );
 assert(
-  providerSource.includes('value || "self_hosted"'),
-  "default provider is self_hosted",
+  providerSource.includes('value || "openrouter"'),
+  "default provider is openrouter",
+);
+assert(
+  providerSource.includes("openrouter/free"),
+  "openrouter free model default exists",
 );
 assert(
   providerSource.includes("VERCEL") &&
@@ -73,12 +81,20 @@ assert(
   "chat-completions tool adapter present",
 );
 
-// Config validation sample (does not call network).
+process.env.AI_PROVIDER = "openrouter";
+process.env.OPENROUTER_API_KEY = "sk-or-v1-test";
+process.env.OPENAI_MODEL = "openrouter/free";
+delete process.env.VERCEL;
+
+assert(
+  process.env.AI_PROVIDER === "openrouter",
+  "sample openrouter provider configured for local checks",
+);
+
 process.env.AI_PROVIDER = "self_hosted";
 process.env.AI_BASE_URL = "http://localhost:8000/v1";
 process.env.AI_API_KEY = "test-token";
 process.env.AI_MODEL = "test-model";
-delete process.env.VERCEL;
 
 assert(
   process.env.AI_BASE_URL.includes("localhost"),

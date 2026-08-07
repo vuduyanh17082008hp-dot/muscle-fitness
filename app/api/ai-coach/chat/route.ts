@@ -67,6 +67,8 @@ function getClientErrorMessage(error: unknown): string {
 
 export async function POST(request: Request) {
   const supabase = await createClient();
+  // Supabase generated Database types omit AI RPCs on this branch.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
 
   const {
