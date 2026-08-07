@@ -1,7 +1,9 @@
 import {
   getDevAiErrorDetail,
-  mapAiErrorToUserMessage,
+  logAiCoachFailure,
+  toAiClientErrorPayload,
 } from "@/lib/ai-coach/errors";
+import { getSafeProviderInfo } from "@/lib/ai-coach/provider";
 import {
   buildCoachInstructions,
   chatRequestSchema,
@@ -54,15 +56,18 @@ function createThreadTitle(message: string): string {
   return `${normalized.slice(0, 61)}...`;
 }
 
-function getClientErrorMessage(error: unknown): string {
-  const mapped = mapAiErrorToUserMessage(error);
+function getClientErrorPayload(error: unknown) {
+  const payload = toAiClientErrorPayload(error);
   const detail = getDevAiErrorDetail(error);
 
   if (detail && process.env.NODE_ENV === "development") {
-    return `${mapped} (${detail})`;
+    return {
+      ...payload,
+      message: `${payload.message} (${detail})`,
+    };
   }
 
-  return mapped;
+  return payload;
 }
 
 export async function POST(request: Request) {
@@ -490,7 +495,11 @@ DATA COLLECTION TURN
 
           closeStream();
         } catch (streamError) {
-          console.error("AI stream failed:", streamError);
+          const info = getSafeProviderInfo();
+          logAiCoachFailure("stream failed", streamError, {
+            provider: info.provider,
+            model: info.model,
+          });
 
           if (usageConsumed) {
             try {
@@ -512,9 +521,8 @@ DATA COLLECTION TURN
             }
           }
 
-          sendEvent("error", {
-            message: getClientErrorMessage(streamError),
-          });
+          const payload = getClientErrorPayload(streamError);
+          sendEvent("error", payload);
 
           closeStream();
         }
@@ -531,7 +539,11 @@ DATA COLLECTION TURN
       },
     });
   } catch (error) {
-    console.error("AI Coach route failed:", error);
+    const info = getSafeProviderInfo();
+    logAiCoachFailure("route failed", error, {
+      provider: info.provider,
+      model: info.model,
+    });
 
     if (usageConsumed) {
       try {
@@ -548,13 +560,8 @@ DATA COLLECTION TURN
       }
     }
 
-    return Response.json(
-      {
-        error: getClientErrorMessage(error),
-      },
-      {
-        status: 500,
-      },
-    );
+    return Response.json(getClientErrorPayload(error), {
+      status: 500,
+    });
   }
 }

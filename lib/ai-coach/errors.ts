@@ -1,5 +1,12 @@
 import { AiProviderConfigError } from "@/lib/ai-coach/provider";
 
+export const AI_UNAVAILABLE = "AI_UNAVAILABLE" as const;
+
+export type AiClientErrorPayload = {
+  error: typeof AI_UNAVAILABLE;
+  message: string;
+};
+
 function readStatus(error: unknown): number | null {
   if (!error || typeof error !== "object") {
     return null;
@@ -27,6 +34,23 @@ function readMessage(error: unknown): string {
   }
 
   return String(error ?? "");
+}
+
+function looksLikeProviderLeak(message: string): boolean {
+  const lower = message.toLowerCase();
+
+  return (
+    lower.includes("platform.openai.com") ||
+    lower.includes("openai.com") ||
+    lower.includes("no credits") ||
+    lower.includes("credits remaining") ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("billing") ||
+    /sk-[a-z0-9_-]{10,}/i.test(message) ||
+    /bearer\s+/i.test(message) ||
+    lower.includes("stack") ||
+    lower.includes("at object.")
+  );
 }
 
 /**
@@ -68,10 +92,10 @@ export function mapAiErrorToUserMessage(error: unknown): string {
 
   if (
     status === 404 ||
-    message.includes("model") &&
+    (message.includes("model") &&
       (message.includes("not found") ||
         message.includes("does not exist") ||
-        message.includes("unavailable"))
+        message.includes("unavailable")))
   ) {
     return "Model AI được cấu hình hiện không khả dụng.";
   }
@@ -80,9 +104,14 @@ export function mapAiErrorToUserMessage(error: unknown): string {
     status === 429 ||
     message.includes("rate limit") ||
     message.includes("too many requests") ||
-    message.includes("overloaded")
+    message.includes("overloaded") ||
+    message.includes("no credits") ||
+    message.includes("credits remaining") ||
+    message.includes("billing") ||
+    message.includes("platform.openai.com") ||
+    message.includes("insufficient_quota")
   ) {
-    return "AI Coach đang quá tải. Vui lòng thử lại sau.";
+    return "AI Coach hiện chưa sẵn sàng. Vui lòng thử lại sau.";
   }
 
   if (
@@ -98,16 +127,20 @@ export function mapAiErrorToUserMessage(error: unknown): string {
     return "Máy chủ AI hiện không thể kết nối. Vui lòng thử lại.";
   }
 
-  if (
-    message.includes("no credits") ||
-    message.includes("billing") ||
-    message.includes("platform.openai.com") ||
-    message.includes("insufficient_quota")
-  ) {
+  if (looksLikeProviderLeak(readMessage(error))) {
     return "AI Coach hiện chưa sẵn sàng. Vui lòng thử lại sau.";
   }
 
   return "AI Coach gặp lỗi khi xử lý yêu cầu.";
+}
+
+export function toAiClientErrorPayload(
+  error: unknown,
+): AiClientErrorPayload {
+  return {
+    error: AI_UNAVAILABLE,
+    message: mapAiErrorToUserMessage(error),
+  };
 }
 
 export function getDevAiErrorDetail(error: unknown): string | null {
@@ -121,10 +154,31 @@ export function getDevAiErrorDetail(error: unknown): string | null {
     return null;
   }
 
-  // Keep details short and never echo key-like material.
-  if (/sk-[a-z0-9_-]{10,}/i.test(message) || /bearer\s+/i.test(message)) {
+  // Keep details short and never echo key-like material or billing URLs.
+  if (looksLikeProviderLeak(message)) {
     return null;
   }
 
   return message.slice(0, 240);
+}
+
+export function logAiCoachFailure(
+  scope: string,
+  error: unknown,
+  extra?: { provider?: string; model?: string; status?: number | null },
+): void {
+  const status = extra?.status ?? readStatus(error);
+  const provider = extra?.provider ?? "unknown";
+  const model = extra?.model ?? "unknown";
+
+  console.error(
+    `[AI Coach] ${scope} provider=${provider} model=${model} status=${status ?? "n/a"}`,
+  );
+
+  if (process.env.NODE_ENV === "development") {
+    const detail = getDevAiErrorDetail(error);
+    if (detail) {
+      console.error(`[AI Coach] detail: ${detail}`);
+    }
+  }
 }

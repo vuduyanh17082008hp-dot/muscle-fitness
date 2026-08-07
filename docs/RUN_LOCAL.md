@@ -29,10 +29,9 @@ Optional / AI Coach (OpenRouter free models by default — avoids OpenAI billing
 ```env
 AI_PROVIDER=openrouter
 OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY
-OPENAI_MODEL=openrouter/free
-# or: AI_MODEL=openrouter/free
+OPENROUTER_MODEL=openrouter/free
 
-# Optional paid OpenAI instead:
+# Optional paid OpenAI instead (explicit only — no silent fallback):
 # AI_PROVIDER=openai
 # OPENAI_API_KEY=sk-...
 # OPENAI_MODEL=gpt-4.1-mini

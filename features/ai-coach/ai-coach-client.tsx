@@ -72,12 +72,48 @@ function parseSseBlock(
   }
 }
 
-function getErrorMessage(
-  error: unknown,
-): string {
-  return error instanceof Error
-    ? error.message
-    : "AI Coach gặp lỗi không xác định.";
+const SAFE_AI_ERROR =
+  "AI Coach hiện chưa sẵn sàng. Vui lòng thử lại sau.";
+
+function looksLikeRawProviderError(message: string): boolean {
+  return /openai\.com|openrouter\.ai|no credits|credits remaining|incorrect api key|econnrefused|insufficient_quota|sk-|billing/i.test(
+    message,
+  );
+}
+
+function getErrorMessage(error: unknown): string {
+  const raw =
+    error instanceof Error
+      ? error.message
+      : "AI Coach gặp lỗi không xác định.";
+
+  if (looksLikeRawProviderError(raw)) {
+    return SAFE_AI_ERROR;
+  }
+
+  return raw;
+}
+
+function readApiErrorMessage(errorData: unknown): string {
+  if (!errorData || typeof errorData !== "object") {
+    return "Không thể gửi tin nhắn tới AI Coach.";
+  }
+
+  const data = errorData as Record<string, unknown>;
+
+  if (typeof data.message === "string" && data.message.trim()) {
+    return data.message;
+  }
+
+  if (typeof data.error === "string" && data.error !== "AI_UNAVAILABLE") {
+    return data.error;
+  }
+
+  if (data.error === "AI_UNAVAILABLE") {
+    return SAFE_AI_ERROR;
+  }
+
+  return "Không thể gửi tin nhắn tới AI Coach.";
 }
 
 export function AiCoachClient({
@@ -239,14 +275,17 @@ export function AiCoachClient({
           .json()
           .catch(() => null);
 
-        if (errorData?.usage) {
-          updateUsage(errorData.usage);
+        if (
+          errorData &&
+          typeof errorData === "object" &&
+          "usage" in errorData
+        ) {
+          updateUsage(
+            (errorData as { usage: unknown }).usage,
+          );
         }
 
-        throw new Error(
-          errorData?.error ??
-            "Không thể gửi tin nhắn tới AI Coach.",
-        );
+        throw new Error(readApiErrorMessage(errorData));
       }
 
       if (!response.body) {
@@ -393,43 +432,58 @@ export function AiCoachClient({
 
           if (eventName === "error") {
             const serverMessage =
-              typeof data.message ===
-              "string"
+              typeof data.message === "string"
                 ? data.message
-                : "AI Coach gặp lỗi.";
+                : SAFE_AI_ERROR;
 
             throw new Error(serverMessage);
           }
         }
       }
     } catch (requestError) {
-      const rawErrorMessage =
-        getErrorMessage(requestError);
-      const errorMessage =
-        /openai\.com|no credits|incorrect api key|econnrefused|sk-/i.test(
-          rawErrorMessage,
-        )
-          ? "AI Coach hiện chưa sẵn sàng. Vui lòng thử lại sau."
-          : rawErrorMessage;
+      const errorMessage = getErrorMessage(requestError);
 
       setError(errorMessage);
       setStatus("");
 
+      // Keep user message in history; remove empty failed assistant bubble.
+      // Surface one polished error + Try again — never raw provider text.
       setMessages((current) =>
-        current.map((message) =>
-          message.id ===
-          temporaryAssistantId
-            ? {
-                ...message,
-                content:
-                  `Không thể trả lời: ${errorMessage}`,
-              }
-            : message,
+        current.filter(
+          (message) => message.id !== temporaryAssistantId,
         ),
       );
     } finally {
       setSending(false);
     }
+  }
+
+  function retryLastUserMessage() {
+    if (sending) {
+      return;
+    }
+
+    let lastUser: AiCoachUiMessage | undefined;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i]?.role === "user") {
+        lastUser = messages[i];
+        break;
+      }
+    }
+
+    if (!lastUser?.content.trim()) {
+      return;
+    }
+
+    const retryContent = lastUser.content;
+    const retryId = lastUser.id;
+
+    // Drop the last user bubble before re-send so we do not duplicate it.
+    setMessages((current) =>
+      current.filter((message) => message.id !== retryId),
+    );
+
+    void sendMessage(undefined, retryContent);
   }
 
   const suggestions = [
@@ -581,8 +635,16 @@ export function AiCoachClient({
             ) : null}
 
             {error ? (
-              <div className="mb-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                {error}
+              <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300 sm:flex-row sm:items-center sm:justify-between">
+                <p>{error}</p>
+                <button
+                  type="button"
+                  onClick={retryLastUserMessage}
+                  disabled={sending}
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border border-red-400/30 bg-red-500/10 px-4 text-xs font-bold uppercase tracking-wide text-red-200 transition hover:bg-red-500/20 disabled:opacity-50"
+                >
+                  Try again
+                </button>
               </div>
             ) : null}
 

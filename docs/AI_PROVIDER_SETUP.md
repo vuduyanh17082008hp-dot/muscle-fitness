@@ -25,10 +25,14 @@ Providers (choose one — no automatic paid fallback):
 ```env
 AI_PROVIDER=openrouter
 OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY
-OPENAI_MODEL=openrouter/free
+OPENROUTER_MODEL=openrouter/free
+# optional:
+# OPENROUTER_SUMMARY_MODEL=openrouter/free
 ```
 
 Get a key: https://openrouter.ai/keys
+
+**Important:** OpenRouter never reuses `OPENAI_API_KEY`. OpenAI is used only when `AI_PROVIDER=openai` is set explicitly. There is no silent fallback on failure.
 
 ## Local development
 
@@ -82,9 +86,15 @@ The Next.js app still builds. Chat returns a clear Vietnamese setup error until 
 
 ## Production (Vercel)
 
-Vercel **must not** use `localhost` / `127.0.0.1` as `AI_BASE_URL`.
+Recommended (OpenRouter):
 
-Required Vercel env:
+```env
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY
+OPENROUTER_MODEL=openrouter/free
+```
+
+Self-hosted alternative — Vercel **must not** use `localhost` / `127.0.0.1` as `AI_BASE_URL`:
 
 ```env
 AI_PROVIDER=self_hosted
@@ -94,7 +104,7 @@ AI_MODEL=your-deployed-model-id
 AI_SUMMARY_MODEL=your-deployed-model-id
 ```
 
-Vercel serverless routes should call a remote inference server. Do **not** load an 8B model inside a normal Vercel function.
+Do **not** load an 8B model inside a normal Vercel function.
 
 ## Useful commands
 

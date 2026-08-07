@@ -1,4 +1,7 @@
-import { mapAiErrorToUserMessage } from "@/lib/ai-coach/errors";
+import {
+  logAiCoachFailure,
+  mapAiErrorToUserMessage,
+} from "@/lib/ai-coach/errors";
 import {
   getAiClient,
   getSafeProviderInfo,
@@ -28,7 +31,10 @@ export async function GET() {
         transport: info.transport,
       });
     } catch (error) {
-      console.error("AI Coach health config failed:", error);
+      logAiCoachFailure("health config failed", error, {
+        provider: info.provider,
+        model: info.model,
+      });
 
       return Response.json(
         {
@@ -37,7 +43,8 @@ export async function GET() {
           model: info.model,
           baseUrlConfigured: info.baseUrlConfigured,
           transport: info.transport,
-          error: mapAiErrorToUserMessage(error),
+          error: "AI_UNAVAILABLE",
+          message: mapAiErrorToUserMessage(error),
         },
         {
           status: 500,
@@ -90,7 +97,10 @@ export async function GET() {
       transport: info.transport,
     });
   } catch (error) {
-    console.error("AI Coach health check failed:", error);
+    logAiCoachFailure("health check failed", error, {
+      provider: info.provider,
+      model: info.model,
+    });
 
     return Response.json(
       {
@@ -99,7 +109,8 @@ export async function GET() {
         model: info.model,
         baseUrlConfigured: info.baseUrlConfigured,
         transport: info.transport,
-        error: mapAiErrorToUserMessage(error),
+        error: "AI_UNAVAILABLE",
+        message: mapAiErrorToUserMessage(error),
       },
       {
         status: 500,

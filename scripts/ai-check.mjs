@@ -42,8 +42,25 @@ assert(
   "default provider is openrouter",
 );
 assert(
+  providerSource.includes("OPENROUTER_API_KEY"),
+  "openrouter requires OPENROUTER_API_KEY",
+);
+assert(
+  providerSource.includes("OPENROUTER_MODEL"),
+  "openrouter uses OPENROUTER_MODEL",
+);
+assert(
   providerSource.includes("openrouter/free"),
   "openrouter free model default exists",
+);
+assert(
+  !/OPENROUTER_API_KEY[\s\S]{0,120}OPENAI_API_KEY/.test(providerSource) ||
+    providerSource.includes("never reuse OPENAI_API_KEY"),
+  "openrouter must not fall back to OPENAI_API_KEY",
+);
+assert(
+  providerSource.includes("maxRetries: 0"),
+  "no aggressive provider retries",
 );
 assert(
   providerSource.includes("VERCEL") &&
@@ -56,7 +73,8 @@ assert(
   "normalized transport helpers exist",
 );
 assert(
-  errorsSource.includes("mapAiErrorToUserMessage"),
+  errorsSource.includes("mapAiErrorToUserMessage") &&
+    errorsSource.includes("AI_UNAVAILABLE"),
   "safe error mapper exists",
 );
 
@@ -83,7 +101,8 @@ assert(
 
 process.env.AI_PROVIDER = "openrouter";
 process.env.OPENROUTER_API_KEY = "sk-or-v1-test";
-process.env.OPENAI_MODEL = "openrouter/free";
+process.env.OPENROUTER_MODEL = "openrouter/free";
+delete process.env.OPENAI_API_KEY;
 delete process.env.VERCEL;
 
 assert(

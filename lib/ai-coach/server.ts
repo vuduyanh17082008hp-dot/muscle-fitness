@@ -76,8 +76,12 @@ export function getAiSummaryModelName(): string {
 
 /** @deprecated Use getAiModelName() — kept for existing imports. */
 export const AI_MODEL =
-  process.env.AI_MODEL || process.env.OPENAI_MODEL || "";
+  process.env.OPENROUTER_MODEL ||
+  process.env.AI_MODEL ||
+  process.env.OPENAI_MODEL ||
+  "";
 export const AI_SUMMARY_MODEL =
+  process.env.OPENROUTER_SUMMARY_MODEL ||
   process.env.AI_SUMMARY_MODEL ||
   process.env.OPENAI_SUMMARY_MODEL ||
   AI_MODEL;

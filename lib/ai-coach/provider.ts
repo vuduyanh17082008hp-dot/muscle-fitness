@@ -31,10 +31,13 @@ export class AiProviderConfigError extends Error {
   }
 }
 
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const OPENROUTER_DEFAULT_MODEL = "openrouter/free";
+
 function normalizeProvider(
   value: string | undefined,
 ): AiProviderName {
-  // Default: OpenRouter free models (avoids OpenAI billing 429s).
+  // Default always OpenRouter. Never infer from key presence.
   const normalized = (value || "openrouter").trim().toLowerCase();
 
   if (normalized === "openai") {
@@ -51,24 +54,8 @@ function normalizeProvider(
     return "self_hosted";
   }
 
+  // Unknown values (including empty) → openrouter.
   return "openrouter";
-}
-
-function resolveModelId(fallback?: string): string {
-  return (
-    process.env.AI_MODEL?.trim() ||
-    process.env.OPENAI_MODEL?.trim() ||
-    fallback ||
-    ""
-  );
-}
-
-function resolveSummaryModel(model: string): string {
-  return (
-    process.env.AI_SUMMARY_MODEL?.trim() ||
-    process.env.OPENAI_SUMMARY_MODEL?.trim() ||
-    model
-  );
 }
 
 function isLocalBaseUrl(baseURL: string): boolean {
@@ -101,9 +88,7 @@ function assertProductionBaseUrl(baseURL: string): void {
   }
 }
 
-function resolveTransport(
-  name: AiProviderName,
-): AiTransportMode {
+function resolveTransport(name: AiProviderName): AiTransportMode {
   const forced = process.env.AI_TRANSPORT?.trim().toLowerCase();
 
   if (forced === "responses") {
@@ -114,9 +99,78 @@ function resolveTransport(
     return "chat_completions";
   }
 
-  // Native OpenAI supports Responses; open-source OpenAI-compatible
-  // servers typically expose chat/completions only.
+  // Native OpenAI supports Responses; OpenRouter / self-hosted use chat.
   return name === "openai" ? "responses" : "chat_completions";
+}
+
+function resolveOpenRouterModel(): string {
+  const primary = process.env.OPENROUTER_MODEL?.trim();
+  if (primary) {
+    return primary;
+  }
+
+  // Legacy alias: only accept OpenRouter-style IDs (e.g. "vendor/model").
+  // Never send Cursor/OpenAI-only IDs like gpt-5.6-* to OpenRouter.
+  const legacy = process.env.OPENAI_MODEL?.trim();
+  if (legacy && legacy.includes("/")) {
+    return legacy;
+  }
+
+  return OPENROUTER_DEFAULT_MODEL;
+}
+
+function resolveOpenRouterSummaryModel(model: string): string {
+  return (
+    process.env.OPENROUTER_SUMMARY_MODEL?.trim() ||
+    process.env.OPENROUTER_MODEL?.trim() ||
+    model
+  );
+}
+
+function resolveOpenAiModel(): string {
+  return (
+    process.env.OPENAI_MODEL?.trim() ||
+    process.env.AI_MODEL?.trim() ||
+    ""
+  );
+}
+
+function resolveOpenAiSummaryModel(model: string): string {
+  return (
+    process.env.OPENAI_SUMMARY_MODEL?.trim() ||
+    process.env.AI_SUMMARY_MODEL?.trim() ||
+    model
+  );
+}
+
+function resolveSelfHostedModel(): string {
+  return (
+    process.env.AI_MODEL?.trim() ||
+    process.env.OPENAI_MODEL?.trim() ||
+    ""
+  );
+}
+
+function resolveSelfHostedSummaryModel(model: string): string {
+  return (
+    process.env.AI_SUMMARY_MODEL?.trim() ||
+    process.env.OPENAI_SUMMARY_MODEL?.trim() ||
+    model
+  );
+}
+
+let lastLoggedSelection: string | null = null;
+
+function logProviderSelection(config: AiProviderConfig): void {
+  const key = `${config.name}|${config.model}|${config.transport}`;
+  if (lastLoggedSelection === key) {
+    return;
+  }
+
+  lastLoggedSelection = key;
+  console.info(
+    `[AI Coach] provider=${config.name} model=${config.model} transport=${config.transport}`,
+  );
 }
 
 export function getAiProviderConfig(): AiProviderConfig {
@@ -133,57 +187,69 @@ export function getAiProviderConfig(): AiProviderConfig {
       );
     }
 
-    const model = resolveModelId();
+    const model = resolveOpenAiModel();
 
     if (!model) {
       throw new AiProviderConfigError(
         "missing_model",
-        "AI_MODEL (or OPENAI_MODEL) is required for AI_PROVIDER=openai.",
+        "OPENAI_MODEL is required for AI_PROVIDER=openai.",
       );
     }
 
-    return {
+    const config: AiProviderConfig = {
       name,
       apiKey,
       model,
-      summaryModel: resolveSummaryModel(model),
+      summaryModel: resolveOpenAiSummaryModel(model),
       transport,
     };
+
+    logProviderSelection(config);
+    return config;
   }
 
   if (name === "openrouter") {
-    const apiKey =
-      process.env.OPENROUTER_API_KEY?.trim() ||
-      process.env.AI_API_KEY?.trim() ||
-      process.env.OPENAI_API_KEY?.trim();
+    // CRITICAL: never reuse OPENAI_API_KEY for OpenRouter.
+    const apiKey = process.env.OPENROUTER_API_KEY?.trim();
 
     if (!apiKey) {
       throw new AiProviderConfigError(
         "missing_key",
-        "OPENROUTER_API_KEY is missing. Get a free key at https://openrouter.ai/keys",
+        "OPENROUTER_API_KEY is missing for AI_PROVIDER=openrouter. Set OPENROUTER_API_KEY (do not use OPENAI_API_KEY).",
       );
     }
 
-    const model = resolveModelId("openrouter/free");
+    const model = resolveOpenRouterModel();
+
+    if (!model) {
+      throw new AiProviderConfigError(
+        "missing_model",
+        "OPENROUTER_MODEL is required for AI_PROVIDER=openrouter.",
+      );
+    }
 
     const siteUrl =
       process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
       "http://localhost:3000";
 
-    return {
+    const config: AiProviderConfig = {
       name,
       apiKey,
-      baseURL: "https://openrouter.ai/api/v1",
+      baseURL: OPENROUTER_BASE_URL,
       model,
-      summaryModel: resolveSummaryModel(model),
+      summaryModel: resolveOpenRouterSummaryModel(model),
       transport,
       defaultHeaders: {
         "HTTP-Referer": siteUrl,
         "X-OpenRouter-Title": "Muscle Fitness AI Coach",
       },
     };
+
+    logProviderSelection(config);
+    return config;
   }
 
+  // self_hosted — only when AI_PROVIDER explicitly selects it.
   const baseURL =
     process.env.AI_BASE_URL?.trim() ||
     process.env.OPENAI_BASE_URL?.trim();
@@ -202,7 +268,7 @@ export function getAiProviderConfig(): AiProviderConfig {
     process.env.VLLM_API_KEY?.trim() ||
     "local-dev-token";
 
-  const model = resolveModelId();
+  const model = resolveSelfHostedModel();
 
   if (!model) {
     throw new AiProviderConfigError(
@@ -211,14 +277,17 @@ export function getAiProviderConfig(): AiProviderConfig {
     );
   }
 
-  return {
+  const config: AiProviderConfig = {
     name: "self_hosted",
     apiKey,
     baseURL,
     model,
-    summaryModel: resolveSummaryModel(model),
+    summaryModel: resolveSelfHostedSummaryModel(model),
     transport,
   };
+
+  logProviderSelection(config);
+  return config;
 }
 
 let cachedClient: OpenAI | null = null;
@@ -231,6 +300,7 @@ export function getAiClient(): OpenAI {
     config.baseURL || "default",
     config.apiKey.slice(0, 8),
     config.transport,
+    config.model,
   ].join("|");
 
   if (!cachedClient || cachedClientKey !== cacheKey) {
@@ -239,7 +309,8 @@ export function getAiClient(): OpenAI {
       baseURL: config.baseURL,
       defaultHeaders: config.defaultHeaders,
       timeout: 60_000,
-      maxRetries: 2,
+      // Do not aggressively retry 429 / billing failures.
+      maxRetries: 0,
     });
     cachedClientKey = cacheKey;
   }
@@ -277,15 +348,26 @@ export function getSafeProviderInfo(): {
   } catch {
     const name = normalizeProvider(process.env.AI_PROVIDER);
 
+    const model =
+      name === "openrouter"
+        ? process.env.OPENROUTER_MODEL?.trim() ||
+          process.env.OPENAI_MODEL?.trim() ||
+          OPENROUTER_DEFAULT_MODEL
+        : name === "openai"
+          ? process.env.OPENAI_MODEL?.trim() ||
+            process.env.AI_MODEL?.trim() ||
+            ""
+          : process.env.AI_MODEL?.trim() ||
+            process.env.OPENAI_MODEL?.trim() ||
+            "";
+
     return {
       provider: name,
-      model:
-        process.env.AI_MODEL?.trim() ||
-        process.env.OPENAI_MODEL?.trim() ||
-        "",
+      model,
       baseUrlConfigured: Boolean(
         process.env.AI_BASE_URL?.trim() ||
-          process.env.OPENAI_BASE_URL?.trim(),
+          process.env.OPENAI_BASE_URL?.trim() ||
+          name === "openrouter",
       ),
       transport: resolveTransport(name),
     };
