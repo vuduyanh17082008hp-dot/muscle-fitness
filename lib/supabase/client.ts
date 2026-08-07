@@ -1,40 +1,38 @@
 import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-function getSupabaseEnvironment() {
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
+import {
+  getSupabasePublicEnv,
+  requireSupabasePublicEnv,
+} from "@/lib/supabase/env";
 
-  const supabaseKey =
-    process.env
-      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+/**
+ * Create a browser Supabase client.
+ * Throws at runtime when env is missing (after build).
+ */
+export function createClient(): SupabaseClient {
+  const { url, publicKey } = requireSupabasePublicEnv();
 
-  if (!supabaseUrl) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL.",
-    );
-  }
-
-  if (!supabaseKey) {
-    throw new Error(
-      "Missing Supabase publishable or anon key.",
-    );
-  }
-
-  return {
-    supabaseUrl,
-    supabaseKey,
-  };
+  return createBrowserClient(url, publicKey);
 }
 
-export function createClient() {
-  const {
-    supabaseUrl,
-    supabaseKey,
-  } = getSupabaseEnvironment();
+/**
+ * Safe for root layout / AuthProvider prerender.
+ * Returns null when public Supabase env is not configured.
+ */
+export function tryCreateClient(): SupabaseClient | null {
+  const env = getSupabasePublicEnv();
 
-  return createBrowserClient(
-    supabaseUrl,
-    supabaseKey,
-  );
+  if (!env) {
+    return null;
+  }
+
+  if (
+    !env.url.startsWith("https://") ||
+    !env.url.includes(".supabase.co")
+  ) {
+    return null;
+  }
+
+  return createBrowserClient(env.url, env.publicKey);
 }

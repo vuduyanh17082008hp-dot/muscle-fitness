@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
+import { requireSupabasePublicEnv } from "@/lib/supabase/env"
+
 const PROTECTED_ROUTES = [
   "/dashboard",
   "/account",
@@ -67,28 +69,11 @@ function copyAuthCookies(
 }
 
 function getSupabaseConfig() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL
-
-  const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL."
-    )
-  }
-
-  if (!key) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY."
-    )
-  }
+  const { url, publicKey } = requireSupabasePublicEnv()
 
   return {
     url,
-    key,
+    key: publicKey,
   }
 }
 

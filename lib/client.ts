@@ -1,46 +1,44 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  getSupabasePublicEnv,
+  requireSupabasePublicEnv,
+} from "@/lib/supabase/env";
+
 let browserClient: SupabaseClient | undefined;
-
-function getSupabaseConfig() {
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-
-  const supabaseKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
-
-  if (!supabaseUrl) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL in .env.local",
-    );
-  }
-
-  if (!supabaseKey) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local",
-    );
-  }
-
-  return {
-    supabaseUrl,
-    supabaseKey,
-  };
-}
 
 export function createClient(): SupabaseClient {
   if (browserClient) {
     return browserClient;
   }
 
-  const { supabaseUrl, supabaseKey } =
-    getSupabaseConfig();
+  const { url, publicKey } = requireSupabasePublicEnv();
 
-  browserClient = createBrowserClient(
-    supabaseUrl,
-    supabaseKey,
-  );
+  browserClient = createBrowserClient(url, publicKey);
+
+  return browserClient;
+}
+
+export function tryCreateClient(): SupabaseClient | null {
+  if (browserClient) {
+    return browserClient;
+  }
+
+  const env = getSupabasePublicEnv();
+
+  if (!env) {
+    return null;
+  }
+
+  if (
+    !env.url.startsWith("https://") ||
+    !env.url.includes(".supabase.co")
+  ) {
+    return null;
+  }
+
+  browserClient = createBrowserClient(env.url, env.publicKey);
 
   return browserClient;
 }

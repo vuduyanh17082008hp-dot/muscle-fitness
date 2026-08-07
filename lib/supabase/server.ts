@@ -1,40 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-function getSupabaseEnvironment(): {
-  url: string;
-  key: string;
-} {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL in .env.local.",
-    );
-  }
-
-  if (!key) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.",
-    );
-  }
-
-  return {
-    url,
-    key,
-  };
-}
+import { requireSupabasePublicEnv } from "@/lib/supabase/env";
 
 export async function createClient() {
   const cookieStore = await cookies();
-  const { url, key } = getSupabaseEnvironment();
+  const { url, publicKey } = requireSupabasePublicEnv();
 
-  return createServerClient(url, key, {
+  return createServerClient(url, publicKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -42,15 +15,9 @@ export async function createClient() {
 
       setAll(cookiesToSet) {
         try {
-          cookiesToSet.forEach(
-            ({ name, value, options }) => {
-              cookieStore.set(
-                name,
-                value,
-                options,
-              );
-            },
-          );
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
         } catch {
           /*
            * Server Components đôi khi không thể ghi cookie.
