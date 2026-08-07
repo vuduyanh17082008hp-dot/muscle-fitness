@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 
 import type { LucideIcon } from "lucide-react"
 
@@ -107,6 +107,11 @@ export default async function DashboardSectionPage({
   params,
 }: PageProps) {
   const { section: sectionKey } = await params
+
+  if (sectionKey === "ai-coach") {
+    redirect("/ai-coach")
+  }
+
   const section = sections[sectionKey]
 
   if (!section) {

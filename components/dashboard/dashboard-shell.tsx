@@ -1,322 +1,297 @@
-'use client'
+"use client";
 
 import {
   useEffect,
   useState,
   type ReactNode,
-} from 'react'
-
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-
-import type { LucideIcon } from 'lucide-react'
-
+} from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 import {
   Bot,
-  CalendarDays,
   ChartNoAxesCombined,
-  CheckSquare2,
-  ChevronRight,
   Dumbbell,
-  Home,
   LayoutDashboard,
   LogOut,
   Menu,
-  MessageSquareText,
   Settings,
-  Sparkles,
+  UserRound,
   Utensils,
   X,
-  Zap,
-} from 'lucide-react'
+} from "lucide-react";
 
-import { logoutAction } from '@/app/dashboard/actions'
+import { logoutAction } from "@/app/dashboard/actions";
+import { useAuth } from "@/app/context/AuthContext";
 
 type NavItem = {
-  label: string
-  href: string
-  icon: LucideIcon
-  exact?: boolean
-}
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  exact?: boolean;
+};
 
 const navItems: NavItem[] = [
   {
-    label: 'Overview',
-    href: '/dashboard',
+    label: "Dashboard",
+    href: "/dashboard",
     icon: LayoutDashboard,
     exact: true,
   },
   {
-    label: 'Today',
-    href: '/dashboard/today',
-    icon: Zap,
-  },
-  {
-    label: 'Workouts',
-    href: '/dashboard/workouts',
-    icon: Dumbbell,
-  },
-  {
-    label: 'Nutrition',
-    href: '/dashboard/nutrition',
-    icon: Utensils,
-  },
-  {
-    label: 'Progress',
-    href: '/dashboard/progress',
-    icon: ChartNoAxesCombined,
-  },
-  {
-    label: 'Check-in',
-    href: '/dashboard/check-in',
-    icon: CheckSquare2,
-  },
-  {
-    label: 'AI Coach',
-    href: '/dashboard/ai-coach',
+    label: "AI Coach",
+    href: "/ai-coach",
     icon: Bot,
   },
   {
-    label: 'Messages',
-    href: '/dashboard/messages',
-    icon: MessageSquareText,
+    label: "Workouts",
+    href: "/dashboard/workouts",
+    icon: Dumbbell,
   },
   {
-    label: 'Calendar',
-    href: '/dashboard/calendar',
-    icon: CalendarDays,
+    label: "Nutrition",
+    href: "/dashboard/nutrition",
+    icon: Utensils,
   },
   {
-    label: 'Settings',
-    href: '/dashboard/settings',
-    icon: Settings,
+    label: "Progress",
+    href: "/dashboard/progress",
+    icon: ChartNoAxesCombined,
   },
-]
+];
 
-function isActive(
-  pathname: string,
-  item: NavItem,
-) {
+function isActive(pathname: string, item: NavItem) {
   if (item.exact) {
-    return pathname === item.href
+    return pathname === item.href;
   }
 
   return (
     pathname === item.href ||
-    pathname.startsWith(
-      `${item.href}/`,
-    )
-  )
+    pathname.startsWith(`${item.href}/`)
+  );
 }
 
-function SidebarContent({
+function getInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+function NavPills({
   pathname,
+  onNavigate,
 }: {
-  pathname: string
+  pathname: string;
+  onNavigate?: () => void;
 }) {
   return (
-    <>
-      <div className="flex h-20 items-center border-b border-white/10 px-5">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-3"
-        >
-          <span className="grid size-10 place-items-center rounded-xl border border-amber-400/30 bg-amber-400/10 text-amber-300 shadow-[0_0_35px_rgba(251,191,36,0.12)]">
-            <Dumbbell className="size-5" />
-          </span>
+    <nav
+      className="flex items-center gap-1 overflow-x-auto"
+      aria-label="Primary"
+    >
+      {navItems.map((item) => {
+        const active = isActive(pathname, item);
+        const Icon = item.icon;
 
-          <span>
-            <span className="block text-sm font-black tracking-[0.16em] text-white">
-              MUSCLE FITNESS
-            </span>
-
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500">
-              Client OS
-            </span>
-          </span>
-        </Link>
-      </div>
-
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
-        {navItems.map(
-          (item) => {
-            const active =
-              isActive(
-                pathname,
-                item,
-              )
-
-            const Icon =
-              item.icon
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
-                  active
-                    ? 'border-amber-400/20 bg-amber-400/10 text-amber-200'
-                    : 'border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/[0.04] hover:text-white'
-                }`}
-              >
-                <Icon className="size-4 shrink-0" />
-
-                <span className="flex-1">
-                  {item.label}
-                </span>
-
-                <ChevronRight
-                  className={`size-4 transition ${
-                    active
-                      ? 'translate-x-0 opacity-100'
-                      : '-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-60'
-                  }`}
-                />
-              </Link>
-            )
-          },
-        )}
-      </nav>
-
-      <div className="border-t border-white/10 p-3">
-        <Link
-          href="/"
-          className="mb-3 flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-amber-400/30 hover:bg-amber-400/10 hover:text-amber-200"
-        >
-          <Home className="size-4 shrink-0" />
-          Back to homepage
-        </Link>
-
-        <Link
-          href="/ai-coach"
-          className="mb-3 flex items-center gap-3 rounded-xl border border-violet-400/20 bg-violet-400/10 p-3 text-sm text-violet-100 transition hover:bg-violet-400/15"
-        >
-          <span className="grid size-9 place-items-center rounded-lg bg-violet-300/10">
-            <Sparkles className="size-4" />
-          </span>
-
-          <span className="min-w-0 flex-1">
-            <span className="block font-bold">
-              Ask AI Coach
-            </span>
-
-            <span className="block truncate text-xs text-violet-200/60">
-              Use your real profile data
-            </span>
-          </span>
-        </Link>
-
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-500 transition hover:bg-red-500/10 hover:text-red-300"
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors duration-200 ${
+              active
+                ? "bg-[var(--color-accent-soft)] text-[var(--color-accent-light)]"
+                : "text-zinc-400 hover:bg-white/[0.04] hover:text-white"
+            }`}
           >
-            <LogOut className="size-4" />
-            Sign out
-          </button>
-        </form>
-      </div>
-    </>
-  )
+            <Icon className="size-4 shrink-0" aria-hidden />
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function ProfileMenu() {
+  const { user, loading } = useAuth();
+  const [open, setOpen] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="size-10 animate-pulse rounded-full bg-white/5" />
+    );
+  }
+
+  const metadata = (user?.user_metadata ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const displayName =
+    (typeof metadata.full_name === "string" &&
+      metadata.full_name.trim()) ||
+    (typeof metadata.name === "string" && metadata.name.trim()) ||
+    user?.email?.split("@")[0] ||
+    "Athlete";
+
+  const initials = getInitials(displayName);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Open profile menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex size-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-xs font-semibold text-[var(--color-accent-light)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-soft)]"
+      >
+        {initials || <UserRound className="size-4" />}
+      </button>
+
+      {open ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close profile menu"
+            className="fixed inset-0 z-40 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121214] py-1 shadow-xl">
+            <p className="truncate px-3 py-2 text-xs text-zinc-500">
+              {user?.email ?? displayName}
+            </p>
+            <Link
+              href="/account"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-200 transition-colors hover:bg-white/[0.04]"
+            >
+              <UserRound className="size-4" />
+              Account
+            </Link>
+            <Link
+              href="/dashboard/settings"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-200 transition-colors hover:bg-white/[0.04]"
+            >
+              <Settings className="size-4" />
+              Settings
+            </Link>
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-300 transition-colors hover:bg-red-500/10"
+              >
+                <LogOut className="size-4" />
+                Sign out
+              </button>
+            </form>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 export function DashboardShell({
   children,
 }: {
-  children: ReactNode
+  children: ReactNode;
 }) {
-  const pathname =
-    usePathname()
-
-  const [
-    mobileOpen,
-    setMobileOpen,
-  ] = useState(false)
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    setMobileOpen(false)
-  }, [pathname])
+    setMobileOpen(false);
+  }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-[#08090b] text-zinc-100">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-white/10 bg-[#0b0d10]/95 backdrop-blur-xl lg:flex">
-        <SidebarContent
-          pathname={pathname}
-        />
-      </aside>
-
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/10 bg-[#08090b]/90 px-4 backdrop-blur-xl lg:hidden">
-        <Link
-          href="/dashboard"
-          className="flex min-w-0 items-center gap-2.5"
-        >
-          <span className="grid size-9 place-items-center rounded-xl border border-amber-400/30 bg-amber-400/10 text-amber-300">
-            <Dumbbell className="size-4" />
-          </span>
-
-          <span className="truncate text-xs font-black tracking-[0.16em]">
-            MUSCLE FITNESS
-          </span>
-        </Link>
-
-        <div className="flex shrink-0 items-center gap-2">
+    <div className="min-h-screen bg-[#050505] text-[var(--color-text-primary)]">
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#080808]/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-[68px] w-full max-w-[1240px] items-center justify-between gap-4 px-4 md:px-6 xl:px-8">
           <Link
-            href="/"
-            aria-label="Back to homepage"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-zinc-300 transition hover:border-amber-400/30 hover:text-amber-200"
+            href="/dashboard"
+            className="flex min-w-0 items-center gap-2.5"
           >
-            <Home className="size-3.5" />
-            Home
+            <span className="grid size-9 place-items-center rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent-soft)] text-[var(--color-accent-light)]">
+              <Dumbbell className="size-4" aria-hidden />
+            </span>
+            <span className="truncate text-sm font-black tracking-[0.14em] text-white">
+              MUSCLE FITNESS
+            </span>
           </Link>
 
-          <button
-            type="button"
-            onClick={() =>
-              setMobileOpen(true)
-            }
-            aria-label="Open dashboard navigation"
-            className="grid size-10 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-zinc-300"
-          >
-            <Menu className="size-5" />
-          </button>
+          <div className="hidden min-w-0 flex-1 justify-center md:flex">
+            <NavPills pathname={pathname} />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <ProfileMenu />
+            <button
+              type="button"
+              className="grid size-10 place-items-center rounded-full border border-white/[0.08] bg-white/[0.04] text-zinc-300 md:hidden"
+              aria-label="Open navigation"
+              onClick={() => setMobileOpen(true)}
+            >
+              <Menu className="size-5" />
+            </button>
+          </div>
         </div>
       </header>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 md:hidden">
           <button
             type="button"
-            aria-label="Close dashboard navigation"
-            onClick={() =>
-              setMobileOpen(false)
-            }
-            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+            aria-label="Close navigation"
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
           />
+          <aside className="absolute inset-y-0 right-0 flex w-[min(88%,20rem)] flex-col border-l border-white/[0.08] bg-[#0B0B0C] p-4 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                Navigate
+              </p>
+              <button
+                type="button"
+                aria-label="Close navigation"
+                onClick={() => setMobileOpen(false)}
+                className="grid size-9 place-items-center rounded-lg border border-white/[0.08] text-zinc-400"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-1">
+              {navItems.map((item) => {
+                const active = isActive(pathname, item);
+                const Icon = item.icon;
 
-          <aside className="absolute inset-y-0 left-0 flex w-[88%] max-w-80 flex-col border-r border-white/10 bg-[#0b0d10] shadow-2xl">
-            <button
-              type="button"
-              onClick={() =>
-                setMobileOpen(false)
-              }
-              aria-label="Close dashboard navigation"
-              className="absolute right-3 top-5 z-10 grid size-9 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-zinc-400"
-            >
-              <X className="size-4" />
-            </button>
-
-            <SidebarContent
-              pathname={pathname}
-            />
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`inline-flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-[var(--color-accent-soft)] text-[var(--color-accent-light)]"
+                        : "text-zinc-300 hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <Icon className="size-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
           </aside>
         </div>
       ) : null}
 
-      <main className="min-h-screen lg:pl-72">
-        <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">
-          {children}
-        </div>
+      <main className="mx-auto w-full max-w-[1240px] px-4 py-6 md:px-6 md:py-8 xl:px-8">
+        {children}
       </main>
     </div>
-  )
+  );
 }

@@ -1,704 +1,634 @@
-import Link from 'next/link'
-
+import Link from "next/link";
 import {
   Activity,
+  Beef,
   Bot,
-  CalendarClock,
-  CheckCircle2,
-  CircleGauge,
+  CalendarDays,
+  Camera,
+  ChevronRight,
   Dumbbell,
-  Droplets,
   Flame,
-  Footprints,
-  MessageSquareText,
-  Scale,
+  Plus,
   Sparkles,
-  Target,
   Utensils,
-} from 'lucide-react'
+} from "lucide-react";
 
-import type { DashboardData } from '@/features/dashboard/types'
+import type { DashboardData } from "@/features/dashboard/types";
+import { WeightChart } from "@/components/dashboard/weight-chart";
 
-import { EmptyState } from './empty-state'
-import { MetricCard } from './metric-card'
-import { WeightChart } from './weight-chart'
+const goalLabels: Record<string, string> = {
+  lose_fat: "Fat loss",
+  fat_loss: "Fat loss",
+  lean_bulk: "Lean bulk",
+  gain_muscle: "Muscle gain",
+  muscle_gain: "Muscle gain",
+  recomposition: "Body recomposition",
+  maintenance: "Maintenance",
+  performance: "Performance",
+};
 
-const goalLabels: Record<
-  string,
-  string
-> = {
-  lose_fat: 'Fat loss',
-  fat_loss: 'Fat loss',
+const weekdayLabels = ["S", "M", "T", "W", "T", "F", "S"] as const;
+const fullWeekdayLabels = [
+  "SUN",
+  "MON",
+  "TUE",
+  "WED",
+  "THU",
+  "FRI",
+  "SAT",
+] as const;
 
-  lean_bulk: 'Lean bulk',
-
-  gain_muscle:
-    'Muscle gain',
-
-  muscle_gain:
-    'Muscle gain',
-
-  recomposition:
-    'Body recomposition',
-
-  maintenance:
-    'Maintenance',
-
-  performance:
-    'Performance',
-}
-
-function getFirstName(
+function getDisplayName(
   fullName: string | null,
   email: string | null,
 ) {
-  const cleanName =
-    fullName?.trim()
+  const clean = fullName?.trim();
 
-  if (cleanName) {
-    const parts =
-      cleanName.split(/\s+/)
-
-    return (
-      parts.at(-1) ??
-      cleanName
-    )
+  if (clean) {
+    const parts = clean.split(/\s+/);
+    // Vietnamese display often uses given name last.
+    return parts.at(-1) ?? clean;
   }
+
+  return email?.split("@")[0] ?? "Athlete";
+}
+
+function getGreeting(timezone: string) {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date()),
+  );
+
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function clampNonNeg(value: number) {
+  return Math.max(0, value);
+}
+
+function safeNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : null;
+}
+
+function MetricCard({
+  icon: Icon,
+  value,
+  label,
+  ofLabel,
+  progress,
+}: {
+  icon: typeof Flame;
+  value: string;
+  label: string;
+  ofLabel?: string;
+  progress?: number | null;
+}) {
+  const pct =
+    typeof progress === "number"
+      ? Math.min(100, Math.max(0, progress))
+      : null;
 
   return (
-    email?.split('@')[0] ??
-    'Athlete'
-  )
+    <article className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 transition-colors duration-200 hover:border-white/[0.1] hover:bg-white/[0.04]">
+      <div className="mb-3 inline-flex size-9 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-[var(--color-accent-light)]">
+        <Icon className="size-4" aria-hidden />
+      </div>
+      <p className="text-2xl font-semibold tracking-tight text-white md:text-[28px]">
+        {value}
+      </p>
+      <p className="mt-1 text-xs text-zinc-400">{label}</p>
+      {ofLabel ? (
+        <p className="mt-0.5 text-[11px] text-zinc-600">{ofLabel}</p>
+      ) : null}
+      {pct !== null ? (
+        <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+          <div
+            className="h-full rounded-full bg-[var(--color-accent)] transition-all duration-300"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      ) : null}
+    </article>
+  );
 }
 
-function getGreeting(
-  timezone: string,
-) {
-  const hour = Number(
-    new Intl.DateTimeFormat(
-      'en-US',
-      {
-        timeZone: timezone,
-        hour: '2-digit',
-        hourCycle: 'h23',
-      },
-    ).format(new Date()),
-  )
-
-  if (hour < 12) {
-    return 'Good morning'
-  }
-
-  if (hour < 18) {
-    return 'Good afternoon'
-  }
-
-  return 'Good evening'
+function QuickAction({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: typeof Utensils;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex flex-col items-center justify-center gap-2 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-3 py-5 text-center transition-colors duration-200 hover:border-[var(--color-accent)]/35 hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/50"
+    >
+      <span className="grid size-10 place-items-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-[var(--color-accent-light)] transition-colors group-hover:border-[var(--color-accent)]/30">
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <span className="text-xs font-medium text-zinc-200">{label}</span>
+    </Link>
+  );
 }
 
-function formatDashboardDate(
-  timezone: string,
-) {
-  return new Intl.DateTimeFormat(
-    'en-SG',
-    {
-      timeZone: timezone,
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-    },
-  ).format(new Date())
-}
-
-function formatTime(
-  value: string | null,
-) {
-  if (!value) {
-    return 'Flexible time'
-  }
-
-  const [
-    hour = '00',
-    minute = '00',
-  ] = value.split(':')
-
-  return `${hour}:${minute}`
-}
-
-function scoreLabel(
-  score: number,
-) {
-  if (score >= 85) {
-    return 'Ready to perform'
-  }
-
-  if (score >= 70) {
-    return 'Good readiness'
-  }
-
-  if (score >= 50) {
-    return 'Train with control'
-  }
-
-  return 'Prioritise recovery'
-}
+const mealSlots = [
+  { key: "breakfast", label: "Breakfast", hint: "Start your fuel" },
+  { key: "lunch", label: "Lunch", hint: "Midday energy" },
+  { key: "dinner", label: "Dinner", hint: "Recovery meal" },
+  { key: "snacks", label: "Snacks", hint: "Optional top-ups" },
+] as const;
 
 export function DashboardOverview({
   data,
 }: {
-  data: DashboardData
+  data: DashboardData;
 }) {
-  const metrics =
-    data.todayMetrics
+  const timezone = data.profile.timezone || "Asia/Singapore";
+  const name = getDisplayName(data.profile.fullName, data.userEmail);
+  const greeting = getGreeting(timezone);
 
-  const firstName =
-    getFirstName(
-      data.profile.fullName,
-      data.userEmail,
-    )
+  const calorieTarget = safeNumber(data.fitness.calorieTarget);
+  const proteinTarget = safeNumber(data.fitness.proteinTargetG);
+  const caloriesConsumed = data.todayMetrics?.caloriesConsumed ?? 0;
+  const proteinConsumed = data.todayMetrics?.proteinConsumedG ?? 0;
 
-  const goal =
-    data.fitness.goal
-      ? goalLabels[
-          data.fitness.goal
-        ] ??
-        data.fitness.goal.replaceAll(
-          '_',
-          ' ',
-        )
-      : 'Goal not set'
+  const caloriesLeft =
+    calorieTarget === null
+      ? null
+      : clampNonNeg(calorieTarget - caloriesConsumed);
+  const proteinLeft =
+    proteinTarget === null
+      ? null
+      : clampNonNeg(proteinTarget - proteinConsumed);
 
-  const calorieTarget =
-    data.fitness.calorieTarget
+  const calorieProgress =
+    calorieTarget && calorieTarget > 0
+      ? (caloriesConsumed / calorieTarget) * 100
+      : null;
+  const proteinProgress =
+    proteinTarget && proteinTarget > 0
+      ? (proteinConsumed / proteinTarget) * 100
+      : null;
 
-  const caloriesConsumed =
-    metrics?.caloriesConsumed ??
-    null
+  const todayWorkout = data.todayWorkouts[0] ?? null;
+  const workoutDone = Boolean(data.todayMetrics?.workoutCompleted);
+  const weeklyAdherence = safeNumber(data.weeklyAdherence);
+  const goalLabel = data.fitness.goal
+    ? goalLabels[data.fitness.goal] ??
+      data.fitness.goal.replaceAll("_", " ")
+    : null;
 
-  const caloriesRemaining =
-    calorieTarget !== null &&
-    caloriesConsumed !== null
-      ? Math.max(
-          0,
-          calorieTarget -
-            caloriesConsumed,
-        )
-      : null
+  const coachBody =
+    data.coachMessage?.body?.trim() ||
+    (proteinLeft !== null && proteinLeft > 0
+      ? `You still need about ${Math.round(proteinLeft)}g protein today. Prioritize a high-protein meal before your day ends.`
+      : todayWorkout
+        ? `Today's focus: ${todayWorkout.title}. Stay disciplined on technique and recovery.`
+        : "Stay consistent. Log your nutrition and keep your training plan moving.");
 
-  const recoveryScore =
-    metrics?.recoveryScore ??
-    null
-
-  const weeklyAdherence =
-    data.weeklyAdherence
-
-  const currentWeight =
-    data.weightTrend.at(-1)
-      ?.weightKg ??
-    data.fitness.currentWeightKg
+  const today = new Date();
+  const todayIndex = today.getDay();
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.13),transparent_34%),linear-gradient(135deg,#12151a,#0d0f12)] p-5 shadow-[0_25px_90px_rgba(0,0,0,0.32)] sm:p-7 lg:p-8">
-        <div className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full border border-amber-300/10" />
+    <div className="space-y-6 md:space-y-8">
+      {/* Header */}
+      <section className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[28px] font-semibold tracking-tight text-white md:text-[32px]">
+            {greeting}, {name}
+          </h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            {proteinLeft !== null
+              ? `You have ${Math.round(proteinLeft)}g protein remaining today.`
+              : goalLabel
+                ? `Focus: ${goalLabel}`
+                : "Your daily command center."}
+          </p>
+        </div>
+        {!data.profile.onboardingCompleted ? (
+          <Link
+            href="/onboarding"
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--color-accent)]/35 bg-[var(--color-accent-soft)] px-4 py-2 text-xs font-semibold text-[var(--color-accent-light)]"
+          >
+            Finish onboarding
+            <ChevronRight className="size-3.5" />
+          </Link>
+        ) : null}
+      </section>
 
-        <div className="pointer-events-none absolute -right-4 -top-10 size-44 rounded-full border border-amber-300/[0.07]" />
+      {/* Today at a glance */}
+      <section>
+        <h2 className="mb-3 text-[15px] font-semibold text-zinc-200">
+          Today at a glance
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <MetricCard
+            icon={Activity}
+            value={
+              workoutDone
+                ? "Done"
+                : todayWorkout
+                  ? "Ready"
+                  : "Rest"
+            }
+            label={
+              todayWorkout
+                ? todayWorkout.title
+                : "Workout / activity"
+            }
+            ofLabel={
+              workoutDone
+                ? "Session completed"
+                : todayWorkout
+                  ? "Planned for today"
+                  : "No session logged"
+            }
+            progress={workoutDone ? 100 : todayWorkout ? 35 : 0}
+          />
+          <MetricCard
+            icon={Flame}
+            value={
+              caloriesLeft === null
+                ? "—"
+                : String(Math.round(caloriesLeft))
+            }
+            label="cal left"
+            ofLabel={
+              calorieTarget === null
+                ? "Set a calorie target"
+                : `of ${Math.round(calorieTarget)}`
+            }
+            progress={calorieProgress}
+          />
+          <MetricCard
+            icon={Beef}
+            value={
+              proteinLeft === null
+                ? "—"
+                : `${Math.round(proteinLeft)}g`
+            }
+            label="protein left"
+            ofLabel={
+              proteinTarget === null
+                ? "Set a protein target"
+                : `of ${Math.round(proteinTarget)}g`
+            }
+            progress={proteinProgress}
+          />
+        </div>
+      </section>
 
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
-              <span>
-                {formatDashboardDate(
-                  data.profile.timezone,
-                )}
-              </span>
+      {/* Quick actions */}
+      <section>
+        <h2 className="mb-3 text-[15px] font-semibold text-zinc-200">
+          Quick actions
+        </h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <QuickAction
+            href="/dashboard/nutrition"
+            icon={Utensils}
+            label="Log Food"
+          />
+          <QuickAction
+            href="/dashboard/workouts"
+            icon={Dumbbell}
+            label="Log Workout"
+          />
+          <QuickAction
+            href="/ai-coach"
+            icon={Bot}
+            label="Ask AI Coach"
+          />
+          <QuickAction
+            href="/dashboard/progress"
+            icon={Camera}
+            label="Check-in"
+          />
+        </div>
+      </section>
 
-              <span className="size-1 rounded-full bg-zinc-700" />
-
-              <span className="text-amber-300">
-                {goal}
-              </span>
+      {/* AI Coach card */}
+      <section className="overflow-hidden rounded-2xl border border-white/[0.07] bg-gradient-to-br from-[#151517] via-[#101011] to-[#0B0B0C]">
+        <div className="flex flex-col gap-5 p-5 md:flex-row md:items-stretch md:p-6">
+          <div className="flex-1 space-y-4">
+            <div className="flex items-center gap-2 text-[var(--color-accent-light)]">
+              <Sparkles className="size-4" aria-hidden />
+              <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+                Muscle Fitness AI Coach
+              </p>
             </div>
-
-            <h1 className="max-w-3xl text-3xl font-black tracking-[-0.04em] text-white sm:text-4xl lg:text-5xl">
-              {getGreeting(
-                data.profile.timezone,
-              )}
-              , {firstName}.
-            </h1>
-
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 sm:text-base">
-              Your targets, logs and progress below are loaded from your private Supabase account—not from sample dashboard values.
+            <p className="text-sm text-zinc-400">
+              Today ·{" "}
+              <span className="text-zinc-200">
+                {todayWorkout
+                  ? todayWorkout.focus || todayWorkout.title
+                  : "No workout planned"}
+              </span>
             </p>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/dashboard/today"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 py-3 text-sm font-black text-zinc-950 transition hover:bg-amber-200"
-            >
-              <Activity className="size-4" />
-              Log today
-            </Link>
-
-            <Link
-              href="/ai-coach"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold text-white transition hover:bg-white/[0.08]"
-            >
-              <Sparkles className="size-4 text-violet-300" />
-              Ask AI Coach
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          title="Calories consumed"
-          value={caloriesConsumed}
-          target={calorieTarget}
-          unit="kcal"
-          icon={Flame}
-          href="/dashboard/nutrition"
-          secondary={
-            caloriesRemaining === null
-              ? undefined
-              : caloriesRemaining > 0
-                ? `${Math.round(
-                    caloriesRemaining,
-                  )} kcal remaining`
-                : 'Daily target reached'
-          }
-        />
-
-        <MetricCard
-          title="Protein progress"
-          value={
-            metrics?.proteinConsumedG ??
-            null
-          }
-          target={
-            data.fitness.proteinTargetG
-          }
-          unit="g"
-          icon={Utensils}
-          href="/dashboard/nutrition"
-          fractionDigits={1}
-        />
-
-        <MetricCard
-          title="Water"
-          value={
-            metrics?.waterMl ??
-            null
-          }
-          target={
-            data.fitness.waterTargetMl
-          }
-          unit="ml"
-          icon={Droplets}
-          href="/dashboard/today"
-        />
-
-        <MetricCard
-          title="Steps"
-          value={
-            metrics?.steps ??
-            null
-          }
-          target={
-            data.fitness.stepTarget
-          }
-          unit="steps"
-          icon={Footprints}
-          href="/dashboard/today"
-        />
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
-                Today&apos;s workout
-              </p>
-
-              <h2 className="mt-1 text-xl font-black text-white">
-                Training execution
-              </h2>
-            </div>
-
-            <Link
-              href="/dashboard/workouts"
-              className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-zinc-300 transition hover:bg-white/[0.05]"
-            >
-              Open workouts
-            </Link>
-          </div>
-
-          {data.todayWorkouts.length >
-          0 ? (
-            <div className="space-y-3">
-              {data.todayWorkouts.map(
-                (workout) => (
-                  <div
-                    key={workout.id}
-                    className="flex flex-col gap-4 rounded-2xl border border-white/[0.08] bg-black/20 p-4 sm:flex-row sm:items-center"
-                  >
-                    <span className="grid size-12 shrink-0 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
-                      <Dumbbell className="size-5" />
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-bold text-white">
-                        {workout.title}
-                      </h3>
-
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {workout.focus ??
-                          'General training'}{' '}
-                        ·{' '}
-                        {formatTime(
-                          workout.startTime,
-                        )}
-                        {workout.durationMinutes
-                          ? ` · ${Math.round(
-                              workout.durationMinutes,
-                            )} min`
-                          : ''}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`w-fit rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] ${
-                        workout.status ===
-                        'completed'
-                          ? 'bg-emerald-400/10 text-emerald-300'
-                          : 'bg-white/[0.05] text-zinc-400'
-                      }`}
-                    >
-                      {workout.status.replaceAll(
-                        '_',
-                        ' ',
-                      )}
-                    </span>
-                  </div>
-                ),
-              )}
-            </div>
-          ) : (
-            <EmptyState
-              icon={CalendarClock}
-              title="No workout scheduled today"
-              description="This card will populate from workout_sessions when Project 09 creates your training plan."
-              href="/dashboard/workouts"
-              action="Open workouts"
-            />
-          )}
-        </article>
-
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
-                Recovery score
-              </p>
-
-              <h2 className="mt-1 text-xl font-black text-white">
-                Readiness
-              </h2>
-            </div>
-
-            <span className="grid size-11 place-items-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
-              <CircleGauge className="size-5" />
-            </span>
-          </div>
-
-          {recoveryScore !== null ? (
-            <div className="mt-8">
-              <div className="flex items-end gap-2">
-                <strong className="text-6xl font-black tracking-[-0.07em] text-white">
-                  {Math.round(
-                    recoveryScore,
-                  )}
-                </strong>
-
-                <span className="pb-2 text-sm font-bold text-zinc-600">
-                  /100
-                </span>
-              </div>
-
-              <p className="mt-3 text-sm font-bold text-cyan-200">
-                {scoreLabel(
-                  recoveryScore,
-                )}
-              </p>
-
-              <p className="mt-2 text-xs leading-5 text-zinc-500">
-                Calculated from today&apos;s sleep, energy, soreness and stress log.
-              </p>
-            </div>
-          ) : (
-            <EmptyState
-              icon={Activity}
-              title="Recovery data is empty"
-              description="Log sleep, energy, soreness and stress to calculate your score."
-              href="/dashboard/today"
-              action="Complete today's log"
-            />
-          )}
-        </article>
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
-                Weight trend
-              </p>
-
-              <div className="mt-1 flex items-end gap-3">
-                <h2 className="text-xl font-black text-white">
-                  Last 12 entries
-                </h2>
-
-                {currentWeight !== null ? (
-                  <span className="pb-0.5 text-sm font-bold text-amber-300">
-                    {currentWeight.toFixed(
-                      1,
-                    )}{' '}
-                    kg
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            <Link
-              href="/dashboard/progress"
-              className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-zinc-300 transition hover:bg-white/[0.05]"
-            >
-              View progress
-            </Link>
-          </div>
-
-          {data.weightTrend.length >=
-          2 ? (
-            <WeightChart
-              data={data.weightTrend}
-            />
-          ) : (
-            <EmptyState
-              icon={Scale}
-              title="More weight entries needed"
-              description="Log at least two dates to display a real trend line."
-              href="/dashboard/today"
-              action="Log body weight"
-            />
-          )}
-        </article>
-
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
-          <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-4">
+            <p className="max-w-2xl text-[15px] leading-relaxed text-zinc-100">
+              {coachBody}
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
-                  Weekly adherence
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  Warm-up
                 </p>
-
-                <h2 className="mt-1 text-xl font-black text-white">
-                  Last 7 days
-                </h2>
+                <ul className="mt-2 space-y-1 text-sm text-zinc-400">
+                  <li>• 5 min light cardio</li>
+                  <li>• Dynamic mobility</li>
+                  <li>• Progressive warm-up sets</li>
+                </ul>
               </div>
-
-              <CheckCircle2 className="size-6 text-emerald-300" />
-            </div>
-
-            {weeklyAdherence !==
-            null ? (
-              <div className="mt-6">
-                <div className="flex items-end justify-between gap-3">
-                  <strong className="text-4xl font-black text-white">
-                    {Math.round(
-                      weeklyAdherence,
-                    )}
-                    %
-                  </strong>
-
-                  <span className="text-xs font-bold text-zinc-500">
-                    average
-                  </span>
-                </div>
-
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-                  <div
-                    className="h-full rounded-full bg-emerald-300"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        Math.max(
-                          0,
-                          weeklyAdherence,
-                        ),
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ) : (
-              <p className="mt-6 text-sm leading-6 text-zinc-500">
-                No adherence scores yet. Daily logs will build this weekly average.
-              </p>
-            )}
-          </article>
-
-          <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
-                  Current goal
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  Today&apos;s focus
                 </p>
-
-                <h2 className="mt-1 text-xl font-black text-white">
-                  {goal}
-                </h2>
-              </div>
-
-              <Target className="size-6 text-amber-300" />
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3 text-xs">
-              <div className="rounded-xl border border-white/[0.07] bg-black/20 p-3">
-                <span className="block text-zinc-600">
-                  Current
-                </span>
-
-                <strong className="mt-1 block text-sm text-zinc-200">
-                  {currentWeight !==
-                  null
-                    ? `${currentWeight.toFixed(
-                        1,
-                      )} kg`
-                    : '—'}
-                </strong>
-              </div>
-
-              <div className="rounded-xl border border-white/[0.07] bg-black/20 p-3">
-                <span className="block text-zinc-600">
-                  Target
-                </span>
-
-                <strong className="mt-1 block text-sm text-zinc-200">
-                  {data.fitness
-                    .targetWeightKg !==
-                  null
-                    ? `${data.fitness.targetWeightKg.toFixed(
-                        1,
-                      )} kg`
-                    : '—'}
-                </strong>
+                <ul className="mt-2 space-y-1 text-sm text-zinc-400">
+                  <li>• Controlled technique</li>
+                  <li>• Full range of motion</li>
+                  <li>• Adequate rest</li>
+                </ul>
               </div>
             </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-2">
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
-                Coach message
-              </p>
-
-              <h2 className="mt-1 text-xl font-black text-white">
-                Latest guidance
-              </h2>
-            </div>
-
-            <MessageSquareText className="size-6 text-blue-300" />
-          </div>
-
-          {data.coachMessage ? (
-            <div className="mt-5 rounded-2xl border border-white/[0.08] bg-black/20 p-4">
-              <div className="flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-full bg-blue-400/10 text-blue-300">
-                  <Dumbbell className="size-4" />
-                </span>
-
-                <div>
-                  <p className="text-sm font-bold text-white">
-                    {data.coachMessage
-                      .senderName ??
-                      'Muscle Fitness Coach'}
-                  </p>
-
-                  <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-600">
-                    {
-                      data.coachMessage
-                        .senderRole
-                    }
-                  </p>
-                </div>
-              </div>
-
-              <p className="mt-4 text-sm leading-6 text-zinc-300">
-                {
-                  data.coachMessage
-                    .body
-                }
-              </p>
-
+            <div className="flex flex-wrap gap-2 pt-1">
               <Link
-                href="/dashboard/messages"
-                className="mt-4 inline-flex text-xs font-bold text-blue-300 hover:text-blue-200"
+                href={
+                  todayWorkout
+                    ? `/dashboard/workouts`
+                    : "/dashboard/workouts/plans/new"
+                }
+                className="inline-flex items-center rounded-full bg-[var(--color-accent)] px-4 py-2 text-xs font-semibold text-black transition-colors hover:bg-[var(--color-accent-light)]"
               >
-                Open messages
+                {todayWorkout ? "Open workouts" : "Plan workout"}
+              </Link>
+              <Link
+                href="/ai-coach"
+                className="inline-flex items-center rounded-full border border-white/[0.1] px-4 py-2 text-xs font-semibold text-zinc-200 transition-colors hover:bg-white/[0.04]"
+              >
+                Ask AI Coach
               </Link>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Nutrition insight */}
+      {proteinLeft !== null && proteinLeft > 0 ? (
+        <section className="flex flex-col gap-3 rounded-2xl border border-[var(--color-accent)]/25 bg-[var(--color-accent-soft)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-accent-light)]">
+              Protein priority
+            </p>
+            <p className="mt-1 text-sm text-zinc-200">
+              You still need {Math.round(proteinLeft)}g protein today.
+            </p>
+          </div>
+          <Link
+            href="/ai-coach"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-accent)]/40 px-4 py-2 text-xs font-semibold text-[var(--color-accent-light)] transition-colors hover:bg-[var(--color-accent)]/15"
+          >
+            Get meal ideas
+            <ChevronRight className="size-3.5" />
+          </Link>
+        </section>
+      ) : null}
+
+      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        {/* Meals today */}
+        <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-[15px] font-semibold text-zinc-200">
+              Meals today
+            </h2>
+            <Link
+              href="/dashboard/nutrition"
+              className="text-xs font-medium text-[var(--color-accent-light)] hover:underline"
+            >
+              See all
+            </Link>
+          </div>
+          <div className="divide-y divide-white/[0.05]">
+            {mealSlots.map((meal) => (
+              <Link
+                key={meal.key}
+                href="/dashboard/nutrition"
+                className="flex items-center gap-3 py-3.5 transition-colors hover:bg-white/[0.02]"
+              >
+                <span className="grid size-10 place-items-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-zinc-400">
+                  <Utensils className="size-4" aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-zinc-100">
+                    {meal.label}
+                  </span>
+                  <span className="block truncate text-xs text-zinc-500">
+                    {meal.hint} · tap to log
+                  </span>
+                </span>
+                <ChevronRight className="size-4 text-zinc-600" />
+              </Link>
+            ))}
+          </div>
+          <Link
+            href="/dashboard/nutrition"
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] py-3 text-sm font-medium text-zinc-100 transition-colors hover:border-[var(--color-accent)]/35 hover:bg-white/[0.05]"
+          >
+            <Plus className="size-4" />
+            Log meal
+          </Link>
+        </section>
+
+        {/* What can I eat + weekly progress */}
+        <div className="space-y-6">
+          <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
+            <h2 className="text-[15px] font-semibold text-zinc-200">
+              What can I eat?
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+              Get meal ideas based on your remaining calories and
+              macros.
+            </p>
+            <Link
+              href="/ai-coach"
+              className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--color-accent)] px-4 py-2 text-xs font-semibold text-black transition-colors hover:bg-[var(--color-accent-light)]"
+            >
+              Find a meal
+              <ChevronRight className="size-3.5" />
+            </Link>
+          </section>
+
+          <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold text-zinc-200">
+                Weekly progress
+              </h2>
+              <Link
+                href="/dashboard/progress"
+                className="text-xs text-[var(--color-accent-light)] hover:underline"
+              >
+                Details
+              </Link>
+            </div>
+            {data.weightTrend.length > 0 ? (
+              <div className="h-44">
+                <WeightChart data={data.weightTrend} />
+              </div>
+            ) : (
+              <div className="flex h-44 flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] px-4 text-center">
+                <p className="text-sm text-zinc-400">
+                  No progress data recorded this week.
+                </p>
+                <Link
+                  href="/dashboard/progress"
+                  className="mt-3 text-xs font-semibold text-[var(--color-accent-light)] hover:underline"
+                >
+                  Add check-in
+                </Link>
+              </div>
+            )}
+            <div className="mt-3 flex justify-between px-1 text-[11px] text-zinc-600">
+              {weekdayLabels.map((label, index) => (
+                <span key={`${label}-${index}`}>{label}</span>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {/* Workout schedule */}
+      <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5 md:p-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-[15px] font-semibold text-zinc-200">
+            Workout schedule
+          </h2>
+          <Link
+            href="/dashboard/workouts"
+            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-accent-light)] hover:underline"
+          >
+            View plan
+            <ChevronRight className="size-3.5" />
+          </Link>
+        </div>
+
+        <article className="rounded-2xl border border-white/[0.07] bg-[#0B0B0C] p-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+            Today&apos;s workout
+          </p>
+          {todayWorkout ? (
+            <>
+              <h3 className="mt-2 text-2xl font-semibold text-white">
+                {todayWorkout.title}
+              </h3>
+              <p className="mt-1 text-sm text-zinc-400">
+                {todayWorkout.focus ||
+                  todayWorkout.status.replaceAll("_", " ")}
+                {todayWorkout.durationMinutes
+                  ? ` · ${todayWorkout.durationMinutes} min`
+                  : ""}
+              </p>
+              <Link
+                href="/dashboard/workouts"
+                className="mt-4 inline-flex rounded-full bg-[var(--color-accent)] px-4 py-2 text-xs font-semibold text-black transition-colors hover:bg-[var(--color-accent-light)]"
+              >
+                {workoutDone ? "View workout" : "Start workout"}
+              </Link>
+            </>
           ) : (
-            <EmptyState
-              icon={
-                MessageSquareText
-              }
-              title="No coach message yet"
-              description="The latest coach or system message will appear here once one is sent."
-              href="/dashboard/messages"
-              action="Open messages"
-            />
+            <>
+              <h3 className="mt-2 text-2xl font-semibold text-white">
+                Rest day
+              </h3>
+              <p className="mt-1 text-sm text-zinc-400">
+                No workout planned today.
+              </p>
+              <Link
+                href="/dashboard/workouts/plans/new"
+                className="mt-4 inline-flex rounded-full border border-white/[0.1] px-4 py-2 text-xs font-semibold text-zinc-200 transition-colors hover:bg-white/[0.04]"
+              >
+                Plan tomorrow
+              </Link>
+            </>
           )}
         </article>
 
-        <article className="relative overflow-hidden rounded-3xl border border-violet-400/20 bg-[radial-gradient(circle_at_top_right,rgba(167,139,250,0.22),transparent_38%),#111019] p-5 sm:p-6">
-          <Bot className="absolute -bottom-6 -right-5 size-36 text-violet-300/[0.06]" />
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          {fullWeekdayLabels.map((label, index) => {
+            const isToday = index === todayIndex;
+            const hasSession =
+              isToday && Boolean(todayWorkout);
 
-          <div className="relative">
-            <span className="grid size-12 place-items-center rounded-2xl border border-violet-300/20 bg-violet-300/10 text-violet-200">
-              <Sparkles className="size-5" />
-            </span>
+            return (
+              <div
+                key={label}
+                className={`min-w-[3.25rem] flex-1 rounded-xl border px-2 py-3 text-center transition-colors ${
+                  isToday
+                    ? "border-[var(--color-accent)]/40 bg-[var(--color-accent-soft)]"
+                    : "border-white/[0.06] bg-white/[0.02]"
+                }`}
+              >
+                <p className="text-[10px] font-semibold tracking-[0.12em] text-zinc-500">
+                  {label}
+                </p>
+                <p
+                  className={`mt-1 text-xs font-medium ${
+                    isToday
+                      ? "text-[var(--color-accent-light)]"
+                      : "text-zinc-400"
+                  }`}
+                >
+                  {isToday
+                    ? hasSession
+                      ? workoutDone
+                        ? "Done"
+                        : "Today"
+                      : "Rest"
+                    : "—"}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
-            <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.17em] text-violet-300/60">
-              AI Coach shortcut
+      {/* Weekly adherence */}
+      <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-[15px] font-semibold text-zinc-200">
+            Weekly adherence
+          </h2>
+          <CalendarDays className="size-4 text-zinc-600" aria-hidden />
+        </div>
+        {weeklyAdherence !== null ? (
+          <>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+              <div
+                className="h-full rounded-full bg-[var(--color-accent)]"
+                style={{
+                  width: `${Math.min(100, Math.max(0, weeklyAdherence))}%`,
+                }}
+              />
+            </div>
+            <p className="mt-3 text-sm text-zinc-300">
+              {Math.round(weeklyAdherence)}% weekly adherence
             </p>
-
-            <h2 className="mt-1 max-w-lg text-2xl font-black text-white">
-              Ask questions using your goal, targets and latest progress.
-            </h2>
-
-            <p className="mt-3 max-w-xl text-sm leading-6 text-violet-100/60">
-              The shortcut is ready for Project 13, where tool calling will read authenticated client context instead of guessing.
-            </p>
-
-            <Link
-              href="/ai-coach"
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-200 px-4 py-3 text-sm font-black text-violet-950 transition hover:bg-white"
-            >
-              Open AI Coach
-              <Bot className="size-4" />
-            </Link>
-          </div>
-        </article>
+          </>
+        ) : (
+          <p className="mt-3 text-sm text-zinc-500">
+            Complete more sessions this week to unlock adherence
+            tracking.
+          </p>
+        )}
       </section>
     </div>
-  )
+  );
 }
