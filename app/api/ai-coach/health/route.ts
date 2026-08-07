@@ -1,4 +1,11 @@
-import OpenAI from "openai";
+import {
+  getAiModelName,
+  getOpenAI,
+} from "@/lib/ai-coach/server";
+import {
+  getAiProviderConfig,
+  usesResponsesApi,
+} from "@/lib/ai-coach/provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,7 +16,7 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return "Unknown OpenAI error.";
+  return "Unknown AI provider error.";
 }
 
 export async function GET() {
@@ -28,67 +35,79 @@ export async function GET() {
     );
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  const model =
-    process.env.OPENAI_MODEL ||
-    "gpt-5.6-terra";
-
-  if (!apiKey) {
-    return Response.json(
-      {
-        ok: false,
-        model,
-        error:
-          "OPENAI_API_KEY chưa được khai báo trong .env.local.",
-      },
-      {
-        status: 500,
-      },
-    );
-  }
-
-  const openai = new OpenAI({
-    apiKey,
-    timeout: 30_000,
-    maxRetries: 1,
-  });
+  let model = "unknown";
+  let provider = "unknown";
 
   try {
-    const response =
-      await openai.responses.create({
+    const config = getAiProviderConfig();
+    model = config.model;
+    provider = config.name;
+
+    const openai = getOpenAI();
+
+    if (usesResponsesApi()) {
+      const response = await openai.responses.create({
         model,
         store: false,
-        input:
-          "Reply with exactly: AI_COACH_CONNECTED",
+        input: "Reply with exactly: AI_COACH_CONNECTED",
         max_output_tokens: 32,
       });
 
-    const output = response.output_text.trim();
+      const output = response.output_text.trim();
+
+      return Response.json({
+        ok: output.includes("AI_COACH_CONNECTED"),
+        provider,
+        model,
+        mode: "responses",
+        output,
+        responseId: response.id,
+      });
+    }
+
+    const response = await openai.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: "user",
+          content: "Reply with exactly: AI_COACH_CONNECTED",
+        },
+      ],
+      max_tokens: 32,
+    });
+
+    const output =
+      response.choices[0]?.message?.content?.trim() ?? "";
 
     return Response.json({
-      ok: output.includes(
-        "AI_COACH_CONNECTED",
-      ),
+      ok: output.includes("AI_COACH_CONNECTED"),
+      provider,
       model,
+      mode: "chat.completions",
       output,
       responseId: response.id,
     });
   } catch (error) {
-    console.error(
-      "OpenAI health check failed:",
-      error,
-    );
+    console.error("AI Coach health check failed:", error);
 
     return Response.json(
       {
         ok: false,
-        model,
+        provider,
+        model: model || getAiModelNameFallback(),
         error: getErrorMessage(error),
       },
       {
         status: 500,
       },
     );
+  }
+}
+
+function getAiModelNameFallback(): string {
+  try {
+    return getAiModelName();
+  } catch {
+    return "unknown";
   }
 }

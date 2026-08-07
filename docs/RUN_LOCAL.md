@@ -24,15 +24,27 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_KEY
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Optional:
+Optional / AI Coach:
 
 ```env
-OPENAI_API_KEY=
+# Default provider is OpenRouter (free models) — avoids OpenAI billing 429s.
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY
+OPENAI_MODEL=openrouter/free
+
+# Optional: paid OpenAI instead
+# AI_PROVIDER=openai
+# OPENAI_API_KEY=sk-...
+# OPENAI_MODEL=gpt-4.1-mini
+
 GOOGLE_DRIVE_CLIENT_ID=
 GOOGLE_DRIVE_CLIENT_SECRET=
 GOOGLE_DRIVE_REFRESH_TOKEN=
 GOOGLE_DRIVE_FOLDER_ID=
 ```
+
+Get a free OpenRouter key: [https://openrouter.ai/keys](https://openrouter.ai/keys)  
+Then restart `npm run dev`. Dev health check: [http://localhost:3000/api/ai-coach/health](http://localhost:3000/api/ai-coach/health)
 
 ## Validation commands
 

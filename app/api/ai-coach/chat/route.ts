@@ -1,17 +1,21 @@
 import {
-  AI_MODEL,
+  buildChatMessages,
   buildCoachInstructions,
   buildModelInput,
   chatRequestSchema,
+  COACH_CHAT_TOOLS,
   COACH_TOOLS,
   DEFAULT_COACH_SETTINGS,
+  getAiModelName,
   getOpenAI,
   maybeSummarizeThread,
   runToolCall,
   type CoachSettings,
   usageFromResponse,
 } from "@/lib/ai-coach/server";
+import { usesResponsesApi } from "@/lib/ai-coach/provider";
 import { createClient } from "@/lib/supabase/server";
+import type OpenAI from "openai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -347,33 +351,16 @@ export async function POST(request: Request) {
         }),
       );
 
-    const planningInput = buildModelInput({
-      messages: historyMessages,
-      summary:
-        settings.allow_conversation_memory
-          ? summaryResult.data?.summary ??
-            null
-          : null,
-      attachment,
-      currentMessageId,
-    });
+    const memorySummary =
+      settings.allow_conversation_memory
+        ? summaryResult.data?.summary ?? null
+        : null;
 
     const openai = getOpenAI();
-
-    /*
-     * PASS 1:
-     * Cho model chọn các tools cần sử dụng.
-     *
-     * Đây là non-streaming response nên có thể dùng
-     * type any tại SDK boundary.
-     */
-    const planningResponse: any =
-      await openai.responses.create({
-        model: AI_MODEL,
-        store: false,
-
-        instructions: `
-${buildCoachInstructions(settings)}
+    const model = getAiModelName();
+    const baseInstructions = buildCoachInstructions(settings);
+    const planningInstructions = `
+${baseInstructions}
 
 DATA COLLECTION TURN
 
@@ -386,8 +373,32 @@ DATA COLLECTION TURN
 - Call get_nutrition_summary for calories, macros, protein or meal questions.
 - Call write tools only when the client requests the corresponding action.
 - Collect all required data in this turn when possible.
-`.trim(),
+`.trim();
 
+    type ExecutedTool = Awaited<ReturnType<typeof runToolCall>>;
+
+    let toolCalls: FunctionCallItem[] = [];
+    let planningResponse: any = null;
+    let planningOutput: any[] = [];
+    let chatPlanningMessages:
+      | OpenAI.Chat.ChatCompletionMessageParam[]
+      | null = null;
+    let chatAssistantToolMessage:
+      | OpenAI.Chat.ChatCompletionAssistantMessageParam
+      | null = null;
+
+    if (usesResponsesApi()) {
+      const planningInput = buildModelInput({
+        messages: historyMessages,
+        summary: memorySummary,
+        attachment,
+        currentMessageId,
+      });
+
+      planningResponse = await openai.responses.create({
+        model,
+        store: false,
+        instructions: planningInstructions,
         input: planningInput as any,
         tools: COACH_TOOLS as any,
         tool_choice: "required",
@@ -395,40 +406,75 @@ DATA COLLECTION TURN
         max_output_tokens: 500,
       });
 
-    const planningOutput: any[] =
-      Array.isArray(
-        planningResponse.output,
-      )
+      planningOutput = Array.isArray(planningResponse.output)
         ? planningResponse.output
         : [];
 
-    const toolCalls =
-      planningOutput.filter(
-        (
-          item: unknown,
-        ): item is FunctionCallItem => {
-          if (
-            !item ||
-            typeof item !== "object"
-          ) {
+      toolCalls = planningOutput.filter(
+        (item: unknown): item is FunctionCallItem => {
+          if (!item || typeof item !== "object") {
             return false;
           }
 
-          const candidate =
-            item as Record<string, unknown>;
+          const candidate = item as Record<string, unknown>;
 
           return (
-            candidate.type ===
-              "function_call" &&
-            typeof candidate.name ===
-              "string" &&
-            typeof candidate.arguments ===
-              "string" &&
-            typeof candidate.call_id ===
-              "string"
+            candidate.type === "function_call" &&
+            typeof candidate.name === "string" &&
+            typeof candidate.arguments === "string" &&
+            typeof candidate.call_id === "string"
           );
         },
       );
+    } else {
+      chatPlanningMessages = buildChatMessages({
+        instructions: planningInstructions,
+        messages: historyMessages,
+        summary: memorySummary,
+        attachment,
+        currentMessageId,
+      });
+
+      planningResponse = await openai.chat.completions.create({
+        model,
+        messages: chatPlanningMessages,
+        tools: COACH_CHAT_TOOLS as any,
+        tool_choice: "required",
+        parallel_tool_calls: true,
+        max_tokens: 500,
+      });
+
+      const assistantMessage = planningResponse.choices?.[0]?.message;
+      const rawToolCalls = assistantMessage?.tool_calls ?? [];
+
+      chatAssistantToolMessage = {
+        role: "assistant",
+        content: assistantMessage?.content ?? null,
+        tool_calls: rawToolCalls,
+      };
+
+      toolCalls = rawToolCalls
+        .filter(
+          (call: {
+            id?: string;
+            function?: { name?: string; arguments?: string };
+          }) =>
+            typeof call.id === "string" &&
+            typeof call.function?.name === "string" &&
+            typeof call.function?.arguments === "string",
+        )
+        .map(
+          (call: {
+            id: string;
+            function: { name: string; arguments: string };
+          }) => ({
+            type: "function_call" as const,
+            name: call.function.name,
+            arguments: call.function.arguments,
+            call_id: call.id,
+          }),
+        );
+    }
 
     if (toolCalls.length === 0) {
       throw new Error(
@@ -436,169 +482,143 @@ DATA COLLECTION TURN
       );
     }
 
-    /*
-     * Chạy các tools song song.
-     */
-    const executedTools =
-      await Promise.all(
-        toolCalls.map((call) =>
-          runToolCall({
-            db,
-            userId: user.id,
-            threadId: resolvedThreadId,
-            latestUserMessage: message,
-            settings,
-            call: {
-              name: call.name,
-              arguments: call.arguments,
-              call_id: call.call_id,
-            },
+    const executedTools: ExecutedTool[] = await Promise.all(
+      toolCalls.map((call) =>
+        runToolCall({
+          db,
+          userId: user.id,
+          threadId: resolvedThreadId,
+          latestUserMessage: message,
+          settings,
+          call: {
+            name: call.name,
+            arguments: call.arguments,
+            call_id: call.call_id,
+          },
+        }),
+      ),
+    );
+
+    const responsesFinalInput = usesResponsesApi()
+      ? [
+          ...buildModelInput({
+            messages: historyMessages,
+            summary: memorySummary,
+            attachment,
+            currentMessageId,
           }),
-        ),
-      );
+          ...planningOutput,
+          ...executedTools.map((tool) => ({
+            type: "function_call_output" as const,
+            call_id: tool.callId,
+            output: JSON.stringify(tool.result),
+          })),
+        ]
+      : null;
 
-    const functionOutputs =
-      executedTools.map((tool) => ({
-        type:
-          "function_call_output" as const,
-        call_id: tool.callId,
-        output: JSON.stringify(
-          tool.result,
-        ),
-      }));
+    const chatFinalMessages: OpenAI.Chat.ChatCompletionMessageParam[] | null =
+      !usesResponsesApi() &&
+      chatPlanningMessages &&
+      chatAssistantToolMessage
+        ? [
+            ...chatPlanningMessages,
+            chatAssistantToolMessage,
+            ...executedTools.map(
+              (tool): OpenAI.Chat.ChatCompletionToolMessageParam => ({
+                role: "tool",
+                tool_call_id: tool.callId,
+                content: JSON.stringify(tool.result),
+              }),
+            ),
+            {
+              role: "system",
+              content: `
+${baseInstructions}
 
-    /*
-     * Giữ nguyên toàn bộ planning output.
-     * Không chỉ lấy function calls vì model có thể trả
-     * thêm reasoning items cần thiết cho request tiếp theo.
-     */
-    const finalInput = [
-      ...planningInput,
-      ...planningOutput,
-      ...functionOutputs,
-    ];
+FINAL ANSWER TURN
+- Use the tool results above.
+- Produce the final natural-language answer for the client now.
+- Do not call more tools.
+`.trim(),
+            },
+          ]
+        : null;
 
     const encoder = new TextEncoder();
 
-    const stream =
-      new ReadableStream<Uint8Array>({
-        async start(controller) {
-          function sendEvent(
-            eventName: string,
-            data: unknown,
-          ) {
-            const payload =
-              `event: ${eventName}\n` +
-              `data: ${JSON.stringify(data)}\n\n`;
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        function sendEvent(eventName: string, data: unknown) {
+          const payload =
+            `event: ${eventName}\n` +
+            `data: ${JSON.stringify(data)}\n\n`;
 
-            controller.enqueue(
-              encoder.encode(payload),
-            );
+          controller.enqueue(encoder.encode(payload));
+        }
+
+        let assistantText = "";
+        let finalResponse: any = null;
+        let streamClosed = false;
+
+        function closeStream() {
+          if (streamClosed) {
+            return;
           }
 
-          let assistantText = "";
-          let finalResponse: any = null;
-          let streamClosed = false;
+          streamClosed = true;
+          controller.close();
+        }
 
-          function closeStream() {
-            if (streamClosed) {
-              return;
-            }
+        sendEvent("meta", {
+          threadId: resolvedThreadId,
+          usage,
+        });
 
-            streamClosed = true;
-            controller.close();
-          }
-
-          sendEvent("meta", {
-            threadId: resolvedThreadId,
-            usage,
+        for (const tool of executedTools) {
+          sendEvent("tool", {
+            name: tool.name,
+            status:
+              tool.result.requires_confirmation === true
+                ? "confirmation_required"
+                : tool.result.error
+                  ? "error"
+                  : "completed",
           });
+        }
 
-          for (const tool of executedTools) {
-            sendEvent("tool", {
-              name: tool.name,
-              status:
-                tool.result
-                  .requires_confirmation === true
-                  ? "confirmation_required"
-                  : tool.result.error
-                    ? "error"
-                    : "completed",
+        try {
+          if (usesResponsesApi()) {
+            const responseStream = await openai.responses.create({
+              model,
+              store: false,
+              instructions: baseInstructions,
+              input: responsesFinalInput as any,
+              stream: true as const,
+              max_output_tokens: 1600,
             });
-          }
 
-          try {
-            /*
-             * PASS 2:
-             * Streaming câu trả lời cuối cùng.
-             *
-             * QUAN TRỌNG:
-             * - Không thêm "as any" vào toàn bộ object.
-             * - Không cast kết quả thành AsyncIterable.
-             * - stream phải là literal true.
-             * - Không truyền tools ở pass này để model
-             *   không gọi thêm tool.
-             */
-            const responseStream =
-              await openai.responses.create({
-                model: AI_MODEL,
-                store: false,
-
-                instructions:
-                  buildCoachInstructions(
-                    settings,
-                  ),
-
-                input: finalInput as any,
-
-                stream: true as const,
-
-                max_output_tokens: 1600,
-              });
-
-            /*
-             * Responses API stream hỗ trợ trực tiếp
-             * for await...of.
-             */
             for await (const rawEvent of responseStream) {
               const event = rawEvent as any;
 
-              if (
-                event.type ===
-                "response.output_text.delta"
-              ) {
+              if (event.type === "response.output_text.delta") {
                 const delta =
-                  typeof event.delta ===
-                  "string"
-                    ? event.delta
-                    : "";
+                  typeof event.delta === "string" ? event.delta : "";
 
                 if (!delta) {
                   continue;
                 }
 
                 assistantText += delta;
-
-                sendEvent("delta", {
-                  text: delta,
-                });
+                sendEvent("delta", { text: delta });
               }
 
-              if (
-                event.type ===
-                "response.completed"
-              ) {
-                finalResponse =
-                  event.response ?? null;
+              if (event.type === "response.completed") {
+                finalResponse = event.response ?? null;
               }
 
-              if (
-                event.type ===
-                "response.failed"
-              ) {
+              if (event.type === "response.failed") {
                 throw new Error(
-                  event.response?.error
-                    ?.message ??
+                  event.response?.error?.message ??
                     "OpenAI response failed.",
                 );
               }
@@ -611,226 +631,177 @@ DATA COLLECTION TURN
                 );
               }
             }
+          } else {
+            const responseStream = await openai.chat.completions.create({
+              model,
+              messages: chatFinalMessages as OpenAI.Chat.ChatCompletionMessageParam[],
+              stream: true as const,
+              stream_options: { include_usage: true },
+              max_tokens: 1600,
+            });
 
-            const cleanAssistantText =
-              assistantText.trim() ||
-              "Mình chưa thể tạo câu trả lời lúc này.";
+            for await (const chunk of responseStream) {
+              const delta = chunk.choices?.[0]?.delta?.content;
 
-            const planningUsage =
-              usageFromResponse(
-                planningResponse,
-              );
+              if (typeof delta === "string" && delta) {
+                assistantText += delta;
+                sendEvent("delta", { text: delta });
+              }
 
-            const finalUsage =
-              usageFromResponse(
-                finalResponse,
-              );
-
-            const totalInputTokens =
-              planningUsage.inputTokens +
-              finalUsage.inputTokens;
-
-            const totalOutputTokens =
-              planningUsage.outputTokens +
-              finalUsage.outputTokens;
-
-            const totalTokens =
-              planningUsage.totalTokens +
-              finalUsage.totalTokens;
-
-            /*
-             * Lưu assistant message.
-             */
-            const assistantMessageResult =
-              await db
-                .from("ai_messages")
-                .insert({
-                  thread_id:
-                    resolvedThreadId,
-                  user_id: user.id,
-                  role: "assistant",
-                  content:
-                    cleanAssistantText,
-
-                  tool_calls:
-                    executedTools.map(
-                      (tool) => ({
-                        name: tool.name,
-                        arguments:
-                          tool.arguments,
-                        result: tool.result,
-                      }),
-                    ),
-
-                  openai_response_id:
-                    finalResponse?.id ??
-                    null,
-
-                  model: AI_MODEL,
-
-                  input_tokens:
-                    totalInputTokens,
-
-                  output_tokens:
-                    totalOutputTokens,
-
-                  total_tokens:
-                    totalTokens,
-                })
-                .select("id")
-                .single();
-
-            if (
-              assistantMessageResult.error ||
-              !assistantMessageResult
-                .data?.id
-            ) {
-              throw new Error(
-                assistantMessageResult
-                  .error?.message ??
-                  "Không thể lưu câu trả lời AI.",
-              );
+              if (chunk.usage) {
+                finalResponse = {
+                  id: chunk.id,
+                  usage: chunk.usage,
+                };
+              } else if (!finalResponse) {
+                finalResponse = { id: chunk.id };
+              }
             }
+          }
 
-            const assistantMessageId =
-              String(
-                assistantMessageResult
-                  .data.id,
-              );
+          const cleanAssistantText =
+            assistantText.trim() ||
+            "Mình chưa thể tạo câu trả lời lúc này.";
 
-            /*
-             * Cập nhật thread và token usage.
-             */
-            const [
-              threadUpdateResult,
-              tokenUsageResult,
-            ] = await Promise.all([
+          const planningUsage = usageFromResponse(planningResponse);
+          const finalUsage = usageFromResponse(finalResponse);
+
+          const totalInputTokens =
+            planningUsage.inputTokens + finalUsage.inputTokens;
+          const totalOutputTokens =
+            planningUsage.outputTokens + finalUsage.outputTokens;
+          const totalTokens =
+            planningUsage.totalTokens + finalUsage.totalTokens;
+
+          const assistantMessageResult = await db
+            .from("ai_messages")
+            .insert({
+              thread_id: resolvedThreadId,
+              user_id: user.id,
+              role: "assistant",
+              content: cleanAssistantText,
+              tool_calls: executedTools.map((tool) => ({
+                name: tool.name,
+                arguments: tool.arguments,
+                result: tool.result,
+              })),
+              openai_response_id: finalResponse?.id ?? null,
+              model,
+              input_tokens: totalInputTokens,
+              output_tokens: totalOutputTokens,
+              total_tokens: totalTokens,
+            })
+            .select("id")
+            .single();
+
+          if (
+            assistantMessageResult.error ||
+            !assistantMessageResult.data?.id
+          ) {
+            throw new Error(
+              assistantMessageResult.error?.message ??
+                "Không thể lưu câu trả lời AI.",
+            );
+          }
+
+          const assistantMessageId = String(
+            assistantMessageResult.data.id,
+          );
+
+          const [threadUpdateResult, tokenUsageResult] =
+            await Promise.all([
               db
                 .from("ai_threads")
                 .update({
-                  last_message_at:
-                    new Date().toISOString(),
+                  last_message_at: new Date().toISOString(),
                 })
-                .eq(
-                  "id",
-                  resolvedThreadId,
-                )
+                .eq("id", resolvedThreadId)
                 .eq("user_id", user.id),
-
-              db.rpc(
-                "record_ai_token_usage",
-                {
-                  p_input_tokens:
-                    totalInputTokens,
-
-                  p_output_tokens:
-                    totalOutputTokens,
-
-                  p_model: AI_MODEL,
-                },
-              ),
+              db.rpc("record_ai_token_usage", {
+                p_input_tokens: totalInputTokens,
+                p_output_tokens: totalOutputTokens,
+                p_model: model,
+              }),
             ]);
 
-            if (threadUpdateResult.error) {
-              console.error(
-                "Unable to update AI thread:",
-                threadUpdateResult.error,
-              );
-            }
-
-            if (tokenUsageResult.error) {
-              console.error(
-                "Unable to record token usage:",
-                tokenUsageResult.error,
-              );
-            }
-
-            /*
-             * Tóm tắt thread khi conversation đủ dài.
-             */
-            try {
-              await maybeSummarizeThread({
-                db,
-                userId: user.id,
-                threadId:
-                  resolvedThreadId,
-              });
-            } catch (summaryError) {
-              console.error(
-                "AI thread summarization failed:",
-                summaryError,
-              );
-            }
-
-            sendEvent("done", {
-              threadId: resolvedThreadId,
-              messageId:
-                assistantMessageId,
-              usage: {
-                ...usage,
-                remaining: Math.max(
-                  usage.remaining,
-                  0,
-                ),
-              },
-            });
-
-            closeStream();
-          } catch (streamError) {
+          if (threadUpdateResult.error) {
             console.error(
-              "AI stream failed:",
-              streamError,
+              "Unable to update AI thread:",
+              threadUpdateResult.error,
             );
+          }
 
-            /*
-             * Hoàn lại lượt khi OpenAI hoặc lưu dữ liệu lỗi.
-             */
-            if (usageConsumed) {
-              try {
-                const refundResult =
-                  await db.rpc(
-                    "refund_ai_usage",
-                  );
+          if (tokenUsageResult.error) {
+            console.error(
+              "Unable to record token usage:",
+              tokenUsageResult.error,
+            );
+          }
 
-                if (refundResult.error) {
-                  console.error(
-                    "Unable to refund AI usage:",
-                    refundResult.error,
-                  );
-                } else {
-                  usageConsumed = false;
-                }
-              } catch (refundError) {
+          try {
+            await maybeSummarizeThread({
+              db,
+              userId: user.id,
+              threadId: resolvedThreadId,
+            });
+          } catch (summaryError) {
+            console.error(
+              "AI thread summarization failed:",
+              summaryError,
+            );
+          }
+
+          sendEvent("done", {
+            threadId: resolvedThreadId,
+            messageId: assistantMessageId,
+            usage: {
+              ...usage,
+              remaining: Math.max(usage.remaining, 0),
+            },
+          });
+
+          closeStream();
+        } catch (streamError) {
+          console.error("AI stream failed:", streamError);
+
+          if (usageConsumed) {
+            try {
+              const refundResult = await db.rpc("refund_ai_usage");
+
+              if (refundResult.error) {
                 console.error(
                   "Unable to refund AI usage:",
-                  refundError,
+                  refundResult.error,
                 );
+              } else {
+                usageConsumed = false;
               }
+            } catch (refundError) {
+              console.error(
+                "Unable to refund AI usage:",
+                refundError,
+              );
             }
-
-            sendEvent("error", {
-              message: getErrorMessage(
-                streamError,
-                "AI Coach gặp lỗi khi tạo câu trả lời. Lượt sử dụng đã được hoàn lại.",
-              ),
-            });
-
-            closeStream();
           }
-        },
-      });
+
+          sendEvent("error", {
+            message: getErrorMessage(
+              streamError,
+              "AI Coach gặp lỗi khi tạo câu trả lời. Lượt sử dụng đã được hoàn lại.",
+            ),
+          });
+
+          closeStream();
+        }
+      },
+    });
 
     return new Response(stream, {
       status: 200,
       headers: {
-        "Content-Type":
-          "text/event-stream; charset=utf-8",
-
-        "Cache-Control":
-          "no-cache, no-transform",
-
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
-
         "X-Accel-Buffering": "no",
       },
     });

@@ -1,5 +1,11 @@
-import OpenAI from "openai";
+import type OpenAI from "openai";
 import { z } from "zod";
+import {
+  getAiClient,
+  getAiModel,
+  getAiSummaryModel,
+  usesResponsesApi,
+} from "@/lib/ai-coach/provider";
 
 type DatabaseClient = any;
 
@@ -55,27 +61,21 @@ export const chatRequestSchema = z.object({
   attachment: attachmentSchema.nullable().optional(),
 });
 
-let openAIClient: OpenAI | null = null;
-
 export function getOpenAI(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is missing.");
-  }
-
-  if (!openAIClient) {
-    openAIClient = new OpenAI({
-      apiKey,
-      timeout: 60_000,
-      maxRetries: 2,
-    });
-  }
-
-  return openAIClient;
+  return getAiClient();
 }
 
-export const AI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6";
+/** Resolved at call time so env changes apply after restart. */
+export function getAiModelName(): string {
+  return getAiModel();
+}
+
+export function getAiSummaryModelName(): string {
+  return getAiSummaryModel();
+}
+
+/** @deprecated Use getAiModelName() — kept for existing imports. */
+export const AI_MODEL = process.env.OPENAI_MODEL || "openrouter/free";
 export const AI_SUMMARY_MODEL =
   process.env.OPENAI_SUMMARY_MODEL || AI_MODEL;
 
@@ -223,6 +223,16 @@ export const COACH_TOOLS = [
     },
   },
 ] as const;
+
+/** Chat Completions tool schema (OpenRouter / OpenAI-compatible). */
+export const COACH_CHAT_TOOLS = COACH_TOOLS.map((tool) => ({
+  type: "function" as const,
+  function: {
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+  },
+}));
 
 function removeUndefined(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value ?? null));
@@ -1384,6 +1394,92 @@ export function buildModelInput(args: {
   return input;
 }
 
+export function buildChatMessages(args: {
+  instructions: string;
+  messages: Array<{
+    id: string;
+    role: string;
+    content: string;
+  }>;
+  summary?: string | null;
+  attachment?: CoachAttachment | null;
+  currentMessageId: string;
+}): OpenAI.Chat.ChatCompletionMessageParam[] {
+  const {
+    instructions,
+    messages,
+    summary,
+    attachment,
+    currentMessageId,
+  } = args;
+
+  const chatMessages: OpenAI.Chat.ChatCompletionMessageParam[] =
+    [
+      {
+        role: "system",
+        content: instructions,
+      },
+    ];
+
+  if (summary) {
+    chatMessages.push({
+      role: "system",
+      content: `Conversation memory summary:\n${summary}`,
+    });
+  }
+
+  for (const message of messages) {
+    if (
+      message.role !== "user" &&
+      message.role !== "assistant"
+    ) {
+      continue;
+    }
+
+    if (
+      message.role === "user" &&
+      message.id === currentMessageId &&
+      attachment?.kind === "image"
+    ) {
+      chatMessages.push({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: message.content,
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: attachment.dataUrl,
+            },
+          },
+        ],
+      });
+      continue;
+    }
+
+    if (
+      message.role === "user" &&
+      message.id === currentMessageId &&
+      attachment?.kind === "file"
+    ) {
+      chatMessages.push({
+        role: "user",
+        content: `${message.content}\n\n[Attached file: ${attachment.filename} (${attachment.mimeType})]`,
+      });
+      continue;
+    }
+
+    chatMessages.push({
+      role: message.role as "user" | "assistant",
+      content: message.content,
+    });
+  }
+
+  return chatMessages;
+}
+
 export function usageFromResponse(
   response:
     | {
@@ -1391,6 +1487,8 @@ export function usageFromResponse(
           input_tokens?: number;
           output_tokens?: number;
           total_tokens?: number;
+          prompt_tokens?: number;
+          completion_tokens?: number;
         } | null;
       }
     | null
@@ -1400,10 +1498,17 @@ export function usageFromResponse(
   outputTokens: number;
   totalTokens: number;
 } {
+  const usage = response?.usage;
+  const inputTokens =
+    usage?.input_tokens ?? usage?.prompt_tokens ?? 0;
+  const outputTokens =
+    usage?.output_tokens ?? usage?.completion_tokens ?? 0;
+
   return {
-    inputTokens: response?.usage?.input_tokens ?? 0,
-    outputTokens: response?.usage?.output_tokens ?? 0,
-    totalTokens: response?.usage?.total_tokens ?? 0,
+    inputTokens,
+    outputTokens,
+    totalTokens:
+      usage?.total_tokens ?? inputTokens + outputTokens,
   };
 }
 
@@ -1478,11 +1583,8 @@ export async function maybeSummarizeThread(args: {
     .join("\n\n");
 
   const openai = getOpenAI();
-
-  const response = await openai.responses.create({
-    model: AI_SUMMARY_MODEL,
-    store: false,
-    instructions: `
+  const summaryModel = getAiSummaryModelName();
+  const summaryPrompt = `
 Summarize this fitness coaching conversation for future context.
 
 Include only:
@@ -1494,12 +1596,38 @@ Include only:
 - safety-relevant information.
 
 Do not add facts. Do not include hidden reasoning. Keep the summary under 500 words.
-`.trim(),
-    input: transcript,
-    max_output_tokens: 700,
-  });
+`.trim();
 
-  const summary = response.output_text.trim();
+  let summary = "";
+
+  if (usesResponsesApi()) {
+    const response = await openai.responses.create({
+      model: summaryModel,
+      store: false,
+      instructions: summaryPrompt,
+      input: transcript,
+      max_output_tokens: 700,
+    });
+
+    summary = response.output_text.trim();
+  } else {
+    const response = await openai.chat.completions.create({
+      model: summaryModel,
+      messages: [
+        {
+          role: "system",
+          content: summaryPrompt,
+        },
+        {
+          role: "user",
+          content: transcript,
+        },
+      ],
+      max_tokens: 700,
+    });
+
+    summary = response.choices[0]?.message?.content?.trim() ?? "";
+  }
 
   if (!summary) {
     return;
@@ -1512,7 +1640,7 @@ Do not add facts. Do not include hidden reasoning. Keep the summary under 500 wo
       summary,
       covered_through_message_id: latestMessage.id,
       covered_message_count: messageCount,
-      model: AI_SUMMARY_MODEL,
+      model: summaryModel,
       updated_at: new Date().toISOString(),
     },
     {

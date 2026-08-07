@@ -1,11 +1,12 @@
 import {
-  AI_MODEL,
   buildCoachInstructions,
   DEFAULT_COACH_SETTINGS,
+  getAiModelName,
   getOpenAI,
   runToolCall,
   type CoachSettings,
 } from "@/lib/ai-coach/server";
+import { usesResponsesApi } from "@/lib/ai-coach/provider";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -454,11 +455,7 @@ export async function GET(request: Request) {
               }),
             ]);
 
-          const response =
-            await openai.responses.create({
-              model: AI_MODEL,
-              store: false,
-              instructions: `
+          const weeklyPrompt = `
 ${buildCoachInstructions(settings)}
 
 Create a weekly fitness progress summary.
@@ -473,14 +470,47 @@ Include:
 Do not diagnose medical conditions.
 Do not change the active plan.
 Keep it practical and under 500 words.
-`.trim(),
-              input: JSON.stringify({
-                profile: profile.result,
-                progress: progress.result,
-                nutrition: nutrition.result,
-              }),
+`.trim();
+
+          const weeklyPayload = JSON.stringify({
+            profile: profile.result,
+            progress: progress.result,
+            nutrition: nutrition.result,
+          });
+
+          const model = getAiModelName();
+          let weeklyContent = "";
+
+          if (usesResponsesApi()) {
+            const response = await openai.responses.create({
+              model,
+              store: false,
+              instructions: weeklyPrompt,
+              input: weeklyPayload,
               max_output_tokens: 800,
             });
+
+            weeklyContent = response.output_text.trim();
+          } else {
+            const response = await openai.chat.completions.create({
+              model,
+              messages: [
+                {
+                  role: "system",
+                  content: weeklyPrompt,
+                },
+                {
+                  role: "user",
+                  content: weeklyPayload,
+                },
+              ],
+              max_tokens: 800,
+            });
+
+            weeklyContent =
+              response.choices[0]?.message?.content?.trim() ??
+              "";
+          }
 
           const wasDelivered =
             await deliverReminder({
@@ -488,7 +518,7 @@ Keep it practical and under 500 words.
               userId,
               key: summaryKey,
               content:
-                response.output_text.trim() ||
+                weeklyContent ||
                 "Chưa đủ dữ liệu để tạo weekly summary.",
             });
 
