@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FormEvent,
   useEffect,
@@ -135,6 +136,7 @@ export function AiCoachClient({
   initialUsage,
   initialThreads,
 }: AiCoachClientProps) {
+  const router = useRouter();
   const [threadId, setThreadId] = useState<string | null>(
     initialThreadId,
   );
@@ -244,7 +246,7 @@ export function AiCoachClient({
       // Fall through to soft navigation reload.
     }
 
-    window.location.href = `/ai-coach?thread=${nextThreadId}`;
+    router.push(`/ai-coach?thread=${nextThreadId}`);
   }
 
   async function renameCurrentThread() {

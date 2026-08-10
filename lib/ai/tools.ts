@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-type DatabaseClient = {
-  from: (table: string) => any;
-};
+import type { AiDatabaseClient } from "@/lib/ai/db";
+
+type DatabaseClient = AiDatabaseClient;
 
 function removeUndefined(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value ?? null));
