@@ -16,7 +16,7 @@ import type {
   User,
 } from "@supabase/supabase-js"
 
-import { createClient } from "@/lib/supabase/client"
+import { tryCreateClient } from "@/lib/supabase/client"
 
 type AuthContextValue = {
   user: User | null
@@ -41,10 +41,10 @@ export function AuthProvider({
   const router = useRouter()
 
   /*
-   * createClient() trong lib/supabase/client.ts nên trả về
-   * cùng một browser client để tránh tạo nhiều auth listeners.
+   * tryCreateClient() avoids crashing root layout prerender
+   * (e.g. /_not-found) when Supabase public env is missing at build time.
    */
-  const supabase = useMemo(() => createClient(), [])
+  const supabase = useMemo(() => tryCreateClient(), [])
 
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -63,6 +63,14 @@ export function AuthProvider({
 
   useEffect(() => {
     let isMounted = true
+
+    if (!supabase) {
+      setLoading(false)
+      updateAuthState(null)
+      return () => {
+        isMounted = false
+      }
+    }
 
     /**
      * Đọc session ban đầu khi website được mở hoặc refresh.
@@ -156,6 +164,12 @@ export function AuthProvider({
    * Có thể sử dụng sau khi client cập nhật profile.
    */
   const refreshUser = useCallback(async () => {
+    if (!supabase) {
+      updateAuthState(null)
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -186,6 +200,12 @@ export function AuthProvider({
    * Đăng xuất khỏi browser hiện tại.
    */
   const signOut = useCallback(async () => {
+    if (!supabase) {
+      updateAuthState(null)
+      router.replace("/login")
+      return
+    }
+
     setLoading(true)
 
     try {

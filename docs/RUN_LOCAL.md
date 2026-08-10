@@ -24,15 +24,34 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_KEY
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Optional:
+Optional / AI Coach (OpenRouter free models by default — avoids OpenAI billing 429s):
 
 ```env
-OPENAI_API_KEY=
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY
+OPENROUTER_MODEL=openrouter/free
+
+# Optional paid OpenAI instead (explicit only — no silent fallback):
+# AI_PROVIDER=openai
+# OPENAI_API_KEY=sk-...
+# OPENAI_MODEL=gpt-4.1-mini
+
+# Optional self-hosted OpenAI-compatible server:
+# AI_PROVIDER=self_hosted
+# AI_BASE_URL=http://localhost:8000/v1
+# AI_API_KEY=replace-with-private-server-token
+# AI_MODEL=replace-with-model-id
+
 GOOGLE_DRIVE_CLIENT_ID=
 GOOGLE_DRIVE_CLIENT_SECRET=
 GOOGLE_DRIVE_REFRESH_TOKEN=
 GOOGLE_DRIVE_FOLDER_ID=
 ```
+
+Get a free OpenRouter key: [https://openrouter.ai/keys](https://openrouter.ai/keys)  
+Then restart `npm run dev`. Dev health check: [http://localhost:3000/api/ai-coach/health](http://localhost:3000/api/ai-coach/health)
+
+More providers: [AI_PROVIDER_SETUP.md](./AI_PROVIDER_SETUP.md)
 
 ## Validation commands
 
@@ -54,7 +73,7 @@ npm run build
 8. **Session player** — `/dashboard/workouts/session/[sessionId]`
 9. **History** — `/dashboard/workouts/history`
 10. **Nutrition / Progress / AI Coach nav** — `/dashboard/nutrition`, `/dashboard/progress`, `/dashboard/ai-coach`
-11. **Coach chat** — `/chatbot`
+11. **Coach chat** — `/ai-coach` (legacy `/chatbot` redirects here)
 12. **Meal plan calculator** — `/meal-plan`
 
 ## Source of truth

@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 
 import type { LucideIcon } from "lucide-react"
 
@@ -107,6 +107,11 @@ export default async function DashboardSectionPage({
   params,
 }: PageProps) {
   const { section: sectionKey } = await params
+
+  if (sectionKey === "ai-coach") {
+    redirect("/ai-coach")
+  }
+
   const section = sections[sectionKey]
 
   if (!section) {
@@ -150,17 +155,17 @@ export default async function DashboardSectionPage({
     "Athlete"
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-1 py-2">
-      <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-6 sm:p-8">
-        <span className="inline-grid size-14 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
-          <Icon className="size-6" />
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-6 sm:p-8">
+        <span className="inline-grid size-12 place-items-center rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent-soft)] text-[var(--color-accent-light)]">
+          <Icon className="size-5" />
         </span>
 
-        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+        <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-accent-light)]">
           {section.project}
         </p>
 
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-[34px]">
           {section.title}
         </h1>
 
@@ -257,7 +262,7 @@ export default async function DashboardSectionPage({
 
           <div className="mt-5 flex flex-wrap gap-3">
             <Link
-              href="/chatbot"
+              href="/ai-coach"
               className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
             >
               Open AI Coach chat

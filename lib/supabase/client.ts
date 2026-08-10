@@ -1,17 +1,38 @@
-import { createBrowserClient } from "@supabase/ssr"
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { getSupabaseConfig } from "@/lib/supabase/config"
+import {
+  getSupabasePublicEnv,
+  requireSupabasePublicEnv,
+} from "@/lib/supabase/env";
 
-let browserClient: ReturnType<typeof createBrowserClient> | undefined
+/**
+ * Create a browser Supabase client.
+ * Throws at runtime when env is missing (after build).
+ */
+export function createClient(): SupabaseClient {
+  const { url, publicKey } = requireSupabasePublicEnv();
 
-export function createClient() {
-  if (browserClient) {
-    return browserClient
+  return createBrowserClient(url, publicKey);
+}
+
+/**
+ * Safe for root layout / AuthProvider prerender.
+ * Returns null when public Supabase env is not configured.
+ */
+export function tryCreateClient(): SupabaseClient | null {
+  const env = getSupabasePublicEnv();
+
+  if (!env) {
+    return null;
   }
 
-  const { url, key } = getSupabaseConfig()
+  if (
+    !env.url.startsWith("https://") ||
+    !env.url.includes(".supabase.co")
+  ) {
+    return null;
+  }
 
-  browserClient = createBrowserClient(url, key)
-
-  return browserClient
+  return createBrowserClient(env.url, env.publicKey);
 }
