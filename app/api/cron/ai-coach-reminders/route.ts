@@ -1,3 +1,4 @@
+import { asAiDatabaseClient, type AiDatabaseClient } from "@/lib/ai/db";
 import {
   buildCoachInstructions,
   DEFAULT_COACH_SETTINGS,
@@ -82,7 +83,7 @@ function getLocalParts(
 }
 
 async function ensureReminderThread(
-  db: any,
+  db: AiDatabaseClient,
   userId: string,
 ): Promise<string> {
   const existing = await db
@@ -93,8 +94,13 @@ async function ensureReminderThread(
     .limit(1)
     .maybeSingle();
 
-  if (existing.data?.id) {
-    return existing.data.id;
+  const existingRow =
+    existing.data && typeof existing.data === "object"
+      ? (existing.data as { id?: string })
+      : null;
+
+  if (existingRow?.id) {
+    return existingRow.id;
   }
 
   const created = await db
@@ -113,11 +119,20 @@ async function ensureReminderThread(
     throw new Error(created.error.message);
   }
 
-  return created.data.id;
+  const createdRow =
+    created.data && typeof created.data === "object"
+      ? (created.data as { id?: string })
+      : null;
+
+  if (!createdRow?.id) {
+    throw new Error("Unable to create reminder thread.");
+  }
+
+  return createdRow.id;
 }
 
 async function deliverReminder(args: {
-  db: any;
+  db: AiDatabaseClient;
   userId: string;
   key: string;
   content: string;
@@ -199,7 +214,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const db = createAdminClient() as any;
+  const db = asAiDatabaseClient(createAdminClient());
   let delivered = 0;
   const errors: string[] = [];
 

@@ -870,15 +870,18 @@ export async function executeConfirmedToolAction(args: {
             .eq("user_id", userId)
             .maybeSingle();
 
-          if (session.error || !session.data) {
+          const sessionRow =
+            session.data && typeof session.data === "object"
+              ? (session.data as Record<string, unknown>)
+              : null;
+
+          if (session.error || !sessionRow) {
             throw new Error("Workout session not found for this user.");
           }
 
           const noteLine = `[AI Coach adjustment] ${parsed.data.reason}`;
           const existingNotes =
-            typeof session.data.notes === "string"
-              ? session.data.notes
-              : "";
+            typeof sessionRow.notes === "string" ? sessionRow.notes : "";
           const update = await db
             .from("workout_sessions")
             .update({

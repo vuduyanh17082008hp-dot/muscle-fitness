@@ -1,3 +1,4 @@
+import { asAiDatabaseClient } from "@/lib/ai/db";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
@@ -21,7 +22,7 @@ const feedbackSchema = z.object({
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const db = supabase as any;
+  const db = asAiDatabaseClient(supabase);
 
   const {
     data: { user },
