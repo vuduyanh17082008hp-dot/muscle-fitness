@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { SettingsForm } from "@/features/ai-coach/settings-form";
 import {
   DEFAULT_COACH_SETTINGS,
-} from "@/lib/ai-coach/server";
+} from "@/lib/ai/server";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";

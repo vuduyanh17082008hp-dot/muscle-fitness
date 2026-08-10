@@ -1,6 +1,6 @@
 import {
   DEFAULT_COACH_SETTINGS,
-} from "@/lib/ai-coach/server";
+} from "@/lib/ai/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 

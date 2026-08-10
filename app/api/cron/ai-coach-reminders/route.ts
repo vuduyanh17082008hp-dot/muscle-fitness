@@ -3,8 +3,8 @@ import {
   DEFAULT_COACH_SETTINGS,
   runToolCall,
   type CoachSettings,
-} from "@/lib/ai-coach/server";
-import { completeCoachText } from "@/lib/ai-coach/transport";
+} from "@/lib/ai/server";
+import { completeCoachText } from "@/lib/ai/transport";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";

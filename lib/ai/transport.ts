@@ -3,7 +3,7 @@ import {
   getAiClient,
   getAiModel,
   usesResponsesApi,
-} from "@/lib/ai-coach/provider";
+} from "@/lib/ai/provider";
 import {
   buildChatMessages,
   buildModelInput,
@@ -11,7 +11,7 @@ import {
   COACH_TOOLS,
   type CoachAttachment,
   usageFromResponse,
-} from "@/lib/ai-coach/server";
+} from "@/lib/ai/server";
 
 export type CoachFunctionCall = {
   type: "function_call";

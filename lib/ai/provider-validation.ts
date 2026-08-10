@@ -1,7 +1,7 @@
 import {
   AiProviderConfigError,
   getAiProviderConfig,
-} from "@/lib/ai-coach/provider";
+} from "@/lib/ai/provider";
 
 /**
  * Diagnostic helpers used by scripts/tests.

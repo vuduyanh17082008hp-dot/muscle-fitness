@@ -2,8 +2,8 @@ import {
   getDevAiErrorDetail,
   logAiCoachFailure,
   toAiClientErrorPayload,
-} from "@/lib/ai-coach/errors";
-import { getSafeProviderInfo } from "@/lib/ai-coach/provider";
+} from "@/lib/ai/errors";
+import { getSafeProviderInfo } from "@/lib/ai/provider";
 import {
   buildCoachInstructions,
   chatRequestSchema,
@@ -12,12 +12,13 @@ import {
   maybeSummarizeThread,
   runToolCall,
   type CoachSettings,
-} from "@/lib/ai-coach/server";
+} from "@/lib/ai/server";
 import {
   planCoachToolCalls,
   streamCoachFinalAnswer,
   type HistoryMessage,
-} from "@/lib/ai-coach/transport";
+} from "@/lib/ai/transport";
+import { getAiDailyLimit } from "@/lib/entitlements/server";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -110,8 +111,64 @@ export async function POST(request: Request) {
       );
     }
 
-    const { message, attachment = null } = parsedBody.data;
+    const {
+      message,
+      attachment = null,
+      idempotencyKey,
+    } = parsedBody.data;
     let threadId: string | null = parsedBody.data.threadId ?? null;
+
+    // Soft pre-check against Phase 1 ai_daily_limit before consuming usage.
+    // consume_ai_usage remains the atomic authority after migration.
+    const dailyLimit = await getAiDailyLimit();
+    const usageSnapshot = await db.rpc("get_ai_usage_snapshot");
+    const snapshot = getFirstRpcRow<{
+      messages_used: number;
+      daily_limit: number;
+      remaining: number;
+      plan_code: string;
+    }>(usageSnapshot.data);
+
+    if (
+      snapshot &&
+      typeof snapshot.messages_used === "number" &&
+      snapshot.messages_used >= dailyLimit
+    ) {
+      return Response.json(
+        {
+          error: "Bạn đã sử dụng hết lượt AI hôm nay.",
+          usage: {
+            ...snapshot,
+            daily_limit: dailyLimit,
+            remaining: 0,
+          },
+        },
+        { status: 429 },
+      );
+    }
+
+    if (threadId && idempotencyKey) {
+      const duplicate = await db
+        .from("ai_messages")
+        .select("id, content, created_at")
+        .eq("thread_id", threadId)
+        .eq("user_id", user.id)
+        .eq("role", "user")
+        .contains("metadata", { idempotencyKey })
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!duplicate.error && duplicate.data) {
+        return Response.json(
+          {
+            error: "Duplicate request ignored.",
+            messageId: duplicate.data.id,
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     if (threadId) {
       const threadResult = await db
@@ -208,6 +265,9 @@ export async function POST(request: Request) {
         role: "user",
         content: message,
         attachments: attachmentMetadata,
+        metadata: idempotencyKey
+          ? { idempotencyKey }
+          : {},
       })
       .select("id")
       .single();
@@ -290,9 +350,11 @@ DATA COLLECTION TURN
 - Call every tool required to answer the latest user message.
 - Always call get_client_profile.
 - Call get_today_workout for questions about today's training.
-- Call get_recent_progress for progress, adherence, recovery or weekly summaries.
-- Call get_nutrition_summary for calories, macros, protein or meal questions.
-- Call write tools only when the client requests the corresponding action.
+- Call get_recent_workouts / get_workout_history / get_training_adherence for training consistency.
+- Call get_recent_progress, get_weight_trend or get_weekly_summary for progress questions.
+- Call get_nutrition_summary or get_today_nutrition for calories, macros, protein or meal questions.
+- Call get_recent_checkins for recovery / sleep / stress questions.
+- For write intents use propose_* tools only. Never claim writes succeeded.
 - Collect all required data in this turn when possible.
 `.trim();
 
@@ -362,15 +424,34 @@ DATA COLLECTION TURN
           usage,
         });
 
+        const pendingProposals = executedTools.filter(
+          (tool) =>
+            tool.result.requires_confirmation === true &&
+            typeof tool.toolLogId === "string",
+        );
+
         for (const tool of executedTools) {
           sendEvent("tool", {
             name: tool.name,
+            toolLogId: tool.toolLogId,
             status:
               tool.result.requires_confirmation === true
                 ? "confirmation_required"
                 : tool.result.error
                   ? "error"
                   : "completed",
+            proposal: tool.result.proposal ?? null,
+          });
+        }
+
+        if (pendingProposals.length > 0) {
+          sendEvent("proposals", {
+            items: pendingProposals.map((tool) => ({
+              toolLogId: tool.toolLogId,
+              name: tool.name,
+              type: tool.result.type ?? tool.name,
+              proposal: tool.result.proposal ?? null,
+            })),
           });
         }
 

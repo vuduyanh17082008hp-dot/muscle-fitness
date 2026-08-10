@@ -1,4 +1,4 @@
-import { AiProviderConfigError } from "@/lib/ai-coach/provider";
+import { AiProviderConfigError } from "@/lib/ai/provider";
 
 export const AI_UNAVAILABLE = "AI_UNAVAILABLE" as const;
 

@@ -1,12 +1,12 @@
 import {
   logAiCoachFailure,
   mapAiErrorToUserMessage,
-} from "@/lib/ai-coach/errors";
+} from "@/lib/ai/errors";
 import {
   getAiClient,
   getSafeProviderInfo,
   usesResponsesApi,
-} from "@/lib/ai-coach/provider";
+} from "@/lib/ai/provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
