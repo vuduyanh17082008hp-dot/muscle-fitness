@@ -349,6 +349,8 @@ function LoginContent() {
                   }
                 }}
                 placeholder="your@email.com"
+                // Password managers / form helpers inject attrs (e.g. fdprocessedid)
+                suppressHydrationWarning
                 className="h-16 w-full rounded-full border border-white/10 bg-[#151515] pl-14 pr-6 text-base text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-orange-400/70 focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
@@ -398,6 +400,8 @@ function LoginContent() {
                   }
                 }}
                 placeholder="Enter your password"
+                // Password managers / form helpers inject attrs (e.g. fdprocessedid)
+                suppressHydrationWarning
                 className="h-16 w-full rounded-full border border-white/10 bg-[#151515] pl-14 pr-14 text-base text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-orange-400/70 focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-60"
               />
 
