@@ -275,15 +275,14 @@ export async function GET(request: Request) {
     .select("*")
     .limit(50);
 
-  for (const rawSettings of
-    settingsResult.data || []) {
+  for (const rawSettings of asAiRows(settingsResult.data)) {
     try {
       const settings: CoachSettings = {
         ...DEFAULT_COACH_SETTINGS,
-        ...rawSettings,
+        ...(rawSettings as Partial<CoachSettings>),
       };
 
-      const userId = rawSettings.user_id;
+      const userId = String(rawSettings.user_id ?? "");
       const local = getLocalParts(
         settings.timezone,
       );
@@ -438,7 +437,7 @@ export async function GET(request: Request) {
           .limit(1)
           .maybeSingle();
 
-        if (!duplicate.data?.id) {
+        if (!asAiRow(duplicate.data)?.id) {
           const [profile, progress, nutrition] =
             await Promise.all([
               runToolCall({
