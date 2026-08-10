@@ -1,4 +1,7 @@
-import { asAiDatabaseClient } from "@/lib/ai/db";
+import {
+  asAiDatabaseClient,
+  asAiRows,
+} from "@/lib/ai/db";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
@@ -115,7 +118,7 @@ export async function DELETE(
     return Response.json({ error: result.error.message }, { status: 500 });
   }
 
-  if (!result.data?.length) {
+  if (asAiRows(result.data).length === 0) {
     return Response.json(
       { error: "Conversation not found." },
       { status: 404 },

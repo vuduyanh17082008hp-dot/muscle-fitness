@@ -1,4 +1,9 @@
-import { asAiDatabaseClient, type AiDatabaseClient } from "@/lib/ai/db";
+import {
+  asAiDatabaseClient,
+  asAiRow,
+  asAiRows,
+  type AiDatabaseClient,
+} from "@/lib/ai/db";
 import {
   buildCoachInstructions,
   DEFAULT_COACH_SETTINGS,
@@ -149,7 +154,7 @@ async function deliverReminder(args: {
     .limit(1)
     .maybeSingle();
 
-  if (duplicate.data?.id) {
+  if (asAiRow(duplicate.data)?.id) {
     return false;
   }
 
@@ -232,11 +237,11 @@ export async function GET(request: Request) {
     })
     .limit(100);
 
-  for (const reminder of dueReminders.data || []) {
+  for (const reminder of asAiRows(dueReminders.data)) {
     try {
       const wasDelivered = await deliverReminder({
         db,
-        userId: reminder.user_id,
+        userId: String(reminder.user_id ?? ""),
         key: `custom-reminder:${reminder.id}`,
         content: `## ${reminder.title}\n\n${reminder.message}`,
       });

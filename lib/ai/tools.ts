@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import type { AiDatabaseClient } from "@/lib/ai/db";
+import {
+  asAiRow,
+  type AiDatabaseClient,
+} from "@/lib/ai/db";
 
 type DatabaseClient = AiDatabaseClient;
 
@@ -758,7 +761,9 @@ export async function executeConfirmedToolAction(args: {
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (logResult.error || !logResult.data) {
+  const logRow = asAiRow(logResult.data);
+
+  if (logResult.error || !logRow) {
     return {
       ok: false,
       status: 404,
@@ -766,14 +771,21 @@ export async function executeConfirmedToolAction(args: {
     };
   }
 
-  const log = logResult.data as {
-    id: string;
-    user_id: string;
-    thread_id: string | null;
-    tool_name: string;
-    arguments: Record<string, unknown>;
-    result: Record<string, unknown>;
-    status: string;
+  const log = {
+    id: String(logRow.id ?? ""),
+    user_id: String(logRow.user_id ?? ""),
+    thread_id:
+      typeof logRow.thread_id === "string" ? logRow.thread_id : null,
+    tool_name: String(logRow.tool_name ?? ""),
+    arguments:
+      logRow.arguments && typeof logRow.arguments === "object"
+        ? (logRow.arguments as Record<string, unknown>)
+        : {},
+    result:
+      logRow.result && typeof logRow.result === "object"
+        ? (logRow.result as Record<string, unknown>)
+        : {},
+    status: String(logRow.status ?? ""),
   };
 
   if (
@@ -1034,9 +1046,11 @@ export async function cancelConfirmedToolAction(args: {
     };
   }
 
+  const logRow = asAiRow(logResult.data);
+
   if (
-    logResult.data.status !== "confirmation_required" &&
-    logResult.data.status !== "awaiting_confirmation"
+    logRow?.status !== "confirmation_required" &&
+    logRow?.status !== "awaiting_confirmation"
   ) {
     return {
       ok: false,

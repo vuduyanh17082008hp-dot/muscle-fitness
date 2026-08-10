@@ -6,7 +6,11 @@ import {
   getAiSummaryModel,
   usesResponsesApi,
 } from "@/lib/ai/provider";
-import type { AiDatabaseClient } from "@/lib/ai/db";
+import {
+  asAiRow,
+  asAiRows,
+  type AiDatabaseClient,
+} from "@/lib/ai/db";
 import {
   getRecentCheckins,
   getRecentWorkouts,
@@ -1554,10 +1558,9 @@ export async function runToolCall(args: {
     .select("id")
     .single();
 
+  const logRow = asAiRow(logInsert.data);
   const toolLogId =
-    !logInsert.error && logInsert.data?.id
-      ? String(logInsert.data.id)
-      : null;
+    !logInsert.error && logRow?.id ? String(logRow.id) : null;
 
   if (
     toolLogId &&
@@ -1888,8 +1891,11 @@ export async function maybeSummarizeThread(args: {
     .eq("user_id", userId)
     .maybeSingle();
 
+  const summaryRow = asAiRow(summaryResult.data);
   const coveredMessageCount =
-    summaryResult.data?.covered_message_count ?? 0;
+    typeof summaryRow?.covered_message_count === "number"
+      ? summaryRow.covered_message_count
+      : 0;
 
   if (messageCount - coveredMessageCount < 12) {
     return;
@@ -1906,22 +1912,22 @@ export async function maybeSummarizeThread(args: {
     })
     .limit(24);
 
-  if (
-    messagesResult.error ||
-    !messagesResult.data?.length
-  ) {
+  const messages = asAiRows(messagesResult.data).reverse();
+
+  if (messagesResult.error || messages.length === 0) {
     return;
   }
 
-  const messages = [...messagesResult.data].reverse();
   const latestMessage = messages[messages.length - 1];
+
+  if (!latestMessage) {
+    return;
+  }
 
   const transcript = messages
     .map(
-      (message: {
-        role: string;
-        content: string;
-      }) => `${message.role.toUpperCase()}: ${message.content}`,
+      (message) =>
+        `${String(message.role).toUpperCase()}: ${String(message.content ?? "")}`,
     )
     .join("\n\n");
 

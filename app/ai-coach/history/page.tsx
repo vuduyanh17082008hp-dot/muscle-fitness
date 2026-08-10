@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { HistoryClient } from "@/features/ai-coach/history-client";
-import { asAiDatabaseClient } from "@/lib/ai/db";
+import { asAiDatabaseClient, asAiRows } from "@/lib/ai/db";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -16,22 +16,28 @@ export default async function AiCoachHistoryPage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect(
-      "/login?next=/ai-coach/history",
-    );
+    redirect("/login?next=/ai-coach/history");
   }
 
   const result = await db
     .from("ai_threads")
-    .select(
-      "id, title, created_at, last_message_at",
-    )
+    .select("id, title, created_at, last_message_at")
     .eq("user_id", user.id)
     .eq("thread_type", "chat")
     .order("last_message_at", {
       ascending: false,
       nullsFirst: false,
     });
+
+  const initialThreads = asAiRows(result.data).map((thread) => ({
+    id: String(thread.id ?? ""),
+    title: String(thread.title ?? "New conversation"),
+    created_at: String(thread.created_at ?? new Date().toISOString()),
+    last_message_at:
+      typeof thread.last_message_at === "string"
+        ? thread.last_message_at
+        : null,
+  }));
 
   return (
     <main className="mx-auto min-h-[calc(100vh-80px)] w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -49,9 +55,7 @@ export default async function AiCoachHistoryPage() {
         </p>
       </div>
 
-      <HistoryClient
-        initialThreads={result.data || []}
-      />
+      <HistoryClient initialThreads={initialThreads} />
     </main>
   );
 }

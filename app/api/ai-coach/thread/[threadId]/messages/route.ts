@@ -1,4 +1,7 @@
-import { asAiDatabaseClient } from "@/lib/ai/db";
+import {
+  asAiDatabaseClient,
+  asAiRows,
+} from "@/lib/ai/db";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
@@ -64,18 +67,11 @@ export async function GET(
   }
 
   return Response.json({
-    messages: (messagesResult.data ?? []).map(
-      (message: {
-        id: string;
-        role: "user" | "assistant";
-        content: string;
-        created_at: string;
-      }) => ({
-        id: String(message.id),
-        role: message.role,
-        content: String(message.content ?? ""),
-        createdAt: String(message.created_at),
-      }),
-    ),
+    messages: asAiRows(messagesResult.data).map((message) => ({
+      id: String(message.id ?? ""),
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: String(message.content ?? ""),
+      createdAt: String(message.created_at ?? ""),
+    })),
   });
 }

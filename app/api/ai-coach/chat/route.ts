@@ -18,7 +18,11 @@ import {
   streamCoachFinalAnswer,
   type HistoryMessage,
 } from "@/lib/ai/transport";
-import { asAiDatabaseClient } from "@/lib/ai/db";
+import {
+  asAiDatabaseClient,
+  asAiRow,
+  asAiRows,
+} from "@/lib/ai/db";
 import { getAiDailyLimit } from "@/lib/entitlements/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -158,11 +162,13 @@ export async function POST(request: Request) {
         .limit(1)
         .maybeSingle();
 
-      if (!duplicate.error && duplicate.data) {
+      const duplicateRow = asAiRow(duplicate.data);
+
+      if (!duplicate.error && duplicateRow?.id) {
         return Response.json(
           {
             error: "Duplicate request ignored.",
-            messageId: duplicate.data.id,
+            messageId: duplicateRow.id,
           },
           { status: 409 },
         );
@@ -201,14 +207,16 @@ export async function POST(request: Request) {
         .select("id")
         .single();
 
-      if (createThreadResult.error || !createThreadResult.data?.id) {
+      const createdThread = asAiRow(createThreadResult.data);
+
+      if (createThreadResult.error || !createdThread?.id) {
         throw new Error(
           createThreadResult.error?.message ??
             "Không thể tạo cuộc trò chuyện.",
         );
       }
 
-      threadId = String(createThreadResult.data.id);
+      threadId = String(createdThread.id);
     }
 
     if (!threadId) {
@@ -271,13 +279,15 @@ export async function POST(request: Request) {
       .select("id")
       .single();
 
-    if (userMessageResult.error || !userMessageResult.data?.id) {
+    const userMessage = asAiRow(userMessageResult.data);
+
+    if (userMessageResult.error || !userMessage?.id) {
       throw new Error(
         userMessageResult.error?.message ?? "Không thể lưu tin nhắn.",
       );
     }
 
-    const currentMessageId = String(userMessageResult.data.id);
+    const currentMessageId = String(userMessage.id);
 
     await db
       .from("ai_threads")
@@ -316,25 +326,27 @@ export async function POST(request: Request) {
       throw new Error(messagesResult.error.message);
     }
 
+    const settingsRow = asAiRow(settingsResult.data) ?? {};
     const settings: CoachSettings = {
       ...DEFAULT_COACH_SETTINGS,
-      ...(settingsResult.data ?? {}),
+      ...(settingsRow as Partial<CoachSettings>),
     };
 
-    const historyMessages: HistoryMessage[] = [
-      ...(messagesResult.data ?? []),
-    ]
+    const historyMessages: HistoryMessage[] = asAiRows(
+      messagesResult.data,
+    )
       .reverse()
-      .map(
-        (item: { id: string; role: string; content: string }) => ({
-          id: String(item.id),
-          role: String(item.role),
-          content: String(item.content ?? ""),
-        }),
-      );
+      .map((item) => ({
+        id: String(item.id ?? ""),
+        role: String(item.role ?? ""),
+        content: String(item.content ?? ""),
+      }));
 
+    const summaryRow = asAiRow(summaryResult.data);
     const memorySummary = settings.allow_conversation_memory
-      ? summaryResult.data?.summary ?? null
+      ? typeof summaryRow?.summary === "string"
+        ? summaryRow.summary
+        : null
       : null;
 
     const model = getAiModelName();
@@ -507,9 +519,13 @@ DATA COLLECTION TURN
             .select("id")
             .single();
 
+          const assistantMessage = asAiRow(
+            assistantMessageResult.data,
+          );
+
           if (
             assistantMessageResult.error ||
-            !assistantMessageResult.data?.id
+            !assistantMessage?.id
           ) {
             throw new Error(
               assistantMessageResult.error?.message ??
@@ -517,9 +533,7 @@ DATA COLLECTION TURN
             );
           }
 
-          const assistantMessageId = String(
-            assistantMessageResult.data.id,
-          );
+          const assistantMessageId = String(assistantMessage.id);
 
           const [threadUpdateResult, tokenUsageResult] =
             await Promise.all([
