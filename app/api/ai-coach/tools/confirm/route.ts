@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { writeAuditLog } from "@/lib/audit/log";
+import { asAiDatabaseClient } from "@/lib/ai/db";
 import {
   cancelConfirmedToolAction,
   executeConfirmedToolAction,
@@ -17,9 +18,7 @@ const confirmSchema = z.object({
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const db = supabase as unknown as {
-    from: (table: string) => unknown;
-  };
+  const db = asAiDatabaseClient(supabase);
 
   const {
     data: { user },
@@ -48,7 +47,7 @@ export async function POST(request: Request) {
 
   if (parsed.data.action === "cancel") {
     const result = await cancelConfirmedToolAction({
-      db: db as never,
+      db,
       userId: user.id,
       toolLogId: parsed.data.toolLogId,
     });
@@ -65,7 +64,7 @@ export async function POST(request: Request) {
   }
 
   const result = await executeConfirmedToolAction({
-    db: db as never,
+    db,
     userId: user.id,
     toolLogId: parsed.data.toolLogId,
   });

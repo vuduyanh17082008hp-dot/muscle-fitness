@@ -18,6 +18,7 @@ import {
   streamCoachFinalAnswer,
   type HistoryMessage,
 } from "@/lib/ai/transport";
+import { asAiDatabaseClient } from "@/lib/ai/db";
 import { getAiDailyLimit } from "@/lib/entitlements/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -73,9 +74,7 @@ function getClientErrorPayload(error: unknown) {
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  // Supabase generated Database types omit AI RPCs on this branch.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any;
+  const db = asAiDatabaseClient(supabase);
 
   const {
     data: { user },

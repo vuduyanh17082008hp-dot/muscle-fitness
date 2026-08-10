@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { HistoryClient } from "@/features/ai-coach/history-client";
+import { asAiDatabaseClient } from "@/lib/ai/db";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export const revalidate = 0;
 
 export default async function AiCoachHistoryPage() {
   const supabase = await createClient();
-  const db = supabase as any;
+  const db = asAiDatabaseClient(supabase);
 
   const {
     data: { user },

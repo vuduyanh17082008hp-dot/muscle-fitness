@@ -1,3 +1,4 @@
+import { asAiDatabaseClient } from "@/lib/ai/db";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
@@ -27,9 +28,7 @@ export async function PATCH(
   },
 ) {
   const { supabase, user } = await requireUser();
-  const db = supabase as unknown as {
-    from: (table: string) => any;
-  };
+  const db = asAiDatabaseClient(supabase);
 
   if (!user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -91,9 +90,7 @@ export async function DELETE(
   },
 ) {
   const { supabase, user } = await requireUser();
-  const db = supabase as unknown as {
-    from: (table: string) => any;
-  };
+  const db = asAiDatabaseClient(supabase);
 
   if (!user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });

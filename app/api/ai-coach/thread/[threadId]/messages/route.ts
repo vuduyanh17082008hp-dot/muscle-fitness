@@ -1,3 +1,4 @@
+import { asAiDatabaseClient } from "@/lib/ai/db";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
@@ -15,9 +16,7 @@ export async function GET(
   },
 ) {
   const supabase = await createClient();
-  const db = supabase as unknown as {
-    from: (table: string) => any;
-  };
+  const db = asAiDatabaseClient(supabase);
 
   const {
     data: { user },

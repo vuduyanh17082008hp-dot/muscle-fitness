@@ -6,6 +6,7 @@ import {
   getAiSummaryModel,
   usesResponsesApi,
 } from "@/lib/ai/provider";
+import type { AiDatabaseClient } from "@/lib/ai/db";
 import {
   getRecentCheckins,
   getRecentWorkouts,
@@ -20,7 +21,7 @@ import {
   proposeWorkoutAdjustment,
 } from "@/lib/ai/tools";
 
-type DatabaseClient = any;
+type DatabaseClient = AiDatabaseClient;
 
 export type CoachSettings = {
   preferred_tone: "direct" | "supportive" | "analytical";
@@ -1666,11 +1667,11 @@ export function buildModelInput(args: {
   summary?: string | null;
   attachment?: CoachAttachment | null;
   currentMessageId: string;
-}): any[] {
+}): Array<Record<string, unknown>> {
   const { messages, summary, attachment, currentMessageId } =
     args;
 
-  const input: any[] = [];
+  const input: Array<Record<string, unknown>> = [];
 
   if (summary) {
     input.push({
@@ -1692,7 +1693,7 @@ export function buildModelInput(args: {
       message.id === currentMessageId &&
       attachment
     ) {
-      const content: any[] = [
+      const content: Array<Record<string, unknown>> = [
         {
           type: "input_text",
           text: message.content,

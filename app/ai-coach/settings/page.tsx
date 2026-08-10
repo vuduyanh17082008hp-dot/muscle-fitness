@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { SettingsForm } from "@/features/ai-coach/settings-form";
+import { asAiDatabaseClient } from "@/lib/ai/db";
 import {
   DEFAULT_COACH_SETTINGS,
 } from "@/lib/ai/server";
@@ -11,7 +12,7 @@ export const revalidate = 0;
 
 export default async function AiCoachSettingsPage() {
   const supabase = await createClient();
-  const db = supabase as any;
+  const db = asAiDatabaseClient(supabase);
 
   const {
     data: { user },

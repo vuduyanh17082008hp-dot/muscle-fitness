@@ -6,6 +6,7 @@ import {
   type AiCoachUiMessage,
   type AiCoachUsage,
 } from "@/features/ai-coach/ai-coach-client";
+import { asAiDatabaseClient } from "@/lib/ai/db";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -35,10 +36,7 @@ export default async function AiCoachPage({
   searchParams,
 }: AiCoachPageProps) {
   const supabase = await createClient();
-  const db = supabase as unknown as {
-    from: (table: string) => any;
-    rpc: (fn: string, args?: Record<string, unknown>) => any;
-  };
+  const db = asAiDatabaseClient(supabase);
 
   const {
     data: { user },
