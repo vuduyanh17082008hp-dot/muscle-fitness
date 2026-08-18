@@ -64,7 +64,7 @@ export default function DesignSystemPage() {
         className="
           relative min-h-[calc(100svh-var(--navbar-height))]
           overflow-hidden
-          border-b border-[var(--color-border)]
+          border-b border-border
         "
       >
         <div className="section-grid" />
@@ -73,11 +73,11 @@ export default function DesignSystemPage() {
           aria-hidden="true"
           className="
             absolute left-1/2 top-0
-            h-[480px] w-[700px]
+            h-120 w-175
             -translate-x-1/2
             rounded-full
-            bg-[var(--color-accent)]
-            opacity-[0.08] blur-[120px]
+            bg-accent
+            pointer-events-none opacity-8 blur-[120px]
           "
         />
 
@@ -93,15 +93,15 @@ export default function DesignSystemPage() {
                 className="
                   mb-6 inline-flex items-center
                   gap-2 rounded-full
-                  border border-[var(--color-border-accent)]
-                  bg-[var(--color-accent-soft)]
+                  border border-border-accent
+                  bg-accent-soft
                   px-4 py-2
                   text-xs font-bold uppercase
                   tracking-[0.16em]
-                  text-[var(--color-accent-light)]
+                  text-accent-light
                 "
               >
-                <Flame className="size-4" />
+                <Flame aria-hidden className="size-4" />
                 Muscle Fitness Design System
               </div>
             </Reveal>
@@ -127,7 +127,7 @@ export default function DesignSystemPage() {
                 className="
                   mt-7 max-w-2xl
                   text-base leading-8
-                  text-[var(--color-text-secondary)]
+                  text-text-secondary
                   sm:text-lg
                 "
               >
@@ -227,8 +227,8 @@ export default function DesignSystemPage() {
 
       <SectionWrapper
         className="
-          border-y border-[var(--color-border)]
-          bg-white/[0.015]
+          border-y border-border
+          bg-white/1.5
         "
       >
         <Reveal>
@@ -312,11 +312,11 @@ export default function DesignSystemPage() {
                     <div
                       className="
                         grid size-12 place-items-center
-                        rounded-[var(--radius-sm)]
+                        rounded-sm
                         border
-                        border-[var(--color-border-accent)]
-                        bg-[var(--color-accent-soft)]
-                        text-[var(--color-accent-light)]
+                        border-border-accent
+                        bg-accent-soft
+                        text-accent-light
                       "
                     >
                       <Icon className="size-5" />
@@ -337,14 +337,14 @@ export default function DesignSystemPage() {
                         items-center gap-2
                         text-xs font-bold uppercase
                         tracking-[0.14em]
-                        text-[var(--color-accent-light)]
+                        text-accent-light
                       "
                     >
                       Explore System
 
                       <ArrowRight
                         className="
-                          size-4 transition
+                          size-4 transition-transform
                           group-hover:translate-x-1
                         "
                       />
@@ -359,8 +359,8 @@ export default function DesignSystemPage() {
 
       <SectionWrapper
         className="
-          border-y border-[var(--color-border)]
-          bg-[var(--color-background-soft)]
+          border-y border-border
+          bg-background-soft
         "
       >
         <div
@@ -382,14 +382,14 @@ export default function DesignSystemPage() {
               className="
                 mt-8 space-y-4
                 text-sm
-                text-[var(--color-text-secondary)]
+                text-text-secondary
               "
             >
               <div className="flex gap-3">
                 <ShieldCheck
                   className="
                     mt-0.5 size-5 shrink-0
-                    text-[var(--color-accent)]
+                    text-accent
                   "
                 />
 
@@ -403,7 +403,7 @@ export default function DesignSystemPage() {
                 <Target
                   className="
                     mt-0.5 size-5 shrink-0
-                    text-[var(--color-accent)]
+                    text-accent
                   "
                 />
 
@@ -463,7 +463,7 @@ export default function DesignSystemPage() {
                 </FormField>
 
                 <Button
-                  type="submit"
+                  type="button"
                   size="lg"
                   fullWidth
                 >
@@ -481,7 +481,7 @@ export default function DesignSystemPage() {
           <Card
             className="
               overflow-hidden
-              border-[var(--color-border-accent)]
+              border border-border-accent
             "
           >
             <div
@@ -499,7 +499,7 @@ export default function DesignSystemPage() {
                   className="
                     text-xs font-bold uppercase
                     tracking-[0.2em]
-                    text-[var(--color-accent-light)]
+                    text-accent-light
                   "
                 >
                   Responsive check
@@ -522,7 +522,7 @@ export default function DesignSystemPage() {
                   className="
                     mt-5 max-w-2xl
                     leading-8
-                    text-[var(--color-text-secondary)]
+                    text-text-secondary
                   "
                 >
                   Resize the browser and verify
