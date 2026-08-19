@@ -7,7 +7,9 @@ import {
   usesResponsesApi,
 } from "@/lib/ai-coach/provider";
 
-type DatabaseClient = any;
+import type { AiCoachSupabaseClient } from "@/lib/supabase/ai-coach-db";
+
+type DatabaseClient = AiCoachSupabaseClient;
 
 export type CoachSettings = {
   preferred_tone: "direct" | "supportive" | "analytical";
@@ -1061,17 +1063,17 @@ async function createSupportTicket(
     "nutrition",
     "account",
     "other",
-  ];
+  ] as const;
 
   const subject =
     typeof args.subject === "string"
       ? args.subject.trim()
       : "";
 
-  const category =
+  const category: (typeof categoryValues)[number] =
     typeof args.category === "string" &&
-    categoryValues.includes(args.category)
-      ? args.category
+    (categoryValues as readonly string[]).includes(args.category)
+      ? (args.category as (typeof categoryValues)[number])
       : "other";
 
   const description =
@@ -1322,6 +1324,17 @@ ${detailInstruction}
 `.trim();
 }
 
+type ModelInputContent =
+  | { type: "input_text"; text: string }
+  | { type: "input_image"; image_url: string; detail?: string }
+  | { type: "input_file"; filename: string; file_data: string; detail?: string };
+
+type ModelInputMessage = {
+  role: "user" | "assistant" | "developer";
+  content: string | ModelInputContent[];
+  type?: "message";
+};
+
 export function buildModelInput(args: {
   messages: Array<{
     id: string;
@@ -1331,11 +1344,11 @@ export function buildModelInput(args: {
   summary?: string | null;
   attachment?: CoachAttachment | null;
   currentMessageId: string;
-}): any[] {
+}): ModelInputMessage[] {
   const { messages, summary, attachment, currentMessageId } =
     args;
 
-  const input: any[] = [];
+  const input: ModelInputMessage[] = [];
 
   if (summary) {
     input.push({
@@ -1357,7 +1370,7 @@ export function buildModelInput(args: {
       message.id === currentMessageId &&
       attachment
     ) {
-      const content: any[] = [
+      const content: ModelInputContent[] = [
         {
           type: "input_text",
           text: message.content,
@@ -1371,15 +1384,14 @@ export function buildModelInput(args: {
           detail: "auto",
         });
       } else {
-        const fileContent: Record<string, unknown> = {
+        const fileContent: ModelInputContent = {
           type: "input_file",
           filename: attachment.filename,
           file_data: attachment.dataUrl,
+          ...(attachment.mimeType === "application/pdf"
+            ? { detail: "auto" }
+            : {}),
         };
-
-        if (attachment.mimeType === "application/pdf") {
-          fileContent.detail = "auto";
-        }
 
         content.push(fileContent);
       }

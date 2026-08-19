@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
+import { resolveAuthenticatedLandingPath } from "@/lib/auth/post-auth-redirect"
 import { requireSupabasePublicEnv } from "@/lib/supabase/env"
 
 const PROTECTED_ROUTES = [
@@ -37,6 +38,7 @@ const PROTECTED_ROUTES = [
 const AUTH_PAGES = new Set([
   "/login",
   "/register",
+  "/signup",
   "/forgot-password",
   "/reset-password",
 ])
@@ -192,10 +194,15 @@ export async function updateSession(
     isAuthenticated &&
     AUTH_PAGES.has(pathname)
   ) {
+    const landingPath = await resolveAuthenticatedLandingPath(
+      supabase,
+      userId!,
+    )
+
     const dashboardUrl =
       request.nextUrl.clone()
 
-    dashboardUrl.pathname = "/dashboard"
+    dashboardUrl.pathname = landingPath
     dashboardUrl.search = ""
 
     const redirectResponse =

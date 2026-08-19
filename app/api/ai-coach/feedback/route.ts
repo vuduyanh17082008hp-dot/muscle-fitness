@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { asAiCoachDb } from "@/lib/supabase/ai-coach-db";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -21,7 +22,7 @@ const feedbackSchema = z.object({
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const db = supabase as any;
+  const db = asAiCoachDb(supabase);
 
   const {
     data: { user },

@@ -85,20 +85,23 @@ export function WorkoutPlayer({
   const [isError, setIsError] = useState(false)
 
   useEffect(() => {
-    if (!timerRunning || restSeconds <= 0) {
-      if (restSeconds <= 0) {
-        setTimerRunning(false)
-      }
-
-      return
+    if (!timerRunning) {
+      return;
     }
 
     const timer = window.setInterval(() => {
-      setRestSeconds((current) => Math.max(0, current - 1))
-    }, 1000)
+      setRestSeconds((current) => {
+        if (current <= 1) {
+          setTimerRunning(false);
+          return 0;
+        }
 
-    return () => window.clearInterval(timer)
-  }, [timerRunning, restSeconds])
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [timerRunning]);
 
   const progress = useMemo(() => {
     const activeSets = exercises

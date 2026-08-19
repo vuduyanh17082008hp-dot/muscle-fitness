@@ -216,50 +216,63 @@ function OnboardingWizard({
   )
 
   useEffect(() => {
-    try {
-      const storedDraft =
-        window.localStorage.getItem(
-          storageKey,
-        )
+    let cancelled = false
 
-      if (!storedDraft) {
+    queueMicrotask(() => {
+      if (cancelled) {
         return
       }
 
-      const parsed = JSON.parse(
-        storedDraft,
-      ) as {
-        currentStep?: number
-        data?: OnboardingDraftData
-      }
+      try {
+        const storedDraft =
+          window.localStorage.getItem(
+            storageKey,
+          )
 
-      if (parsed.data) {
-        setData(
-          mergeInitialData(parsed.data),
-        )
-      }
+        if (!storedDraft) {
+          setIsHydrated(true)
+          return
+        }
 
-      if (
-        typeof parsed.currentStep ===
-        "number"
-      ) {
-        setStep(
-          Math.min(
-            Math.max(
-              parsed.currentStep,
-              0,
+        const parsed = JSON.parse(
+          storedDraft,
+        ) as {
+          currentStep?: number
+          data?: OnboardingDraftData
+        }
+
+        if (parsed.data) {
+          setData(
+            mergeInitialData(parsed.data),
+          )
+        }
+
+        if (
+          typeof parsed.currentStep ===
+          "number"
+        ) {
+          setStep(
+            Math.min(
+              Math.max(
+                parsed.currentStep,
+                0,
+              ),
+              steps.length - 1,
             ),
-            steps.length - 1,
-          ),
+          )
+        }
+      } catch (error) {
+        console.error(
+          "Unable to restore local onboarding draft:",
+          error,
         )
+      } finally {
+        setIsHydrated(true)
       }
-    } catch (error) {
-      console.error(
-        "Unable to restore local onboarding draft:",
-        error,
-      )
-    } finally {
-      setIsHydrated(true)
+    })
+
+    return () => {
+      cancelled = true
     }
   }, [storageKey])
 

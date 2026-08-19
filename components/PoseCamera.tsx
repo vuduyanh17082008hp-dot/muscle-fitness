@@ -43,6 +43,8 @@ export default function PoseCamera() {
   const [stage, setStage] =
     useState<RepCounterState["stage"]>("up");
 
+  const detectPoseRef = useRef<(() => Promise<void>) | null>(null);
+
   const scheduleNextFrame = useCallback(
     (callback: FrameRequestCallback) => {
       if (!runningRef.current) {
@@ -64,7 +66,7 @@ export default function PoseCamera() {
 
     if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
       scheduleNextFrame(() => {
-        void detectPose();
+        void detectPoseRef.current?.();
       });
 
       return;
@@ -94,7 +96,7 @@ export default function PoseCamera() {
         setCameraStatus("ready");
 
         scheduleNextFrame(() => {
-          void detectPose();
+          void detectPoseRef.current?.();
         });
 
         return;
@@ -159,9 +161,13 @@ export default function PoseCamera() {
     }
 
     scheduleNextFrame(() => {
-      void detectPose();
+      void detectPoseRef.current?.();
     });
   }, [scheduleNextFrame]);
+
+  useEffect(() => {
+    detectPoseRef.current = detectPose;
+  }, [detectPose]);
 
   useEffect(() => {
     if (!cameraReady) {

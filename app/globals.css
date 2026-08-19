@@ -420,89 +420,10 @@ input:-webkit-autofill:focus {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Story page scroll offset (navbar height from :root) */
 html {
-  scroll-behavior: smooth;
-  background: #0d0b0a;
-}
-
-body {
-  margin: 0;
-  overflow-x: hidden;
-  background: #0d0b0a;
-  color: #f3eadf;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-::selection {
-  background: #c7a06b;
-  color: #17100a;
-}
-
-a,
-button {
-  -webkit-tap-highlight-color: transparent;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-/* My Story page */
-
-html {
-  scroll-padding-top: 80px;
-  scroll-behavior: smooth;
-}
-
-.story-page {
-  isolation: isolate;
-}
-
-.story-page ::selection {
-  background: rgba(217, 119, 6, 0.45);
-  color: white;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  .story-page *,
-  .story-page *::before,
-  .story-page *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-/* =========================================================
-   MY STORY — GLOBAL FIXES
-========================================================= */
-
-html {
-  scroll-padding-top: 88px;
-  scroll-behavior: smooth;
-}
-
-body {
-  margin: 0;
-  overflow-x: hidden;
-  background: #000;
+  scroll-padding-top: var(--navbar-height);
 }
 
 .story-page {
@@ -527,10 +448,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
   .story-page *,
   .story-page *::before,
   .story-page *::after {
@@ -540,6 +457,7 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
 @keyframes loading-bar {
   0% {
     transform: translateX(-120%);

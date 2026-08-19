@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { asAiCoachDb } from "@/lib/supabase/ai-coach-db";
 
 import {
   AiCoachClient,
@@ -27,7 +28,7 @@ export default async function AiCoachPage({
   searchParams,
 }: AiCoachPageProps) {
   const supabase = await createClient();
-  const db = supabase as any;
+  const db = asAiCoachDb(supabase);
 
   const {
     data: { user },

@@ -29,13 +29,10 @@ export default function StoryVisual({
   theme,
   chapterNumber,
 }: StoryVisualProps) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = failedSrc === media.src;
   const videoRef = useRef<HTMLVideoElement>(null);
   const shouldReduceMotion = useReducedMotion();
-
-  useEffect(() => {
-    setFailed(false);
-  }, [media.src]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -112,7 +109,7 @@ export default function StoryVisual({
             loop={media.loop}
             controls={media.controls}
             preload="metadata"
-            onError={() => setFailed(true)}
+            onError={() => setFailedSrc(media.src)}
             style={{
               objectPosition: media.objectPosition ?? "center",
             }}
@@ -127,7 +124,7 @@ export default function StoryVisual({
             style={{
               objectPosition: media.objectPosition ?? "center",
             }}
-            onError={() => setFailed(true)}
+            onError={() => setFailedSrc(media.src)}
           />
         )}
 

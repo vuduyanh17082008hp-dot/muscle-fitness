@@ -1,6 +1,6 @@
 // lib/nutrition/meal-generator.ts
 
-import { FitnessProfile, NutritionTargets, CarbDay, Food } from '@/lib/client/client-profile';
+import { FitnessProfile, NutritionTargets, CarbDay } from '@/lib/client/client-profile';
 import { FOOD_DB, getFoodById } from '@/lib/nutrition/food';
 import { calculateNutritionTargets } from '@/lib/fitness/calorie';
 
@@ -60,10 +60,6 @@ const MEAL_DISTRIBUTION: Record<string, { calories: number; protein: number; car
 
 // --- Helper Functions ---
 
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
 function clampGrams(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -82,7 +78,6 @@ export function generateMealPlan(
   const totalProtein = adjustedTargets.protein;
   const totalCarbs = adjustedTargets.carbs;
   const totalFat = adjustedTargets.fat;
-  const totalFiber = adjustedTargets.fiber;
 
   const mealRoles = MEAL_ROLES.slice(0, mealsPerDay);
   const trainingTime = profile.preferredTrainingTime || '08:00';
@@ -161,7 +156,7 @@ function selectFoodsForMeal(
   let remainingCarbs = carbTarget;
   let remainingFat = fatTarget;
 
-  let availableFoods = FOOD_DB.filter(food => {
+  const availableFoods = FOOD_DB.filter(food => {
     if (profile.allergies.some(a => food.name.toLowerCase().includes(a.toLowerCase()))) return false;
     if (profile.dislikedFoods.some(d => food.name.toLowerCase().includes(d.toLowerCase()))) return false;
     return true;

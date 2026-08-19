@@ -48,7 +48,7 @@ export function AuthProvider({
 
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => Boolean(supabase))
 
   /**
    * Cập nhật session và user cùng lúc để tránh trạng thái lệch nhau.
@@ -65,8 +65,6 @@ export function AuthProvider({
     let isMounted = true
 
     if (!supabase) {
-      setLoading(false)
-      updateAuthState(null)
       return () => {
         isMounted = false
       }
