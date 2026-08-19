@@ -48,6 +48,16 @@ const nextConfig: NextConfig = {
         destination: "/auth/singout",
         permanent: false,
       },
+      {
+        source: "/auth/login",
+        destination: "/login",
+        permanent: true,
+      },
+      {
+        source: "/auth/callback",
+        destination: "/callback",
+        permanent: false,
+      },
     ];
   },
 };

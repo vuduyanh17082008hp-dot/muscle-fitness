@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
 import { syncAuthUserProfile } from "@/lib/auth/profile"
+import { resolveAuthenticatedLandingPath } from "@/lib/auth/post-auth-redirect"
 import { createClient } from "@/lib/supabase/server"
 
 function getSafeNextPath(value: string | null): string {
@@ -109,7 +110,13 @@ export async function GET(request: Request) {
     )
   }
 
+  const destination = await resolveAuthenticatedLandingPath(
+    supabase,
+    user.id,
+    nextPath,
+  )
+
   return NextResponse.redirect(
-    new URL(nextPath, requestUrl.origin)
+    new URL(destination, requestUrl.origin)
   )
 }
