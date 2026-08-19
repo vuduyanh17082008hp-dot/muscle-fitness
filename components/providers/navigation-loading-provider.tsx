@@ -43,7 +43,13 @@ export function NavigationLoadingProvider({
   }, []);
 
   useEffect(() => {
-    setIsLoading(false);
+    const frame = requestAnimationFrame(() => {
+      setIsLoading(false);
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+    };
   }, [pathname]);
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { asAiCoachDb } from "@/lib/supabase/ai-coach-db";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -15,7 +16,7 @@ export async function DELETE(
   },
 ) {
   const supabase = await createClient();
-  const db = supabase as any;
+  const db = asAiCoachDb(supabase);
 
   const {
     data: { user },

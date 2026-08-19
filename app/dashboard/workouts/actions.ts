@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -1758,42 +1757,6 @@ function findSessionId(
   }
 
   return null;
-}
-
-async function getApplicationOrigin(): Promise<string> {
-  const configuredUrl =
-    process.env
-      .NEXT_PUBLIC_SITE_URL
-      ?.replace(/\/$/, "");
-
-  if (configuredUrl) {
-    return configuredUrl;
-  }
-
-  const requestHeaders =
-    await headers();
-
-  const host =
-    requestHeaders.get(
-      "x-forwarded-host",
-    ) ??
-    requestHeaders.get("host");
-
-  if (!host) {
-    throw new Error(
-      "Không xác định được application URL. Hãy thêm NEXT_PUBLIC_SITE_URL vào .env.local.",
-    );
-  }
-
-  const protocol =
-    requestHeaders.get(
-      "x-forwarded-proto",
-    ) ??
-    (host.includes("localhost")
-      ? "http"
-      : "https");
-
-  return `${protocol}://${host}`;
 }
 
 async function callWorkoutSessionApi(

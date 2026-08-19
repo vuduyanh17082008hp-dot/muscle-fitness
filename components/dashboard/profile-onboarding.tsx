@@ -159,46 +159,59 @@ export default function ProfileOnboarding({
     useState<string | null>(null)
 
   useEffect(() => {
-    try {
-      const stored =
-        window.localStorage.getItem(
-          storageKey,
-        )
+    let cancelled = false
 
-      if (!stored) {
+    queueMicrotask(() => {
+      if (cancelled) {
         return
       }
 
-      const parsed = JSON.parse(
-        stored,
-      ) as {
-        step?: number
-        data?: OnboardingDraftData
-      }
+      try {
+        const stored =
+          window.localStorage.getItem(
+            storageKey,
+          )
 
-      if (parsed.data) {
-        setData(
-          mergeInitialData(parsed.data),
-        )
-      }
+        if (!stored) {
+          setIsHydrated(true)
+          return
+        }
 
-      if (
-        typeof parsed.step === "number"
-      ) {
-        setStep(
-          Math.min(
-            Math.max(parsed.step, 0),
-            steps.length - 1,
-          ),
+        const parsed = JSON.parse(
+          stored,
+        ) as {
+          step?: number
+          data?: OnboardingDraftData
+        }
+
+        if (parsed.data) {
+          setData(
+            mergeInitialData(parsed.data),
+          )
+        }
+
+        if (
+          typeof parsed.step === "number"
+        ) {
+          setStep(
+            Math.min(
+              Math.max(parsed.step, 0),
+              steps.length - 1,
+            ),
+          )
+        }
+      } catch (error) {
+        console.error(
+          "Unable to restore local onboarding draft:",
+          error,
         )
+      } finally {
+        setIsHydrated(true)
       }
-    } catch (error) {
-      console.error(
-        "Unable to restore local onboarding draft:",
-        error,
-      )
-    } finally {
-      setIsHydrated(true)
+    })
+
+    return () => {
+      cancelled = true
     }
   }, [storageKey])
 

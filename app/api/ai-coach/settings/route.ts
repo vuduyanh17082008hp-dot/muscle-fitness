@@ -1,3 +1,4 @@
+import { asAiCoachDb } from "@/lib/supabase/ai-coach-db";
 import {
   DEFAULT_COACH_SETTINGS,
 } from "@/lib/ai-coach/server";
@@ -45,7 +46,7 @@ function isValidTimeZone(timeZone: string): boolean {
 
 export async function GET() {
   const supabase = await createClient();
-  const db = supabase as any;
+  const db = asAiCoachDb(supabase);
 
   const {
     data: { user },
@@ -88,7 +89,7 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   const supabase = await createClient();
-  const db = supabase as any;
+  const db = asAiCoachDb(supabase);
 
   const {
     data: { user },

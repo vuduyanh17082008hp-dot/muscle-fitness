@@ -1,8 +1,7 @@
 "use client"
 
 import {
-  useEffect,
-  useState,
+  useSyncExternalStore,
 } from "react"
 
 import OnboardingWizard, {
@@ -57,12 +56,11 @@ function OnboardingLoadingSkeleton() {
 export default function OnboardingWizardClient(
   props: OnboardingWizardProps,
 ) {
-  const [mounted, setMounted] =
-    useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
 
   /*
    * Server render và lần client render đầu tiên

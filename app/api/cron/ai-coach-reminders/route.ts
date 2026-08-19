@@ -1,4 +1,8 @@
 import {
+  asAiCoachDb,
+  type AiCoachSupabaseClient,
+} from "@/lib/supabase/ai-coach-db";
+import {
   buildCoachInstructions,
   DEFAULT_COACH_SETTINGS,
   runToolCall,
@@ -82,7 +86,7 @@ function getLocalParts(
 }
 
 async function ensureReminderThread(
-  db: any,
+  db: AiCoachSupabaseClient,
   userId: string,
 ): Promise<string> {
   const existing = await db
@@ -117,7 +121,7 @@ async function ensureReminderThread(
 }
 
 async function deliverReminder(args: {
-  db: any;
+  db: AiCoachSupabaseClient;
   userId: string;
   key: string;
   content: string;
@@ -199,7 +203,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const db = createAdminClient() as any;
+  const db = asAiCoachDb(createAdminClient());
   let delivered = 0;
   const errors: string[] = [];
 

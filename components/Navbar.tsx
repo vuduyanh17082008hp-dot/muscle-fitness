@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Dumbbell, Camera, MessageCircle, Apple, BarChart3 } from "lucide-react";
+import { Camera, Dumbbell, MessageCircle, Apple } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 
 export default function Navbar() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  // Avoid hydration mismatch
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   if (!mounted) return null;
 
@@ -25,8 +26,8 @@ export default function Navbar() {
         <Link href="/camera" className="hover:text-blue-500 flex items-center gap-1">
           <Camera className="w-4 h-4" /> Camera
         </Link>
-        <Link href="/progress" className="hover:text-blue-500 flex items-center gap-1">
-          <BarChart3 className="w-4 h-4" /> Progress
+        <Link href="/dashboard/progress" className="hover:text-blue-500 flex items-center gap-1">
+          Progress
         </Link>
         <Link href="/nutrition" className="hover:text-blue-500 flex items-center gap-1">
           <Apple className="w-4 h-4" /> Nutrition
