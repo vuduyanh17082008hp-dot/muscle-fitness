@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { resolveAuthenticatedLandingPath } from "@/lib/auth/post-auth-redirect"
-import { requireSupabasePublicEnv } from "@/lib/supabase/env"
+import { getSupabasePublicEnv } from "@/lib/supabase/env"
 
 const PROTECTED_ROUTES = [
   "/dashboard",
@@ -70,23 +70,60 @@ function copyAuthCookies(
   return target
 }
 
-function getSupabaseConfig() {
-  const { url, publicKey } = requireSupabasePublicEnv()
+let warnedAboutMissingSupabaseEnv = false
 
-  return {
-    url,
-    key: publicKey,
+/**
+ * Xử lý an toàn khi thiếu Supabase env ở local dev.
+ *
+ * Production build/deploy vẫn phải cấu hình đầy đủ; ở đó ta throw
+ * để lỗi hiển thị rõ ràng thay vì âm thầm bỏ qua auth.
+ *
+ * Ở local dev (chưa tạo .env.local), thay vì crash toàn bộ proxy
+ * (mọi trang, kể cả trang public), ta log cảnh báo một lần và cho
+ * request đi qua như chưa đăng nhập. Điều này khớp với rule
+ * "safe disconnected state" trong master prompt.
+ */
+function warnMissingSupabaseEnvOnce(): void {
+  if (warnedAboutMissingSupabaseEnv) {
+    return
   }
+
+  warnedAboutMissingSupabaseEnv = true
+
+  console.warn(
+    [
+      "[muscle-fitness] Missing NEXT_PUBLIC_SUPABASE_URL / ",
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
+      "Copy .env.example to .env.local and fill in your Supabase project",
+      "credentials. Auth/session middleware is disabled until then —",
+      "protected routes will not be enforced and users will appear signed out.",
+    ].join(" "),
+  )
 }
 
 export async function updateSession(
   request: NextRequest
 ): Promise<NextResponse> {
+  const supabaseEnv = getSupabasePublicEnv()
+
+  if (!supabaseEnv) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY. " +
+          "Configure these environment variables in your deployment settings.",
+      )
+    }
+
+    warnMissingSupabaseEnvOnce()
+
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
 
-  const { url, key } = getSupabaseConfig()
+  const { url, publicKey: key } = supabaseEnv
 
   const supabase = createServerClient(
     url,
