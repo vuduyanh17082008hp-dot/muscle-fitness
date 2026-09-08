@@ -6,6 +6,7 @@ import {
 } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 /* =========================================================
    BUTTON VARIANTS
@@ -245,6 +246,8 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  loading?: boolean;
+  loadingText?: string;
 }
 
 /* =========================================================
@@ -263,7 +266,11 @@ const Button =
         size,
         fullWidth,
         asChild = false,
+        loading = false,
+        loadingText = "Loading...",
+        disabled,
         type,
+        children,
         ...props
       },
       ref,
@@ -273,6 +280,16 @@ const Button =
           ? Slot
           : "button";
 
+      /*
+       * Slot chỉ nhận đúng một child nên không chèn spinner
+       * khi asChild.
+       */
+      const showLoading =
+        loading && !asChild;
+
+      const isDisabled =
+        disabled || showLoading;
+
       return (
         <Comp
           ref={ref}
@@ -280,6 +297,17 @@ const Button =
             asChild
               ? undefined
               : type ?? "button"
+          }
+          disabled={
+            asChild
+              ? undefined
+              : isDisabled
+          }
+          aria-disabled={
+            isDisabled || undefined
+          }
+          aria-busy={
+            showLoading || undefined
           }
           className={cn(
             buttonVariants({
@@ -290,7 +318,20 @@ const Button =
             className,
           )}
           {...props}
-        />
+        >
+          {showLoading ? (
+            <>
+              <LoadingSpinner
+                size="sm"
+                label={loadingText}
+              />
+
+              <span>{loadingText}</span>
+            </>
+          ) : (
+            children
+          )}
+        </Comp>
       );
     },
   );

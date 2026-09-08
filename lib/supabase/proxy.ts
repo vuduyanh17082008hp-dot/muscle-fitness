@@ -66,7 +66,10 @@ function copyAuthCookies(
   return target
 }
 
-function getSupabaseConfig() {
+function getSupabaseConfig(): {
+  url: string
+  key: string
+} | null {
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL
 
@@ -74,16 +77,8 @@ function getSupabaseConfig() {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (!url) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL."
-    )
-  }
-
-  if (!key) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY."
-    )
+  if (!url || !key) {
+    return null
   }
 
   return {
@@ -92,14 +87,88 @@ function getSupabaseConfig() {
   }
 }
 
+let loggedProxyFailure = false
+
+/*
+ * Proxy chạy trên MỌI route (trừ static asset). Nếu nó throw thì
+ * toàn bộ site trả về "Internal Server Error", kể cả trang public.
+ *
+ * Vì vậy proxy không bao giờ được throw. Khi Supabase thiếu config
+ * hoặc gọi lỗi:
+ * - route private: redirect về /login (fail closed, giữ an toàn)
+ * - route public: cho request đi qua (fail open, trang vẫn hiển thị)
+ */
+function logProxyFailureOnce(reason: string): void {
+  if (loggedProxyFailure) {
+    return
+  }
+
+  loggedProxyFailure = true
+
+  console.error(
+    `[muscle-fitness] Auth proxy disabled: ${reason} ` +
+      "Public pages still render; protected routes redirect to /login. " +
+      "Configure NEXT_PUBLIC_SUPABASE_URL and " +
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) " +
+      "in your deployment environment, then redeploy."
+  )
+}
+
+function handleProxyFailure(
+  request: NextRequest,
+  reason: string
+): NextResponse {
+  logProxyFailureOnce(reason)
+
+  const pathname = request.nextUrl.pathname
+
+  if (isProtectedRoute(pathname)) {
+    const loginUrl = request.nextUrl.clone()
+
+    loginUrl.pathname = "/login"
+    loginUrl.searchParams.set(
+      "next",
+      `${pathname}${request.nextUrl.search}`
+    )
+
+    return NextResponse.redirect(loginUrl)
+  }
+
+  return NextResponse.next({ request })
+}
+
 export async function updateSession(
+  request: NextRequest
+): Promise<NextResponse> {
+  try {
+    return await runSessionProxy(request)
+  } catch (error) {
+    return handleProxyFailure(
+      request,
+      error instanceof Error
+        ? error.message
+        : "unexpected proxy error."
+    )
+  }
+}
+
+async function runSessionProxy(
   request: NextRequest
 ): Promise<NextResponse> {
   let supabaseResponse = NextResponse.next({
     request,
   })
 
-  const { url, key } = getSupabaseConfig()
+  const config = getSupabaseConfig()
+
+  if (!config) {
+    return handleProxyFailure(
+      request,
+      "Supabase public environment variables are not configured."
+    )
+  }
+
+  const { url, key } = config
 
   const supabase = createServerClient(
     url,
