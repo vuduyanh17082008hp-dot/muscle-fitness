@@ -1,58 +1,84 @@
-import Link from "next/link"
-import { redirect } from "next/navigation"
-import { Home } from "lucide-react"
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { Home } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server";
 
-export const dynamic = "force-dynamic"
+export const dynamic =
+  "force-dynamic";
+
+/* =========================================================
+   HELPERS
+========================================================= */
 
 function formatValue(
-  value: string | number | null | undefined,
-  suffix = "",
+  value:
+    | string
+    | number
+    | null
+    | undefined,
+  suffix = ""
 ) {
   if (
     value === null ||
     value === undefined ||
     value === ""
   ) {
-    return "Not available"
+    return "Not available";
   }
 
-  return `${value}${suffix}`
+  return `${value}${suffix}`;
 }
 
 function formatList(
-  value: string[] | null | undefined,
+  value:
+    | string[]
+    | null
+    | undefined
 ) {
-  if (!value || value.length === 0) {
-    return "Not provided"
+  if (
+    !value ||
+    value.length === 0
+  ) {
+    return "Not provided";
   }
 
-  return value.join(", ")
+  return value.join(", ");
 }
 
 function humanize(
-  value: string | null | undefined,
+  value:
+    | string
+    | null
+    | undefined
 ) {
   if (!value) {
-    return "Not available"
+    return "Not available";
   }
 
   return value
     .replaceAll("_", " ")
-    .replace(/\b\w/g, (character) =>
-      character.toUpperCase(),
-    )
+    .replace(
+      /\b\w/g,
+      (character) =>
+        character.toUpperCase()
+    );
 }
+
+/* =========================================================
+   STAT CARD
+========================================================= */
 
 function StatCard({
   label,
   value,
   description,
 }: {
-  label: string
-  value: string | number
-  description: string
+  label: string;
+  value:
+    | string
+    | number;
+  description: string;
 }) {
   return (
     <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
@@ -68,15 +94,21 @@ function StatCard({
         {description}
       </p>
     </article>
-  )
+  );
 }
+
+/* =========================================================
+   INFORMATION ROW
+========================================================= */
 
 function InformationRow({
   label,
   value,
 }: {
-  label: string
-  value: string | number
+  label: string;
+  value:
+    | string
+    | number;
 }) {
   return (
     <div className="flex flex-col gap-1 border-b border-white/5 py-4 first:pt-0 last:border-b-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
@@ -88,25 +120,45 @@ function InformationRow({
         {value}
       </span>
     </div>
-  )
+  );
 }
 
+/* =========================================================
+   DASHBOARD PAGE
+========================================================= */
+
 export default async function DashboardPage() {
-  const supabase = await createClient()
+  const supabase =
+    await createClient();
+
+  /* =======================================================
+     AUTH
+  ======================================================= */
 
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } =
+    await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login?next=/dashboard")
+    redirect(
+      "/login?next=/dashboard"
+    );
   }
+
+  /* =======================================================
+     LOAD USER DATA
+  ======================================================= */
 
   const [
     profileResponse,
     fitnessResponse,
     preferencesResponse,
   ] = await Promise.all([
+    /* -----------------------------------------------------
+       PROFILE
+    ----------------------------------------------------- */
+
     supabase
       .from("profiles")
       .select(
@@ -121,13 +173,22 @@ export default async function DashboardPage() {
           onboarding_completed,
           created_at,
           updated_at
-        `,
+        `
       )
-      .eq("user_id", user.id)
+      .eq(
+        "user_id",
+        user.id
+      )
       .maybeSingle(),
 
+    /* -----------------------------------------------------
+       FITNESS
+    ----------------------------------------------------- */
+
     supabase
-      .from("fitness_profiles")
+      .from(
+        "fitness_profiles"
+      )
       .select(
         `
           user_id,
@@ -145,13 +206,22 @@ export default async function DashboardPage() {
           protein_target_g,
           carbs_target_g,
           fat_target_g
-        `,
+        `
       )
-      .eq("user_id", user.id)
+      .eq(
+        "user_id",
+        user.id
+      )
       .maybeSingle(),
 
+    /* -----------------------------------------------------
+       PREFERENCES
+    ----------------------------------------------------- */
+
     supabase
-      .from("user_preferences")
+      .from(
+        "user_preferences"
+      )
       .select(
         `
           user_id,
@@ -167,53 +237,108 @@ export default async function DashboardPage() {
           work_schedule,
           stress_level,
           preferred_training_time
-        `,
+        `
       )
-      .eq("user_id", user.id)
+      .eq(
+        "user_id",
+        user.id
+      )
       .maybeSingle(),
-  ])
+  ]);
 
-  if (profileResponse.error) {
+  /* =======================================================
+     DATABASE ERRORS
+  ======================================================= */
+
+  if (
+    profileResponse.error
+  ) {
     throw new Error(
-      `Unable to load profile: ${profileResponse.error.message}`,
-    )
+      `Unable to load profile: ${profileResponse.error.message}`
+    );
   }
 
-  if (fitnessResponse.error) {
+  if (
+    fitnessResponse.error
+  ) {
     throw new Error(
-      `Unable to load fitness profile: ${fitnessResponse.error.message}`,
-    )
+      `Unable to load fitness profile: ${fitnessResponse.error.message}`
+    );
   }
 
-  if (preferencesResponse.error) {
+  if (
+    preferencesResponse.error
+  ) {
     throw new Error(
-      `Unable to load preferences: ${preferencesResponse.error.message}`,
-    )
+      `Unable to load preferences: ${preferencesResponse.error.message}`
+    );
   }
 
-  const profile = profileResponse.data
-  const fitness = fitnessResponse.data
+  const profile =
+    profileResponse.data;
+
+  const fitness =
+    fitnessResponse.data;
+
   const preferences =
-    preferencesResponse.data
+    preferencesResponse.data;
+
+  /* =======================================================
+     ONBOARDING CHECK
+  ======================================================= */
 
   if (
     !profile ||
     !profile.onboarding_completed
   ) {
-    redirect("/onboarding")
+    redirect("/onboarding");
   }
+
+  /* =======================================================
+     DISPLAY NAME
+  ======================================================= */
 
   const displayName =
     profile.full_name ||
-    user.user_metadata?.full_name ||
+    user.user_metadata
+      ?.full_name ||
     user.email?.split("@")[0] ||
-    "Athlete"
+    "Athlete";
+
+  /* =======================================================
+     PAGE
+  ======================================================= */
 
   return (
     <main className="min-h-screen bg-[#070707] text-white">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-        <header className="overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 shadow-2xl shadow-black sm:p-10">
+
+        {/* =================================================
+            HERO
+        ================================================= */}
+
+        <header
+          className="
+            overflow-hidden
+            rounded-[28px]
+            border
+            border-white/10
+            bg-linear-to-br
+            from-zinc-900
+            via-[#111111]
+            to-black
+            p-7
+            shadow-2xl
+            shadow-black
+            sm:p-10
+          "
+        >
           <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+
+            {/* =============================================
+                INTRO
+            ============================================= */}
+
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-500">
                 Muscle Fitness Dashboard
@@ -221,6 +346,7 @@ export default async function DashboardPage() {
 
               <h1 className="mt-4 max-w-3xl text-4xl font-black uppercase tracking-tight text-white sm:text-5xl lg:text-6xl">
                 Welcome back,{" "}
+
                 <span className="text-amber-500">
                   {displayName}
                 </span>
@@ -234,12 +360,35 @@ export default async function DashboardPage() {
               </p>
             </div>
 
+            {/* =============================================
+                ACTION BUTTONS
+            ============================================= */}
+
             <div className="flex flex-wrap gap-3">
-              {/* RETURN TO HOMEPAGE BUTTON */}
+
+              {/* RETURN HOME */}
 
               <Link
                 href="/"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-5 py-3 text-sm font-semibold text-amber-400 transition hover:border-amber-500/50 hover:bg-amber-500/20 hover:text-amber-300"
+                className="
+                  inline-flex
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-xl
+                  border
+                  border-amber-500/25
+                  bg-amber-500/10
+                  px-5
+                  py-3
+                  text-sm
+                  font-semibold
+                  text-amber-400
+                  transition
+                  hover:border-amber-500/50
+                  hover:bg-amber-500/20
+                  hover:text-amber-300
+                "
               >
                 <Home
                   aria-hidden="true"
@@ -249,16 +398,52 @@ export default async function DashboardPage() {
                 Return home
               </Link>
 
+              {/* EDIT PROFILE */}
+
               <Link
-                href="/onboarding"
-                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.08]"
+                href="/onboarding?edit=1"
+                className="
+                  inline-flex
+                  items-center
+                  justify-center
+                  rounded-xl
+                  border
+                  border-white/10
+                  bg-white/4
+                  px-5
+                  py-3
+                  text-sm
+                  font-semibold
+                  text-zinc-300
+                  transition
+                  hover:border-white/20
+                  hover:bg-white/8
+                  hover:text-white
+                "
               >
                 Edit profile
               </Link>
 
+              {/* OPEN TRAINING */}
+
               <Link
                 href="/training"
-                className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-5 py-3 text-sm font-black uppercase tracking-wider text-black transition hover:bg-amber-400"
+                className="
+                  inline-flex
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-amber-500
+                  px-5
+                  py-3
+                  text-sm
+                  font-black
+                  uppercase
+                  tracking-wider
+                  text-black
+                  transition
+                  hover:bg-amber-400
+                "
               >
                 Open training
               </Link>
@@ -266,11 +451,16 @@ export default async function DashboardPage() {
           </div>
         </header>
 
+        {/* =================================================
+            MACRO CARDS
+        ================================================= */}
+
         <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             label="Calories"
             value={formatValue(
-              fitness?.calories_target,
+              fitness
+                ?.calories_target
             )}
             description="Initial daily energy target."
           />
@@ -278,8 +468,9 @@ export default async function DashboardPage() {
           <StatCard
             label="Protein"
             value={formatValue(
-              fitness?.protein_target_g,
-              " g",
+              fitness
+                ?.protein_target_g,
+              " g"
             )}
             description="Daily protein target."
           />
@@ -287,8 +478,9 @@ export default async function DashboardPage() {
           <StatCard
             label="Carbohydrates"
             value={formatValue(
-              fitness?.carbs_target_g,
-              " g",
+              fitness
+                ?.carbs_target_g,
+              " g"
             )}
             description="Daily carbohydrate target."
           />
@@ -296,15 +488,25 @@ export default async function DashboardPage() {
           <StatCard
             label="Fat"
             value={formatValue(
-              fitness?.fat_target_g,
-              " g",
+              fitness
+                ?.fat_target_g,
+              " g"
             )}
             description="Daily dietary fat target."
           />
         </section>
 
+        {/* =================================================
+            DETAILS
+        ================================================= */}
+
         <section className="mt-8 grid gap-6 xl:grid-cols-2">
-          <article className="rounded-[24px] border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+
+          {/* ===============================================
+              TRAINING PROFILE
+          =============================================== */}
+
+          <article className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-500">
                 Training profile
@@ -317,13 +519,15 @@ export default async function DashboardPage() {
 
             <InformationRow
               label="Primary goal"
-              value={humanize(fitness?.goal)}
+              value={humanize(
+                fitness?.goal
+              )}
             />
 
             <InformationRow
               label="Experience"
               value={humanize(
-                fitness?.experience,
+                fitness?.experience
               )}
             />
 
@@ -331,7 +535,7 @@ export default async function DashboardPage() {
               label="Height"
               value={formatValue(
                 fitness?.height_cm,
-                " cm",
+                " cm"
               )}
             />
 
@@ -339,57 +543,67 @@ export default async function DashboardPage() {
               label="Weight"
               value={formatValue(
                 fitness?.weight_kg,
-                " kg",
+                " kg"
               )}
             />
 
             <InformationRow
               label="Training days"
               value={formatValue(
-                fitness?.training_days,
-                " days per week",
+                fitness
+                  ?.training_days,
+                " days per week"
               )}
             />
 
             <InformationRow
               label="Session duration"
               value={formatValue(
-                fitness?.session_duration_minutes,
-                " minutes",
+                fitness
+                  ?.session_duration_minutes,
+                " minutes"
               )}
             />
 
             <InformationRow
               label="Training location"
               value={humanize(
-                fitness?.training_location,
+                fitness
+                  ?.training_location
               )}
             />
 
             <InformationRow
               label="Priority muscles"
               value={formatList(
-                fitness?.priority_muscles,
+                fitness
+                  ?.priority_muscles
               )}
             />
 
             <InformationRow
               label="Available equipment"
               value={formatList(
-                fitness?.available_equipment,
+                fitness
+                  ?.available_equipment
               )}
             />
 
             <InformationRow
               label="Physical limitations"
               value={
-                fitness?.physical_limitations ||
+                fitness
+                  ?.physical_limitations ||
                 "No limitations reported"
               }
             />
           </article>
 
-          <article className="rounded-[24px] border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+          {/* ===============================================
+              NUTRITION + LIFESTYLE
+          =============================================== */}
+
+          <article className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-500">
                 Nutrition and lifestyle
@@ -403,37 +617,43 @@ export default async function DashboardPage() {
             <InformationRow
               label="Meals per day"
               value={formatValue(
-                preferences?.meals_per_day,
+                preferences
+                  ?.meals_per_day
               )}
             />
 
             <InformationRow
               label="Food preferences"
               value={formatList(
-                preferences?.food_preferences,
+                preferences
+                  ?.food_preferences
               )}
             />
 
             <InformationRow
               label="Excluded foods"
               value={formatList(
-                preferences?.excluded_foods,
+                preferences
+                  ?.excluded_foods
               )}
             />
 
             <InformationRow
               label="Allergies"
               value={formatList(
-                preferences?.allergies,
+                preferences
+                  ?.allergies
               )}
             />
 
             <InformationRow
               label="Weekly food budget"
               value={
-                preferences?.weekly_food_budget !==
+                preferences
+                  ?.weekly_food_budget !==
                   null &&
-                preferences?.weekly_food_budget !==
+                preferences
+                  ?.weekly_food_budget !==
                   undefined
                   ? `${preferences.weekly_food_budget} SGD`
                   : "Not provided"
@@ -443,50 +663,57 @@ export default async function DashboardPage() {
             <InformationRow
               label="Cooking ability"
               value={humanize(
-                preferences?.cooking_ability,
+                preferences
+                  ?.cooking_ability
               )}
             />
 
             <InformationRow
               label="Meal-prep frequency"
               value={humanize(
-                preferences?.meal_prep_frequency,
+                preferences
+                  ?.meal_prep_frequency
               )}
             />
 
             <InformationRow
               label="Sleep"
               value={formatValue(
-                preferences?.sleep_hours,
-                " hours",
+                preferences
+                  ?.sleep_hours,
+                " hours"
               )}
             />
 
             <InformationRow
               label="Daily steps"
               value={formatValue(
-                preferences?.daily_steps,
+                preferences
+                  ?.daily_steps
               )}
             />
 
             <InformationRow
               label="Stress level"
               value={humanize(
-                preferences?.stress_level,
+                preferences
+                  ?.stress_level
               )}
             />
 
             <InformationRow
               label="Preferred training time"
               value={humanize(
-                preferences?.preferred_training_time,
+                preferences
+                  ?.preferred_training_time
               )}
             />
 
             <InformationRow
               label="School/work schedule"
               value={
-                preferences?.work_schedule ||
+                preferences
+                  ?.work_schedule ||
                 "Not provided"
               }
             />
@@ -494,5 +721,5 @@ export default async function DashboardPage() {
         </section>
       </div>
     </main>
-  )
+  );
 }

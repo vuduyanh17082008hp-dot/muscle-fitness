@@ -1,631 +1,3038 @@
-import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+
 import {
-  ArrowRight,
-  BarChart3,
-  CalendarDays,
-  Check,
-  ChevronDown,
+  ArrowLeft,
+  Brain,
+  CheckCircle2,
   Clock3,
   Dumbbell,
-  Flame,
   Gauge,
-  ShieldCheck,
+  Info,
+  RotateCcw,
+  ShieldAlert,
+  Sparkles,
   Target,
+  TimerReset,
   TrendingUp,
 } from "lucide-react";
 
-import styles from "./training.module.css";
+import { createClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = {
-  title: "Training | Muscle Fitness",
-  description:
-    "Structured training programs designed around progression, discipline and measurable performance.",
+export const dynamic =
+  "force-dynamic";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+type Exercise = {
+  id: string;
+
+  name: string;
+
+  muscle: string;
+
+  secondaryMuscles?: string[];
+
+  equipment: string[];
+
+  category:
+    | "compound"
+    | "supported_compound"
+    | "isolation";
+
+  difficulty:
+    | "beginner"
+    | "intermediate"
+    | "advanced";
+
+  sets: {
+    beginner: number;
+    intermediate: number;
+    advanced: number;
+  };
+
+  reps: string;
+
+  rest: string;
+
+  rir: string;
+
+  tempo: string;
+
+  setup: string[];
+
+  execution: string[];
+
+  cues: string[];
+
+  mistakes: string[];
+
+  purpose: string;
 };
 
-const benefits = [
-  {
-    icon: Target,
-    title: "CLEAR DIRECTION",
-    description:
-      "Every workout has a purpose, exercise order, repetition range and progression target.",
-  },
-  {
-    icon: TrendingUp,
-    title: "PROGRESSIVE OVERLOAD",
-    description:
-      "Track your working weight and repetitions so performance continues moving forward.",
-  },
-  {
-    icon: CalendarDays,
-    title: "WEEKLY STRUCTURE",
-    description:
-      "Follow a schedule that matches your available training days and recovery ability.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "RECOVERY CONTROL",
-    description:
-      "Balance hard training with planned rest, controlled volume and fatigue management.",
-  },
-];
+type PlannedExercise = {
+  exercise: Exercise;
+  sets: number;
+};
 
-const programs = [
+type TrainingDay = {
+  day: number;
+  title: string;
+  focus: string;
+  exercises: PlannedExercise[];
+};
+
+type FitnessProfile = {
+  height_cm: number | null;
+  weight_kg: number | null;
+
+  goal: string | null;
+
+  experience: string | null;
+
+  training_days: number | null;
+
+  session_duration_minutes:
+    | number
+    | null;
+
+  training_location:
+    | string
+    | null;
+
+  available_equipment:
+    string[];
+
+  priority_muscles:
+    string[];
+
+  physical_limitations:
+    | string
+    | null;
+};
+
+/* =========================================================
+   EXERCISE DATABASE
+========================================================= */
+
+const EXERCISES: Exercise[] = [
+  /* =======================================================
+     CHEST
+  ======================================================= */
+
   {
-    number: "01",
-    title: "FOUNDATION",
-    level: "BEGINNER",
-    duration: "8 WEEKS",
-    frequency: "3 DAYS / WEEK",
-    description:
-      "Build proper technique, training consistency and a reliable strength foundation.",
-    features: [
-      "Full-body training structure",
-      "Exercise technique guidance",
-      "Simple progression method",
-      "Basic recovery targets",
+    id: "incline-db-press",
+
+    name:
+      "Incline Dumbbell Press",
+
+    muscle:
+      "Upper Chest",
+
+    secondaryMuscles: [
+      "Front Delts",
+      "Triceps",
     ],
-    featured: false,
-  },
-  {
-    number: "02",
-    title: "MUSCLE BUILDER",
-    level: "INTERMEDIATE",
-    duration: "12 WEEKS",
-    frequency: "4–5 DAYS / WEEK",
-    description:
-      "Develop balanced muscle with structured hypertrophy volume and progressive overload.",
-    features: [
-      "Push, pull and lower-body structure",
-      "Weekly muscle-volume targets",
-      "Progressive overload tracking",
-      "Fatigue and deload management",
+
+    equipment: [
+      "dumbbell",
+      "bench",
+      "gym",
     ],
-    featured: true,
-  },
-  {
-    number: "03",
-    title: "4D PERFORMANCE",
-    level: "ADVANCED",
-    duration: "16 WEEKS",
-    frequency: "5–6 DAYS / WEEK",
-    description:
-      "A higher-volume system focused on weak points, performance and advanced progression.",
-    features: [
-      "Priority muscle specialization",
-      "Advanced progression blocks",
-      "Strength and hypertrophy phases",
-      "Detailed performance tracking",
+
+    category:
+      "compound",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 3,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "6–10",
+
+    rest:
+      "2–3 min",
+
+    rir:
+      "1–3 RIR",
+
+    tempo:
+      "2–3 sec eccentric",
+
+    setup: [
+      "Set the bench at roughly 20–35°.",
+      "Plant both feet firmly on the floor.",
+      "Keep shoulder blades controlled against the bench.",
+      "Start with the dumbbells above the upper-chest line.",
     ],
-    featured: false,
+
+    execution: [
+      "Lower the dumbbells under control.",
+      "Allow the elbows to travel slightly below the torso if comfortable.",
+      "Press upward and slightly inward.",
+      "Keep the upper chest loaded instead of shrugging the shoulders.",
+    ],
+
+    cues: [
+      "Chest up.",
+      "Control the stretch.",
+      "Drive through the upper chest.",
+      "Do not bounce.",
+    ],
+
+    mistakes: [
+      "Bench angle too steep.",
+      "Elbows excessively flared.",
+      "Shrugging toward the ears.",
+      "Cutting the eccentric short.",
+    ],
+
+    purpose:
+      "Stable upper-chest compound for progressive overload.",
+  },
+
+  {
+    id:
+      "machine-chest-press",
+
+    name:
+      "Machine Chest Press",
+
+    muscle:
+      "Chest",
+
+    secondaryMuscles: [
+      "Triceps",
+      "Front Delts",
+    ],
+
+    equipment: [
+      "machine",
+      "gym",
+    ],
+
+    category:
+      "supported_compound",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 3,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "8–12",
+
+    rest:
+      "2–3 min",
+
+    rir:
+      "1–2 RIR",
+
+    tempo:
+      "Controlled eccentric",
+
+    setup: [
+      "Adjust the seat so the handles align with mid chest.",
+      "Keep the upper back firmly supported.",
+      "Set the shoulder blades comfortably back and down.",
+    ],
+
+    execution: [
+      "Press forward without losing torso position.",
+      "Control the return until the chest is comfortably stretched.",
+      "Repeat through the same range every rep.",
+    ],
+
+    cues: [
+      "Press through the chest.",
+      "Keep shoulders away from ears.",
+      "Same ROM every rep.",
+    ],
+
+    mistakes: [
+      "Seat positioned too high or low.",
+      "Shoulders rolling forward.",
+      "Bouncing out of the stretch.",
+    ],
+
+    purpose:
+      "Highly stable chest movement that allows hard hypertrophy sets.",
+  },
+
+  {
+    id:
+      "low-high-cable-fly",
+
+    name:
+      "Low-to-High Cable Fly",
+
+    muscle:
+      "Upper Chest",
+
+    equipment: [
+      "cable",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 3,
+    },
+
+    reps:
+      "10–15",
+
+    rest:
+      "60–90 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "2–3 sec eccentric",
+
+    setup: [
+      "Set cables around low hip height.",
+      "Take a small staggered stance.",
+      "Maintain a soft bend in the elbows.",
+    ],
+
+    execution: [
+      "Sweep the arms upward and inward.",
+      "Finish around upper-chest or eye-line depending on anatomy.",
+      "Return slowly into a chest stretch.",
+    ],
+
+    cues: [
+      "Hug upward.",
+      "Lead with the elbows.",
+      "Do not turn it into a press.",
+    ],
+
+    mistakes: [
+      "Excess elbow flexion.",
+      "Shrugging.",
+      "Using momentum.",
+    ],
+
+    purpose:
+      "Upper-chest isolation using a different line of pull from pressing.",
+  },
+
+  /* =======================================================
+     DELTS
+  ======================================================= */
+
+  {
+    id:
+      "cable-lateral-raise",
+
+    name:
+      "Cable Lateral Raise",
+
+    muscle:
+      "Side Delts",
+
+    equipment: [
+      "cable",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 3,
+      intermediate: 4,
+      advanced: 4,
+    },
+
+    reps:
+      "10–20",
+
+    rest:
+      "60–90 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Controlled",
+
+    setup: [
+      "Place the cable low.",
+      "Stand slightly away from the stack.",
+      "Keep the shoulder relaxed rather than shrugged.",
+    ],
+
+    execution: [
+      "Raise the arm out and slightly forward.",
+      "Stop around shoulder height.",
+      "Lower slowly while maintaining delt tension.",
+    ],
+
+    cues: [
+      "Lead with the elbow.",
+      "Reach outward.",
+      "Keep traps quiet.",
+    ],
+
+    mistakes: [
+      "Shrugging.",
+      "Swinging the torso.",
+      "Turning the movement into an upright row.",
+    ],
+
+    purpose:
+      "High-tension side-delt movement for shoulder width.",
+  },
+
+  {
+    id:
+      "reverse-cable-fly",
+
+    name:
+      "Cable Reverse Fly",
+
+    muscle:
+      "Rear Delts",
+
+    secondaryMuscles: [
+      "Upper Back",
+    ],
+
+    equipment: [
+      "cable",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "12–20",
+
+    rest:
+      "60–90 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Controlled",
+
+    setup: [
+      "Set cables around shoulder height.",
+      "Keep the chest stable.",
+      "Maintain only a slight elbow bend.",
+    ],
+
+    execution: [
+      "Sweep the arms outward.",
+      "Keep tension on the rear delts.",
+      "Return slowly without allowing the stack to slam.",
+    ],
+
+    cues: [
+      "Reach wide.",
+      "Rear delts move the arms.",
+      "Avoid excessive scapular retraction.",
+    ],
+
+    mistakes: [
+      "Turning it into a row.",
+      "Using momentum.",
+      "Shrugging.",
+    ],
+
+    purpose:
+      "Rear-delt isolation with constant cable tension.",
+  },
+
+  /* =======================================================
+     LATS / BACK
+  ======================================================= */
+
+  {
+    id:
+      "single-arm-lat-pulldown",
+
+    name:
+      "Single-Arm Lat Pulldown",
+
+    muscle:
+      "Lats",
+
+    equipment: [
+      "cable",
+      "lat pulldown",
+      "gym",
+    ],
+
+    category:
+      "supported_compound",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 3,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "8–12",
+
+    rest:
+      "90–120 sec",
+
+    rir:
+      "1–2 RIR",
+
+    tempo:
+      "Controlled eccentric",
+
+    setup: [
+      "Sit or kneel securely.",
+      "Reach the working arm overhead.",
+      "Allow a controlled lat stretch.",
+    ],
+
+    execution: [
+      "Drive the elbow toward the hip.",
+      "Keep the torso relatively stable.",
+      "Return slowly to the stretched position.",
+    ],
+
+    cues: [
+      "Elbow to hip.",
+      "Stretch the lat.",
+      "Do not curl the handle.",
+    ],
+
+    mistakes: [
+      "Pulling primarily with the biceps.",
+      "Excessive torso rotation.",
+      "Stopping before the lat is stretched.",
+    ],
+
+    purpose:
+      "Lat-biased vertical pull for back width.",
+  },
+
+  {
+    id:
+      "chest-supported-row",
+
+    name:
+      "Chest-Supported Row",
+
+    muscle:
+      "Upper Back",
+
+    secondaryMuscles: [
+      "Lats",
+      "Rear Delts",
+      "Biceps",
+    ],
+
+    equipment: [
+      "machine",
+      "dumbbell",
+      "bench",
+      "gym",
+    ],
+
+    category:
+      "supported_compound",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 3,
+      intermediate: 4,
+      advanced: 4,
+    },
+
+    reps:
+      "6–12",
+
+    rest:
+      "2–3 min",
+
+    rir:
+      "1–2 RIR",
+
+    tempo:
+      "Controlled eccentric",
+
+    setup: [
+      "Support the chest firmly.",
+      "Use a grip that allows comfortable elbow travel.",
+      "Start with the arms extended.",
+    ],
+
+    execution: [
+      "Pull the elbows back.",
+      "Allow the shoulder blades to move naturally.",
+      "Control the eccentric into a full reach.",
+    ],
+
+    cues: [
+      "Row through the elbows.",
+      "Keep chest on support.",
+      "Reach forward under control.",
+    ],
+
+    mistakes: [
+      "Lifting the chest off the pad.",
+      "Shortened ROM.",
+      "Jerking the weight.",
+    ],
+
+    purpose:
+      "Stable rowing pattern for back thickness.",
+  },
+
+  {
+    id:
+      "wide-cable-row",
+
+    name:
+      "Wide Cable Row",
+
+    muscle:
+      "Upper Back",
+
+    secondaryMuscles: [
+      "Rear Delts",
+      "Traps",
+    ],
+
+    equipment: [
+      "cable",
+      "gym",
+    ],
+
+    category:
+      "supported_compound",
+
+    difficulty:
+      "intermediate",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "8–15",
+
+    rest:
+      "90–120 sec",
+
+    rir:
+      "1–2 RIR",
+
+    tempo:
+      "Controlled",
+
+    setup: [
+      "Use a wider handle or dual handles.",
+      "Brace the torso.",
+      "Start with the arms extended.",
+    ],
+
+    execution: [
+      "Drive elbows outward and backward.",
+      "Finish without excessive lumbar extension.",
+      "Return to a controlled stretch.",
+    ],
+
+    cues: [
+      "Elbows wide.",
+      "Upper back drives.",
+      "Stay braced.",
+    ],
+
+    mistakes: [
+      "Leaning excessively.",
+      "Shrugging.",
+      "Pulling too low.",
+    ],
+
+    purpose:
+      "Upper-back thickness using a wide elbow path.",
+  },
+
+  /* =======================================================
+     BICEPS
+  ======================================================= */
+
+  {
+    id:
+      "bayesian-curl",
+
+    name:
+      "Bayesian Cable Curl",
+
+    muscle:
+      "Biceps — Long Head",
+
+    equipment: [
+      "cable",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "intermediate",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 3,
+    },
+
+    reps:
+      "8–15",
+
+    rest:
+      "60–90 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Slow eccentric",
+
+    setup: [
+      "Stand slightly in front of the cable.",
+      "Keep the working arm behind the torso.",
+      "Maintain a stable shoulder.",
+    ],
+
+    execution: [
+      "Curl without moving the upper arm forward.",
+      "Squeeze the biceps.",
+      "Lower into a controlled stretched position.",
+    ],
+
+    cues: [
+      "Keep shoulder back.",
+      "Curl, do not swing.",
+      "Own the stretch.",
+    ],
+
+    mistakes: [
+      "Shoulder drifting forward.",
+      "Torso rotation.",
+      "Using momentum.",
+    ],
+
+    purpose:
+      "Lengthened-position biceps work emphasizing the long head.",
+  },
+
+  {
+    id:
+      "incline-db-curl",
+
+    name:
+      "Incline Dumbbell Curl",
+
+    muscle:
+      "Biceps",
+
+    equipment: [
+      "dumbbell",
+      "bench",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 3,
+    },
+
+    reps:
+      "8–15",
+
+    rest:
+      "60–90 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Slow eccentric",
+
+    setup: [
+      "Use a moderately inclined bench.",
+      "Allow the arms to hang behind the torso.",
+    ],
+
+    execution: [
+      "Curl while keeping the shoulders stable.",
+      "Lower fully under control.",
+    ],
+
+    cues: [
+      "Keep upper arm still.",
+      "No swinging.",
+    ],
+
+    mistakes: [
+      "Shoulders moving forward.",
+      "Shortening the bottom range.",
+    ],
+
+    purpose:
+      "Simple lengthened biceps isolation.",
+  },
+
+  /* =======================================================
+     TRICEPS
+  ======================================================= */
+
+  {
+    id:
+      "overhead-cable-extension",
+
+    name:
+      "Overhead Cable Triceps Extension",
+
+    muscle:
+      "Triceps — Long Head",
+
+    equipment: [
+      "cable",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "8–15",
+
+    rest:
+      "60–90 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Controlled stretch",
+
+    setup: [
+      "Position the cable behind the body.",
+      "Keep elbows comfortably overhead.",
+      "Brace the torso.",
+    ],
+
+    execution: [
+      "Extend the elbows fully.",
+      "Return slowly into a deep triceps stretch.",
+    ],
+
+    cues: [
+      "Move at the elbow.",
+      "Keep ribs controlled.",
+      "Own the stretch.",
+    ],
+
+    mistakes: [
+      "Excessive elbow movement.",
+      "Arching the lower back.",
+      "Using momentum.",
+    ],
+
+    purpose:
+      "Lengthened triceps work emphasizing the long head.",
+  },
+
+  {
+    id:
+      "triceps-pressdown",
+
+    name:
+      "Cable Triceps Pressdown",
+
+    muscle:
+      "Triceps",
+
+    equipment: [
+      "cable",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 3,
+    },
+
+    reps:
+      "10–15",
+
+    rest:
+      "60–90 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Controlled",
+
+    setup: [
+      "Stand stable in front of the cable.",
+      "Keep elbows beside the torso.",
+    ],
+
+    execution: [
+      "Extend the elbows until the triceps are shortened.",
+      "Return under control.",
+    ],
+
+    cues: [
+      "Elbows pinned.",
+      "Finish with triceps.",
+    ],
+
+    mistakes: [
+      "Shoulder movement.",
+      "Using bodyweight to push down.",
+    ],
+
+    purpose:
+      "Stable shortened-position triceps isolation.",
+  },
+
+  /* =======================================================
+     QUADS
+  ======================================================= */
+
+  {
+    id:
+      "hack-squat",
+
+    name:
+      "Hack Squat",
+
+    muscle:
+      "Quads",
+
+    secondaryMuscles: [
+      "Glutes",
+    ],
+
+    equipment: [
+      "hack squat",
+      "machine",
+      "gym",
+    ],
+
+    category:
+      "compound",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 3,
+      intermediate: 4,
+      advanced: 4,
+    },
+
+    reps:
+      "6–12",
+
+    rest:
+      "2–4 min",
+
+    rir:
+      "1–3 RIR",
+
+    tempo:
+      "Controlled eccentric",
+
+    setup: [
+      "Place feet where the knees can travel comfortably.",
+      "Keep the back supported.",
+      "Brace before descending.",
+    ],
+
+    execution: [
+      "Descend as deep as mobility and control allow.",
+      "Allow controlled knee flexion.",
+      "Drive through the platform without bouncing.",
+    ],
+
+    cues: [
+      "Knees travel naturally.",
+      "Stay controlled.",
+      "Push through the whole foot.",
+    ],
+
+    mistakes: [
+      "Cutting depth unnecessarily.",
+      "Bouncing at the bottom.",
+      "Losing foot pressure.",
+    ],
+
+    purpose:
+      "Stable quad-biased compound that supports high effort.",
+  },
+
+  {
+    id:
+      "leg-extension",
+
+    name:
+      "Leg Extension",
+
+    muscle:
+      "Quads",
+
+    equipment: [
+      "leg extension",
+      "machine",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "10–20",
+
+    rest:
+      "60–120 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Controlled",
+
+    setup: [
+      "Align the machine pivot with the knee.",
+      "Secure the hips against the pad.",
+    ],
+
+    execution: [
+      "Extend the knee smoothly.",
+      "Control the return into knee flexion.",
+    ],
+
+    cues: [
+      "Quads move the load.",
+      "Stay seated firmly.",
+    ],
+
+    mistakes: [
+      "Hips lifting.",
+      "Kicking explosively.",
+    ],
+
+    purpose:
+      "Direct quad isolation after compound work.",
+  },
+
+  /* =======================================================
+     HAMSTRINGS
+  ======================================================= */
+
+  {
+    id:
+      "seated-leg-curl",
+
+    name:
+      "Seated Leg Curl",
+
+    muscle:
+      "Hamstrings",
+
+    equipment: [
+      "leg curl",
+      "machine",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 3,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "8–15",
+
+    rest:
+      "90–120 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Slow eccentric",
+
+    setup: [
+      "Adjust the machine so the knee aligns with its pivot.",
+      "Secure the thighs.",
+    ],
+
+    execution: [
+      "Curl the pad down using the hamstrings.",
+      "Control the return into the stretched position.",
+    ],
+
+    cues: [
+      "Keep hips down.",
+      "Pull through the hamstrings.",
+    ],
+
+    mistakes: [
+      "Hips lifting.",
+      "Rushing the eccentric.",
+    ],
+
+    purpose:
+      "Lengthened hamstring isolation.",
+  },
+
+  {
+    id:
+      "romanian-deadlift",
+
+    name:
+      "Romanian Deadlift",
+
+    muscle:
+      "Hamstrings",
+
+    secondaryMuscles: [
+      "Glutes",
+      "Erectors",
+    ],
+
+    equipment: [
+      "barbell",
+      "dumbbell",
+      "gym",
+    ],
+
+    category:
+      "compound",
+
+    difficulty:
+      "intermediate",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "6–10",
+
+    rest:
+      "2–4 min",
+
+    rir:
+      "2–3 RIR",
+
+    tempo:
+      "2–3 sec eccentric",
+
+    setup: [
+      "Stand tall with the load close to the thighs.",
+      "Brace the trunk.",
+      "Keep a soft knee bend.",
+    ],
+
+    execution: [
+      "Push the hips backward.",
+      "Lower until hamstrings are strongly loaded without losing spinal position.",
+      "Drive the hips forward to stand.",
+    ],
+
+    cues: [
+      "Hips back.",
+      "Keep load close.",
+      "Feel hamstrings stretch.",
+    ],
+
+    mistakes: [
+      "Turning it into a squat.",
+      "Rounding excessively.",
+      "Chasing unnecessary depth.",
+    ],
+
+    purpose:
+      "Hip-hinge movement loading the hamstrings at long muscle lengths.",
+  },
+
+  /* =======================================================
+     GLUTES
+  ======================================================= */
+
+  {
+    id:
+      "bulgarian-split-squat",
+
+    name:
+      "Deep Bulgarian Split Squat",
+
+    muscle:
+      "Glutes",
+
+    secondaryMuscles: [
+      "Quads",
+      "Adductors",
+    ],
+
+    equipment: [
+      "dumbbell",
+      "bench",
+      "bodyweight",
+      "gym",
+      "home",
+    ],
+
+    category:
+      "compound",
+
+    difficulty:
+      "intermediate",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 3,
+    },
+
+    reps:
+      "8–12 / leg",
+
+    rest:
+      "2 min",
+
+    rir:
+      "1–2 RIR",
+
+    tempo:
+      "Controlled eccentric",
+
+    setup: [
+      "Set the rear foot on a bench.",
+      "Choose a stance that allows stable depth.",
+    ],
+
+    execution: [
+      "Descend under control.",
+      "Allow the working hip to flex deeply.",
+      "Drive through the lead leg.",
+    ],
+
+    cues: [
+      "Stay balanced.",
+      "Use the front leg.",
+      "Control depth.",
+    ],
+
+    mistakes: [
+      "Pushing excessively from the rear foot.",
+      "Losing balance.",
+    ],
+
+    purpose:
+      "Lengthened-position glute and leg training.",
+  },
+
+  {
+    id:
+      "hip-thrust",
+
+    name:
+      "Hip Thrust",
+
+    muscle:
+      "Glutes",
+
+    equipment: [
+      "barbell",
+      "machine",
+      "bench",
+      "gym",
+    ],
+
+    category:
+      "compound",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 3,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "8–15",
+
+    rest:
+      "90–150 sec",
+
+    rir:
+      "1–2 RIR",
+
+    tempo:
+      "Controlled",
+
+    setup: [
+      "Position the upper back securely.",
+      "Set feet where full hip extension feels strong.",
+    ],
+
+    execution: [
+      "Drive hips upward.",
+      "Finish with the glutes rather than lumbar extension.",
+      "Lower under control.",
+    ],
+
+    cues: [
+      "Ribs down.",
+      "Squeeze glutes.",
+      "Do not overextend back.",
+    ],
+
+    mistakes: [
+      "Hyperextending the spine.",
+      "Feet too far or too close.",
+    ],
+
+    purpose:
+      "Shortened-position glute overload.",
+  },
+
+  /* =======================================================
+     CALVES
+  ======================================================= */
+
+  {
+    id:
+      "standing-calf-raise",
+
+    name:
+      "Standing Calf Raise",
+
+    muscle:
+      "Calves — Gastrocnemius",
+
+    equipment: [
+      "machine",
+      "dumbbell",
+      "gym",
+      "home",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 3,
+      intermediate: 4,
+      advanced: 4,
+    },
+
+    reps:
+      "8–15",
+
+    rest:
+      "60–120 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Pause in stretch",
+
+    setup: [
+      "Keep knees mostly extended.",
+      "Use a stable support if necessary.",
+    ],
+
+    execution: [
+      "Lower into a controlled calf stretch.",
+      "Rise onto the toes.",
+      "Pause briefly at the top.",
+    ],
+
+    cues: [
+      "Full stretch.",
+      "Drive through big toe.",
+    ],
+
+    mistakes: [
+      "Bouncing.",
+      "Partial ROM.",
+    ],
+
+    purpose:
+      "Primary gastrocnemius calf movement.",
+  },
+
+  {
+    id:
+      "seated-calf-raise",
+
+    name:
+      "Seated Calf Raise",
+
+    muscle:
+      "Calves — Soleus",
+
+    equipment: [
+      "machine",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "10–20",
+
+    rest:
+      "60–90 sec",
+
+    rir:
+      "0–2 RIR",
+
+    tempo:
+      "Pause in stretch",
+
+    setup: [
+      "Sit with the knees bent.",
+      "Position the forefoot securely.",
+    ],
+
+    execution: [
+      "Lower the heel under control.",
+      "Raise through full plantar flexion.",
+    ],
+
+    cues: [
+      "Do not bounce.",
+      "Own both ends of the ROM.",
+    ],
+
+    mistakes: [
+      "Rushed repetitions.",
+      "Short ROM.",
+    ],
+
+    purpose:
+      "Bent-knee calf work emphasizing the soleus.",
+  },
+
+  /* =======================================================
+     CORE
+  ======================================================= */
+
+  {
+    id:
+      "cable-crunch",
+
+    name:
+      "Cable Crunch",
+
+    muscle:
+      "Abs",
+
+    equipment: [
+      "cable",
+      "gym",
+    ],
+
+    category:
+      "isolation",
+
+    difficulty:
+      "beginner",
+
+    sets: {
+      beginner: 2,
+      intermediate: 3,
+      advanced: 4,
+    },
+
+    reps:
+      "10–20",
+
+    rest:
+      "60–90 sec",
+
+    rir:
+      "1–2 RIR",
+
+    tempo:
+      "Controlled",
+
+    setup: [
+      "Kneel securely in front of the cable.",
+      "Hold the rope near the head.",
+    ],
+
+    execution: [
+      "Flex the trunk using the abdominals.",
+      "Return without turning the movement into a hip hinge.",
+    ],
+
+    cues: [
+      "Ribs toward pelvis.",
+      "Abs shorten the torso.",
+    ],
+
+    mistakes: [
+      "Pulling with the arms.",
+      "Hip hinging instead of spinal flexion.",
+    ],
+
+    purpose:
+      "Loadable abdominal flexion.",
   },
 ];
 
-const exercises = [
-  {
-    name: "BARBELL BENCH PRESS",
-    muscle: "CHEST",
-    sets: "4",
-    reps: "6–8",
-    rest: "120 SEC",
-  },
-  {
-    name: "INCLINE DUMBBELL PRESS",
-    muscle: "UPPER CHEST",
-    sets: "3",
-    reps: "8–10",
-    rest: "90 SEC",
-  },
-  {
-    name: "CABLE CHEST FLY",
-    muscle: "CHEST",
-    sets: "3",
-    reps: "12–15",
-    rest: "60 SEC",
-  },
-  {
-    name: "CABLE LATERAL RAISE",
-    muscle: "SIDE DELTS",
-    sets: "4",
-    reps: "12–15",
-    rest: "60 SEC",
-  },
-];
+/* =========================================================
+   HELPERS
+========================================================= */
 
-const processSteps = [
-  {
-    number: "01",
-    title: "BUILD YOUR PROFILE",
-    description:
-      "Enter your experience, available days, equipment and priority muscle groups.",
-  },
-  {
-    number: "02",
-    title: "SELECT YOUR LEVEL",
-    description:
-      "Choose the program that matches your present ability and weekly schedule.",
-  },
-  {
-    number: "03",
-    title: "COMPLETE THE WORK",
-    description:
-      "Follow every planned session and record your working sets accurately.",
-  },
-  {
-    number: "04",
-    title: "TRACK AND ADJUST",
-    description:
-      "Use performance data to improve weight, repetitions and execution quality.",
-  },
-];
+function normalize(
+  value: string
+) {
+  return value
+    .toLowerCase()
+    .trim();
+}
 
-export default function TrainingPage() {
+function humanize(
+  value:
+    | string
+    | null
+    | undefined
+) {
+  if (!value) {
+    return "Not available";
+  }
+
+  return value
+    .replaceAll("_", " ")
+    .replace(
+      /\b\w/g,
+      (character) =>
+        character.toUpperCase()
+    );
+}
+
+function getExperience(
+  value:
+    | string
+    | null
+):
+  | "beginner"
+  | "intermediate"
+  | "advanced" {
+  if (
+    value ===
+      "intermediate" ||
+    value ===
+      "advanced"
+  ) {
+    return value;
+  }
+
+  return "beginner";
+}
+
+/* =========================================================
+   EQUIPMENT FILTER
+========================================================= */
+
+function exerciseAvailable(
+  exercise: Exercise,
+  fitness: FitnessProfile
+) {
+  const location =
+    normalize(
+      fitness.training_location ??
+        ""
+    );
+
+  const equipment =
+    fitness.available_equipment.map(
+      normalize
+    );
+
+  /*
+    Gym users are assumed to have
+    standard gym equipment unless
+    specifically configured otherwise.
+  */
+
+  if (location === "gym") {
+    return true;
+  }
+
+  if (
+    exercise.equipment.includes(
+      "bodyweight"
+    )
+  ) {
+    return true;
+  }
+
+  return exercise.equipment.some(
+    (required) =>
+      equipment.some(
+        (available) =>
+          available.includes(
+            normalize(required)
+          ) ||
+          normalize(required).includes(
+            available
+          )
+      )
+  );
+}
+
+/* =========================================================
+   GET EXERCISE
+========================================================= */
+
+function findExercise(
+  id: string,
+  fitness: FitnessProfile
+) {
+  const exercise =
+    EXERCISES.find(
+      (item) =>
+        item.id === id
+    );
+
+  if (!exercise) {
+    return null;
+  }
+
+  if (
+    !exerciseAvailable(
+      exercise,
+      fitness
+    )
+  ) {
+    return null;
+  }
+
+  return exercise;
+}
+
+/* =========================================================
+   CREATE PLANNED EXERCISE
+========================================================= */
+
+function planned(
+  id: string,
+  fitness: FitnessProfile
+): PlannedExercise | null {
+  const exercise =
+    findExercise(
+      id,
+      fitness
+    );
+
+  if (!exercise) {
+    return null;
+  }
+
+  const experience =
+    getExperience(
+      fitness.experience
+    );
+
+  return {
+    exercise,
+
+    sets:
+      exercise.sets[
+        experience
+      ],
+  };
+}
+
+/* =========================================================
+   CLEAN DAY
+========================================================= */
+
+function createDay(
+  day: number,
+  title: string,
+  focus: string,
+  ids: string[],
+  fitness: FitnessProfile
+): TrainingDay {
+  return {
+    day,
+    title,
+    focus,
+
+    exercises: ids
+      .map(
+        (id) =>
+          planned(
+            id,
+            fitness
+          )
+      )
+      .filter(
+        (
+          item
+        ): item is PlannedExercise =>
+          item !== null
+      ),
+  };
+}
+
+/* =========================================================
+   WEEKLY SPLIT ENGINE
+========================================================= */
+
+function createTrainingPlan(
+  fitness: FitnessProfile
+): TrainingDay[] {
+  const days =
+    Math.min(
+      Math.max(
+        fitness.training_days ??
+          3,
+        1
+      ),
+      7
+    );
+
+  /* =======================================================
+     1 DAY
+  ======================================================= */
+
+  if (days === 1) {
+    return [
+      createDay(
+        1,
+        "Full Body",
+        "Whole-body foundation",
+        [
+          "hack-squat",
+          "incline-db-press",
+          "single-arm-lat-pulldown",
+          "seated-leg-curl",
+          "cable-lateral-raise",
+          "cable-crunch",
+        ],
+        fitness
+      ),
+    ];
+  }
+
+  /* =======================================================
+     2 DAYS
+  ======================================================= */
+
+  if (days === 2) {
+    return [
+      createDay(
+        1,
+        "Upper Body",
+        "Chest · Back · Delts · Arms",
+        [
+          "incline-db-press",
+          "single-arm-lat-pulldown",
+          "chest-supported-row",
+          "cable-lateral-raise",
+          "bayesian-curl",
+          "overhead-cable-extension",
+        ],
+        fitness
+      ),
+
+      createDay(
+        2,
+        "Lower Body",
+        "Quads · Hamstrings · Glutes · Calves",
+        [
+          "hack-squat",
+          "romanian-deadlift",
+          "leg-extension",
+          "seated-leg-curl",
+          "hip-thrust",
+          "standing-calf-raise",
+          "cable-crunch",
+        ],
+        fitness
+      ),
+    ];
+  }
+
+  /* =======================================================
+     3 DAYS
+  ======================================================= */
+
+  if (days === 3) {
+    return [
+      createDay(
+        1,
+        "Full Body A",
+        "Chest · Quads · Lats",
+        [
+          "incline-db-press",
+          "hack-squat",
+          "single-arm-lat-pulldown",
+          "cable-lateral-raise",
+          "seated-leg-curl",
+          "overhead-cable-extension",
+        ],
+        fitness
+      ),
+
+      createDay(
+        2,
+        "Full Body B",
+        "Back · Hamstrings · Chest",
+        [
+          "chest-supported-row",
+          "romanian-deadlift",
+          "machine-chest-press",
+          "leg-extension",
+          "reverse-cable-fly",
+          "bayesian-curl",
+        ],
+        fitness
+      ),
+
+      createDay(
+        3,
+        "Full Body C",
+        "Lower body · Upper chest · Back",
+        [
+          "hack-squat",
+          "incline-db-press",
+          "single-arm-lat-pulldown",
+          "hip-thrust",
+          "cable-lateral-raise",
+          "cable-crunch",
+        ],
+        fitness
+      ),
+    ];
+  }
+
+  /* =======================================================
+     4 DAYS
+  ======================================================= */
+
+  if (days === 4) {
+    return [
+      createDay(
+        1,
+        "Upper A",
+        "Chest · Lats · Delts",
+        [
+          "incline-db-press",
+          "single-arm-lat-pulldown",
+          "machine-chest-press",
+          "chest-supported-row",
+          "cable-lateral-raise",
+          "overhead-cable-extension",
+        ],
+        fitness
+      ),
+
+      createDay(
+        2,
+        "Lower A",
+        "Quads · Hamstrings",
+        [
+          "hack-squat",
+          "seated-leg-curl",
+          "leg-extension",
+          "romanian-deadlift",
+          "standing-calf-raise",
+          "cable-crunch",
+        ],
+        fitness
+      ),
+
+      createDay(
+        3,
+        "Upper B",
+        "Back · Upper chest · Arms",
+        [
+          "chest-supported-row",
+          "low-high-cable-fly",
+          "single-arm-lat-pulldown",
+          "reverse-cable-fly",
+          "bayesian-curl",
+          "triceps-pressdown",
+        ],
+        fitness
+      ),
+
+      createDay(
+        4,
+        "Lower B",
+        "Glutes · Quads · Hamstrings",
+        [
+          "romanian-deadlift",
+          "hack-squat",
+          "hip-thrust",
+          "seated-leg-curl",
+          "leg-extension",
+          "seated-calf-raise",
+        ],
+        fitness
+      ),
+    ];
+  }
+
+  /* =======================================================
+     5 DAYS
+  ======================================================= */
+
+  if (days === 5) {
+    return [
+      createDay(
+        1,
+        "Push",
+        "Chest · Side Delts · Triceps",
+        [
+          "incline-db-press",
+          "machine-chest-press",
+          "low-high-cable-fly",
+          "cable-lateral-raise",
+          "overhead-cable-extension",
+          "triceps-pressdown",
+        ],
+        fitness
+      ),
+
+      createDay(
+        2,
+        "Pull",
+        "Lats · Upper Back · Biceps",
+        [
+          "single-arm-lat-pulldown",
+          "chest-supported-row",
+          "wide-cable-row",
+          "reverse-cable-fly",
+          "bayesian-curl",
+          "incline-db-curl",
+        ],
+        fitness
+      ),
+
+      createDay(
+        3,
+        "Legs",
+        "Quads · Hamstrings · Glutes",
+        [
+          "hack-squat",
+          "seated-leg-curl",
+          "romanian-deadlift",
+          "leg-extension",
+          "hip-thrust",
+          "standing-calf-raise",
+        ],
+        fitness
+      ),
+
+      createDay(
+        4,
+        "Upper",
+        "Chest · Back · Delts",
+        [
+          "incline-db-press",
+          "single-arm-lat-pulldown",
+          "chest-supported-row",
+          "cable-lateral-raise",
+          "reverse-cable-fly",
+          "overhead-cable-extension",
+        ],
+        fitness
+      ),
+
+      createDay(
+        5,
+        "Lower + Arms",
+        "Legs · Biceps · Triceps",
+        [
+          "hack-squat",
+          "seated-leg-curl",
+          "leg-extension",
+          "bayesian-curl",
+          "triceps-pressdown",
+          "cable-crunch",
+        ],
+        fitness
+      ),
+    ];
+  }
+
+  /* =======================================================
+     6+ DAYS
+  ======================================================= */
+
+  return [
+    createDay(
+      1,
+      "Push A",
+      "Chest priority",
+      [
+        "incline-db-press",
+        "machine-chest-press",
+        "low-high-cable-fly",
+        "cable-lateral-raise",
+        "overhead-cable-extension",
+      ],
+      fitness
+    ),
+
+    createDay(
+      2,
+      "Pull A",
+      "Lat width priority",
+      [
+        "single-arm-lat-pulldown",
+        "chest-supported-row",
+        "reverse-cable-fly",
+        "bayesian-curl",
+      ],
+      fitness
+    ),
+
+    createDay(
+      3,
+      "Legs A",
+      "Quad priority",
+      [
+        "hack-squat",
+        "leg-extension",
+        "seated-leg-curl",
+        "standing-calf-raise",
+        "cable-crunch",
+      ],
+      fitness
+    ),
+
+    createDay(
+      4,
+      "Push B",
+      "Chest · Delts · Triceps",
+      [
+        "machine-chest-press",
+        "low-high-cable-fly",
+        "cable-lateral-raise",
+        "overhead-cable-extension",
+        "triceps-pressdown",
+      ],
+      fitness
+    ),
+
+    createDay(
+      5,
+      "Pull B",
+      "Back thickness priority",
+      [
+        "chest-supported-row",
+        "wide-cable-row",
+        "single-arm-lat-pulldown",
+        "reverse-cable-fly",
+        "incline-db-curl",
+      ],
+      fitness
+    ),
+
+    createDay(
+      6,
+      "Legs B",
+      "Hamstrings · Glutes",
+      [
+        "romanian-deadlift",
+        "seated-leg-curl",
+        "hip-thrust",
+        "hack-squat",
+        "seated-calf-raise",
+      ],
+      fitness
+    ),
+  ];
+}
+
+/* =========================================================
+   PRIORITY MUSCLE SORTING
+========================================================= */
+
+function priorityScore(
+  exercise: Exercise,
+  priorities: string[]
+) {
+  const target =
+    normalize(
+      exercise.muscle
+    );
+
+  return priorities.some(
+    (priority) => {
+      const value =
+        normalize(priority);
+
+      return (
+        target.includes(value) ||
+        value.includes(target) ||
+        exercise.secondaryMuscles
+          ?.some((muscle) =>
+            normalize(
+              muscle
+            ).includes(value)
+          )
+      );
+    }
+  )
+    ? 1
+    : 0;
+}
+
+function applyPriority(
+  days: TrainingDay[],
+  fitness: FitnessProfile
+) {
+  const priorities =
+    fitness.priority_muscles ??
+    [];
+
+  if (
+    priorities.length === 0
+  ) {
+    return days;
+  }
+
+  return days.map(
+    (day) => ({
+      ...day,
+
+      exercises: [
+        ...day.exercises,
+      ].sort(
+        (a, b) =>
+          priorityScore(
+            b.exercise,
+            priorities
+          ) -
+          priorityScore(
+            a.exercise,
+            priorities
+          )
+      ),
+    })
+  );
+}
+
+/* =========================================================
+   PAGE
+========================================================= */
+
+export default async function TrainingPage() {
+  const supabase =
+    await createClient();
+
+  /* =======================================================
+     AUTH
+  ======================================================= */
+
+  const {
+    data: { user },
+    error: userError,
+  } =
+    await supabase.auth.getUser();
+
+  if (
+    userError ||
+    !user
+  ) {
+    redirect(
+      "/login?next=/training"
+    );
+  }
+
+  /* =======================================================
+     FITNESS PROFILE
+  ======================================================= */
+
+  const {
+    data: fitness,
+    error:
+      fitnessError,
+  } =
+    await supabase
+      .from(
+        "fitness_profiles"
+      )
+      .select(
+        `
+          height_cm,
+          weight_kg,
+          goal,
+          experience,
+          training_days,
+          session_duration_minutes,
+          training_location,
+          available_equipment,
+          priority_muscles,
+          physical_limitations
+        `
+      )
+      .eq(
+        "user_id",
+        user.id
+      )
+      .maybeSingle();
+
+  if (fitnessError) {
+    throw new Error(
+      `Unable to load training profile: ${fitnessError.message}`
+    );
+  }
+
+  if (!fitness) {
+    redirect(
+      "/onboarding"
+    );
+  }
+
+  const trainingPlan =
+    applyPriority(
+      createTrainingPlan(
+        fitness
+      ),
+      fitness
+    );
+
+  const totalWeeklySets =
+    trainingPlan.reduce(
+      (
+        total,
+        day
+      ) =>
+        total +
+        day.exercises.reduce(
+          (
+            dayTotal,
+            plannedExercise
+          ) =>
+            dayTotal +
+            plannedExercise.sets,
+          0
+        ),
+      0
+    );
+
+  /* =======================================================
+     UI
+  ======================================================= */
+
   return (
-    <main className={styles.page}>
-      {/* HERO */}
-      <section className={styles.hero}>
-        <div className={styles.gridBackground} />
-        <div className={styles.heroGlow} />
+    <main className="min-h-screen bg-[#070707] text-white">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
 
-        <div className={styles.container}>
-          <div className={styles.heroGrid}>
-            <div className={styles.heroContent}>
-              <div className={styles.chapter}>
-                <span>01</span>
-                <span className={styles.chapterLine} />
-                <span>TRAINING</span>
+        {/* =================================================
+            NAVIGATION
+        ================================================= */}
+
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/4 px-4 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-white/8 hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+
+            Dashboard
+          </Link>
+
+          <Link
+            href="/chatbot"
+            className="inline-flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-400 transition hover:bg-amber-500/20"
+          >
+            <Brain className="h-4 w-4" />
+
+            Ask Dante
+          </Link>
+        </div>
+
+        {/* =================================================
+            HERO
+        ================================================= */}
+
+        <header className="overflow-hidden rounded-3xl border border-white/10 bg-linear-to-br from-[#171717] via-[#0d0d0d] to-black p-7 sm:p-10">
+          <div className="grid gap-8 xl:grid-cols-[1.5fr_1fr]">
+            <div>
+              <div className="flex items-center gap-2 text-amber-500">
+                <Sparkles className="h-4 w-4" />
+
+                <p className="text-xs font-black uppercase tracking-[0.3em]">
+                  Personalized Training System
+                </p>
               </div>
 
-              <p className={styles.eyebrow}>BUILT THROUGH DISCIPLINE</p>
-
-              <h1 className={styles.heroTitle}>
-                TRAIN WITH
-                <span>PURPOSE.</span>
+              <h1 className="mt-5 max-w-3xl text-4xl font-black uppercase leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+                Your training.
+                <span className="block text-amber-500">
+                  Built from your profile.
+                </span>
               </h1>
 
-              <p className={styles.heroDescription}>
-                Structured training built to remove confusion, improve
-                performance and turn repeated effort into measurable progress.
+              <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-400 sm:text-base">
+                Exercise selection,
+                working sets, repetition
+                targets, rest periods,
+                RIR and technique cues
+                are organized around
+                your current training
+                profile.
+              </p>
+            </div>
+
+            {/* PROFILE SUMMARY */}
+
+            <div className="grid grid-cols-2 gap-3">
+              <SummaryCard
+                label="Goal"
+                value={humanize(
+                  fitness.goal
+                )}
+              />
+
+              <SummaryCard
+                label="Experience"
+                value={humanize(
+                  fitness.experience
+                )}
+              />
+
+              <SummaryCard
+                label="Frequency"
+                value={`${fitness.training_days ?? 3}× / week`}
+              />
+
+              <SummaryCard
+                label="Session"
+                value={`${fitness.session_duration_minutes ?? 60} min`}
+              />
+
+              <SummaryCard
+                label="Weekly sets"
+                value={String(
+                  totalWeeklySets
+                )}
+              />
+
+              <SummaryCard
+                label="Location"
+                value={humanize(
+                  fitness.training_location
+                )}
+              />
+            </div>
+          </div>
+        </header>
+
+        {/* =================================================
+            PRIORITIES
+        ================================================= */}
+
+        <section className="mt-6 grid gap-4 md:grid-cols-3">
+          <InfoCard
+            icon={
+              <Target className="h-5 w-5" />
+            }
+            title="Priority muscles"
+            value={
+              fitness
+                .priority_muscles
+                ?.length
+                ? fitness
+                    .priority_muscles
+                    .join(", ")
+                : "Balanced development"
+            }
+          />
+
+          <InfoCard
+            icon={
+              <Dumbbell className="h-5 w-5" />
+            }
+            title="Available equipment"
+            value={
+              fitness
+                .available_equipment
+                ?.length
+                ? fitness
+                    .available_equipment
+                    .join(", ")
+                : fitness.training_location ===
+                  "gym"
+                ? "Standard gym equipment"
+                : "Limited equipment"
+            }
+          />
+
+          <InfoCard
+            icon={
+              <ShieldAlert className="h-5 w-5" />
+            }
+            title="Limitations"
+            value={
+              fitness
+                .physical_limitations ||
+              "No limitations reported"
+            }
+          />
+        </section>
+
+        {/* =================================================
+            TRAINING PRINCIPLES
+        ================================================= */}
+
+        <section className="mt-8 rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+          <div className="flex items-center gap-3">
+            <Gauge className="h-5 w-5 text-amber-500" />
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.25em] text-amber-500">
+                Programming Rules
               </p>
 
-              <div className={styles.heroActions}>
-                <Link href="/signup" className={styles.primaryButton}>
-                  START TRAINING
-                  <ArrowRight size={16} />
-                </Link>
-
-                <a href="#programs" className={styles.secondaryButton}>
-                  VIEW PROGRAMS
-                  <ChevronDown size={16} />
-                </a>
-              </div>
-
-              <div className={styles.heroStats}>
-                <Stat value="3" label="TRAINING LEVELS" />
-                <Stat value="8–16" label="WEEK PROGRAMS" />
-                <Stat value="100%" label="TRACKABLE" />
-                <Stat value="4D" label="MENTALITY" />
-              </div>
-            </div>
-
-            <div className={styles.workoutCard}>
-              <div className={styles.workoutCardHeader}>
-                <div>
-                  <p className={styles.smallLabel}>TODAY&apos;S TRAINING</p>
-                  <h2>PUSH — CHEST FOCUS</h2>
-                </div>
-
-                <div className={styles.iconBox}>
-                  <Dumbbell size={23} />
-                </div>
-              </div>
-
-              <div className={styles.exercisePreviewList}>
-                {exercises.slice(0, 3).map((exercise, index) => (
-                  <div className={styles.exercisePreview} key={exercise.name}>
-                    <span className={styles.exerciseNumber}>
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-
-                    <div className={styles.exercisePreviewContent}>
-                      <p>{exercise.name}</p>
-                      <span>{exercise.muscle}</span>
-                    </div>
-
-                    <strong>
-                      {exercise.sets} × {exercise.reps}
-                    </strong>
-                  </div>
-                ))}
-              </div>
-
-              <div className={styles.workoutSummary}>
-                <Stat value="58 MIN" label="DURATION" />
-                <Stat value="16" label="WORKING SETS" />
-                <Stat value="HIGH" label="INTENSITY" />
-              </div>
+              <h2 className="mt-1 text-2xl font-bold">
+                How to use this program
+              </h2>
             </div>
           </div>
-        </div>
 
-        <a href="#benefits" className={styles.scrollIndicator}>
-          <span>DISCOVER THE SYSTEM</span>
-          <span className={styles.scrollLine} />
-        </a>
-      </section>
+          <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Rule
+              title="Working sets"
+              text="Warm-up sets do not count. The prescribed sets are challenging working sets."
+            />
 
-      {/* BENEFITS */}
-      <section id="benefits" className={styles.section}>
-        <div className={styles.container}>
-          <SectionHeading
-            chapter="02"
-            eyebrow="BUILT FOR PROGRESS"
-            title={
-              <>
-                MORE THAN A LIST
-                <span>OF EXERCISES.</span>
-              </>
-            }
-            description="Every part of the training system is designed to give your effort a clear direction."
-          />
+            <Rule
+              title="RIR"
+              text="RIR means Reps In Reserve. 2 RIR = stop when roughly two clean reps remain."
+            />
 
-          <div className={styles.benefitGrid}>
-            {benefits.map((benefit) => {
-              const Icon = benefit.icon;
+            <Rule
+              title="Rest"
+              text="Heavy compounds generally receive more rest than isolation movements."
+            />
 
-              return (
-                <article className={styles.benefitCard} key={benefit.title}>
-                  <div className={styles.benefitIcon}>
-                    <Icon size={21} />
-                  </div>
-
-                  <h3>{benefit.title}</h3>
-                  <p>{benefit.description}</p>
-                </article>
-              );
-            })}
+            <Rule
+              title="Execution"
+              text="Use repeatable ROM, controlled eccentric and stable technique before adding load."
+            />
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* PROGRAMS */}
-      <section id="programs" className={styles.programSection}>
-        <div className={styles.container}>
-          <SectionHeading
-            chapter="03"
-            eyebrow="TRAINING PROGRAMS"
-            title={
-              <>
-                SELECT YOUR
-                <span>STARTING LEVEL.</span>
-              </>
-            }
-            description="Choose the structure that matches your current experience, recovery and available training time."
-          />
+        {/* =================================================
+            WEEKLY PLAN
+        ================================================= */}
 
-          <div className={styles.programGrid}>
-            {programs.map((program) => (
-              <article
-                key={program.title}
-                className={`${styles.programCard} ${
-                  program.featured ? styles.featuredProgram : ""
-                }`}
-              >
-                {program.featured && (
-                  <span className={styles.popularBadge}>MOST POPULAR</span>
-                )}
+        <section className="mt-10">
+          <div className="mb-6">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-500">
+              Weekly Program
+            </p>
 
-                <p className={styles.programNumber}>
-                  PROGRAM {program.number}
-                </p>
+            <h2 className="mt-2 text-3xl font-black uppercase">
+              Your Training Split
+            </h2>
+          </div>
 
-                <h3>{program.title}</h3>
-                <p className={styles.programDescription}>
-                  {program.description}
-                </p>
-
-                <div className={styles.programMeta}>
-                  <MetaItem label="LEVEL" value={program.level} />
-                  <MetaItem label="DURATION" value={program.duration} />
-                </div>
-
-                <div className={styles.frequency}>
-                  <Clock3 size={17} />
-
-                  <div>
-                    <span>FREQUENCY</span>
-                    <strong>{program.frequency}</strong>
-                  </div>
-                </div>
-
-                <ul className={styles.featureList}>
-                  {program.features.map((feature) => (
-                    <li key={feature}>
-                      <Check size={15} />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <Link
-                  href="/signup"
-                  className={
-                    program.featured
-                      ? styles.programPrimary
-                      : styles.programSecondary
+          <div className="space-y-8">
+            {trainingPlan.map(
+              (trainingDay) => (
+                <article
+                  key={
+                    trainingDay.day
                   }
+                  className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d]"
                 >
-                  SELECT PROGRAM
-                  <ArrowRight size={15} />
-                </Link>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+                  {/* DAY HEADER */}
 
-      {/* WORKOUT PREVIEW */}
-      <section className={styles.workoutSection}>
-        <div className={styles.container}>
-          <div className={styles.twoColumn}>
-            <div>
-              <SectionHeading
-                chapter="04"
-                eyebrow="SESSION STRUCTURE"
-                title={
-                  <>
-                    KNOW EXACTLY
-                    <span>WHAT TO DO.</span>
-                  </>
-                }
-                description="Every session shows the exercise order, working sets, repetition targets, rest periods and muscle focus."
-              />
+                  <header className="border-b border-white/10 bg-white/3 px-6 py-5 sm:px-8">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-[0.25em] text-amber-500">
+                          Day{" "}
+                          {
+                            trainingDay.day
+                          }
+                        </p>
 
-              <div className={styles.checkList}>
-                <CheckItem text="Exercise order and target muscle" />
-                <CheckItem text="Working sets and repetition range" />
-                <CheckItem text="Rest time between working sets" />
-                <CheckItem text="Previous performance history" />
-              </div>
-            </div>
+                        <h3 className="mt-2 text-2xl font-black uppercase">
+                          {
+                            trainingDay.title
+                          }
+                        </h3>
+                      </div>
 
-            <div className={styles.sessionPanel}>
-              <div className={styles.sessionHeader}>
-                <div>
-                  <p className={styles.smallLabel}>WORKOUT PREVIEW</p>
-                  <h3>PUSH A — CHEST PRIORITY</h3>
-                </div>
-
-                <span className={styles.durationBadge}>58 MINUTES</span>
-              </div>
-
-              <div className={styles.exerciseTable}>
-                {exercises.map((exercise, index) => (
-                  <div className={styles.exerciseRow} key={exercise.name}>
-                    <span className={styles.exerciseNumber}>
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-
-                    <div className={styles.exerciseName}>
-                      <strong>{exercise.name}</strong>
-                      <span>{exercise.muscle}</span>
+                      <p className="text-sm text-zinc-500">
+                        {
+                          trainingDay.focus
+                        }
+                      </p>
                     </div>
+                  </header>
 
-                    <ExerciseValue label="SETS" value={exercise.sets} />
-                    <ExerciseValue label="REPS" value={exercise.reps} />
-                    <ExerciseValue label="REST" value={exercise.rest} />
+                  {/* EXERCISES */}
+
+                  <div className="divide-y divide-white/8">
+                    {trainingDay.exercises.map(
+                      (
+                        plannedExercise,
+                        index
+                      ) => (
+                        <ExerciseCard
+                          key={
+                            plannedExercise
+                              .exercise.id
+                          }
+                          index={
+                            index
+                          }
+                          plannedExercise={
+                            plannedExercise
+                          }
+                          priority={
+                            priorityScore(
+                              plannedExercise.exercise,
+                              fitness.priority_muscles ??
+                                []
+                            ) >
+                            0
+                          }
+                        />
+                      )
+                    )}
                   </div>
-                ))}
-              </div>
-            </div>
+                </article>
+              )
+            )}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* PROCESS */}
-      <section className={styles.section}>
-        <div className={styles.container}>
-          <SectionHeading
-            chapter="05"
-            eyebrow="THE PROCESS"
-            title={
-              <>
-                FROM PROFILE
-                <span>TO PROGRESSION.</span>
-              </>
-            }
-            description="A clear path from your first setup to ongoing performance improvements."
-          />
+        {/* =================================================
+            PROGRESSION
+        ================================================= */}
 
-          <div className={styles.processGrid}>
-            {processSteps.map((step) => (
-              <article className={styles.processCard} key={step.number}>
-                <p className={styles.processNumber}>{step.number}</p>
-                <h3>{step.title}</h3>
-                <p>{step.description}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+        <section className="mt-10 grid gap-6 lg:grid-cols-2">
+          <article className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-7">
+            <TrendingUp className="h-6 w-6 text-amber-500" />
 
-      {/* PROGRESS */}
-      <section className={styles.progressSection}>
-        <div className={styles.container}>
-          <div className={styles.twoColumn}>
-            <div className={styles.progressPanel}>
-              <div className={styles.progressHeader}>
-                <div>
-                  <p className={styles.smallLabel}>TRAINING PERFORMANCE</p>
-                  <h3>WEEKLY PROGRESS</h3>
-                </div>
+            <h2 className="mt-4 text-2xl font-bold">
+              Progressive overload
+            </h2>
 
-                <BarChart3 size={25} />
-              </div>
+            <div className="mt-5 space-y-4 text-sm leading-7 text-zinc-400">
+              <p>
+                1. Keep the same
+                technique and ROM.
+              </p>
 
-              <div className={styles.chart}>
-                {["42%", "50%", "47%", "63%", "70%", "78%", "90%"].map(
-                  (height, index) => (
-                    <div className={styles.chartColumn} key={index}>
-                      <span style={{ height }} />
-                    </div>
-                  ),
-                )}
-              </div>
+              <p>
+                2. Progress toward
+                the top of the rep
+                range.
+              </p>
 
-              <div className={styles.progressStats}>
-                <Stat value="12" label="WORKOUTS" />
-                <Stat value="92%" label="COMPLETION" />
-                <Stat value="+7.5 KG" label="BENCH PRESS" />
-              </div>
+              <p>
+                3. Once all working
+                sets reach the top
+                of the range at the
+                intended RIR, add a
+                small amount of load.
+              </p>
+
+              <p>
+                4. Do not add weight
+                if execution quality
+                deteriorates.
+              </p>
             </div>
+          </article>
 
-            <div>
-              <SectionHeading
-                chapter="06"
-                eyebrow="MEASURABLE PROGRESS"
-                title={
-                  <>
-                    TRACK THE WORK.
-                    <span>EARN THE RESULT.</span>
-                  </>
-                }
-                description="Review completed sessions, training volume, strength changes and weekly consistency."
-              />
+          <article className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-7">
+            <RotateCcw className="h-6 w-6 text-amber-500" />
 
-              <div className={styles.trackingList}>
-                <TrackingItem
-                  icon={<Gauge size={19} />}
-                  text="Track completed workouts and weekly consistency."
-                />
+            <h2 className="mt-4 text-2xl font-bold">
+              Fatigue management
+            </h2>
 
-                <TrackingItem
-                  icon={<TrendingUp size={19} />}
-                  text="Compare working weight and repetitions over time."
-                />
+            <div className="mt-5 space-y-4 text-sm leading-7 text-zinc-400">
+              <p>
+                Reduce training load
+                or volume when
+                performance declines
+                repeatedly across
+                sessions.
+              </p>
 
-                <TrackingItem
-                  icon={<Flame size={19} />}
-                  text="Build training streaks and stronger habits."
-                />
-              </div>
+              <p>
+                Technical compounds
+                should generally be
+                stopped further from
+                failure than stable
+                isolation movements.
+              </p>
 
-              <Link href="/dashboard" className={styles.secondaryButton}>
-                OPEN DASHBOARD
-                <ArrowRight size={16} />
-              </Link>
+              <p>
+                Joint pain is not a
+                target-muscle
+                stimulus. Change the
+                movement if necessary.
+              </p>
             </div>
-          </div>
-        </div>
-      </section>
+          </article>
+        </section>
 
-      {/* FINAL CTA */}
-      <section className={styles.finalCta}>
-        <div className={styles.ctaGlow} />
+        {/* =================================================
+            SAFETY
+        ================================================= */}
 
-        <div className={styles.container}>
-          <p className={styles.eyebrow}>YOUR NEXT SESSION STARTS HERE</p>
+        <section className="mt-8 rounded-3xl border border-amber-500/15 bg-amber-500/5 p-6">
+          <div className="flex gap-3">
+            <Info className="mt-1 h-5 w-5 shrink-0 text-amber-500" />
 
-          <h2>
-            STOP TRAINING
-            <span>WITHOUT DIRECTION.</span>
-          </h2>
-
-          <p>
-            Select your level, follow the structure and turn every completed
-            workout into measurable progress.
+            <p className="text-sm leading-7 text-zinc-400">
+              This program is generated
+              from the information you
+              supplied. If you experience
+              sharp pain, numbness,
+              dizziness or other unusual
+              symptoms, stop the exercise
+              and seek an appropriate
+              qualified professional.
           </p>
-
-          <div className={styles.ctaActions}>
-            <Link href="/signup" className={styles.primaryButton}>
-              START TRAINING FREE
-              <ArrowRight size={16} />
-            </Link>
-
-            <Link href="/" className={styles.secondaryButton}>
-              RETURN HOME
-            </Link>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </main>
   );
 }
 
-function SectionHeading({
-  chapter,
-  eyebrow,
-  title,
-  description,
+/* =========================================================
+   COMPONENTS
+========================================================= */
+
+function SummaryCard({
+  label,
+  value,
 }: {
-  chapter: string;
-  eyebrow: string;
-  title: React.ReactNode;
-  description: string;
+  label: string;
+  value: string;
 }) {
   return (
-    <div className={styles.sectionHeading}>
-      <div className={styles.chapter}>
-        <span>{chapter}</span>
-        <span className={styles.chapterLine} />
-        <span>{eyebrow}</span>
+    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-600">
+        {label}
+      </p>
+
+      <p className="mt-2 text-sm font-semibold text-zinc-100">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function InfoCard({
+  icon,
+  title,
+  value,
+}: {
+  icon:
+    React.ReactNode;
+  title: string;
+  value: string;
+}) {
+  return (
+    <article className="rounded-2xl border border-white/10 bg-[#0d0d0d] p-5">
+      <div className="flex items-center gap-2 text-amber-500">
+        {icon}
+
+        <p className="text-xs font-black uppercase tracking-[0.2em]">
+          {title}
+        </p>
       </div>
 
-      <h2>{title}</h2>
-      <p>{description}</p>
-    </div>
+      <p className="mt-4 text-sm leading-6 text-zinc-300">
+        {value}
+      </p>
+    </article>
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className={styles.stat}>
-      <strong>{value}</strong>
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.metaItem}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function CheckItem({ text }: { text: string }) {
-  return (
-    <div className={styles.checkItem}>
-      <span>
-        <Check size={14} />
-      </span>
-      <p>{text}</p>
-    </div>
-  );
-}
-
-function ExerciseValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.exerciseValue}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function TrackingItem({
-  icon,
+function Rule({
+  title,
   text,
 }: {
-  icon: React.ReactNode;
+  title: string;
   text: string;
 }) {
   return (
-    <div className={styles.trackingItem}>
-      <span>{icon}</span>
-      <p>{text}</p>
+    <article className="rounded-2xl border border-white/8 bg-black/20 p-5">
+      <CheckCircle2 className="h-5 w-5 text-amber-500" />
+
+      <h3 className="mt-4 font-bold">
+        {title}
+      </h3>
+
+      <p className="mt-2 text-sm leading-6 text-zinc-500">
+        {text}
+      </p>
+    </article>
+  );
+}
+
+/* =========================================================
+   EXERCISE CARD
+========================================================= */
+
+function ExerciseCard({
+  index,
+  plannedExercise,
+  priority,
+}: {
+  index: number;
+  plannedExercise:
+    PlannedExercise;
+  priority: boolean;
+}) {
+  const {
+    exercise,
+    sets,
+  } =
+    plannedExercise;
+
+  return (
+    <div className="p-6 sm:p-8">
+      <div className="grid gap-6 xl:grid-cols-[1fr_1.3fr]">
+
+        {/* ===============================================
+            SUMMARY
+        =============================================== */}
+
+        <div>
+          <div className="flex items-start gap-4">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-sm font-black text-black">
+              {String(
+                index + 1
+              ).padStart(
+                2,
+                "0"
+              )}
+            </span>
+
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-xl font-bold text-white">
+                  {
+                    exercise.name
+                  }
+                </h4>
+
+                {priority && (
+                  <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-amber-500">
+                    Priority
+                  </span>
+                )}
+              </div>
+
+              <p className="mt-1 text-sm font-semibold text-amber-500">
+                {
+                  exercise.muscle
+                }
+              </p>
+
+              <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-500">
+                {
+                  exercise.purpose
+                }
+              </p>
+            </div>
+          </div>
+
+          {/* TRAINING VARIABLES */}
+
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <TrainingMetric
+              icon={
+                <Dumbbell className="h-4 w-4" />
+              }
+              label="Sets"
+              value={String(
+                sets
+              )}
+            />
+
+            <TrainingMetric
+              icon={
+                <Target className="h-4 w-4" />
+              }
+              label="Reps"
+              value={
+                exercise.reps
+              }
+            />
+
+            <TrainingMetric
+              icon={
+                <Gauge className="h-4 w-4" />
+              }
+              label="RIR"
+              value={
+                exercise.rir
+              }
+            />
+
+            <TrainingMetric
+              icon={
+                <Clock3 className="h-4 w-4" />
+              }
+              label="Rest"
+              value={
+                exercise.rest
+              }
+            />
+
+            <TrainingMetric
+              icon={
+                <TimerReset className="h-4 w-4" />
+              }
+              label="Tempo"
+              value={
+                exercise.tempo
+              }
+            />
+          </div>
+        </div>
+
+        {/* ===============================================
+            TECHNIQUE DETAILS
+        =============================================== */}
+
+        <div className="grid gap-3 md:grid-cols-2">
+
+          <TechniqueSection
+            title="Setup"
+            items={
+              exercise.setup
+            }
+          />
+
+          <TechniqueSection
+            title="Execution"
+            items={
+              exercise.execution
+            }
+          />
+
+          <TechniqueSection
+            title="Coaching cues"
+            items={
+              exercise.cues
+            }
+            accent
+          />
+
+          <TechniqueSection
+            title="Avoid"
+            items={
+              exercise.mistakes
+            }
+            warning
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TrainingMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon:
+    React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/8 bg-white/3 p-3">
+      <div className="flex items-center gap-1.5 text-zinc-600">
+        {icon}
+
+        <span className="text-[10px] font-bold uppercase tracking-wider">
+          {label}
+        </span>
+      </div>
+
+      <p className="mt-2 text-xs font-bold text-zinc-200">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function TechniqueSection({
+  title,
+  items,
+  accent = false,
+  warning = false,
+}: {
+  title: string;
+  items: string[];
+  accent?: boolean;
+  warning?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-black/20 p-5">
+      <p
+        className={
+          warning
+            ? "text-xs font-black uppercase tracking-[0.18em] text-red-400"
+            : accent
+            ? "text-xs font-black uppercase tracking-[0.18em] text-amber-500"
+            : "text-xs font-black uppercase tracking-[0.18em] text-zinc-500"
+        }
+      >
+        {title}
+      </p>
+
+      <ul className="mt-4 space-y-2">
+        {items.map(
+          (item) => (
+            <li
+              key={item}
+              className="flex gap-2 text-sm leading-6 text-zinc-400"
+            >
+              <span
+                className={
+                  warning
+                    ? "mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400"
+                    : accent
+                    ? "mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+                    : "mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-600"
+                }
+              />
+
+              {item}
+            </li>
+          )
+        )}
+      </ul>
     </div>
   );
 }

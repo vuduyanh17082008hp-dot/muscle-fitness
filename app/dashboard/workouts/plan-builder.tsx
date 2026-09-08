@@ -1,176 +1,626 @@
 "use client";
 
 import {
+  useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+
 import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronDown,
-  Dumbbell,
+  AlertTriangle,
+  Check,
+  ChevronRight,
   Loader2,
-  Minus,
   Plus,
   Save,
   Search,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 
-import { createWorkoutPlanAction } from "./actions";
+import { useRouter } from "next/navigation";
+
+import {
+  createWorkoutPlanAction,
+} from "./actions";
+
+import type {
+  ExerciseLibraryItem,
+} from "@/lib/workouts/exercise-library";
+
+import {
+  buildSplitDays,
+  MUSCLE_FOCUS_OPTIONS,
+  SPLIT_OPTIONS,
+  type MuscleFocus,
+  type SplitPreset,
+} from "@/lib/workouts/presets";
 
 /* =========================================================
-   PUBLIC TYPES
+   TYPES
 ========================================================= */
 
-export type ExerciseDifficulty =
-  | "beginner"
-  | "intermediate"
-  | "advanced";
+type BuilderProfile = {
+  goal:
+    | string
+    | null;
 
-export type ExerciseLibraryItem = {
-  id: string;
-  name: string;
-  description: string;
-  primaryMuscle: string;
-  secondaryMuscles: string[];
-  equipment: string;
-  difficulty: ExerciseDifficulty;
-  movementPattern: string;
+  experience:
+    | string
+    | null;
+
+  trainingDays: number;
+
+  sessionDurationMinutes:
+    number;
+
+  trainingLocation:
+    | string
+    | null;
+
+  availableEquipment:
+    string[];
+
+  priorityMuscles:
+    string[];
+
+  physicalLimitations:
+    | string
+    | null;
 };
 
-export type PlanBuilderProps = {
+type PlanBuilderProps = {
   clientId: string;
-  exercises: ExerciseLibraryItem[];
+
+  exercises:
+    ExerciseLibraryItem[];
+
+  profile:
+    BuilderProfile;
+
+  initialPreset:
+    SplitPreset;
+
+  externalTemplateName:
+    | string
+    | null;
 };
 
-/* =========================================================
-   INTERNAL TYPES
-========================================================= */
+type IntensityStyle =
+  | "conservative"
+  | "moderate"
+  | "hard"
+  | "very_hard";
+
+type VolumeStyle =
+  | "low"
+  | "moderate"
+  | "high";
+
+type FailureStyle =
+  | "rare"
+  | "isolation_only"
+  | "selected_last_sets";
+
+type ExerciseStyle =
+  | "mixed"
+  | "machine"
+  | "free_weights";
 
 type BuilderExercise = {
   localId: string;
-  exerciseId: string;
+
+  exerciseId:
+    | string
+    | null;
+
   exerciseName: string;
-  exerciseOrder: number;
+
+  source:
+    "muscle-fitness"
+    | "wger";
+
+  sourceUrl:
+    | string
+    | null;
+
   targetSets: number;
+
   repMin: number;
+
   repMax: number;
+
   restSeconds: number;
-  rir: number | null;
+
+  rir:
+    | number
+    | null;
+
   tempo: string;
+
   notes: string;
 };
 
 type BuilderDay = {
   localId: string;
+
   dayNumber: number;
+
   name: string;
-  focus: string;
+
+  focus: MuscleFocus[];
+
   notes: string;
-  restDay: boolean;
-  exercises: BuilderExercise[];
+
+  exercises:
+    BuilderExercise[];
 };
 
 type Feedback =
   | {
-      type: "success";
+      type: "error";
       message: string;
     }
   | {
-      type: "error";
+      type: "success";
       message: string;
     }
   | null;
 
 /* =========================================================
-   STYLES
-========================================================= */
-
-const inputClassName = [
-  "h-12 w-full rounded-xl",
-  "border border-white/10",
-  "bg-black/40 px-4",
-  "text-sm text-white",
-  "outline-none transition",
-  "placeholder:text-zinc-700",
-  "hover:border-white/20",
-  "focus:border-orange-400/70",
-  "focus:ring-4",
-  "focus:ring-orange-500/10",
-  "disabled:cursor-not-allowed",
-  "disabled:opacity-50",
-].join(" ");
-
-const textareaClassName = [
-  "min-h-28 w-full resize-y rounded-xl",
-  "border border-white/10",
-  "bg-black/40 px-4 py-3",
-  "text-sm leading-6 text-white",
-  "outline-none transition",
-  "placeholder:text-zinc-700",
-  "hover:border-white/20",
-  "focus:border-orange-400/70",
-  "focus:ring-4",
-  "focus:ring-orange-500/10",
-].join(" ");
-
-/* =========================================================
    HELPERS
 ========================================================= */
 
-function createLocalId(): string {
+function localId() {
+  return crypto.randomUUID();
+}
+
+function normalize(
+  value: string,
+) {
+  return value
+    .trim()
+    .toLowerCase();
+}
+
+function experienceRank(
+  value: string,
+) {
   if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
+    value === "advanced"
   ) {
-    return crypto.randomUUID();
+    return 3;
   }
 
-  return `${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2)}`;
+  if (
+    value ===
+    "intermediate"
+  ) {
+    return 2;
+  }
+
+  return 1;
 }
 
-function createEmptyDay(dayNumber: number): BuilderDay {
-  return {
-    localId: createLocalId(),
-    dayNumber,
-    name: `Day ${dayNumber}`,
-    focus: "",
-    notes: "",
-    restDay: false,
-    exercises: [],
+function muscleSearchTerms(
+  muscle: MuscleFocus,
+): string[] {
+  const map: Record<
+    MuscleFocus,
+    string[]
+  > = {
+    Chest: [
+      "chest",
+      "pector",
+      "bench",
+    ],
+
+    "Upper Chest": [
+      "upper chest",
+      "incline",
+      "clavicular",
+    ],
+
+    "Back Width": [
+      "latissimus",
+      "lat ",
+      "pulldown",
+      "pull down",
+      "pull-up",
+    ],
+
+    "Back Thickness": [
+      "upper back",
+      "row",
+      "rhomboid",
+      "trapez",
+    ],
+
+    "Side Delts": [
+      "side delt",
+      "lateral",
+      "shoulder abduction",
+    ],
+
+    "Rear Delts": [
+      "rear delt",
+      "posterior delt",
+      "reverse",
+    ],
+
+    Quads: [
+      "quadr",
+      "leg press",
+      "squat",
+      "leg extension",
+    ],
+
+    Hamstrings: [
+      "hamstring",
+      "leg curl",
+      "romanian",
+    ],
+
+    Glutes: [
+      "glute",
+      "hip thrust",
+    ],
+
+    Biceps: [
+      "biceps",
+      "curl",
+    ],
+
+    Triceps: [
+      "triceps",
+      "pushdown",
+      "pressdown",
+      "extension",
+    ],
+
+    Calves: [
+      "calf",
+      "gastro",
+      "soleus",
+    ],
+
+    Abs: [
+      "abdominal",
+      "abs",
+      "crunch",
+    ],
   };
+
+  return map[muscle];
 }
 
-function getDifficultyClasses(
-  difficulty: ExerciseDifficulty,
-): string {
-  switch (difficulty) {
-    case "beginner":
-      return [
-        "border-emerald-500/20",
-        "bg-emerald-500/10",
-        "text-emerald-300",
-      ].join(" ");
+function exerciseText(
+  exercise:
+    ExerciseLibraryItem,
+) {
+  return normalize(
+    [
+      exercise.name,
+      exercise.description,
+      exercise.primaryMuscle,
+      ...exercise
+        .secondaryMuscles,
+      exercise.equipment,
+      exercise.movementPattern,
+    ].join(" "),
+  );
+}
 
-    case "advanced":
-      return [
-        "border-red-500/20",
-        "bg-red-500/10",
-        "text-red-300",
-      ].join(" ");
+function matchesMuscle(
+  exercise:
+    ExerciseLibraryItem,
+  muscle:
+    MuscleFocus,
+) {
+  const text =
+    exerciseText(
+      exercise,
+    );
 
-    default:
-      return [
-        "border-orange-500/20",
-        "bg-orange-500/10",
-        "text-orange-300",
-      ].join(" ");
+  return muscleSearchTerms(
+    muscle,
+  ).some(
+    (term) =>
+      text.includes(
+        normalize(term),
+      ),
+  );
+}
+
+function isIsolation(
+  exercise:
+    ExerciseLibraryItem,
+) {
+  const text =
+    normalize(
+      `${exercise.name} ${exercise.movementPattern}`,
+    );
+
+  return [
+    "curl",
+    "extension",
+    "raise",
+    "fly",
+    "adduction",
+    "abduction",
+    "crunch",
+    "plantar flexion",
+  ].some(
+    (keyword) =>
+      text.includes(
+        keyword,
+      ),
+  );
+}
+
+function equipmentAllowed(
+  exercise:
+    ExerciseLibraryItem,
+  profile:
+    BuilderProfile,
+) {
+  if (
+    normalize(
+      profile.trainingLocation ??
+        "",
+    ) === "gym"
+  ) {
+    return true;
   }
+
+  if (
+    profile
+      .availableEquipment
+      .length === 0
+  ) {
+    return true;
+  }
+
+  const equipment =
+    normalize(
+      exercise.equipment,
+    );
+
+  return profile
+    .availableEquipment
+    .some(
+      (available) => {
+        const item =
+          normalize(
+            available,
+          );
+
+        return (
+          equipment.includes(
+            item,
+          ) ||
+          item.includes(
+            equipment,
+          )
+        );
+      },
+    );
+}
+
+function styleScore(
+  exercise:
+    ExerciseLibraryItem,
+  style:
+    ExerciseStyle,
+) {
+  if (style === "mixed") {
+    return 0;
+  }
+
+  const text =
+    normalize(
+      `${exercise.name} ${exercise.equipment}`,
+    );
+
+  if (
+    style === "machine"
+  ) {
+    return (
+      text.includes(
+        "machine",
+      ) ||
+      text.includes(
+        "cable",
+      )
+    )
+      ? 5
+      : -2;
+  }
+
+  return (
+    text.includes(
+      "barbell",
+    ) ||
+    text.includes(
+      "dumbbell",
+    )
+  )
+    ? 5
+    : -1;
+}
+
+function getSets(
+  volume:
+    VolumeStyle,
+  priorityIndex:
+    number,
+) {
+  let sets =
+    volume === "low"
+      ? 2
+      : volume === "high"
+        ? 4
+        : 3;
+
+  if (
+    priorityIndex === 0
+  ) {
+    sets += 1;
+  }
+
+  return Math.min(
+    sets,
+    5,
+  );
+}
+
+function getRir(
+  intensity:
+    IntensityStyle,
+  isolation:
+    boolean,
+) {
+  if (
+    intensity ===
+    "conservative"
+  ) {
+    return isolation
+      ? 2
+      : 3;
+  }
+
+  if (
+    intensity ===
+    "moderate"
+  ) {
+    return isolation
+      ? 1
+      : 2;
+  }
+
+  if (
+    intensity === "hard"
+  ) {
+    return 1;
+  }
+
+  return isolation
+    ? 0
+    : 1;
+}
+
+function repRange(
+  goal: string,
+  isolation:
+    boolean,
+) {
+  const strength =
+    normalize(
+      goal,
+    ).includes(
+      "strength",
+    );
+
+  if (strength) {
+    return isolation
+      ? [8, 15]
+      : [4, 8];
+  }
+
+  return isolation
+    ? [10, 20]
+    : [6, 12];
+}
+
+function getRest(
+  isolation:
+    boolean,
+) {
+  return isolation
+    ? 90
+    : 150;
+}
+
+function maxExercises(
+  minutes: number,
+) {
+  if (minutes <= 45) {
+    return 4;
+  }
+
+  if (minutes <= 60) {
+    return 5;
+  }
+
+  if (minutes <= 75) {
+    return 6;
+  }
+
+  if (minutes <= 90) {
+    return 7;
+  }
+
+  return 8;
+}
+
+function failureInstruction(
+  style:
+    FailureStyle,
+  isolation:
+    boolean,
+) {
+  if (
+    style === "rare"
+  ) {
+    return "Stay short of technical failure.";
+  }
+
+  if (
+    style ===
+    "isolation_only"
+  ) {
+    return isolation
+      ? "Final isolation set may approach technical failure."
+      : "Keep compound sets short of failure.";
+  }
+
+  return isolation
+    ? "Final set may reach technical failure."
+    : "Only selected final sets may approach 0–1 RIR while technique remains stable.";
+}
+
+function makeDays(
+  preset:
+    SplitPreset,
+  trainingDays:
+    number,
+): BuilderDay[] {
+  return buildSplitDays(
+    preset,
+    trainingDays,
+  ).map(
+    (
+      day,
+      index,
+    ) => ({
+      localId:
+        localId(),
+
+      dayNumber:
+        index + 1,
+
+      name:
+        day.name,
+
+      focus: [
+        ...day.muscles,
+      ],
+
+      notes: "",
+
+      exercises: [],
+    }),
+  );
 }
 
 /* =========================================================
@@ -180,436 +630,1097 @@ function getDifficultyClasses(
 export default function PlanBuilder({
   clientId,
   exercises,
+  profile,
+  initialPreset,
+  externalTemplateName,
 }: PlanBuilderProps) {
-  const router = useRouter();
-
-  const [planName, setPlanName] = useState("");
-  const [description, setDescription] =
-    useState("");
-  const [goal, setGoal] = useState("");
-  const [weeks, setWeeks] = useState(4);
+  const router =
+    useRouter();
 
   const [
-    sessionDurationMinutes,
-    setSessionDurationMinutes,
-  ] = useState(60);
+    split,
+    setSplit,
+  ] =
+    useState<SplitPreset>(
+      initialPreset,
+    );
 
-  const [days, setDays] = useState<
-    BuilderDay[]
-  >(() => [
-    createEmptyDay(1),
-    createEmptyDay(2),
-    createEmptyDay(3),
-  ]);
+  const [
+    trainingDays,
+    setTrainingDays,
+  ] =
+    useState(
+      profile.trainingDays,
+    );
+
+  const [
+    planName,
+    setPlanName,
+  ] =
+    useState(
+      externalTemplateName
+        ? `${externalTemplateName} — adapted`
+        : `${
+            SPLIT_OPTIONS.find(
+              (item) =>
+                item.id ===
+                initialPreset,
+            )?.name ??
+            "Workout"
+          } Plan`,
+    );
+
+  const [
+    description,
+    setDescription,
+  ] =
+    useState(
+      externalTemplateName
+        ? `Adapted from wger community template: ${externalTemplateName}.`
+        : "",
+    );
+
+  const [
+    goal,
+    setGoal,
+  ] =
+    useState(
+      profile.goal ??
+        "Muscle gain",
+    );
+
+  const [
+    weeks,
+    setWeeks,
+  ] =
+    useState(8);
+
+  const [
+    sessionMinutes,
+    setSessionMinutes,
+  ] =
+    useState(
+      profile
+        .sessionDurationMinutes,
+    );
+
+  const [
+    intensity,
+    setIntensity,
+  ] =
+    useState<IntensityStyle>(
+      normalize(
+        profile.experience ??
+          "",
+      ) === "beginner"
+        ? "moderate"
+        : "hard",
+    );
+
+  const [
+    volume,
+    setVolume,
+  ] =
+    useState<VolumeStyle>(
+      "moderate",
+    );
+
+  const [
+    failureStyle,
+    setFailureStyle,
+  ] =
+    useState<FailureStyle>(
+      "isolation_only",
+    );
+
+  const [
+    exerciseStyle,
+    setExerciseStyle,
+  ] =
+    useState<ExerciseStyle>(
+      "mixed",
+    );
+
+  const [
+    priorities,
+    setPriorities,
+  ] =
+    useState<MuscleFocus[]>(
+      profile.priorityMuscles
+        .filter(
+          (
+            item,
+          ): item is MuscleFocus =>
+            MUSCLE_FOCUS_OPTIONS.includes(
+              item as MuscleFocus,
+            ),
+        )
+        .slice(0, 3),
+    );
+
+  const [
+    days,
+    setDays,
+  ] =
+    useState<BuilderDay[]>(
+      () =>
+        makeDays(
+          initialPreset,
+          profile.trainingDays,
+        ),
+    );
 
   const [
     selectedDayId,
     setSelectedDayId,
-  ] = useState<string | null>(
-    days[0]?.localId ?? null,
-  );
+  ] =
+    useState(
+      days[0]?.localId ??
+        null,
+    );
 
-  const [searchQuery, setSearchQuery] =
+  const [
+    externalExercises,
+    setExternalExercises,
+  ] =
+    useState<
+      ExerciseLibraryItem[]
+    >([]);
+
+  const [
+    externalLoading,
+    setExternalLoading,
+  ] =
+    useState(true);
+
+  const [
+    search,
+    setSearch,
+  ] =
     useState("");
 
-  const [muscleFilter, setMuscleFilter] =
-    useState("all");
+  const [
+    feedback,
+    setFeedback,
+  ] =
+    useState<Feedback>(
+      null,
+    );
 
-  const [feedback, setFeedback] =
-    useState<Feedback>(null);
-
-  const [isSubmitting, setIsSubmitting] =
+  const [
+    submitting,
+    setSubmitting,
+  ] =
     useState(false);
+
+  /* =======================================================
+     LOAD WGER EXERCISES
+  ======================================================= */
+
+  useEffect(() => {
+    let active =
+      true;
+
+    async function load() {
+      try {
+        const response =
+          await fetch(
+            "/api/workouts/exercises",
+          );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data =
+          (await response.json()) as {
+            exercises?:
+              ExerciseLibraryItem[];
+          };
+
+        if (active) {
+          setExternalExercises(
+            data.exercises ??
+              [],
+          );
+        }
+      } catch (
+        error
+      ) {
+        console.error(
+          "[EXTERNAL EXERCISES]",
+          error,
+        );
+      } finally {
+        if (active) {
+          setExternalLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const library =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          ExerciseLibraryItem
+        >();
+
+      /*
+       * External first:
+       * wger gets preference when names match.
+       */
+      for (
+        const exercise of [
+          ...externalExercises,
+          ...exercises,
+        ]
+      ) {
+        const key =
+          normalize(
+            exercise.name,
+          );
+
+        if (!map.has(key)) {
+          map.set(
+            key,
+            exercise,
+          );
+        }
+      }
+
+      return Array.from(
+        map.values(),
+      );
+    }, [
+      exercises,
+      externalExercises,
+    ]);
 
   const selectedDay =
     days.find(
       (day) =>
-        day.localId === selectedDayId,
+        day.localId ===
+        selectedDayId,
     ) ??
     days[0] ??
     null;
 
-  const muscleOptions = useMemo(() => {
-    return Array.from(
-      new Set(
-        exercises.map(
-          (exercise) =>
-            exercise.primaryMuscle,
-        ),
-      ),
-    ).sort((first, second) =>
-      first.localeCompare(second),
-    );
-  }, [exercises]);
-
-  const filteredExercises = useMemo(() => {
-    const query =
-      searchQuery.trim().toLowerCase();
-
-    return exercises.filter((exercise) => {
-      const matchesMuscle =
-        muscleFilter === "all" ||
-        exercise.primaryMuscle ===
-          muscleFilter;
-
-      if (!matchesMuscle) {
-        return false;
-      }
+  const filteredLibrary =
+    useMemo(() => {
+      const query =
+        normalize(search);
 
       if (!query) {
-        return true;
+        return library.slice(
+          0,
+          80,
+        );
       }
 
-      const searchableText = [
-        exercise.name,
-        exercise.description,
-        exercise.primaryMuscle,
-        exercise.secondaryMuscles.join(" "),
-        exercise.equipment,
-        exercise.movementPattern,
-        exercise.difficulty,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return searchableText.includes(query);
-    });
-  }, [
-    exercises,
-    muscleFilter,
-    searchQuery,
-  ]);
-
-  const totalExercises = days.reduce(
-    (total, day) =>
-      total + day.exercises.length,
-    0,
-  );
-
-  function updateDay(
-    dayId: string,
-    changes: Partial<BuilderDay>,
-  ) {
-    setDays((currentDays) =>
-      currentDays.map((day) =>
-        day.localId === dayId
-          ? {
-              ...day,
-              ...changes,
-            }
-          : day,
-      ),
-    );
-  }
-
-  function addDay() {
-    if (days.length >= 7) {
-      setFeedback({
-        type: "error",
-        message:
-          "A workout plan can contain a maximum of seven days.",
-      });
-
-      return;
-    }
-
-    const newDay = createEmptyDay(
-      days.length + 1,
-    );
-
-    setDays((currentDays) => [
-      ...currentDays,
-      newDay,
+      return library
+        .filter(
+          (exercise) =>
+            exerciseText(
+              exercise,
+            ).includes(
+              query,
+            ),
+        )
+        .slice(
+          0,
+          80,
+        );
+    }, [
+      library,
+      search,
     ]);
 
-    setSelectedDayId(newDay.localId);
-    setFeedback(null);
-  }
+  /* =======================================================
+     SPLIT
+  ======================================================= */
 
-  function removeDay(dayId: string) {
-    if (days.length <= 1) {
-      setFeedback({
-        type: "error",
-        message:
-          "A workout plan must contain at least one day.",
-      });
-
-      return;
-    }
-
-    const remainingDays = days
-      .filter(
-        (day) =>
-          day.localId !== dayId,
-      )
-      .map((day, index) => ({
-        ...day,
-        dayNumber: index + 1,
-      }));
-
-    setDays(remainingDays);
-
-    if (selectedDayId === dayId) {
-      setSelectedDayId(
-        remainingDays[0]?.localId ?? null,
-      );
-    }
-
-    setFeedback(null);
-  }
-
-  function addExercise(
-    libraryExercise: ExerciseLibraryItem,
+  function applySplit(
+    next:
+      SplitPreset,
   ) {
-    if (!selectedDay) {
-      setFeedback({
-        type: "error",
-        message:
-          "Select a workout day before adding an exercise.",
-      });
+    setSplit(next);
 
-      return;
-    }
+    const nextDays =
+      makeDays(
+        next,
+        trainingDays,
+      );
 
-    if (selectedDay.restDay) {
-      setFeedback({
-        type: "error",
-        message:
-          "Exercises cannot be added to a recovery day.",
-      });
-
-      return;
-    }
-
-    const newExercise: BuilderExercise = {
-      localId: createLocalId(),
-      exerciseId: libraryExercise.id,
-      exerciseName:
-        libraryExercise.name,
-      exerciseOrder:
-        selectedDay.exercises.length + 1,
-      targetSets: 3,
-      repMin: 8,
-      repMax: 12,
-      restSeconds: 90,
-      rir: 2,
-      tempo: "",
-      notes: "",
-    };
-
-    setDays((currentDays) =>
-      currentDays.map((day) =>
-        day.localId ===
-        selectedDay.localId
-          ? {
-              ...day,
-              exercises: [
-                ...day.exercises,
-                newExercise,
-              ],
-            }
-          : day,
-      ),
+    setDays(
+      nextDays,
     );
 
-    setFeedback(null);
+    setSelectedDayId(
+      nextDays[0]
+        ?.localId ??
+        null,
+    );
+
+    setPlanName(
+      `${SPLIT_OPTIONS.find(
+        (item) =>
+          item.id === next,
+      )?.name ?? "Workout"} Plan`,
+    );
   }
 
-  function updateExercise(
-    dayId: string,
-    exerciseLocalId: string,
-    changes: Partial<BuilderExercise>,
+  function changeTrainingDays(
+    next: number,
   ) {
-    setDays((currentDays) =>
-      currentDays.map((day) => {
-        if (day.localId !== dayId) {
-          return day;
+    setTrainingDays(
+      next,
+    );
+
+    const nextDays =
+      makeDays(
+        split,
+        next,
+      );
+
+    setDays(
+      nextDays,
+    );
+
+    setSelectedDayId(
+      nextDays[0]
+        ?.localId ??
+        null,
+    );
+  }
+
+  /* =======================================================
+     PRIORITIES
+  ======================================================= */
+
+  function togglePriority(
+    muscle:
+      MuscleFocus,
+  ) {
+    setPriorities(
+      (current) => {
+        if (
+          current.includes(
+            muscle,
+          )
+        ) {
+          return current.filter(
+            (item) =>
+              item !==
+              muscle,
+          );
         }
 
-        return {
-          ...day,
+        if (
+          current.length >= 3
+        ) {
+          return current;
+        }
 
-          exercises: day.exercises.map(
-            (exercise) =>
-              exercise.localId ===
-              exerciseLocalId
-                ? {
-                    ...exercise,
-                    ...changes,
-                  }
-                : exercise,
-          ),
-        };
-      }),
+        return [
+          ...current,
+          muscle,
+        ];
+      },
+    );
+  }
+
+  /* =======================================================
+     CUSTOM DAY
+  ======================================================= */
+
+  function toggleDayFocus(
+    dayId: string,
+    muscle:
+      MuscleFocus,
+  ) {
+    setDays(
+      (current) =>
+        current.map(
+          (day) => {
+            if (
+              day.localId !==
+              dayId
+            ) {
+              return day;
+            }
+
+            return {
+              ...day,
+
+              focus:
+                day.focus.includes(
+                  muscle,
+                )
+                  ? day.focus.filter(
+                      (
+                        item,
+                      ) =>
+                        item !==
+                        muscle,
+                    )
+                  : [
+                      ...day.focus,
+                      muscle,
+                    ],
+            };
+          },
+        ),
+    );
+  }
+
+  function updateDayName(
+    dayId: string,
+    name: string,
+  ) {
+    setDays(
+      (current) =>
+        current.map(
+          (day) =>
+            day.localId ===
+            dayId
+              ? {
+                  ...day,
+                  name,
+                }
+              : day,
+        ),
+    );
+  }
+
+  /* =======================================================
+     EXERCISE SELECTION
+  ======================================================= */
+
+  function exerciseScore(
+    exercise:
+      ExerciseLibraryItem,
+    muscle:
+      MuscleFocus,
+  ) {
+    if (
+      !matchesMuscle(
+        exercise,
+        muscle,
+      )
+    ) {
+      return -999;
+    }
+
+    if (
+      !equipmentAllowed(
+        exercise,
+        profile,
+      )
+    ) {
+      return -999;
+    }
+
+    const clientRank =
+      experienceRank(
+        normalize(
+          profile.experience ??
+            "beginner",
+        ),
+      );
+
+    const exerciseRank =
+      experienceRank(
+        exercise.difficulty,
+      );
+
+    if (
+      exerciseRank >
+      clientRank + 1
+    ) {
+      return -999;
+    }
+
+    let score = 10;
+
+    if (
+      exercise.source ===
+      "wger"
+    ) {
+      score += 2;
+    }
+
+    if (
+      normalize(
+        profile.experience ??
+          "",
+      ) ===
+      "beginner"
+    ) {
+      if (
+        exercise.difficulty ===
+        "beginner"
+      ) {
+        score += 5;
+      }
+
+      const equipment =
+        normalize(
+          exercise.equipment,
+        );
+
+      if (
+        equipment.includes(
+          "machine",
+        ) ||
+        equipment.includes(
+          "cable",
+        )
+      ) {
+        score += 2;
+      }
+    }
+
+    score +=
+      styleScore(
+        exercise,
+        exerciseStyle,
+      );
+
+    return score;
+  }
+
+  function makeExercise(
+    libraryExercise:
+      ExerciseLibraryItem,
+    muscle:
+      MuscleFocus,
+  ): BuilderExercise {
+    const isolation =
+      isIsolation(
+        libraryExercise,
+      );
+
+    const priorityIndex =
+      priorities.indexOf(
+        muscle,
+      );
+
+    const [
+      repMin,
+      repMax,
+    ] =
+      repRange(
+        goal,
+        isolation,
+      );
+
+    const sourceNote =
+      libraryExercise.source ===
+      "wger"
+        ? `Source: wger${
+            libraryExercise.sourceUrl
+              ? ` — ${libraryExercise.sourceUrl}`
+              : ""
+          }`
+        : "";
+
+    return {
+      localId:
+        localId(),
+
+      exerciseId:
+        libraryExercise.id,
+
+      exerciseName:
+        libraryExercise.name,
+
+      source:
+        libraryExercise.source,
+
+      sourceUrl:
+        libraryExercise.sourceUrl,
+
+      targetSets:
+        getSets(
+          volume,
+          priorityIndex,
+        ),
+
+      repMin,
+
+      repMax,
+
+      restSeconds:
+        getRest(
+          isolation,
+        ),
+
+      rir:
+        getRir(
+          intensity,
+          isolation,
+        ),
+
+      tempo:
+        isolation
+          ? "2-1-2"
+          : "2-0-1",
+
+      notes: [
+        failureInstruction(
+          failureStyle,
+          isolation,
+        ),
+
+        sourceNote,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    };
+  }
+
+  function autoBuild() {
+    const maximum =
+      maxExercises(
+        sessionMinutes,
+      );
+
+    const nextDays =
+      days.map(
+        (day) => {
+          const used =
+            new Set<string>();
+
+          const selected:
+            BuilderExercise[] =
+            [];
+
+          const orderedFocus =
+            [
+              ...day.focus,
+            ].sort(
+              (a, b) => {
+                const ia =
+                  priorities.indexOf(
+                    a,
+                  );
+
+                const ib =
+                  priorities.indexOf(
+                    b,
+                  );
+
+                return (
+                  (
+                    ia === -1
+                      ? 99
+                      : ia
+                  ) -
+                  (
+                    ib === -1
+                      ? 99
+                      : ib
+                  )
+                );
+              },
+            );
+
+          for (
+            const muscle of orderedFocus
+          ) {
+            if (
+              selected.length >=
+              maximum
+            ) {
+              break;
+            }
+
+            const candidate =
+              library
+                .filter(
+                  (exercise) =>
+                    !used.has(
+                      normalize(
+                        exercise.name,
+                      ),
+                    ),
+                )
+                .map(
+                  (exercise) => ({
+                    exercise,
+
+                    score:
+                      exerciseScore(
+                        exercise,
+                        muscle,
+                      ),
+                  }),
+                )
+                .filter(
+                  (item) =>
+                    item.score >
+                    -999,
+                )
+                .sort(
+                  (a, b) =>
+                    b.score -
+                    a.score,
+                )[0]
+                ?.exercise;
+
+            if (!candidate) {
+              continue;
+            }
+
+            used.add(
+              normalize(
+                candidate.name,
+              ),
+            );
+
+            selected.push(
+              makeExercise(
+                candidate,
+                muscle,
+              ),
+            );
+          }
+
+          /*
+           * Add a second exercise for Priority #1
+           * if this day trains it and time allows.
+           */
+
+          const primaryPriority =
+            priorities[0];
+
+          if (
+            primaryPriority &&
+            day.focus.includes(
+              primaryPriority,
+            ) &&
+            selected.length <
+              maximum
+          ) {
+            const second =
+              library
+                .filter(
+                  (exercise) =>
+                    !used.has(
+                      normalize(
+                        exercise.name,
+                      ),
+                    ),
+                )
+                .map(
+                  (exercise) => ({
+                    exercise,
+
+                    score:
+                      exerciseScore(
+                        exercise,
+                        primaryPriority,
+                      ),
+                  }),
+                )
+                .filter(
+                  (item) =>
+                    item.score >
+                    -999,
+                )
+                .sort(
+                  (a, b) =>
+                    b.score -
+                    a.score,
+                )[0]
+                ?.exercise;
+
+            if (second) {
+              selected.splice(
+                1,
+                0,
+                makeExercise(
+                  second,
+                  primaryPriority,
+                ),
+              );
+            }
+          }
+
+          return {
+            ...day,
+
+            exercises:
+              selected.slice(
+                0,
+                maximum,
+              ),
+          };
+        },
+      );
+
+    setDays(
+      nextDays,
+    );
+
+    setFeedback({
+      type: "success",
+
+      message:
+        "Workout sessions were generated from your split, profile, priorities and training style.",
+    });
+  }
+
+  function addManualExercise(
+    exercise:
+      ExerciseLibraryItem,
+  ) {
+    if (!selectedDay) {
+      return;
+    }
+
+    const target =
+      selectedDay
+        .focus[0] ??
+      "Chest";
+
+    setDays(
+      (current) =>
+        current.map(
+          (day) =>
+            day.localId ===
+            selectedDay.localId
+              ? {
+                  ...day,
+
+                  exercises: [
+                    ...day.exercises,
+
+                    makeExercise(
+                      exercise,
+                      target,
+                    ),
+                  ],
+                }
+              : day,
+        ),
     );
   }
 
   function removeExercise(
     dayId: string,
-    exerciseLocalId: string,
+    exerciseId: string,
   ) {
-    setDays((currentDays) =>
-      currentDays.map((day) => {
-        if (day.localId !== dayId) {
-          return day;
-        }
+    setDays(
+      (current) =>
+        current.map(
+          (day) =>
+            day.localId ===
+            dayId
+              ? {
+                  ...day,
 
-        const remainingExercises =
-          day.exercises
-            .filter(
-              (exercise) =>
-                exercise.localId !==
-                exerciseLocalId,
-            )
-            .map((exercise, index) => ({
-              ...exercise,
-              exerciseOrder: index + 1,
-            }));
-
-        return {
-          ...day,
-          exercises:
-            remainingExercises,
-        };
-      }),
+                  exercises:
+                    day.exercises.filter(
+                      (
+                        exercise,
+                      ) =>
+                        exercise.localId !==
+                        exerciseId,
+                    ),
+                }
+              : day,
+        ),
     );
   }
 
-  function validatePlan(): string | null {
-    if (planName.trim().length < 2) {
-      return "Plan name must contain at least two characters.";
-    }
+  function updateExercise(
+    dayId: string,
+    localExerciseId: string,
+    changes:
+      Partial<BuilderExercise>,
+  ) {
+    setDays(
+      (current) =>
+        current.map(
+          (day) =>
+            day.localId ===
+            dayId
+              ? {
+                  ...day,
 
-    if (days.length === 0) {
-      return "The plan must contain at least one day.";
-    }
-
-    for (const day of days) {
-      if (day.name.trim().length < 2) {
-        return `Day ${day.dayNumber} needs a valid name.`;
-      }
-
-      if (
-        !day.restDay &&
-        day.exercises.length === 0
-      ) {
-        return `${day.name} does not contain any exercises.`;
-      }
-
-      for (const exercise of day.exercises) {
-        if (
-          exercise.repMax <
-          exercise.repMin
-        ) {
-          return `${exercise.exerciseName}: maximum repetitions cannot be lower than minimum repetitions.`;
-        }
-
-        if (exercise.targetSets < 1) {
-          return `${exercise.exerciseName}: at least one set is required.`;
-        }
-      }
-    }
-
-    return null;
+                  exercises:
+                    day.exercises.map(
+                      (
+                        exercise,
+                      ) =>
+                        exercise.localId ===
+                        localExerciseId
+                          ? {
+                              ...exercise,
+                              ...changes,
+                            }
+                          : exercise,
+                    ),
+                }
+              : day,
+        ),
+    );
   }
 
-  async function handleSubmit() {
-    const validationError =
-      validatePlan();
+  /* =======================================================
+     SAVE
+  ======================================================= */
 
-    if (validationError) {
+  async function savePlan() {
+    if (
+      planName.trim().length <
+      2
+    ) {
       setFeedback({
         type: "error",
-        message: validationError,
+        message:
+          "Enter a valid plan name.",
       });
 
       return;
     }
 
-    setIsSubmitting(true);
+    if (
+      days.some(
+        (day) =>
+          day.focus.length ===
+          0,
+      )
+    ) {
+      setFeedback({
+        type: "error",
+        message:
+          "Every workout day needs at least one training focus.",
+      });
+
+      return;
+    }
+
+    if (
+      days.some(
+        (day) =>
+          day.exercises.length ===
+          0,
+      )
+    ) {
+      setFeedback({
+        type: "error",
+        message:
+          "Generate or manually add exercises before saving.",
+      });
+
+      return;
+    }
+
+    setSubmitting(true);
     setFeedback(null);
 
     try {
       const result =
         await createWorkoutPlanAction({
           clientId,
-          name: planName.trim(),
+
+          name:
+            planName.trim(),
+
           description:
             description.trim(),
-          goal: goal.trim(),
+
+          goal:
+            goal.trim(),
+
           weeks,
 
-          daysPerWeek: Math.max(
-            1,
-            days.filter(
-              (day) =>
-                !day.restDay,
-            ).length,
-          ),
+          daysPerWeek:
+            days.length,
 
-          sessionDurationMinutes,
+          sessionDurationMinutes:
+            sessionMinutes,
 
-          days: days.map((day) => ({
-            dayNumber: day.dayNumber,
-            name: day.name.trim(),
-            focus: day.focus.trim(),
-            notes: day.notes.trim(),
-            restDay: day.restDay,
+          days:
+            days.map(
+              (
+                day,
+              ) => ({
+                dayNumber:
+                  day.dayNumber,
 
-            exercises: day.restDay
-              ? []
-              : day.exercises.map(
-                  (
-                    exercise,
-                    index,
-                  ) => ({
-                    exerciseId:
-                      exercise.exerciseId,
+                name:
+                  day.name.trim(),
 
-                    exerciseName:
-                      exercise.exerciseName,
+                focus:
+                  day.focus.join(
+                    ", ",
+                  ),
 
-                    exerciseOrder:
-                      index + 1,
+                notes:
+                  day.notes,
 
-                    targetSets:
-                      exercise.targetSets,
+                restDay:
+                  false,
 
-                    repMin:
-                      exercise.repMin,
+                exercises:
+                  day.exercises.map(
+                    (
+                      exercise,
+                      index,
+                    ) => ({
+                      exerciseId:
+                        exercise.exerciseId,
 
-                    repMax:
-                      exercise.repMax,
+                      exerciseName:
+                        exercise.exerciseName,
 
-                    restSeconds:
-                      exercise.restSeconds,
+                      exerciseOrder:
+                        index + 1,
 
-                    rir:
-                      exercise.rir,
+                      targetSets:
+                        exercise.targetSets,
 
-                    tempo:
-                      exercise.tempo.trim(),
+                      repMin:
+                        exercise.repMin,
 
-                    notes:
-                      exercise.notes.trim(),
-                  }),
-                ),
-          })),
+                      repMax:
+                        exercise.repMax,
+
+                      restSeconds:
+                        exercise.restSeconds,
+
+                      rir:
+                        exercise.rir,
+
+                      tempo:
+                        exercise.tempo,
+
+                      notes:
+                        exercise.notes,
+                    }),
+                  ),
+              }),
+            ),
         });
 
       if (!result.success) {
-        setFeedback({
-          type: "error",
-          message: result.message,
-        });
-
-        return;
+        throw new Error(
+          result.message,
+        );
       }
-
-      setFeedback({
-        type: "success",
-        message: result.message,
-      });
 
       if (result.planId) {
         router.push(
@@ -625,647 +1736,932 @@ export default function PlanBuilder({
     } catch (error) {
       setFeedback({
         type: "error",
+
         message:
           error instanceof Error
             ? error.message
-            : "Unable to create the workout plan.",
+            : "Unable to save workout plan.",
       });
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   }
 
+  /* =======================================================
+     UI
+  ======================================================= */
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
-      <div className="space-y-6">
-        {/* PLAN INFORMATION */}
+    <div className="space-y-8">
+      {/* ===================================================
+          SPLIT
+      =================================================== */}
 
-        <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-5 sm:p-7">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-400">
-            Step 1
-          </p>
+      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
+          Step 1
+        </p>
 
-          <h2 className="mt-2 text-2xl font-black">
-            Programme information
-          </h2>
+        <h2 className="mt-2 text-2xl font-black">
+          Choose your split
+        </h2>
 
-          <div className="mt-7 grid gap-5 md:grid-cols-2">
-            <Field
-              label="Plan name"
-              className="md:col-span-2"
-            >
-              <input
-                value={planName}
-                onChange={(event) =>
-                  setPlanName(
-                    event.target.value,
-                  )
-                }
-                maxLength={120}
-                placeholder="12-week hypertrophy programme"
-                className={inputClassName}
-              />
-            </Field>
-
-            <Field label="Primary goal">
-              <input
-                value={goal}
-                onChange={(event) =>
-                  setGoal(event.target.value)
-                }
-                maxLength={500}
-                placeholder="Muscle gain"
-                className={inputClassName}
-              />
-            </Field>
-
-            <Field label="Programme weeks">
-              <input
-                value={weeks}
-                onChange={(event) =>
-                  setWeeks(
-                    Math.max(
-                      1,
-                      Math.min(
-                        52,
-                        Number(
-                          event.target.value,
-                        ) || 1,
-                      ),
-                    ),
-                  )
-                }
-                type="number"
-                min={1}
-                max={52}
-                className={inputClassName}
-              />
-            </Field>
-
-            <Field label="Session duration">
-              <div className="relative">
-                <input
-                  value={
-                    sessionDurationMinutes
-                  }
-                  onChange={(event) =>
-                    setSessionDurationMinutes(
-                      Math.max(
-                        15,
-                        Math.min(
-                          300,
-                          Number(
-                            event.target.value,
-                          ) || 15,
-                        ),
-                      ),
-                    )
-                  }
-                  type="number"
-                  min={15}
-                  max={300}
-                  className={`${inputClassName} pr-20`}
-                />
-
-                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-zinc-600">
-                  minutes
-                </span>
-              </div>
-            </Field>
-
-            <Field
-              label="Description"
-              className="md:col-span-2"
-            >
-              <textarea
-                value={description}
-                onChange={(event) =>
-                  setDescription(
-                    event.target.value,
-                  )
-                }
-                maxLength={2000}
-                placeholder="Describe the programme structure and progression."
-                className={
-                  textareaClassName
-                }
-              />
-            </Field>
-          </div>
-        </section>
-
-        {/* WORKOUT DAYS */}
-
-        <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-5 sm:p-7">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-400">
-                Step 2
-              </p>
-
-              <h2 className="mt-2 text-2xl font-black">
-                Workout days
-              </h2>
-
-              <p className="mt-2 text-sm text-zinc-600">
-                Add training and recovery
-                days to the programme.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={addDay}
-              disabled={days.length >= 7}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-orange-500/25 bg-orange-500/10 px-5 text-xs font-black uppercase tracking-wider text-orange-300 transition hover:bg-orange-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Plus className="h-4 w-4" />
-
-              Add day
-            </button>
-          </div>
-
-          <div className="mt-6 flex gap-2 overflow-x-auto pb-2">
-            {days.map((day) => {
-              const isSelected =
-                day.localId ===
-                selectedDay?.localId;
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {SPLIT_OPTIONS.map(
+            (option) => {
+              const selected =
+                option.id ===
+                split;
 
               return (
                 <button
-                  key={day.localId}
+                  key={
+                    option.id
+                  }
                   type="button"
                   onClick={() =>
-                    setSelectedDayId(
-                      day.localId,
+                    applySplit(
+                      option.id,
                     )
                   }
-                  className={`min-w-36 rounded-xl border px-4 py-3 text-left transition ${
-                    isSelected
-                      ? [
-                          "border-orange-500/40",
-                          "bg-orange-500/10",
-                          "text-orange-300",
-                        ].join(" ")
-                      : [
-                          "border-white/10",
-                          "bg-black/30",
-                          "text-zinc-500",
-                          "hover:border-white/20",
-                          "hover:text-white",
-                        ].join(" ")
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    selected
+                      ? "border-amber-400 bg-amber-400/10"
+                      : "border-white/10 bg-black/20 hover:border-white/20"
                   }`}
                 >
-                  <p className="text-[10px] font-black uppercase tracking-wider">
-                    Day {day.dayNumber}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <strong>
+                      {
+                        option.name
+                      }
+                    </strong>
 
-                  <p className="mt-1 truncate text-sm font-bold">
-                    {day.name}
-                  </p>
+                    {selected && (
+                      <Check className="h-4 w-4 text-amber-400" />
+                    )}
+                  </div>
 
-                  <p className="mt-1 text-[10px] text-zinc-600">
-                    {day.restDay
-                      ? "Recovery"
-                      : `${day.exercises.length} exercises`}
+                  <p className="mt-2 text-xs leading-5 text-zinc-600">
+                    {
+                      option.description
+                    }
                   </p>
                 </button>
               );
-            })}
-          </div>
+            },
+          )}
+        </div>
+      </section>
 
-          {selectedDay ? (
-            <div className="mt-6 rounded-2xl border border-white/10 bg-black/25 p-5">
-              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-400">
-                    Day{" "}
-                    {selectedDay.dayNumber}
-                  </p>
+      {/* ===================================================
+          PROGRAM SETTINGS
+      =================================================== */}
 
-                  <h3 className="mt-2 text-xl font-black">
-                    Configure workout day
-                  </h3>
-                </div>
+      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
+          Step 2
+        </p>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    removeDay(
-                      selectedDay.localId,
-                    )
-                  }
-                  disabled={
-                    days.length <= 1
-                  }
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-xs font-bold text-red-300 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <Trash2 className="h-4 w-4" />
+        <h2 className="mt-2 text-2xl font-black">
+          Programme settings
+        </h2>
 
-                  Delete day
-                </button>
-              </div>
-
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <Field label="Day name">
-                  <input
-                    value={selectedDay.name}
-                    onChange={(event) =>
-                      updateDay(
-                        selectedDay.localId,
-                        {
-                          name:
-                            event.target.value,
-                        },
-                      )
-                    }
-                    maxLength={120}
-                    className={inputClassName}
-                  />
-                </Field>
-
-                <Field label="Training focus">
-                  <input
-                    value={
-                      selectedDay.focus
-                    }
-                    onChange={(event) =>
-                      updateDay(
-                        selectedDay.localId,
-                        {
-                          focus:
-                            event.target.value,
-                        },
-                      )
-                    }
-                    maxLength={300}
-                    placeholder="Chest, shoulders and triceps"
-                    className={inputClassName}
-                  />
-                </Field>
-
-                <Field
-                  label="Day notes"
-                  className="md:col-span-2"
-                >
-                  <textarea
-                    value={
-                      selectedDay.notes
-                    }
-                    onChange={(event) =>
-                      updateDay(
-                        selectedDay.localId,
-                        {
-                          notes:
-                            event.target.value,
-                        },
-                      )
-                    }
-                    maxLength={2000}
-                    placeholder="Training priorities and coaching notes."
-                    className={
-                      textareaClassName
-                    }
-                  />
-                </Field>
-
-                <label className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-zinc-400 md:col-span-2">
-                  <input
-                    checked={
-                      selectedDay.restDay
-                    }
-                    onChange={(event) =>
-                      updateDay(
-                        selectedDay.localId,
-                        {
-                          restDay:
-                            event.target
-                              .checked,
-
-                          exercises:
-                            event.target
-                              .checked
-                              ? []
-                              : selectedDay.exercises,
-                        },
-                      )
-                    }
-                    type="checkbox"
-                    className="h-4 w-4 accent-orange-400"
-                  />
-
-                  Mark this as a recovery day
-                </label>
-              </div>
-
-              {!selectedDay.restDay ? (
-                <div className="mt-7">
-                  <div className="flex items-end justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-600">
-                        Selected exercises
-                      </p>
-
-                      <h4 className="mt-1 text-lg font-black">
-                        Session structure
-                      </h4>
-                    </div>
-
-                    <span className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-bold text-zinc-500">
-                      {
-                        selectedDay.exercises
-                          .length
-                      }{" "}
-                      exercises
-                    </span>
-                  </div>
-
-                  {selectedDay.exercises
-                    .length === 0 ? (
-                    <div className="mt-5 rounded-2xl border border-dashed border-white/10 px-5 py-10 text-center">
-                      <Dumbbell className="mx-auto h-7 w-7 text-zinc-700" />
-
-                      <p className="mt-3 font-bold text-zinc-500">
-                        No exercises selected
-                      </p>
-
-                      <p className="mt-1 text-sm text-zinc-700">
-                        Add exercises from the
-                        library.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="mt-5 space-y-4">
-                      {selectedDay.exercises.map(
-                        (exercise) => (
-                          <ExerciseEditor
-                            key={
-                              exercise.localId
-                            }
-                            exercise={
-                              exercise
-                            }
-                            onChange={(
-                              changes,
-                            ) =>
-                              updateExercise(
-                                selectedDay.localId,
-                                exercise.localId,
-                                changes,
-                              )
-                            }
-                            onRemove={() =>
-                              removeExercise(
-                                selectedDay.localId,
-                                exercise.localId,
-                              )
-                            }
-                          />
-                        ),
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-6 rounded-2xl border border-blue-500/20 bg-blue-500/10 px-5 py-4">
-                  <p className="font-bold text-blue-300">
-                    Recovery day
-                  </p>
-
-                  <p className="mt-1 text-sm leading-6 text-blue-200/50">
-                    Exercises are disabled for
-                    recovery days.
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </section>
-      </div>
-
-      {/* EXERCISE LIBRARY */}
-
-      <aside className="self-start xl:sticky xl:top-6">
-        <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-5">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-400">
-            Step 3
-          </p>
-
-          <h2 className="mt-2 text-xl font-black">
-            Exercise library
-          </h2>
-
-          <p className="mt-2 text-xs leading-6 text-zinc-600">
-            Select a workout day, then add
-            exercises.
-          </p>
-
-          <div className="relative mt-5">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
-
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field
+            label="Plan name"
+          >
             <input
-              value={searchQuery}
-              onChange={(event) =>
-                setSearchQuery(
-                  event.target.value,
+              value={
+                planName
+              }
+              onChange={(
+                event,
+              ) =>
+                setPlanName(
+                  event
+                    .target
+                    .value,
                 )
               }
-              type="search"
-              placeholder="Search exercise..."
-              className={`${inputClassName} pl-11`}
+              className={
+                inputClasses
+              }
             />
-          </div>
+          </Field>
 
-          <div className="relative mt-3">
-            <select
-              value={muscleFilter}
-              onChange={(event) =>
-                setMuscleFilter(
-                  event.target.value,
+          <Field
+            label="Goal"
+          >
+            <input
+              value={
+                goal
+              }
+              onChange={(
+                event,
+              ) =>
+                setGoal(
+                  event
+                    .target
+                    .value,
                 )
               }
-              className={`${inputClassName} appearance-none pr-10`}
-            >
-              <option value="all">
-                All muscles
-              </option>
+              className={
+                inputClasses
+              }
+            />
+          </Field>
 
-              {muscleOptions.map(
-                (muscle) => (
+          <Field
+            label="Training days"
+          >
+            <select
+              value={
+                trainingDays
+              }
+              onChange={(
+                event,
+              ) =>
+                changeTrainingDays(
+                  Number(
+                    event
+                      .target
+                      .value,
+                  ),
+                )
+              }
+              className={
+                inputClasses
+              }
+            >
+              {[2,3,4,5,6,7].map(
+                (number) => (
                   <option
-                    key={muscle}
-                    value={muscle}
+                    key={
+                      number
+                    }
+                    value={
+                      number
+                    }
                   >
-                    {muscle}
+                    {number} days
                   </option>
                 ),
               )}
             </select>
+          </Field>
 
-            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
-          </div>
-
-          <div className="mt-5 max-h-[680px] space-y-3 overflow-y-auto pr-1">
-            {filteredExercises.map(
-              (exercise) => (
-                <article
-                  key={exercise.id}
-                  className="rounded-2xl border border-white/10 bg-black/25 p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-black text-zinc-200">
-                        {exercise.name}
-                      </p>
-
-                      <p className="mt-1 text-xs text-zinc-600">
-                        {
-                          exercise.primaryMuscle
-                        }{" "}
-                        · {exercise.equipment}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`rounded-full border px-2 py-1 text-[9px] font-black uppercase ${getDifficultyClasses(
-                        exercise.difficulty,
-                      )}`}
-                    >
-                      {exercise.difficulty}
-                    </span>
-                  </div>
-
-                  <p className="mt-3 line-clamp-2 text-xs leading-5 text-zinc-700">
-                    {exercise.description}
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addExercise(exercise)
-                    }
-                    disabled={
-                      !selectedDay ||
-                      selectedDay.restDay
-                    }
-                    className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-orange-500/25 bg-orange-500/10 text-xs font-black uppercase tracking-wider text-orange-300 transition hover:bg-orange-500/20 disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    <Plus className="h-4 w-4" />
-
-                    Add exercise
-                  </button>
-                </article>
-              ),
-            )}
-
-            {filteredExercises.length ===
-            0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center">
-                <Search className="mx-auto h-6 w-6 text-zinc-700" />
-
-                <p className="mt-3 text-sm font-bold text-zinc-600">
-                  No exercises found
-                </p>
-              </div>
-            ) : null}
-          </div>
-        </section>
-
-        {/* SAVE PANEL */}
-
-        <section className="mt-5 rounded-3xl border border-white/10 bg-[#0d0d0d] p-5">
-          <div className="grid grid-cols-3 gap-2">
-            <SummaryValue
-              label="Days"
-              value={days.length}
-            />
-
-            <SummaryValue
-              label="Exercises"
-              value={totalExercises}
-            />
-
-            <SummaryValue
-              label="Weeks"
-              value={weeks}
-            />
-          </div>
-
-          {feedback ? (
-            <div
-              className={`mt-5 flex items-start gap-3 rounded-xl border px-4 py-3 ${
-                feedback.type === "success"
-                  ? [
-                      "border-emerald-500/20",
-                      "bg-emerald-500/10",
-                      "text-emerald-300",
-                    ].join(" ")
-                  : [
-                      "border-red-500/20",
-                      "bg-red-500/10",
-                      "text-red-300",
-                    ].join(" ")
-              }`}
+          <Field
+            label="Session"
+          >
+            <select
+              value={
+                sessionMinutes
+              }
+              onChange={(
+                event,
+              ) =>
+                setSessionMinutes(
+                  Number(
+                    event
+                      .target
+                      .value,
+                  ),
+                )
+              }
+              className={
+                inputClasses
+              }
             >
-              {feedback.type ===
-              "success" ? (
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-              ) : (
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              {[45,60,75,90,120].map(
+                (number) => (
+                  <option
+                    key={
+                      number
+                    }
+                    value={
+                      number
+                    }
+                  >
+                    {number} min
+                  </option>
+                ),
               )}
+            </select>
+          </Field>
 
-              <p className="text-xs leading-5">
-                {feedback.message}
-              </p>
-            </div>
-          ) : null}
+          <Field
+            label="Intensity"
+          >
+            <select
+              value={
+                intensity
+              }
+              onChange={(
+                event,
+              ) =>
+                setIntensity(
+                  event
+                    .target
+                    .value as IntensityStyle,
+                )
+              }
+              className={
+                inputClasses
+              }
+            >
+              <option value="conservative">
+                Conservative
+              </option>
+
+              <option value="moderate">
+                Moderate
+              </option>
+
+              <option value="hard">
+                Hard
+              </option>
+
+              <option value="very_hard">
+                Very Hard
+              </option>
+            </select>
+          </Field>
+
+          <Field
+            label="Volume"
+          >
+            <select
+              value={
+                volume
+              }
+              onChange={(
+                event,
+              ) =>
+                setVolume(
+                  event
+                    .target
+                    .value as VolumeStyle,
+                )
+              }
+              className={
+                inputClasses
+              }
+            >
+              <option value="low">
+                Low
+              </option>
+
+              <option value="moderate">
+                Moderate
+              </option>
+
+              <option value="high">
+                High
+              </option>
+            </select>
+          </Field>
+
+          <Field
+            label="Failure use"
+          >
+            <select
+              value={
+                failureStyle
+              }
+              onChange={(
+                event,
+              ) =>
+                setFailureStyle(
+                  event
+                    .target
+                    .value as FailureStyle,
+                )
+              }
+              className={
+                inputClasses
+              }
+            >
+              <option value="rare">
+                Rare
+              </option>
+
+              <option value="isolation_only">
+                Isolation only
+              </option>
+
+              <option value="selected_last_sets">
+                Selected last sets
+              </option>
+            </select>
+          </Field>
+
+          <Field
+            label="Exercise style"
+          >
+            <select
+              value={
+                exerciseStyle
+              }
+              onChange={(
+                event,
+              ) =>
+                setExerciseStyle(
+                  event
+                    .target
+                    .value as ExerciseStyle,
+                )
+              }
+              className={
+                inputClasses
+              }
+            >
+              <option value="mixed">
+                Mixed
+              </option>
+
+              <option value="machine">
+                Machine / Cable
+              </option>
+
+              <option value="free_weights">
+                Free weights
+              </option>
+            </select>
+          </Field>
+        </div>
+      </section>
+
+      {/* ===================================================
+          PRIORITY
+      =================================================== */}
+
+      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
+          Step 3
+        </p>
+
+        <h2 className="mt-2 text-2xl font-black">
+          Muscle priorities
+        </h2>
+
+        <p className="mt-2 text-sm text-zinc-600">
+          Select up to three.
+          Priority #1 receives the
+          strongest exercise-order and
+          volume emphasis.
+        </p>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {MUSCLE_FOCUS_OPTIONS.map(
+            (muscle) => {
+              const index =
+                priorities.indexOf(
+                  muscle,
+                );
+
+              return (
+                <button
+                  key={
+                    muscle
+                  }
+                  type="button"
+                  onClick={() =>
+                    togglePriority(
+                      muscle,
+                    )
+                  }
+                  className={`rounded-full border px-4 py-2 text-xs font-bold transition ${
+                    index >= 0
+                      ? "border-amber-400 bg-amber-400 text-black"
+                      : "border-white/10 text-zinc-500 hover:border-white/20 hover:text-white"
+                  }`}
+                >
+                  {index >= 0 &&
+                    `#${index + 1} `}
+
+                  {muscle}
+                </button>
+              );
+            },
+          )}
+        </div>
+      </section>
+
+      {/* ===================================================
+          DAYS
+      =================================================== */}
+
+      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
+              Step 4
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black">
+              Workout days
+            </h2>
+          </div>
 
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-orange-400 px-6 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={
+              autoBuild
+            }
+            disabled={
+              library.length ===
+              0
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-sm font-black text-black transition hover:bg-amber-300"
           >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+            <Sparkles className="h-4 w-4" />
 
-                Creating plan
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-
-                Save workout plan
-              </>
-            )}
+            Auto-build exercises
           </button>
-        </section>
-      </aside>
+        </div>
+
+        <div className="mt-6 flex gap-2 overflow-x-auto pb-2">
+          {days.map(
+            (day) => (
+              <button
+                key={
+                  day.localId
+                }
+                onClick={() =>
+                  setSelectedDayId(
+                    day.localId,
+                  )
+                }
+                className={`min-w-40 rounded-xl border p-3 text-left ${
+                  selectedDay?.localId ===
+                  day.localId
+                    ? "border-amber-400 bg-amber-400/10"
+                    : "border-white/10 bg-black/20"
+                }`}
+              >
+                <p className="text-[10px] font-black uppercase text-zinc-600">
+                  Day{" "}
+                  {
+                    day.dayNumber
+                  }
+                </p>
+
+                <p className="mt-1 truncate text-sm font-bold">
+                  {
+                    day.name
+                  }
+                </p>
+
+                <p className="mt-1 text-[10px] text-zinc-700">
+                  {
+                    day.exercises
+                      .length
+                  }{" "}
+                  exercises
+                </p>
+              </button>
+            ),
+          )}
+        </div>
+
+        {selectedDay && (
+          <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+            <input
+              value={
+                selectedDay.name
+              }
+              onChange={(
+                event,
+              ) =>
+                updateDayName(
+                  selectedDay.localId,
+                  event
+                    .target
+                    .value,
+                )
+              }
+              className="w-full bg-transparent text-xl font-black outline-none"
+            />
+
+            <p className="mt-5 text-xs font-black uppercase tracking-wider text-zinc-600">
+              Training focus
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {MUSCLE_FOCUS_OPTIONS.map(
+                (muscle) => (
+                  <button
+                    key={
+                      muscle
+                    }
+                    type="button"
+                    onClick={() =>
+                      toggleDayFocus(
+                        selectedDay.localId,
+                        muscle,
+                      )
+                    }
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                      selectedDay.focus.includes(
+                        muscle,
+                      )
+                        ? "border-amber-400 bg-amber-400 text-black"
+                        : "border-white/10 text-zinc-500"
+                    }`}
+                  >
+                    {
+                      muscle
+                    }
+                  </button>
+                ),
+              )}
+            </div>
+
+            <div className="mt-6 space-y-3">
+              {selectedDay.exercises.map(
+                (
+                  exercise,
+                ) => (
+                  <div
+                    key={
+                      exercise.localId
+                    }
+                    className="rounded-xl border border-white/10 bg-[#101010] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <strong>
+                            {
+                              exercise.exerciseName
+                            }
+                          </strong>
+
+                          {exercise.source ===
+                            "wger" && (
+                            <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase text-emerald-400">
+                              wger
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeExercise(
+                            selectedDay.localId,
+                            exercise.localId,
+                          )
+                        }
+                        className="text-red-400"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                      <NumberField
+                        label="Sets"
+                        value={
+                          exercise.targetSets
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          updateExercise(
+                            selectedDay.localId,
+                            exercise.localId,
+                            {
+                              targetSets:
+                                value,
+                            },
+                          )
+                        }
+                      />
+
+                      <NumberField
+                        label="Min reps"
+                        value={
+                          exercise.repMin
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          updateExercise(
+                            selectedDay.localId,
+                            exercise.localId,
+                            {
+                              repMin:
+                                value,
+                            },
+                          )
+                        }
+                      />
+
+                      <NumberField
+                        label="Max reps"
+                        value={
+                          exercise.repMax
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          updateExercise(
+                            selectedDay.localId,
+                            exercise.localId,
+                            {
+                              repMax:
+                                value,
+                            },
+                          )
+                        }
+                      />
+
+                      <NumberField
+                        label="Rest"
+                        value={
+                          exercise.restSeconds
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          updateExercise(
+                            selectedDay.localId,
+                            exercise.localId,
+                            {
+                              restSeconds:
+                                value,
+                            },
+                          )
+                        }
+                      />
+
+                      <NumberField
+                        label="RIR"
+                        value={
+                          exercise.rir ??
+                          0
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          updateExercise(
+                            selectedDay.localId,
+                            exercise.localId,
+                            {
+                              rir:
+                                value,
+                            },
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* ===================================================
+          LIBRARY
+      =================================================== */}
+
+      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-400">
+              Exercise library
+            </p>
+
+            <h2 className="mt-2 text-xl font-black">
+              Add or replace exercises
+            </h2>
+          </div>
+
+          <p className="text-xs text-zinc-600">
+            {externalLoading
+              ? "Loading wger…"
+              : `${externalExercises.length} external exercises loaded`}
+          </p>
+        </div>
+
+        <div className="relative mt-5">
+          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
+
+          <input
+            value={
+              search
+            }
+            onChange={(
+              event,
+            ) =>
+              setSearch(
+                event
+                  .target
+                  .value,
+              )
+            }
+            placeholder="Search exercises..."
+            className={`${inputClasses} pl-11`}
+          />
+        </div>
+
+        <div className="mt-4 grid max-h-96 gap-2 overflow-y-auto md:grid-cols-2 xl:grid-cols-3">
+          {filteredLibrary.map(
+            (
+              exercise,
+              index,
+            ) => (
+              <button
+                key={`${exercise.source}-${exercise.name}-${index}`}
+                type="button"
+                onClick={() =>
+                  addManualExercise(
+                    exercise,
+                  )
+                }
+                className="rounded-xl border border-white/10 bg-black/20 p-4 text-left transition hover:border-amber-400/30"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <strong className="text-sm">
+                    {
+                      exercise.name
+                    }
+                  </strong>
+
+                  <Plus className="h-4 w-4 text-amber-400" />
+                </div>
+
+                <p className="mt-2 text-xs text-zinc-600">
+                  {
+                    exercise.primaryMuscle
+                  }{" "}
+                  ·{" "}
+                  {
+                    exercise.equipment
+                  }
+                </p>
+
+                {exercise.source ===
+                  "wger" && (
+                  <p className="mt-2 text-[10px] font-black uppercase text-emerald-400">
+                    wger source
+                  </p>
+                )}
+              </button>
+            ),
+          )}
+        </div>
+      </section>
+
+      {/* ===================================================
+          DESCRIPTION
+      =================================================== */}
+
+      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+        <div className="grid gap-4 md:grid-cols-[160px_1fr]">
+          <Field
+            label="Weeks"
+          >
+            <input
+              type="number"
+              value={
+                weeks
+              }
+              min={1}
+              max={52}
+              onChange={(
+                event,
+              ) =>
+                setWeeks(
+                  Number(
+                    event
+                      .target
+                      .value,
+                  ),
+                )
+              }
+              className={
+                inputClasses
+              }
+            />
+          </Field>
+
+          <Field
+            label="Notes / description"
+          >
+            <textarea
+              value={
+                description
+              }
+              onChange={(
+                event,
+              ) =>
+                setDescription(
+                  event
+                    .target
+                    .value,
+                )
+              }
+              className="min-h-24 w-full rounded-xl border border-white/10 bg-black/30 p-4 text-sm outline-none focus:border-amber-400/50"
+            />
+          </Field>
+        </div>
+      </section>
+
+      {/* ===================================================
+          WARNING
+      =================================================== */}
+
+      {profile.physicalLimitations && (
+        <div className="flex gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+
+          <div>
+            <strong>
+              Physical limitations
+            </strong>
+
+            <p className="mt-1 text-amber-200/70">
+              {
+                profile.physicalLimitations
+              }
+            </p>
+          </div>
+        </div>
+      )}
+
+      {feedback && (
+        <div
+          className={`rounded-xl border p-4 text-sm ${
+            feedback.type ===
+            "error"
+              ? "border-red-500/20 bg-red-500/5 text-red-300"
+              : "border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+          }`}
+        >
+          {
+            feedback.message
+          }
+        </div>
+      )}
+
+      {/* ===================================================
+          SAVE
+      =================================================== */}
+
+      <button
+        type="button"
+        disabled={
+          submitting
+        }
+        onClick={() =>
+          void savePlan()
+        }
+        className="flex w-full items-center justify-center gap-3 rounded-2xl bg-amber-400 px-6 py-5 font-black uppercase tracking-wider text-black transition hover:bg-amber-300 disabled:opacity-50"
+      >
+        {submitting ? (
+          <>
+            <Loader2 className="h-5 w-5 animate-spin" />
+
+            Saving plan
+          </>
+        ) : (
+          <>
+            <Save className="h-5 w-5" />
+
+            Save Workout Plan
+
+            <ChevronRight className="h-5 w-5" />
+          </>
+        )}
+      </button>
     </div>
   );
 }
 
 /* =========================================================
-   FIELD
+   UI HELPERS
 ========================================================= */
 
-type FieldProps = {
-  label: string;
-  children: ReactNode;
-  className?: string;
-};
+const inputClasses =
+  "h-12 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-white outline-none focus:border-amber-400/50";
 
 function Field({
   label,
   children,
-  className = "",
-}: FieldProps) {
+}: {
+  label: string;
+  children:
+    React.ReactNode;
+}) {
   return (
-    <label
-      className={`space-y-2 ${className}`}
-    >
-      <span className="block text-sm font-semibold text-zinc-300">
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-wider text-zinc-600">
         {label}
       </span>
 
@@ -1274,251 +2670,44 @@ function Field({
   );
 }
 
-/* =========================================================
-   SUMMARY VALUE
-========================================================= */
-
-type SummaryValueProps = {
-  label: string;
-  value: number;
-};
-
-function SummaryValue({
-  label,
-  value,
-}: SummaryValueProps) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-center">
-      <p className="text-lg font-black">
-        {value}
-      </p>
-
-      <p className="mt-1 text-[9px] font-black uppercase tracking-wider text-zinc-700">
-        {label}
-      </p>
-    </div>
-  );
-}
-
-/* =========================================================
-   EXERCISE EDITOR
-========================================================= */
-
-type ExerciseEditorProps = {
-  exercise: BuilderExercise;
-
-  onChange: (
-    changes: Partial<BuilderExercise>,
-  ) => void;
-
-  onRemove: () => void;
-};
-
-function ExerciseEditor({
-  exercise,
-  onChange,
-  onRemove,
-}: ExerciseEditorProps) {
-  return (
-    <article className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-orange-500/20 bg-orange-500/10 text-xs font-black text-orange-300">
-            {exercise.exerciseOrder}
-          </span>
-
-          <div>
-            <p className="font-black text-zinc-200">
-              {exercise.exerciseName}
-            </p>
-
-            <p className="mt-1 text-xs text-zinc-600">
-              Configure sets and repetitions
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Remove ${exercise.exerciseName}`}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 transition hover:bg-red-500/20"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <NumberField
-          label="Sets"
-          value={exercise.targetSets}
-          minimum={1}
-          maximum={20}
-          onChange={(value) =>
-            onChange({
-              targetSets: value,
-            })
-          }
-        />
-
-        <NumberField
-          label="Min reps"
-          value={exercise.repMin}
-          minimum={1}
-          maximum={100}
-          onChange={(value) =>
-            onChange({
-              repMin: value,
-            })
-          }
-        />
-
-        <NumberField
-          label="Max reps"
-          value={exercise.repMax}
-          minimum={1}
-          maximum={100}
-          onChange={(value) =>
-            onChange({
-              repMax: value,
-            })
-          }
-        />
-
-        <NumberField
-          label="Rest"
-          value={exercise.restSeconds}
-          minimum={0}
-          maximum={900}
-          step={15}
-          onChange={(value) =>
-            onChange({
-              restSeconds: value,
-            })
-          }
-        />
-
-        <NumberField
-          label="RIR"
-          value={exercise.rir ?? 0}
-          minimum={0}
-          maximum={5}
-          onChange={(value) =>
-            onChange({
-              rir: value,
-            })
-          }
-        />
-      </div>
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <input
-          value={exercise.tempo}
-          onChange={(event) =>
-            onChange({
-              tempo: event.target.value,
-            })
-          }
-          maxLength={30}
-          placeholder="Tempo, e.g. 3-1-1"
-          className={inputClassName}
-        />
-
-        <input
-          value={exercise.notes}
-          onChange={(event) =>
-            onChange({
-              notes: event.target.value,
-            })
-          }
-          maxLength={1000}
-          placeholder="Exercise notes"
-          className={inputClassName}
-        />
-      </div>
-    </article>
-  );
-}
-
-/* =========================================================
-   NUMBER FIELD
-========================================================= */
-
-type NumberFieldProps = {
-  label: string;
-  value: number;
-  minimum: number;
-  maximum: number;
-  step?: number;
-  onChange: (value: number) => void;
-};
-
 function NumberField({
   label,
   value,
-  minimum,
-  maximum,
-  step = 1,
   onChange,
-}: NumberFieldProps) {
-  function applyValue(nextValue: number) {
-    const safeValue = Number.isFinite(
-      nextValue,
-    )
-      ? nextValue
-      : minimum;
+}: {
+  label: string;
 
-    onChange(
-      Math.max(
-        minimum,
-        Math.min(maximum, safeValue),
-      ),
-    );
-  }
+  value: number;
 
+  onChange:
+    (value: number) =>
+      void;
+}) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-3">
-      <p className="text-[9px] font-black uppercase tracking-wider text-zinc-700">
+    <label>
+      <span className="text-[9px] font-black uppercase text-zinc-700">
         {label}
-      </p>
+      </span>
 
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() =>
-            applyValue(value - step)
-          }
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-zinc-500 transition hover:text-white"
-        >
-          <Minus className="h-3.5 w-3.5" />
-        </button>
-
-        <input
-          value={value}
-          onChange={(event) =>
-            applyValue(
-              Number(
-                event.target.value,
-              ),
-            )
-          }
-          type="number"
-          min={minimum}
-          max={maximum}
-          step={step}
-          className="h-8 min-w-0 flex-1 bg-transparent text-center text-sm font-black text-zinc-200 outline-none"
-        />
-
-        <button
-          type="button"
-          onClick={() =>
-            applyValue(value + step)
-          }
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-zinc-500 transition hover:text-white"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
+      <input
+        value={
+          value
+        }
+        type="number"
+        min={0}
+        onChange={(
+          event,
+        ) =>
+          onChange(
+            Number(
+              event
+                .target
+                .value,
+            ),
+          )
+        }
+        className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm outline-none"
+      />
+    </label>
   );
 }
