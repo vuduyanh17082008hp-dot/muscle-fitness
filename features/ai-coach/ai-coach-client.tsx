@@ -502,7 +502,7 @@ export function AiCoachClient({
           </p>
 
           <h1 className="mt-2 text-2xl font-black text-white sm:text-3xl">
-            Muscle Fitness AI Coach
+            Dante &middot; Muscle Fitness Intelligence
           </h1>
 
           <p className="mt-2 text-sm text-zinc-500">
@@ -602,7 +602,7 @@ export function AiCoachClient({
                     >
                       {!isUser ? (
                         <p className="mb-2 text-xs font-black uppercase tracking-wider text-amber-400">
-                          AI Coach
+                          Dante
                         </p>
                       ) : null}
 
@@ -685,7 +685,7 @@ export function AiCoachClient({
             </form>
 
             <p className="mt-3 text-center text-[11px] text-zinc-600">
-              AI Coach cung cấp hướng dẫn
+              Dante cung cấp hướng dẫn
               fitness tổng quát, không thay thế
               tư vấn y tế.
             </p>

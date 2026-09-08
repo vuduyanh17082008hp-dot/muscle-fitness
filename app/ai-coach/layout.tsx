@@ -42,11 +42,11 @@ export default async function AiCoachLayout({
 
             <span>
               <span className="block text-sm font-black tracking-wide">
-                AI COACH
+                DANTE
               </span>
 
               <span className="block text-[10px] uppercase tracking-[0.22em] text-zinc-600">
-                Muscle Fitness
+                Muscle Fitness Intelligence
               </span>
             </span>
           </Link>
@@ -68,7 +68,7 @@ export default async function AiCoachLayout({
             >
               <Bot className="h-4 w-4" />
               <span className="hidden sm:inline">
-                Coach
+                Dante
               </span>
             </Link>
 

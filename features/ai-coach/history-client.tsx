@@ -93,7 +93,7 @@ export function HistoryClient({
           href="/ai-coach"
           className="mt-6 inline-flex rounded-2xl bg-amber-400 px-5 py-3 text-sm font-bold text-black"
         >
-          Start AI Coach
+          Start with Dante
         </Link>
       </div>
     );

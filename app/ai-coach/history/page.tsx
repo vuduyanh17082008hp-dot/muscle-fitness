@@ -41,7 +41,7 @@ export default async function AiCoachHistoryPage() {
         </p>
 
         <h1 className="mt-3 text-3xl font-black tracking-tight text-white">
-          AI Coach History
+          Dante History
         </h1>
 
         <p className="mt-3 text-sm leading-6 text-zinc-500">
