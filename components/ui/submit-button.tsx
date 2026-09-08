@@ -1,36 +1,68 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useFormStatus } from "react-dom";
+import type {
+  ReactNode,
+} from "react";
+
+import {
+  useFormStatus,
+} from "react-dom";
 
 import {
   Button,
   type ButtonProps,
 } from "@/components/ui/button";
 
-type SubmitButtonProps = Omit<
-  ButtonProps,
-  "type" | "loading"
-> & {
-  pendingText?: string;
-  children: ReactNode;
-};
+/* =========================================================
+   TYPES
+========================================================= */
+
+type SubmitButtonProps =
+  Omit<
+    ButtonProps,
+    | "type"
+    | "loading"
+    | "loadingText"
+  > & {
+    pendingText?: string;
+
+    children:
+      ReactNode;
+  };
+
+/* =========================================================
+   SUBMIT BUTTON
+========================================================= */
 
 export function SubmitButton({
-  pendingText = "Submitting...",
+  pendingText =
+    "Submitting...",
+
   children,
+
   disabled,
+
   ...props
 }: SubmitButtonProps) {
-  const { pending } = useFormStatus();
+  const {
+    pending,
+  } =
+    useFormStatus();
 
   return (
     <Button
       {...props}
       type="submit"
-      disabled={disabled || pending}
-      loading={pending}
-      loadingText={pendingText}
+      disabled={
+        Boolean(disabled) ||
+        pending
+      }
+      loading={
+        pending
+      }
+      loadingText={
+        pendingText
+      }
     >
       {children}
     </Button>

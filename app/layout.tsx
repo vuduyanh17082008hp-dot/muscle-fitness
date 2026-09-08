@@ -1,104 +1,169 @@
-import type { Metadata, Viewport } from "next"
-import type { ReactNode } from "react"
+import type {
+  Metadata,
+  Viewport,
+} from "next";
 
-import { AuthProvider } from "@/app/context/AuthContext"
+import type {
+  ReactNode,
+} from "react";
 
-import "./globals.css"
+import {
+  AuthProvider,
+} from "@/app/context/AuthContext";
+
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Muscle Fitness",
-    template: "%s | Muscle Fitness",
+    default:
+      "Muscle Fitness — AI-Powered Personal Training",
+
+    template:
+      "%s | Muscle Fitness",
   },
 
   description:
-    "A modern fitness platform for personalised training, nutrition, progress tracking and long-term transformation.",
+    "An evidence-aware AI fitness coaching platform connecting training, nutrition, recovery and personalized guidance through Dante.",
 
-  applicationName: "Muscle Fitness",
+  applicationName:
+    "Muscle Fitness",
 
   keywords: [
     "Muscle Fitness",
-    "fitness",
-    "workout",
+    "AI fitness coach",
+    "Dante AI",
+    "workout programming",
     "nutrition",
-    "training",
-    "body transformation",
+    "recovery",
+    "personal training",
     "fitness coaching",
   ],
 
   authors: [
     {
-      name: "Muscle Fitness",
+      name:
+        "Muscle Fitness",
     },
   ],
 
-  creator: "Muscle Fitness",
-  publisher: "Muscle Fitness",
+  creator:
+    "Muscle Fitness",
 
-  category: "fitness",
+  publisher:
+    "Muscle Fitness",
+
+  category:
+    "fitness",
 
   icons: {
     icon: [
       {
-        url: "/favicon.ico",
+        url:
+          "/favicon.ico",
       },
     ],
-    shortcut: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
+
+    shortcut:
+      "/favicon.ico",
+
+    apple:
+      "/apple-touch-icon.png",
   },
 
   openGraph: {
-    type: "website",
-    locale: "en_SG",
-    siteName: "Muscle Fitness",
-    title: "Muscle Fitness",
+    type:
+      "website",
+
+    locale:
+      "en_SG",
+
+    siteName:
+      "Muscle Fitness",
+
+    title:
+      "Muscle Fitness — AI-Powered Personal Training",
+
     description:
-      "Personalised training, nutrition and progress tracking built for real transformation.",
+      "Training, nutrition and recovery guidance built around your real profile, goals and progress.",
   },
 
   twitter: {
-    card: "summary_large_image",
-    title: "Muscle Fitness",
+    card:
+      "summary_large_image",
+
+    title:
+      "Muscle Fitness — AI-Powered Personal Training",
+
     description:
-      "Personalised training, nutrition and progress tracking built for real transformation.",
+      "Training, nutrition and recovery guidance built around your real profile, goals and progress.",
   },
 
   robots: {
-    index: true,
-    follow: true,
+    index:
+      true,
+
+    follow:
+      true,
+
     googleBot: {
-      index: true,
-      follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
+      index:
+        true,
+
+      follow:
+        true,
+
+      "max-image-preview":
+        "large",
+
+      "max-snippet":
+        -1,
+
+      "max-video-preview":
+        -1,
     },
   },
-}
+};
 
 export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 5,
-  viewportFit: "cover",
+  width:
+    "device-width",
+
+  initialScale:
+    1,
+
+  maximumScale:
+    5,
+
+  viewportFit:
+    "cover",
 
   themeColor: [
     {
-      media: "(prefers-color-scheme: light)",
-      color: "#070707",
+      media:
+        "(prefers-color-scheme: light)",
+
+      color:
+        "#070707",
     },
+
     {
-      media: "(prefers-color-scheme: dark)",
-      color: "#070707",
+      media:
+        "(prefers-color-scheme: dark)",
+
+      color:
+        "#070707",
     },
   ],
 
-  colorScheme: "dark",
-}
+  colorScheme:
+    "dark",
+};
 
-type RootLayoutProps = Readonly<{
-  children: ReactNode
-}>
+type RootLayoutProps =
+  Readonly<{
+    children:
+      ReactNode;
+  }>;
 
 export default function RootLayout({
   children,
@@ -112,9 +177,12 @@ export default function RootLayout({
         className="
           min-h-screen
           overflow-x-hidden
+
           bg-[#070707]
           text-white
+
           antialiased
+
           selection:bg-amber-500
           selection:text-black
         "
@@ -124,5 +192,5 @@ export default function RootLayout({
         </AuthProvider>
       </body>
     </html>
-  )
+  );
 }

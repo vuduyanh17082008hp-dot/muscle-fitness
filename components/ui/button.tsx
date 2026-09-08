@@ -4,6 +4,7 @@ import {
   cva,
   type VariantProps,
 } from "class-variance-authority";
+import { Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -43,11 +44,11 @@ const buttonVariants = cva(
   ].join(" "),
   {
     variants: {
-      variant: {
-        /* =================================================
-           DEFAULT
-        ================================================= */
+      /* ===================================================
+         VARIANT
+      =================================================== */
 
+      variant: {
         default: [
           "bg-amber-500",
           "text-black",
@@ -56,10 +57,6 @@ const buttonVariants = cva(
 
           "active:translate-y-px",
         ].join(" "),
-
-        /* =================================================
-           PRIMARY
-        ================================================= */
 
         primary: [
           "bg-amber-500",
@@ -75,10 +72,6 @@ const buttonVariants = cva(
           "active:translate-y-px",
         ].join(" "),
 
-        /* =================================================
-           SECONDARY
-        ================================================= */
-
         secondary: [
           "border",
           "border-white/10",
@@ -89,10 +82,6 @@ const buttonVariants = cva(
           "hover:border-white/20",
           "hover:bg-white/10",
         ].join(" "),
-
-        /* =================================================
-           OUTLINE
-        ================================================= */
 
         outline: [
           "border",
@@ -106,10 +95,6 @@ const buttonVariants = cva(
           "hover:text-amber-400",
         ].join(" "),
 
-        /* =================================================
-           GHOST
-        ================================================= */
-
         ghost: [
           "bg-transparent",
           "text-zinc-400",
@@ -117,10 +102,6 @@ const buttonVariants = cva(
           "hover:bg-white/5",
           "hover:text-white",
         ].join(" "),
-
-        /* =================================================
-           LINK
-        ================================================= */
 
         link: [
           "bg-transparent",
@@ -133,10 +114,6 @@ const buttonVariants = cva(
           "hover:underline",
         ].join(" "),
 
-        /* =================================================
-           DESTRUCTIVE
-        ================================================= */
-
         destructive: [
           "bg-red-600",
           "text-white",
@@ -145,12 +122,6 @@ const buttonVariants = cva(
 
           "focus-visible:ring-red-500/40",
         ].join(" "),
-
-        /* =================================================
-           DANGER
-
-           Used by Muscle Fitness design system.
-        ================================================= */
 
         danger: [
           "bg-red-600",
@@ -198,16 +169,6 @@ const buttonVariants = cva(
 
       /* ===================================================
          FULL WIDTH
-
-         Supports:
-
-         <Button fullWidth />
-
-         and:
-
-         buttonStyles({
-           fullWidth: true
-         })
       =================================================== */
 
       fullWidth: {
@@ -227,10 +188,12 @@ const buttonVariants = cva(
 /* =========================================================
    BACKWARD-COMPATIBLE ALIAS
 
-   Existing code:
+   Existing project code may use:
+
    buttonVariants(...)
 
-   New Muscle Fitness code:
+   or:
+
    buttonStyles(...)
 ========================================================= */
 
@@ -245,6 +208,25 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+
+  /*
+   * Shows a spinner and disables interaction.
+   */
+  loading?: boolean;
+
+  /*
+   * Optional text shown while loading.
+   *
+   * Example:
+   *
+   * <Button
+   *   loading
+   *   loadingText="Saving..."
+   * >
+   *   Save
+   * </Button>
+   */
+  loadingText?: React.ReactNode;
 }
 
 /* =========================================================
@@ -259,11 +241,22 @@ const Button =
     (
       {
         className,
+
         variant,
         size,
         fullWidth,
+
         asChild = false,
+
+        loading = false,
+        loadingText,
+
+        disabled,
+
         type,
+
+        children,
+
         ...props
       },
       ref,
@@ -273,6 +266,10 @@ const Button =
           ? Slot
           : "button";
 
+      const isDisabled =
+        Boolean(disabled) ||
+        loading;
+
       return (
         <Comp
           ref={ref}
@@ -281,16 +278,46 @@ const Button =
               ? undefined
               : type ?? "button"
           }
+          disabled={
+            asChild
+              ? undefined
+              : isDisabled
+          }
+          aria-disabled={
+            isDisabled
+              ? true
+              : undefined
+          }
+          aria-busy={
+            loading
+              ? true
+              : undefined
+          }
           className={cn(
             buttonVariants({
               variant,
               size,
               fullWidth,
             }),
+
             className,
           )}
           {...props}
-        />
+        >
+          {loading ? (
+            <>
+              <Loader2
+                aria-hidden="true"
+                className="size-4 animate-spin"
+              />
+
+              {loadingText ??
+                children}
+            </>
+          ) : (
+            children
+          )}
+        </Comp>
       );
     },
   );

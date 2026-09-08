@@ -1,56 +1,127 @@
-# Muscle Fitness — Repository Audit & Delivery Status
+# AI and Technology Disclosure
 
-**Updated:** 2026-08-05  
-**Source of truth:** Root Next.js app (`app/`, `components/`, `lib/`, `features/`, `supabase/`)  
-**Nested scaffold excluded:** `muscle-fitness/` (Project 09 copy; excluded from `tsconfig`)
+## Groq
 
----
+Purpose:
 
-## How to run
+Runtime inference provider for Dante.
 
-See **[RUN_LOCAL.md](./RUN_LOCAL.md)**.
+Runtime:
 
-```bash
-npm run dev
-```
+Yes when `GROQ_API_KEY` is configured.
 
-Open [http://localhost:3000](http://localhost:3000)
+The exact production model must be verified from `GROQ_MODEL`
+before submission.
 
----
+## Supabase
 
-## Phase delivery status (this session)
+Purpose:
 
-| Phase | Status | What shipped |
-|---|---|---|
-| 1. Build / TypeScript | Done for root | Nested app excluded; story/plan-builder/motion/RPC typing fixed; deps declared |
-| 2. Auth | Stabilized | `/auth/callback` accepts publishable or anon key; redirects to `/login` |
-| 3. Database types | Improved | RPC function map expanded in `types/app-database.types.ts` |
-| 4. Onboarding | Preserved | Existing wizard left intact |
-| 5. Dashboard data | Improved | Nav sections no longer 404; real targets shown on nutrition/progress/today |
-| 6. Workout system | Wired | Session mutations + API routes for save/skip/replace/finish |
-| 7. Nutrition | Partial | Dashboard nutrition shows real targets; meal-plan calculator still client-side |
-| 8. Progress | Partial | Progress section + `/api/progress` weight update path |
-| 9. AI Coach | Partial | Honest coach pages + chatbot; not full OpenAI production coach |
-| 10. Google | Preserved | Existing Drive sync left intact |
-| 11. Polish | Partial | Invalid next.config; run docs exported |
+- authentication
+- user profiles
+- database
+- Row Level Security
 
----
+Runtime:
 
-## Critical architecture notes
+Yes.
 
-1. Do **not** develop inside nested `muscle-fitness/` for the live app.
-2. Workout player actions call server mutations in `lib/workouts/session-mutations.ts`.
-3. Schema drift between Project 09 SQL and later migrations may still affect some column names at runtime — verify against your live Supabase project.
-4. Landing `/images/*` assets may still be missing from `public/`.
+## Vercel
 
----
+Purpose:
 
-## Validation
+Production deployment.
 
-```bash
-npm run type-check
-npm run lint
-npm run build
-```
+Runtime:
 
-Type-check target: root app only (nested folder excluded).
+Yes for the competition deployment.
+
+## PubMed / NCBI
+
+Purpose:
+
+Scientific research retrieval.
+
+Only describe PubMed as used at runtime if the deployed Dante API
+actually retrieves NCBI data.
+
+## USDA FoodData Central
+
+Purpose:
+
+Food and nutrient information.
+
+Only claim runtime use when the API is actually connected.
+
+## Open Food Facts
+
+Purpose:
+
+Packaged food information.
+
+License and attribution requirements should be verified before
+submission.
+
+## wger
+
+Purpose:
+
+Exercise and workout data.
+
+License and attribution requirements should be verified before
+submission.
+
+## PubChem
+
+Purpose:
+
+Compound information.
+
+Only list as runtime if the deployed code calls PubChem.
+
+## openFDA
+
+Purpose:
+
+Supporting drug-label and safety information.
+
+openFDA information must not be interpreted as clinical diagnosis.
+
+## Development Tools
+
+### Cursor
+
+Used as an AI-assisted development environment.
+
+### ChatGPT / OpenAI
+
+Used during development for:
+
+- architecture
+- debugging
+- code assistance
+- copy
+- product planning
+
+Development-tool usage does not necessarily mean that the same
+model or provider is used at runtime.
+
+## Media Disclosure
+
+The inspirational fitness story used on the website is original
+composite copy.
+
+It is not presented as a real Muscle Fitness client testimonial.
+
+Third-party stories were used only as thematic inspiration.
+
+## Before Submission
+
+Verify:
+
+- production AI model
+- active APIs
+- licenses
+- media permissions
+- GitHub visibility
+- no secrets in Git history

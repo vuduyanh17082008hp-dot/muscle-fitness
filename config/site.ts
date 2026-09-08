@@ -1,70 +1,123 @@
 export type NavigationItem = {
-  title: string
-  href: string
-}
+  title: string;
+  href: string;
+};
 
 export type SiteConfig = {
-  name: string
-  description: string
-  navigation: {
-    marketing: NavigationItem[]
-    dashboard: NavigationItem[]
-  }
-}
-
-export const siteConfig: SiteConfig = {
-  name: "Muscle Fitness",
+  name: string;
 
   description:
-    "A modern fitness coaching platform for training, nutrition, progress tracking and long-term transformation.",
+    string;
+
+  navigation: {
+    marketing:
+      NavigationItem[];
+
+    dashboard:
+      NavigationItem[];
+  };
+};
+
+export const siteConfig: SiteConfig = {
+  name:
+    "Muscle Fitness",
+
+  description:
+    "An evidence-aware AI fitness coaching platform connecting training, nutrition, recovery and personalized guidance.",
 
   navigation: {
     marketing: [
       {
-        title: "Home",
-        href: "/",
+        title:
+          "Home",
+
+        href:
+          "/",
       },
+
       {
-        title: "My Story",
-        href: "/story",
+        title:
+          "Solution",
+
+        href:
+          "/#solution",
       },
+
       {
-        title: "Training",
-        href: "/training",
+        title:
+          "Dante",
+
+        href:
+          "/chatbot",
       },
+
       {
-        title: "Nutrition",
-        href: "/nutrition",
+        title:
+          "Training",
+
+        href:
+          "/training",
       },
+
       {
-        title: "Pricing",
-        href: "/#pricing",
+        title:
+          "AI Fair",
+
+        href:
+          "/ai-fair",
+      },
+
+      {
+        title:
+          "Responsible AI",
+
+        href:
+          "/responsible-ai",
       },
     ],
 
     dashboard: [
       {
-        title: "Overview",
-        href: "/dashboard",
+        title:
+          "Overview",
+
+        href:
+          "/dashboard",
       },
+
       {
-        title: "Training",
-        href: "/dashboard/training",
+        title:
+          "Training",
+
+        href:
+          "/dashboard/training",
       },
+
       {
-        title: "Nutrition",
-        href: "/dashboard/nutrition",
+        title:
+          "Nutrition",
+
+        href:
+          "/dashboard/nutrition",
       },
+
       {
-        title: "Progress",
-        href: "/dashboard/progress",
+        title:
+          "Progress",
+
+        href:
+          "/dashboard/progress",
       },
+
       {
-        title: "AI Coach",
-        href: "/coach",
+        title:
+          "Dante",
+
+        href:
+          "/coach",
       },
     ],
   },
-}
+};
 
-export default siteConfig
+export default siteConfig;

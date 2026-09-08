@@ -1,5 +1,15 @@
-import { createServerClient } from "@supabase/ssr"
-import { NextResponse, type NextRequest } from "next/server"
+import {
+  createServerClient,
+} from "@supabase/ssr";
+
+import {
+  NextResponse,
+  type NextRequest,
+} from "next/server";
+
+/* =========================================================
+   ROUTES
+========================================================= */
 
 const PROTECTED_ROUTES = [
   "/dashboard",
@@ -21,206 +31,336 @@ const PROTECTED_ROUTES = [
   "/feedback",
   "/reminders",
   "/notifications",
-]
+] as const;
 
-/*
- * Chỉ những route này mới redirect user đã đăng nhập
- * về dashboard.
- *
- * Tuyệt đối không thêm:
- * /account
- * /profile
- * /account/edit
- */
-const AUTH_PAGES = new Set([
-  "/login",
-  "/register",
-  "/forgot-password",
-  "/reset-password",
-])
+const AUTH_PAGES =
+  new Set([
+    "/login",
+    "/register",
+    "/signup",
+    "/forgot-password",
+    "/reset-password",
+  ]);
+
+/* =========================================================
+   ROUTE HELPERS
+========================================================= */
 
 function isRouteMatch(
   pathname: string,
-  route: string
+  route: string,
 ): boolean {
   return (
     pathname === route ||
-    pathname.startsWith(`${route}/`)
-  )
+    pathname.startsWith(
+      `${route}/`,
+    )
+  );
 }
 
-function isProtectedRoute(pathname: string): boolean {
-  return PROTECTED_ROUTES.some((route) =>
-    isRouteMatch(pathname, route)
-  )
+function isProtectedRoute(
+  pathname: string,
+): boolean {
+  return PROTECTED_ROUTES.some(
+    (route) =>
+      isRouteMatch(
+        pathname,
+        route,
+      ),
+  );
 }
 
-function copyAuthCookies(
-  source: NextResponse,
-  target: NextResponse
-): NextResponse {
-  source.cookies.getAll().forEach((cookie) => {
-    target.cookies.set(cookie)
-  })
+/* =========================================================
+   SUPABASE CONFIG
+========================================================= */
 
-  return target
-}
+type SupabaseConfig = {
+  url: string;
+  key: string;
+};
 
-function getSupabaseConfig() {
+function getSupabaseConfig():
+  SupabaseConfig | null {
   const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL
+    process.env
+      .NEXT_PUBLIC_SUPABASE_URL
+      ?.trim();
 
   const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    process.env
+      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+      ?.trim() ??
+    process.env
+      .NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ?.trim();
 
-  if (!url) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL."
-    )
-  }
-
-  if (!key) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY."
-    )
+  if (
+    !url ||
+    !key
+  ) {
+    return null;
   }
 
   return {
     url,
     key,
-  }
+  };
 }
 
+/* =========================================================
+   COOKIE COPY
+========================================================= */
+
+function copyAuthCookies(
+  source: NextResponse,
+  target: NextResponse,
+): NextResponse {
+  source.cookies
+    .getAll()
+    .forEach(
+      (cookie) => {
+        target.cookies.set(
+          cookie,
+        );
+      },
+    );
+
+  return target;
+}
+
+/* =========================================================
+   UPDATE SESSION
+========================================================= */
+
 export async function updateSession(
-  request: NextRequest
+  request: NextRequest,
 ): Promise<NextResponse> {
-  let supabaseResponse = NextResponse.next({
-    request,
-  })
+  const pathname =
+    request.nextUrl.pathname;
 
-  const { url, key } = getSupabaseConfig()
+  const config =
+    getSupabaseConfig();
 
-  const supabase = createServerClient(
-    url,
-    key,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
+  /* =======================================================
+     IMPORTANT
 
-        setAll(cookiesToSet, headersToSet) {
-          /*
-           * Cho Server Components trong request hiện tại
-           * nhìn thấy cookie mới.
-           */
-          cookiesToSet.forEach(
-            ({ name, value }) => {
-              request.cookies.set(name, value)
-            }
-          )
+     Do not crash the entire public website if Supabase
+     environment variables are temporarily unavailable.
 
-          supabaseResponse = NextResponse.next({
-            request,
-          })
+     Public routes can continue rendering.
 
-          /*
-           * Gửi cookie mới về browser.
-           */
-          cookiesToSet.forEach(
-            ({ name, value, options }) => {
-              supabaseResponse.cookies.set(
+     Protected routes are redirected to login.
+  ======================================================= */
+
+  if (!config) {
+    console.error(
+      [
+        "[SUPABASE CONFIG ERROR]",
+        "Missing NEXT_PUBLIC_SUPABASE_URL",
+        "or Supabase publishable / anon key.",
+      ].join(" "),
+    );
+
+    if (
+      isProtectedRoute(
+        pathname,
+      )
+    ) {
+      const loginUrl =
+        request.nextUrl.clone();
+
+      loginUrl.pathname =
+        "/login";
+
+      loginUrl.searchParams.set(
+        "next",
+        `${pathname}${request.nextUrl.search}`,
+      );
+
+      return NextResponse.redirect(
+        loginUrl,
+      );
+    }
+
+    return NextResponse.next({
+      request,
+    });
+  }
+
+  /* =======================================================
+     INITIAL RESPONSE
+  ======================================================= */
+
+  let supabaseResponse =
+    NextResponse.next({
+      request,
+    });
+
+  /* =======================================================
+     SUPABASE CLIENT
+  ======================================================= */
+
+  const supabase =
+    createServerClient(
+      config.url,
+      config.key,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+
+          setAll(
+            cookiesToSet,
+          ) {
+            /*
+             * Update request cookies so Server Components
+             * see refreshed auth state during this request.
+             */
+            cookiesToSet.forEach(
+              ({
                 name,
                 value,
-                options
-              )
-            }
-          )
+              }) => {
+                request.cookies.set(
+                  name,
+                  value,
+                );
+              },
+            );
 
-          /*
-           * Giữ headers được Supabase trả về.
-           */
-          Object.entries(headersToSet).forEach(
-            ([name, value]) => {
-              supabaseResponse.headers.set(
+            /*
+             * Recreate response with the updated request.
+             */
+            supabaseResponse =
+              NextResponse.next({
+                request,
+              });
+
+            /*
+             * Send refreshed cookies back to the browser.
+             */
+            cookiesToSet.forEach(
+              ({
                 name,
-                value
-              )
-            }
-          )
+                value,
+                options,
+              }) => {
+                supabaseResponse.cookies.set(
+                  name,
+                  value,
+                  options,
+                );
+              },
+            );
+          },
         },
       },
+    );
+
+  /* =======================================================
+     AUTH CLAIMS
+  ======================================================= */
+
+  let userId:
+    string | null =
+      null;
+
+  try {
+    const {
+      data,
+      error,
+    } =
+      await supabase.auth.getClaims();
+
+    if (
+      !error &&
+      typeof data?.claims?.sub ===
+        "string"
+    ) {
+      userId =
+        data.claims.sub;
     }
-  )
+  } catch (
+    error
+  ) {
+    /*
+     * An auth refresh failure should not destroy public
+     * pages.
+     */
+    console.error(
+      "[SUPABASE AUTH ERROR]",
+      error,
+    );
+  }
 
-  /*
-   * Không đặt logic khác giữa createServerClient
-   * và getClaims().
-   */
-  const {
-    data: claimsData,
-    error: claimsError,
-  } = await supabase.auth.getClaims()
+  const isAuthenticated =
+    Boolean(userId);
 
-  const pathname = request.nextUrl.pathname
+  /* =======================================================
+     PRIVATE ROUTE
+  ======================================================= */
 
-  const userId =
-    !claimsError &&
-    typeof claimsData?.claims?.sub === "string"
-      ? claimsData.claims.sub
-      : null
-
-  const isAuthenticated = Boolean(userId)
-
-  /*
-   * User chưa đăng nhập nhưng truy cập private route.
-   */
   if (
     !isAuthenticated &&
-    isProtectedRoute(pathname)
+    isProtectedRoute(
+      pathname,
+    )
   ) {
-    const loginUrl = request.nextUrl.clone()
+    const loginUrl =
+      request.nextUrl.clone();
 
-    loginUrl.pathname = "/login"
+    loginUrl.pathname =
+      "/login";
+
     loginUrl.searchParams.set(
       "next",
-      `${pathname}${request.nextUrl.search}`
-    )
+      `${pathname}${request.nextUrl.search}`,
+    );
 
     const redirectResponse =
-      NextResponse.redirect(loginUrl)
+      NextResponse.redirect(
+        loginUrl,
+      );
 
     return copyAuthCookies(
       supabaseResponse,
-      redirectResponse
-    )
+      redirectResponse,
+    );
   }
 
-  /*
-   * Chỉ redirect khi user đã đăng nhập
-   * nhưng truy cập đúng trang login/register.
-   *
-   * Không dùng startsWith("/account").
-   */
+  /* =======================================================
+     AUTH PAGE
+
+     Already authenticated users should not be sent back
+     through login/register.
+  ======================================================= */
+
   if (
     isAuthenticated &&
-    AUTH_PAGES.has(pathname)
+    AUTH_PAGES.has(
+      pathname,
+    )
   ) {
     const dashboardUrl =
-      request.nextUrl.clone()
+      request.nextUrl.clone();
 
-    dashboardUrl.pathname = "/dashboard"
-    dashboardUrl.search = ""
+    dashboardUrl.pathname =
+      "/dashboard";
+
+    dashboardUrl.search =
+      "";
 
     const redirectResponse =
-      NextResponse.redirect(dashboardUrl)
+      NextResponse.redirect(
+        dashboardUrl,
+      );
 
     return copyAuthCookies(
       supabaseResponse,
-      redirectResponse
-    )
+      redirectResponse,
+    );
   }
 
-  return supabaseResponse
+  return supabaseResponse;
 }
