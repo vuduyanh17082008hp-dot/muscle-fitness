@@ -65,7 +65,7 @@ export default function AiFairPage() {
             Source Code
           </Link>
 
-          <Link href="/coach" className={buttonStyles({ variant: "secondary" })}>
+          <Link href="/dante" className={buttonStyles({ variant: "secondary" })}>
             Meet Dante
             <ExternalLink className="size-4" />
           </Link>

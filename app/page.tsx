@@ -104,7 +104,7 @@ export default function HomePage() {
             <Link href="/story" className="transition hover:text-white">
               Story
             </Link>
-            <Link href="/coach" className="transition hover:text-white">
+            <Link href="/dante" className="transition hover:text-white">
               Dante
             </Link>
             <Link href="/training" className="transition hover:text-white">
@@ -164,7 +164,7 @@ export default function HomePage() {
                 <ArrowRight className="size-4" />
               </Link>
 
-              <Link href="/coach" className={buttonStyles({ variant: "secondary", size: "lg" })}>
+              <Link href="/dante" className={buttonStyles({ variant: "secondary", size: "lg" })}>
                 Meet Dante
               </Link>
             </div>
@@ -392,7 +392,7 @@ export default function HomePage() {
               <ArrowRight className="size-4" />
             </Link>
 
-            <Link href="/coach" className={buttonStyles({ variant: "secondary", size: "lg" })}>
+            <Link href="/dante" className={buttonStyles({ variant: "secondary", size: "lg" })}>
               Ask Dante
             </Link>
           </div>
