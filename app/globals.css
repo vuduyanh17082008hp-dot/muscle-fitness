@@ -2,9 +2,15 @@
 
 /* =========================================================
    MUSCLE FITNESS DESIGN SYSTEM
+   =========================================================
+   Tokens that back Tailwind utilities (bg-accent, text-text-secondary,
+   border-border, shadow-accent, font-heading, ...) MUST live inside
+   @theme — Tailwind v4 only generates utilities from variables declared
+   there. Values remain available as plain CSS vars (var(--color-accent))
+   everywhere, since @theme also emits them onto :root.
    ========================================================= */
 
-:root {
+@theme {
   /* Background */
   --color-background: #070707;
   --color-background-soft: #0d0d0d;
@@ -43,6 +49,14 @@
   --font-body: var(--font-inter), Arial, Helvetica, sans-serif;
   --font-heading: var(--font-bebas), Impact, sans-serif;
 
+  /* Shadows */
+  --shadow-card: 0 20px 50px rgba(0, 0, 0, 0.45);
+  --shadow-card-hover: 0 28px 70px rgba(0, 0, 0, 0.62);
+  --shadow-accent: 0 0 35px rgba(184, 115, 51, 0.24);
+  --shadow-accent-strong: 0 0 55px rgba(184, 115, 51, 0.35);
+}
+
+:root {
   /* Radius */
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -65,19 +79,6 @@
   /* Layout */
   --container-width: 1280px;
   --navbar-height: 80px;
-
-  /* Shadows */
-  --shadow-card:
-    0 20px 50px rgba(0, 0, 0, 0.45);
-
-  --shadow-card-hover:
-    0 28px 70px rgba(0, 0, 0, 0.62);
-
-  --shadow-accent:
-    0 0 35px rgba(184, 115, 51, 0.24);
-
-  --shadow-accent-strong:
-    0 0 55px rgba(184, 115, 51, 0.35);
 
   /* Transitions */
   --transition-fast: 180ms ease;
