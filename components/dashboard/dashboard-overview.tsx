@@ -307,7 +307,7 @@ export function DashboardOverview({
           <QuickAction
             href="/ai-coach"
             icon={Bot}
-            label="Ask AI Coach"
+            label="Ask Dante"
           />
           <QuickAction
             href="/dashboard/progress"
@@ -324,7 +324,7 @@ export function DashboardOverview({
             <div className="flex items-center gap-2 text-[var(--color-accent-light)]">
               <Sparkles className="size-4" aria-hidden />
               <p className="text-xs font-semibold uppercase tracking-[0.18em]">
-                Muscle Fitness AI Coach
+                Dante &middot; Muscle Fitness Intelligence
               </p>
             </div>
             <p className="text-sm text-zinc-400">
@@ -375,7 +375,7 @@ export function DashboardOverview({
                 href="/ai-coach"
                 className="inline-flex items-center rounded-full border border-white/[0.1] px-4 py-2 text-xs font-semibold text-zinc-200 transition-colors hover:bg-white/[0.04]"
               >
-                Ask AI Coach
+                Ask Dante
               </Link>
             </div>
           </div>

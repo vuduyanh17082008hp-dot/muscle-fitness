@@ -6,7 +6,7 @@ import { Menu, X } from "lucide-react";
 
 const navigation = [
   {
-    label: "MY STORY",
+    label: "STORY",
     href: "/story",
   },
   {

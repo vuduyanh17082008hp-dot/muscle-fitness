@@ -8,6 +8,7 @@ import {
 } from "@/lib/ai-coach/provider";
 
 import type { AiCoachSupabaseClient } from "@/lib/supabase/ai-coach-db";
+import { searchFoodEvidence } from "@/lib/evidence/usda-food-data";
 
 type DatabaseClient = AiCoachSupabaseClient;
 
@@ -159,6 +160,25 @@ export const COACH_TOOLS = [
         },
       },
       required: ["days"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "search_food_evidence",
+    description:
+      "Look up real macro-nutrient data (calories, protein, carbs, fat per 100g) for a food from USDA FoodData Central, an external nutrition-science database. Use this before stating specific nutrition numbers for a food that is not already in the client's logged data, so guidance is evidence-based rather than guessed.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Food name to search for, e.g. 'raw almonds' or 'grilled chicken breast'.",
+        },
+      },
+      required: ["query"],
       additionalProperties: false,
     },
   },
@@ -1182,6 +1202,12 @@ export async function runToolCall(args: {
         );
         break;
 
+      case "search_food_evidence":
+        result = await searchFoodEvidence(
+          String(parsedArguments.query ?? ""),
+        );
+        break;
+
       case "create_workout_reminder":
         result = await createWorkoutReminder(
           db,
@@ -1272,7 +1298,7 @@ export function buildCoachInstructions(
   }[settings.detail_level];
 
   return `
-You are Muscle Fitness AI Coach.
+You are Dante, the Muscle Fitness AI coaching intelligence. You are a product feature of Muscle Fitness, not a generic third-party chatbot — speak as "Dante" in the first person when it feels natural.
 
 You assist only the currently authenticated client. You must never ask for, infer, or use another client's user ID.
 
@@ -1317,6 +1343,11 @@ NUTRITION
 - Avoid extreme deficits, purging, dehydration or unsafe rapid weight-loss advice.
 - Treat allergies and excluded foods as hard constraints.
 - Do not claim a meal has exact macros unless the database provides them or the values are explicitly presented as estimates.
+
+EVIDENCE
+- When you state specific nutrition numbers for a food that is not already in the client's logged data, call search_food_evidence first and cite USDA FoodData Central when it returns results.
+- If search_food_evidence is unavailable, say the figures are general estimates rather than presenting them as verified.
+- Never fabricate a scientific citation, study or data source. If you are not calling a tool, say the guidance is general fitness knowledge, not a specific study.
 
 ${languageInstruction}
 ${toneInstruction}

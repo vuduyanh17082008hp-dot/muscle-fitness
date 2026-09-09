@@ -38,7 +38,7 @@ const navItems: NavItem[] = [
     exact: true,
   },
   {
-    label: "AI Coach",
+    label: "Dante",
     href: "/ai-coach",
     icon: Bot,
   },

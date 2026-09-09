@@ -9,7 +9,7 @@ const productLinks = [
 const accountLinks = [
   { label: "Login", href: "/login" },
   { label: "Create Account", href: "/signup" },
-  { label: "My Story", href: "/story" },
+  { label: "Story", href: "/story" },
 ];
 
 export default function Footer() {
@@ -33,7 +33,7 @@ export default function Footer() {
           </Link>
 
           <p className="mt-6 max-w-md leading-7">
-            Built from a real transformation and created to turn confusion
+            An evidence-aware AI coaching platform built to turn confusion
             into direction, effort into progress and progress into confidence.
           </p>
         </div>

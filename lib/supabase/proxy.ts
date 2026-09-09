@@ -70,53 +70,82 @@ function copyAuthCookies(
   return target
 }
 
-let warnedAboutMissingSupabaseEnv = false
+let loggedProxyFailure = false
 
-/**
- * Xử lý an toàn khi thiếu Supabase env ở local dev.
+/*
+ * Proxy chạy trên MỌI route (trừ static asset). Nếu nó throw thì
+ * toàn bộ site trả về "Internal Server Error", kể cả trang public.
  *
- * Production build/deploy vẫn phải cấu hình đầy đủ; ở đó ta throw
- * để lỗi hiển thị rõ ràng thay vì âm thầm bỏ qua auth.
- *
- * Ở local dev (chưa tạo .env.local), thay vì crash toàn bộ proxy
- * (mọi trang, kể cả trang public), ta log cảnh báo một lần và cho
- * request đi qua như chưa đăng nhập. Điều này khớp với rule
- * "safe disconnected state" trong master prompt.
+ * Vì vậy proxy không bao giờ được throw. Khi Supabase thiếu config
+ * hoặc gọi lỗi:
+ * - route private: redirect về /login (fail closed, giữ an toàn)
+ * - route public: cho request đi qua (fail open, trang vẫn hiển thị)
  */
-function warnMissingSupabaseEnvOnce(): void {
-  if (warnedAboutMissingSupabaseEnv) {
+function logProxyFailureOnce(reason: string): void {
+  if (loggedProxyFailure) {
     return
   }
 
-  warnedAboutMissingSupabaseEnv = true
+  loggedProxyFailure = true
 
-  console.warn(
-    [
-      "[muscle-fitness] Missing NEXT_PUBLIC_SUPABASE_URL / ",
-      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
-      "Copy .env.example to .env.local and fill in your Supabase project",
-      "credentials. Auth/session middleware is disabled until then —",
-      "protected routes will not be enforced and users will appear signed out.",
-    ].join(" "),
+  console.error(
+    `[muscle-fitness] Auth proxy disabled: ${reason} ` +
+      "Public pages still render; protected routes redirect to /login. " +
+      "Configure NEXT_PUBLIC_SUPABASE_URL and " +
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) " +
+      "in .env.local for local development, or in your deployment " +
+      "environment settings, then redeploy.",
   )
+}
+
+function handleProxyFailure(
+  request: NextRequest,
+  reason: string,
+): NextResponse {
+  logProxyFailureOnce(reason)
+
+  const pathname = request.nextUrl.pathname
+
+  if (isProtectedRoute(pathname)) {
+    const loginUrl = request.nextUrl.clone()
+
+    loginUrl.pathname = "/login"
+    loginUrl.searchParams.set(
+      "next",
+      `${pathname}${request.nextUrl.search}`,
+    )
+
+    return NextResponse.redirect(loginUrl)
+  }
+
+  return NextResponse.next({ request })
 }
 
 export async function updateSession(
   request: NextRequest
 ): Promise<NextResponse> {
+  try {
+    return await runSessionProxy(request)
+  } catch (error) {
+    return handleProxyFailure(
+      request,
+      error instanceof Error
+        ? error.message
+        : "unexpected proxy error.",
+    )
+  }
+}
+
+async function runSessionProxy(
+  request: NextRequest
+): Promise<NextResponse> {
   const supabaseEnv = getSupabasePublicEnv()
 
   if (!supabaseEnv) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY. " +
-          "Configure these environment variables in your deployment settings.",
-      )
-    }
-
-    warnMissingSupabaseEnvOnce()
-
-    return NextResponse.next({ request })
+    return handleProxyFailure(
+      request,
+      "Supabase public environment variables are not configured.",
+    )
   }
 
   let supabaseResponse = NextResponse.next({

@@ -25,7 +25,7 @@ export const siteConfig: SiteConfig = {
         href: "/",
       },
       {
-        title: "My Story",
+        title: "Story",
         href: "/story",
       },
       {
@@ -60,7 +60,7 @@ export const siteConfig: SiteConfig = {
         href: "/dashboard/progress",
       },
       {
-        title: "AI Coach",
+        title: "Dante",
         href: "/coach",
       },
     ],
