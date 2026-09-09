@@ -1,19 +1,25 @@
-"use client"
+"use client";
 
 import {
   useEffect,
   useMemo,
   useState,
-} from "react"
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
-import { useRouter } from "next/navigation"
+import {
+  useRouter,
+} from "next/navigation";
 
 import {
   completeOnboardingAction,
   saveOnboardingDraftAction,
-} from "@/app/onboarding/actions"
+} from "@/app/onboarding/actions";
 
-import { calculateNutritionTargets } from "@/features/onboarding/calculations"
+import {
+  calculateNutritionTargets,
+} from "@/features/onboarding/calculations";
 
 import {
   defaultOnboardingData,
@@ -21,13 +27,36 @@ import {
   onboardingStepSchemas,
   type OnboardingData,
   type OnboardingDraftData,
-} from "@/features/onboarding/schema"
+} from "@/features/onboarding/schema";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 export type OnboardingWizardProps = {
-  userId: string
-  initialStep?: number
-  initialData?: OnboardingDraftData
-}
+  userId: string;
+
+  initialStep?:
+    number;
+
+  initialData?:
+    OnboardingDraftData;
+};
+
+type StoredOnboardingDraft = {
+  currentStep?:
+    number;
+
+  step?:
+    number;
+
+  data?:
+    OnboardingDraftData;
+};
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
 
 const steps = [
   "Personal",
@@ -36,16 +65,176 @@ const steps = [
   "Nutrition",
   "Lifestyle",
   "Review",
-] as const
+] as const;
 
 const inputClassName =
-  "w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10"
+  "w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10";
 
 const labelClassName =
-  "mb-2 block text-sm font-semibold text-zinc-300"
+  "mb-2 block text-sm font-semibold text-zinc-300";
+
+/* =========================================================
+   HYDRATION STORE
+
+   No setMounted(true) / setState in effect required.
+========================================================= */
+
+function subscribeHydration() {
+  return () => {};
+}
+
+function getClientSnapshot() {
+  return true;
+}
+
+function getServerSnapshot() {
+  return false;
+}
+
+function useHydrated() {
+  return useSyncExternalStore(
+    subscribeHydration,
+    getClientSnapshot,
+    getServerSnapshot,
+  );
+}
+
+/* =========================================================
+   STORAGE
+========================================================= */
+
+function primaryStorageKey(
+  userId: string,
+) {
+  return `muscle-fitness:onboarding:${userId}`;
+}
+
+function legacyStorageKey(
+  userId: string,
+) {
+  return `muscle-fitness-onboarding-${userId}`;
+}
+
+function readStoredDraft(
+  userId: string,
+): StoredOnboardingDraft | null {
+  try {
+    const primary =
+      window.localStorage.getItem(
+        primaryStorageKey(
+          userId,
+        ),
+      );
+
+    const legacy =
+      window.localStorage.getItem(
+        legacyStorageKey(
+          userId,
+        ),
+      );
+
+    const raw =
+      primary ??
+      legacy;
+
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(
+      raw,
+    ) as StoredOnboardingDraft;
+  } catch (error) {
+    console.error(
+      "Unable to restore local onboarding draft:",
+      error,
+    );
+
+    return null;
+  }
+}
+
+/* =========================================================
+   DATA MERGING
+========================================================= */
+
+function combineDraftData(
+  base?:
+    OnboardingDraftData,
+
+  override?:
+    OnboardingDraftData,
+):
+  | OnboardingDraftData
+  | undefined {
+  if (
+    !base &&
+    !override
+  ) {
+    return undefined;
+  }
+
+  return {
+    personal: {
+      ...base?.personal,
+      ...override?.personal,
+    },
+
+    goal: {
+      ...base?.goal,
+      ...override?.goal,
+    },
+
+    training: {
+      ...base?.training,
+      ...override?.training,
+
+      availableEquipment:
+        override?.training
+          ?.availableEquipment ??
+        base?.training
+          ?.availableEquipment,
+
+      priorityMuscles:
+        override?.training
+          ?.priorityMuscles ??
+        base?.training
+          ?.priorityMuscles,
+    },
+
+    nutrition: {
+      ...base?.nutrition,
+      ...override?.nutrition,
+
+      foodPreferences:
+        override?.nutrition
+          ?.foodPreferences ??
+        base?.nutrition
+          ?.foodPreferences,
+
+      excludedFoods:
+        override?.nutrition
+          ?.excludedFoods ??
+        base?.nutrition
+          ?.excludedFoods,
+
+      allergies:
+        override?.nutrition
+          ?.allergies ??
+        base?.nutrition
+          ?.allergies,
+    },
+
+    lifestyle: {
+      ...base?.lifestyle,
+      ...override?.lifestyle,
+    },
+  };
+}
 
 function mergeInitialData(
-  initialData?: OnboardingDraftData,
+  initialData?:
+    OnboardingDraftData,
 ): OnboardingData {
   return {
     personal: {
@@ -102,439 +291,744 @@ function mergeInitialData(
       ...defaultOnboardingData.lifestyle,
       ...initialData?.lifestyle,
     },
-  }
+  };
+}
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function clampStep(
+  value:
+    number,
+) {
+  return Math.min(
+    Math.max(
+      value,
+      0,
+    ),
+    steps.length -
+      1,
+  );
 }
 
 function parseList(
-  value: string,
+  value:
+    string,
 ): string[] {
   return value
     .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
+    .map(
+      (
+        item,
+      ) =>
+        item.trim(),
+    )
+    .filter(Boolean);
 }
 
 function humanize(
-  value: string,
+  value:
+    string,
 ): string {
   return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (character) =>
-      character.toUpperCase(),
+    .replaceAll(
+      "_",
+      " ",
     )
+    .replace(
+      /\b\w/g,
+      (
+        character,
+      ) =>
+        character.toUpperCase(),
+    );
 }
+
+/* =========================================================
+   GENERIC FIELD
+========================================================= */
 
 function Field({
   label,
   children,
 }: {
-  label: string
-  children: React.ReactNode
+  label:
+    string;
+
+  children:
+    ReactNode;
 }) {
   return (
     <label className="block">
-      <span className={labelClassName}>
-        {label}
+      <span
+        className={
+          labelClassName
+        }
+      >
+        {
+          label
+        }
       </span>
 
-      {children}
+      {
+        children
+      }
     </label>
-  )
+  );
 }
+
+/* =========================================================
+   REVIEW ROW
+========================================================= */
 
 function ReviewRow({
   label,
   value,
 }: {
-  label: string
+  label:
+    string;
+
   value:
     | string
     | number
     | null
-    | undefined
+    | undefined;
 }) {
   return (
     <div className="flex flex-col gap-1 border-b border-white/5 py-3 last:border-none sm:flex-row sm:justify-between">
       <span className="text-sm text-zinc-500">
-        {label}
+        {
+          label
+        }
       </span>
 
       <span className="text-sm font-medium text-zinc-200 sm:text-right">
-        {value === null ||
-        value === undefined ||
-        value === ""
+        {value ===
+          null ||
+        value ===
+          undefined ||
+        value ===
+          ""
           ? "Not provided"
           : value}
       </span>
     </div>
-  )
+  );
 }
 
-function OnboardingWizard({
+/* =========================================================
+   LOADING SKELETON
+========================================================= */
+
+function OnboardingLoadingSkeleton() {
+  return (
+    <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d] shadow-2xl shadow-black">
+      <header className="border-b border-white/10 bg-linear-to-r from-black via-zinc-900 to-black px-6 py-8 sm:px-10">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="w-full">
+            <div className="h-3 w-36 animate-pulse rounded-full bg-amber-500/20" />
+
+            <div className="mt-5 h-10 w-full max-w-xl animate-pulse rounded-xl bg-white/5" />
+
+            <div className="mt-4 h-4 w-full max-w-2xl animate-pulse rounded-full bg-white/5" />
+          </div>
+        </div>
+
+        <div className="mt-7 h-1.5 animate-pulse rounded-full bg-white/5" />
+      </header>
+
+      <div className="grid gap-6 px-6 py-10 sm:grid-cols-2 sm:px-10">
+        {Array.from({
+          length: 6,
+        }).map(
+          (
+            _,
+            index,
+          ) => (
+            <div
+              key={
+                index
+              }
+              className="space-y-3"
+            >
+              <div className="h-4 w-28 animate-pulse rounded-full bg-white/5" />
+
+              <div className="h-14 animate-pulse rounded-2xl border border-white/5 bg-white/3" />
+            </div>
+          ),
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* =========================================================
+   PUBLIC WRAPPER
+========================================================= */
+
+export default function OnboardingWizard(
+  props:
+    OnboardingWizardProps,
+) {
+  const hydrated =
+    useHydrated();
+
+  if (!hydrated) {
+    return (
+      <OnboardingLoadingSkeleton />
+    );
+  }
+
+  return (
+    <HydratedOnboardingWizard
+      {...props}
+    />
+  );
+}
+
+/* =========================================================
+   HYDRATED WIZARD
+========================================================= */
+
+function HydratedOnboardingWizard({
   userId,
   initialStep = 0,
   initialData,
 }: OnboardingWizardProps) {
-  const router = useRouter()
+  const router =
+    useRouter();
 
-  const storageKey = useMemo(
-    () =>
-      `muscle-fitness:onboarding:${userId}`,
-    [userId],
-  )
+  const storageKey =
+    useMemo(
+      () =>
+        primaryStorageKey(
+          userId,
+        ),
+      [
+        userId,
+      ],
+    );
 
-  const [step, setStep] = useState(
-    Math.min(
-      Math.max(initialStep, 0),
-      steps.length - 1,
-    ),
-  )
+  const restoredDraft =
+    useMemo(
+      () =>
+        readStoredDraft(
+          userId,
+        ),
+      [
+        userId,
+      ],
+    );
 
-  const [data, setData] =
-    useState<OnboardingData>(() =>
-      mergeInitialData(initialData),
-    )
+  const mergedInitialData =
+    useMemo(
+      () =>
+        combineDraftData(
+          initialData,
+          restoredDraft?.data,
+        ),
+      [
+        initialData,
+        restoredDraft,
+      ],
+    );
 
-  const [isHydrated, setIsHydrated] =
-    useState(false)
+  const initialResolvedStep =
+    restoredDraft
+      ?.currentStep ??
+    restoredDraft
+      ?.step ??
+    initialStep;
 
-  const [isSaving, setIsSaving] =
-    useState(false)
+  const [
+    step,
+    setStep,
+  ] =
+    useState(
+      () =>
+        clampStep(
+          initialResolvedStep,
+        ),
+    );
+
+  const [
+    data,
+    setData,
+  ] =
+    useState<OnboardingData>(
+      () =>
+        mergeInitialData(
+          mergedInitialData,
+        ),
+    );
+
+  const [
+    isSaving,
+    setIsSaving,
+  ] =
+    useState(false);
 
   const [
     isSubmitting,
     setIsSubmitting,
-  ] = useState(false)
+  ] =
+    useState(false);
 
-  const [message, setMessage] =
-    useState<string | null>(null)
+  const [
+    message,
+    setMessage,
+  ] =
+    useState<
+      string | null
+    >(null);
 
-  const targets = useMemo(
-    () =>
-      calculateNutritionTargets(data),
-    [data],
-  )
+  const targets =
+    useMemo(
+      () =>
+        calculateNutritionTargets(
+          data,
+        ),
+      [
+        data,
+      ],
+    );
 
-  useEffect(() => {
-    try {
-      const storedDraft =
-        window.localStorage.getItem(
-          storageKey,
-        )
+  /* =======================================================
+     AUTOSAVE
 
-      if (!storedDraft) {
-        return
-      }
-
-      const parsed = JSON.parse(
-        storedDraft,
-      ) as {
-        currentStep?: number
-        data?: OnboardingDraftData
-      }
-
-      if (parsed.data) {
-        setData(
-          mergeInitialData(parsed.data),
-        )
-      }
-
-      if (
-        typeof parsed.currentStep ===
-        "number"
-      ) {
-        setStep(
-          Math.min(
-            Math.max(
-              parsed.currentStep,
-              0,
-            ),
-            steps.length - 1,
-          ),
-        )
-      }
-    } catch (error) {
-      console.error(
-        "Unable to restore local onboarding draft:",
-        error,
-      )
-    } finally {
-      setIsHydrated(true)
-    }
-  }, [storageKey])
+     No synchronous setState occurs directly in the effect.
+     State changes happen inside the timer callback.
+  ======================================================= */
 
   useEffect(() => {
-    if (!isHydrated) {
-      return
-    }
-
     window.localStorage.setItem(
       storageKey,
       JSON.stringify({
-        currentStep: step,
+        currentStep:
+          step,
+
         data,
       }),
-    )
+    );
 
     const timeoutId =
-      window.setTimeout(async () => {
-        setIsSaving(true)
+      window.setTimeout(
+        async () => {
+          setIsSaving(
+            true,
+          );
 
-        try {
-          const result =
-            await saveOnboardingDraftAction(
-              {
-                currentStep: step,
-                data,
-              },
-            )
+          try {
+            const result =
+              await saveOnboardingDraftAction(
+                {
+                  currentStep:
+                    step,
 
-          if (!result.success) {
-            setMessage(
-              result.message,
-            )
+                  data,
+                },
+              );
+
+            if (
+              !result.success
+            ) {
+              setMessage(
+                result.message,
+              );
+            }
+          } catch (error) {
+            console.error(
+              "Unable to save onboarding draft:",
+              error,
+            );
+          } finally {
+            setIsSaving(
+              false,
+            );
           }
-        } catch (error) {
-          console.error(
-            "Unable to save onboarding draft:",
-            error,
-          )
-        } finally {
-          setIsSaving(false)
-        }
-      }, 700)
+        },
+        700,
+      );
 
     return () => {
-      window.clearTimeout(timeoutId)
-    }
+      window.clearTimeout(
+        timeoutId,
+      );
+    };
   }, [
     data,
-    isHydrated,
     step,
     storageKey,
-  ])
+  ]);
+
+  /* =======================================================
+     UPDATE HELPERS
+  ======================================================= */
 
   function updatePersonal<
     Key extends keyof OnboardingData["personal"],
   >(
-    key: Key,
-    value: OnboardingData["personal"][Key],
+    key:
+      Key,
+
+    value:
+      OnboardingData["personal"][Key],
   ) {
-    setData((current) => ({
-      ...current,
+    setData(
+      (
+        current,
+      ) => ({
+        ...current,
 
-      personal: {
-        ...current.personal,
-        [key]: value,
-      },
-    }))
+        personal: {
+          ...current.personal,
 
-    setMessage(null)
+          [key]:
+            value,
+        },
+      }),
+    );
+
+    setMessage(
+      null,
+    );
   }
 
   function updateGoal<
     Key extends keyof OnboardingData["goal"],
   >(
-    key: Key,
-    value: OnboardingData["goal"][Key],
+    key:
+      Key,
+
+    value:
+      OnboardingData["goal"][Key],
   ) {
-    setData((current) => ({
-      ...current,
+    setData(
+      (
+        current,
+      ) => ({
+        ...current,
 
-      goal: {
-        ...current.goal,
-        [key]: value,
-      },
-    }))
+        goal: {
+          ...current.goal,
 
-    setMessage(null)
+          [key]:
+            value,
+        },
+      }),
+    );
+
+    setMessage(
+      null,
+    );
   }
 
   function updateTraining<
     Key extends keyof OnboardingData["training"],
   >(
-    key: Key,
-    value: OnboardingData["training"][Key],
+    key:
+      Key,
+
+    value:
+      OnboardingData["training"][Key],
   ) {
-    setData((current) => ({
-      ...current,
+    setData(
+      (
+        current,
+      ) => ({
+        ...current,
 
-      training: {
-        ...current.training,
-        [key]: value,
-      },
-    }))
+        training: {
+          ...current.training,
 
-    setMessage(null)
+          [key]:
+            value,
+        },
+      }),
+    );
+
+    setMessage(
+      null,
+    );
   }
 
   function updateNutrition<
     Key extends keyof OnboardingData["nutrition"],
   >(
-    key: Key,
-    value: OnboardingData["nutrition"][Key],
+    key:
+      Key,
+
+    value:
+      OnboardingData["nutrition"][Key],
   ) {
-    setData((current) => ({
-      ...current,
+    setData(
+      (
+        current,
+      ) => ({
+        ...current,
 
-      nutrition: {
-        ...current.nutrition,
-        [key]: value,
-      },
-    }))
+        nutrition: {
+          ...current.nutrition,
 
-    setMessage(null)
+          [key]:
+            value,
+        },
+      }),
+    );
+
+    setMessage(
+      null,
+    );
   }
 
   function updateLifestyle<
     Key extends keyof OnboardingData["lifestyle"],
   >(
-    key: Key,
-    value: OnboardingData["lifestyle"][Key],
+    key:
+      Key,
+
+    value:
+      OnboardingData["lifestyle"][Key],
   ) {
-    setData((current) => ({
-      ...current,
+    setData(
+      (
+        current,
+      ) => ({
+        ...current,
 
-      lifestyle: {
-        ...current.lifestyle,
-        [key]: value,
-      },
-    }))
+        lifestyle: {
+          ...current.lifestyle,
 
-    setMessage(null)
+          [key]:
+            value,
+        },
+      }),
+    );
+
+    setMessage(
+      null,
+    );
   }
 
-  function validateCurrentStep(): boolean {
-    if (step >= 5) {
-      return true
+  /* =======================================================
+     VALIDATION
+  ======================================================= */
+
+  function validateCurrentStep():
+    boolean {
+    if (
+      step >=
+      5
+    ) {
+      return true;
     }
 
-    const currentValues = [
-      data.personal,
-      data.goal,
-      data.training,
-      data.nutrition,
-      data.lifestyle,
-    ][step]
+    const currentValues =
+      [
+        data.personal,
+        data.goal,
+        data.training,
+        data.nutrition,
+        data.lifestyle,
+      ][
+        step
+      ];
 
     const currentSchema =
-      onboardingStepSchemas[step]
+      onboardingStepSchemas[
+        step
+      ];
 
     const result =
       currentSchema.safeParse(
         currentValues,
-      )
+      );
 
-    if (!result.success) {
+    if (
+      !result.success
+    ) {
       setMessage(
-        result.error.issues[0]
+        result.error
+          .issues[0]
           ?.message ??
           "Please complete this step.",
-      )
+      );
 
-      return false
+      return false;
     }
 
-    setMessage(null)
+    setMessage(
+      null,
+    );
 
-    return true
+    return true;
   }
 
+  /* =======================================================
+     NAVIGATION
+  ======================================================= */
+
   function handleNext() {
-    if (!validateCurrentStep()) {
-      return
+    if (
+      !validateCurrentStep()
+    ) {
+      return;
     }
 
-    setStep((current) =>
-      Math.min(
-        current + 1,
-        steps.length - 1,
-      ),
-    )
+    setStep(
+      (
+        current,
+      ) =>
+        Math.min(
+          current +
+            1,
+
+          steps.length -
+            1,
+        ),
+    );
 
     window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    })
+      top:
+        0,
+
+      behavior:
+        "smooth",
+    });
   }
 
   function handleBack() {
-    setMessage(null)
+    setMessage(
+      null,
+    );
 
-    setStep((current) =>
-      Math.max(current - 1, 0),
-    )
+    setStep(
+      (
+        current,
+      ) =>
+        Math.max(
+          current -
+            1,
+
+          0,
+        ),
+    );
 
     window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    })
+      top:
+        0,
+
+      behavior:
+        "smooth",
+    });
   }
+
+  /* =======================================================
+     COMPLETE
+  ======================================================= */
 
   async function handleComplete() {
     const validation =
-      onboardingSchema.safeParse(data)
+      onboardingSchema.safeParse(
+        data,
+      );
 
-    if (!validation.success) {
+    if (
+      !validation.success
+    ) {
       setMessage(
-        validation.error.issues[0]
+        validation.error
+          .issues[0]
           ?.message ??
           "Please review your information.",
-      )
+      );
 
-      return
+      return;
     }
 
     const confirmed =
       window.confirm(
         "Confirm and save your onboarding information?",
-      )
+      );
 
-    if (!confirmed) {
-      return
+    if (
+      !confirmed
+    ) {
+      return;
     }
 
-    setIsSubmitting(true)
-    setMessage(null)
+    setIsSubmitting(
+      true,
+    );
+
+    setMessage(
+      null,
+    );
 
     try {
       const result =
         await completeOnboardingAction(
           validation.data,
-        )
+        );
 
-      if (!result.success) {
-        setMessage(result.message)
-        return
+      if (
+        !result.success
+      ) {
+        setMessage(
+          result.message,
+        );
+
+        return;
       }
 
       window.localStorage.removeItem(
         storageKey,
-      )
+      );
 
-      router.replace("/dashboard")
-      router.refresh()
+      window.localStorage.removeItem(
+        legacyStorageKey(
+          userId,
+        ),
+      );
+
+      router.replace(
+        "/dashboard",
+      );
+
+      router.refresh();
     } catch (error) {
       console.error(
         "Unable to complete onboarding:",
         error,
-      )
+      );
 
       setMessage(
         "Something went wrong while completing onboarding.",
-      )
+      );
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(
+        false,
+      );
     }
   }
 
   const progress =
-    ((step + 1) / steps.length) *
-    100
+    ((step + 1) /
+      steps.length) *
+    100;
+
+  /* =======================================================
+     UI
+  ======================================================= */
 
   return (
-    <section className="overflow-hidden rounded-[28px] border border-white/10 bg-[#0d0d0d] shadow-2xl shadow-black">
-      <header className="border-b border-white/10 bg-gradient-to-r from-black via-zinc-900 to-black px-6 py-8 sm:px-10">
+    <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d] shadow-2xl shadow-black">
+      {/* ===================================================
+          HEADER
+      =================================================== */}
+
+      <header className="border-b border-white/10 bg-linear-to-r from-black via-zinc-900 to-black px-6 py-8 sm:px-10">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.35em] text-amber-500">
@@ -546,21 +1040,30 @@ function OnboardingWizard({
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
-              Complete your profile to
-              create your initial training,
-              nutrition and recovery
-              targets.
+              Complete your profile to create your initial training,
+              nutrition and recovery targets.
             </p>
           </div>
 
           <div className="sm:text-right">
             <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">
-              Step {step + 1} of{" "}
-              {steps.length}
+              Step{" "}
+              {
+                step +
+                1
+              }{" "}
+              of{" "}
+              {
+                steps.length
+              }
             </p>
 
             <p className="mt-1 font-semibold text-zinc-300">
-              {steps[step]}
+              {
+                steps[
+                  step
+                ]
+              }
             </p>
           </div>
         </div>
@@ -569,14 +1072,20 @@ function OnboardingWizard({
           <div
             className="h-full rounded-full bg-amber-500 transition-all duration-500"
             style={{
-              width: `${progress}%`,
+              width:
+                `${progress}%`,
             }}
           />
         </div>
       </header>
 
       <div className="px-6 py-8 sm:px-10 sm:py-10">
-        {step === 0 ? (
+        {/* =================================================
+            STEP 1 — PERSONAL
+        ================================================= */}
+
+        {step ===
+        0 ? (
           <div className="grid gap-6 md:grid-cols-2">
             <div className="md:col-span-2">
               <h2 className="text-2xl font-bold text-white">
@@ -586,15 +1095,23 @@ function OnboardingWizard({
 
             <Field label="Full name">
               <input
-                className={inputClassName}
-                value={
-                  data.personal.fullName
+                className={
+                  inputClassName
                 }
-                onChange={(event) =>
-                  updatePersonal(
-                    "fullName",
-                    event.target.value,
-                  )
+                value={
+                  data.personal
+                    .fullName
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updatePersonal(
+                      "fullName",
+                      event
+                        .target
+                        .value,
+                    )
                 }
               />
             </Field>
@@ -602,31 +1119,46 @@ function OnboardingWizard({
             <Field label="Date of birth">
               <input
                 type="date"
-                className={inputClassName}
-                value={
-                  data.personal.dateOfBirth
+                className={
+                  inputClassName
                 }
-                onChange={(event) =>
-                  updatePersonal(
-                    "dateOfBirth",
-                    event.target.value,
-                  )
+                value={
+                  data.personal
+                    .dateOfBirth
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updatePersonal(
+                      "dateOfBirth",
+                      event
+                        .target
+                        .value,
+                    )
                 }
               />
             </Field>
 
             <Field label="Gender">
               <select
-                className={inputClassName}
-                value={
-                  data.personal.gender
+                className={
+                  inputClassName
                 }
-                onChange={(event) =>
-                  updatePersonal(
-                    "gender",
-                    event.target
-                      .value as OnboardingData["personal"]["gender"],
-                  )
+                value={
+                  data.personal
+                    .gender
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updatePersonal(
+                      "gender",
+                      event
+                        .target
+                        .value as OnboardingData["personal"]["gender"],
+                    )
                 }
               >
                 <option value="male">
@@ -649,15 +1181,23 @@ function OnboardingWizard({
 
             <Field label="Timezone">
               <input
-                className={inputClassName}
-                value={
-                  data.personal.timezone
+                className={
+                  inputClassName
                 }
-                onChange={(event) =>
-                  updatePersonal(
-                    "timezone",
-                    event.target.value,
-                  )
+                value={
+                  data.personal
+                    .timezone
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updatePersonal(
+                      "timezone",
+                      event
+                        .target
+                        .value,
+                    )
                 }
               />
             </Field>
@@ -665,19 +1205,31 @@ function OnboardingWizard({
             <Field label="Height (cm)">
               <input
                 type="number"
-                min={80}
-                max={250}
-                className={inputClassName}
-                value={
-                  data.personal.heightCm
+                min={
+                  80
                 }
-                onChange={(event) =>
-                  updatePersonal(
-                    "heightCm",
-                    Number(
-                      event.target.value,
-                    ),
-                  )
+                max={
+                  250
+                }
+                className={
+                  inputClassName
+                }
+                value={
+                  data.personal
+                    .heightCm
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updatePersonal(
+                      "heightCm",
+                      Number(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
@@ -685,27 +1237,44 @@ function OnboardingWizard({
             <Field label="Weight (kg)">
               <input
                 type="number"
-                min={20}
-                max={400}
-                step="0.1"
-                className={inputClassName}
-                value={
-                  data.personal.weightKg
+                min={
+                  20
                 }
-                onChange={(event) =>
-                  updatePersonal(
-                    "weightKg",
-                    Number(
-                      event.target.value,
-                    ),
-                  )
+                max={
+                  400
+                }
+                step="0.1"
+                className={
+                  inputClassName
+                }
+                value={
+                  data.personal
+                    .weightKg
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updatePersonal(
+                      "weightKg",
+                      Number(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
           </div>
         ) : null}
 
-        {step === 1 ? (
+        {/* =================================================
+            STEP 2 — GOAL
+        ================================================= */}
+
+        {step ===
+        1 ? (
           <div>
             <h2 className="text-2xl font-bold text-white">
               Primary goal
@@ -719,37 +1288,54 @@ function OnboardingWizard({
                 "body_recomposition",
                 "maintenance",
                 "performance",
-              ].map((goal) => {
-                const selected =
-                  data.goal.goal === goal
+              ].map(
+                (
+                  goal,
+                ) => {
+                  const selected =
+                    data.goal
+                      .goal ===
+                    goal;
 
-                return (
-                  <button
-                    key={goal}
-                    type="button"
-                    onClick={() =>
-                      updateGoal(
-                        "goal",
-                        goal as OnboardingData["goal"]["goal"],
-                      )
-                    }
-                    className={`rounded-2xl border p-5 text-left transition ${
-                      selected
-                        ? "border-amber-500 bg-amber-500/10"
-                        : "border-white/10 bg-white/[0.03] hover:border-white/20"
-                    }`}
-                  >
-                    <span className="font-bold text-white">
-                      {humanize(goal)}
-                    </span>
-                  </button>
-                )
-              })}
+                  return (
+                    <button
+                      key={
+                        goal
+                      }
+                      type="button"
+                      onClick={() =>
+                        updateGoal(
+                          "goal",
+                          goal as OnboardingData["goal"]["goal"],
+                        )
+                      }
+                      className={`rounded-2xl border p-5 text-left transition ${
+                        selected
+                          ? "border-amber-500 bg-amber-500/10"
+                          : "border-white/10 bg-white/3 hover:border-white/20"
+                      }`}
+                    >
+                      <span className="font-bold text-white">
+                        {
+                          humanize(
+                            goal,
+                          )
+                        }
+                      </span>
+                    </button>
+                  );
+                },
+              )}
             </div>
           </div>
         ) : null}
 
-        {step === 2 ? (
+        {/* =================================================
+            STEP 3 — TRAINING
+        ================================================= */}
+
+        {step ===
+        2 ? (
           <div className="grid gap-6 md:grid-cols-2">
             <div className="md:col-span-2">
               <h2 className="text-2xl font-bold text-white">
@@ -759,16 +1345,23 @@ function OnboardingWizard({
 
             <Field label="Experience">
               <select
-                className={inputClassName}
-                value={
-                  data.training.experience
+                className={
+                  inputClassName
                 }
-                onChange={(event) =>
-                  updateTraining(
-                    "experience",
-                    event.target
-                      .value as OnboardingData["training"]["experience"],
-                  )
+                value={
+                  data.training
+                    .experience
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateTraining(
+                      "experience",
+                      event
+                        .target
+                        .value as OnboardingData["training"]["experience"],
+                    )
                 }
               >
                 <option value="beginner">
@@ -787,17 +1380,23 @@ function OnboardingWizard({
 
             <Field label="Training location">
               <select
-                className={inputClassName}
+                className={
+                  inputClassName
+                }
                 value={
                   data.training
                     .trainingLocation
                 }
-                onChange={(event) =>
-                  updateTraining(
-                    "trainingLocation",
-                    event.target
-                      .value as OnboardingData["training"]["trainingLocation"],
-                  )
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateTraining(
+                      "trainingLocation",
+                      event
+                        .target
+                        .value as OnboardingData["training"]["trainingLocation"],
+                    )
                 }
               >
                 <option value="gym">
@@ -817,20 +1416,31 @@ function OnboardingWizard({
             <Field label="Training days per week">
               <input
                 type="number"
-                min={1}
-                max={7}
-                className={inputClassName}
+                min={
+                  1
+                }
+                max={
+                  7
+                }
+                className={
+                  inputClassName
+                }
                 value={
                   data.training
                     .trainingDays
                 }
-                onChange={(event) =>
-                  updateTraining(
-                    "trainingDays",
-                    Number(
-                      event.target.value,
-                    ),
-                  )
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateTraining(
+                      "trainingDays",
+                      Number(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
@@ -838,56 +1448,89 @@ function OnboardingWizard({
             <Field label="Session duration (minutes)">
               <input
                 type="number"
-                min={20}
-                max={300}
-                className={inputClassName}
+                min={
+                  20
+                }
+                max={
+                  300
+                }
+                className={
+                  inputClassName
+                }
                 value={
                   data.training
                     .sessionDurationMinutes
                 }
-                onChange={(event) =>
-                  updateTraining(
-                    "sessionDurationMinutes",
-                    Number(
-                      event.target.value,
-                    ),
-                  )
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateTraining(
+                      "sessionDurationMinutes",
+                      Number(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
 
             <Field label="Available equipment">
               <input
-                className={inputClassName}
+                className={
+                  inputClassName
+                }
                 placeholder="Barbell, dumbbells, cables"
-                value={data.training.availableEquipment.join(
-                  ", ",
-                )}
-                onChange={(event) =>
-                  updateTraining(
-                    "availableEquipment",
-                    parseList(
-                      event.target.value,
-                    ),
-                  )
+                value={
+                  data.training
+                    .availableEquipment
+                    .join(
+                      ", ",
+                    )
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateTraining(
+                      "availableEquipment",
+                      parseList(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
 
             <Field label="Priority muscles">
               <input
-                className={inputClassName}
+                className={
+                  inputClassName
+                }
                 placeholder="Chest, side delts, upper back"
-                value={data.training.priorityMuscles.join(
-                  ", ",
-                )}
-                onChange={(event) =>
-                  updateTraining(
-                    "priorityMuscles",
-                    parseList(
-                      event.target.value,
-                    ),
-                  )
+                value={
+                  data.training
+                    .priorityMuscles
+                    .join(
+                      ", ",
+                    )
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateTraining(
+                      "priorityMuscles",
+                      parseList(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
@@ -895,17 +1538,26 @@ function OnboardingWizard({
             <div className="md:col-span-2">
               <Field label="Physical limitations">
                 <textarea
-                  rows={4}
-                  className={inputClassName}
+                  rows={
+                    4
+                  }
+                  className={
+                    inputClassName
+                  }
                   value={
                     data.training
                       .physicalLimitations
                   }
-                  onChange={(event) =>
-                    updateTraining(
-                      "physicalLimitations",
-                      event.target.value,
-                    )
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      updateTraining(
+                        "physicalLimitations",
+                        event
+                          .target
+                          .value,
+                      )
                   }
                 />
               </Field>
@@ -913,7 +1565,12 @@ function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 3 ? (
+        {/* =================================================
+            STEP 4 — NUTRITION
+        ================================================= */}
+
+        {step ===
+        3 ? (
           <div className="grid gap-6 md:grid-cols-2">
             <div className="md:col-span-2">
               <h2 className="text-2xl font-bold text-white">
@@ -924,19 +1581,31 @@ function OnboardingWizard({
             <Field label="Meals per day">
               <input
                 type="number"
-                min={1}
-                max={8}
-                className={inputClassName}
-                value={
-                  data.nutrition.mealsPerDay
+                min={
+                  1
                 }
-                onChange={(event) =>
-                  updateNutrition(
-                    "mealsPerDay",
-                    Number(
-                      event.target.value,
-                    ),
-                  )
+                max={
+                  8
+                }
+                className={
+                  inputClassName
+                }
+                value={
+                  data.nutrition
+                    .mealsPerDay
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateNutrition(
+                      "mealsPerDay",
+                      Number(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
@@ -944,91 +1613,141 @@ function OnboardingWizard({
             <Field label="Weekly food budget">
               <input
                 type="number"
-                min={0}
-                className={inputClassName}
+                min={
+                  0
+                }
+                className={
+                  inputClassName
+                }
                 value={
                   data.nutrition
-                    .weeklyFoodBudget ?? ""
+                    .weeklyFoodBudget ??
+                  ""
                 }
-                onChange={(event) =>
-                  updateNutrition(
-                    "weeklyFoodBudget",
-                    event.target.value ===
-                      ""
-                      ? null
-                      : Number(
-                          event.target
-                            .value,
-                        ),
-                  )
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateNutrition(
+                      "weeklyFoodBudget",
+                      event
+                        .target
+                        .value ===
+                        ""
+                        ? null
+                        : Number(
+                            event
+                              .target
+                              .value,
+                          ),
+                    )
                 }
               />
             </Field>
 
             <Field label="Food preferences">
               <input
-                className={inputClassName}
-                value={data.nutrition.foodPreferences.join(
-                  ", ",
-                )}
-                onChange={(event) =>
-                  updateNutrition(
-                    "foodPreferences",
-                    parseList(
-                      event.target.value,
-                    ),
-                  )
+                className={
+                  inputClassName
+                }
+                value={
+                  data.nutrition
+                    .foodPreferences
+                    .join(
+                      ", ",
+                    )
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateNutrition(
+                      "foodPreferences",
+                      parseList(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
 
             <Field label="Excluded foods">
               <input
-                className={inputClassName}
-                value={data.nutrition.excludedFoods.join(
-                  ", ",
-                )}
-                onChange={(event) =>
-                  updateNutrition(
-                    "excludedFoods",
-                    parseList(
-                      event.target.value,
-                    ),
-                  )
+                className={
+                  inputClassName
+                }
+                value={
+                  data.nutrition
+                    .excludedFoods
+                    .join(
+                      ", ",
+                    )
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateNutrition(
+                      "excludedFoods",
+                      parseList(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
 
             <Field label="Allergies">
               <input
-                className={inputClassName}
-                value={data.nutrition.allergies.join(
-                  ", ",
-                )}
-                onChange={(event) =>
-                  updateNutrition(
-                    "allergies",
-                    parseList(
-                      event.target.value,
-                    ),
-                  )
+                className={
+                  inputClassName
+                }
+                value={
+                  data.nutrition
+                    .allergies
+                    .join(
+                      ", ",
+                    )
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateNutrition(
+                      "allergies",
+                      parseList(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
 
             <Field label="Cooking ability">
               <select
-                className={inputClassName}
+                className={
+                  inputClassName
+                }
                 value={
                   data.nutrition
                     .cookingAbility
                 }
-                onChange={(event) =>
-                  updateNutrition(
-                    "cookingAbility",
-                    event.target
-                      .value as OnboardingData["nutrition"]["cookingAbility"],
-                  )
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateNutrition(
+                      "cookingAbility",
+                      event
+                        .target
+                        .value as OnboardingData["nutrition"]["cookingAbility"],
+                    )
                 }
               >
                 <option value="beginner">
@@ -1047,17 +1766,23 @@ function OnboardingWizard({
 
             <Field label="Meal-prep frequency">
               <select
-                className={inputClassName}
+                className={
+                  inputClassName
+                }
                 value={
                   data.nutrition
                     .mealPrepFrequency
                 }
-                onChange={(event) =>
-                  updateNutrition(
-                    "mealPrepFrequency",
-                    event.target
-                      .value as OnboardingData["nutrition"]["mealPrepFrequency"],
-                  )
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateNutrition(
+                      "mealPrepFrequency",
+                      event
+                        .target
+                        .value as OnboardingData["nutrition"]["mealPrepFrequency"],
+                    )
                 }
               >
                 <option value="daily">
@@ -1080,7 +1805,12 @@ function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 4 ? (
+        {/* =================================================
+            STEP 5 — LIFESTYLE
+        ================================================= */}
+
+        {step ===
+        4 ? (
           <div className="grid gap-6 md:grid-cols-2">
             <div className="md:col-span-2">
               <h2 className="text-2xl font-bold text-white">
@@ -1091,20 +1821,32 @@ function OnboardingWizard({
             <Field label="Sleep hours">
               <input
                 type="number"
-                min={0}
-                max={24}
-                step="0.5"
-                className={inputClassName}
-                value={
-                  data.lifestyle.sleepHours
+                min={
+                  0
                 }
-                onChange={(event) =>
-                  updateLifestyle(
-                    "sleepHours",
-                    Number(
-                      event.target.value,
-                    ),
-                  )
+                max={
+                  24
+                }
+                step="0.5"
+                className={
+                  inputClassName
+                }
+                value={
+                  data.lifestyle
+                    .sleepHours
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateLifestyle(
+                      "sleepHours",
+                      Number(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
@@ -1112,36 +1854,54 @@ function OnboardingWizard({
             <Field label="Daily steps">
               <input
                 type="number"
-                min={0}
-                max={100000}
-                className={inputClassName}
-                value={
-                  data.lifestyle.dailySteps
+                min={
+                  0
                 }
-                onChange={(event) =>
-                  updateLifestyle(
-                    "dailySteps",
-                    Number(
-                      event.target.value,
-                    ),
-                  )
+                max={
+                  100000
+                }
+                className={
+                  inputClassName
+                }
+                value={
+                  data.lifestyle
+                    .dailySteps
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateLifestyle(
+                      "dailySteps",
+                      Number(
+                        event
+                          .target
+                          .value,
+                      ),
+                    )
                 }
               />
             </Field>
 
             <Field label="Stress level">
               <select
-                className={inputClassName}
+                className={
+                  inputClassName
+                }
                 value={
                   data.lifestyle
                     .stressLevel
                 }
-                onChange={(event) =>
-                  updateLifestyle(
-                    "stressLevel",
-                    event.target
-                      .value as OnboardingData["lifestyle"]["stressLevel"],
-                  )
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateLifestyle(
+                      "stressLevel",
+                      event
+                        .target
+                        .value as OnboardingData["lifestyle"]["stressLevel"],
+                    )
                 }
               >
                 <option value="low">
@@ -1164,17 +1924,23 @@ function OnboardingWizard({
 
             <Field label="Preferred training time">
               <select
-                className={inputClassName}
+                className={
+                  inputClassName
+                }
                 value={
                   data.lifestyle
                     .preferredTrainingTime
                 }
-                onChange={(event) =>
-                  updateLifestyle(
-                    "preferredTrainingTime",
-                    event.target
-                      .value as OnboardingData["lifestyle"]["preferredTrainingTime"],
-                  )
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    updateLifestyle(
+                      "preferredTrainingTime",
+                      event
+                        .target
+                        .value as OnboardingData["lifestyle"]["preferredTrainingTime"],
+                    )
                 }
               >
                 <option value="morning">
@@ -1198,17 +1964,26 @@ function OnboardingWizard({
             <div className="md:col-span-2">
               <Field label="School or work schedule">
                 <textarea
-                  rows={5}
-                  className={inputClassName}
+                  rows={
+                    5
+                  }
+                  className={
+                    inputClassName
+                  }
                   value={
                     data.lifestyle
                       .workSchedule
                   }
-                  onChange={(event) =>
-                    updateLifestyle(
-                      "workSchedule",
-                      event.target.value,
-                    )
+                  onChange={
+                    (
+                      event,
+                    ) =>
+                      updateLifestyle(
+                        "workSchedule",
+                        event
+                          .target
+                          .value,
+                      )
                   }
                 />
               </Field>
@@ -1216,14 +1991,19 @@ function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 5 ? (
+        {/* =================================================
+            STEP 6 — REVIEW
+        ================================================= */}
+
+        {step ===
+        5 ? (
           <div>
             <h2 className="text-2xl font-bold text-white">
               Review and confirm
             </h2>
 
             <div className="mt-7 grid gap-5 lg:grid-cols-2">
-              <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+              <article className="rounded-2xl border border-white/10 bg-white/3 p-5">
                 <h3 className="font-bold text-amber-500">
                   Personal
                 </h3>
@@ -1231,22 +2011,27 @@ function OnboardingWizard({
                 <ReviewRow
                   label="Full name"
                   value={
-                    data.personal.fullName
+                    data.personal
+                      .fullName
                   }
                 />
 
                 <ReviewRow
                   label="Date of birth"
                   value={
-                    data.personal.dateOfBirth
+                    data.personal
+                      .dateOfBirth
                   }
                 />
 
                 <ReviewRow
                   label="Gender"
-                  value={humanize(
-                    data.personal.gender,
-                  )}
+                  value={
+                    humanize(
+                      data.personal
+                        .gender,
+                    )
+                  }
                 />
 
                 <ReviewRow
@@ -1260,7 +2045,7 @@ function OnboardingWizard({
                 />
               </article>
 
-              <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+              <article className="rounded-2xl border border-white/10 bg-white/3 p-5">
                 <h3 className="font-bold text-amber-500">
                   Initial targets
                 </h3>
@@ -1291,23 +2076,29 @@ function OnboardingWizard({
                 />
               </article>
 
-              <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+              <article className="rounded-2xl border border-white/10 bg-white/3 p-5">
                 <h3 className="font-bold text-amber-500">
                   Training
                 </h3>
 
                 <ReviewRow
                   label="Goal"
-                  value={humanize(
-                    data.goal.goal,
-                  )}
+                  value={
+                    humanize(
+                      data.goal
+                        .goal,
+                    )
+                  }
                 />
 
                 <ReviewRow
                   label="Experience"
-                  value={humanize(
-                    data.training.experience,
-                  )}
+                  value={
+                    humanize(
+                      data.training
+                        .experience,
+                    )
+                  }
                 />
 
                 <ReviewRow
@@ -1322,14 +2113,16 @@ function OnboardingWizard({
 
                 <ReviewRow
                   label="Location"
-                  value={humanize(
-                    data.training
-                      .trainingLocation,
-                  )}
+                  value={
+                    humanize(
+                      data.training
+                        .trainingLocation,
+                    )
+                  }
                 />
               </article>
 
-              <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+              <article className="rounded-2xl border border-white/10 bg-white/3 p-5">
                 <h3 className="font-bold text-amber-500">
                   Lifestyle
                 </h3>
@@ -1347,35 +2140,50 @@ function OnboardingWizard({
                 <ReviewRow
                   label="Steps"
                   value={
-                    data.lifestyle.dailySteps
+                    data.lifestyle
+                      .dailySteps
                   }
                 />
 
                 <ReviewRow
                   label="Stress"
-                  value={humanize(
-                    data.lifestyle
-                      .stressLevel,
-                  )}
+                  value={
+                    humanize(
+                      data.lifestyle
+                        .stressLevel,
+                    )
+                  }
                 />
 
                 <ReviewRow
                   label="Training time"
-                  value={humanize(
-                    data.lifestyle
-                      .preferredTrainingTime,
-                  )}
+                  value={
+                    humanize(
+                      data.lifestyle
+                        .preferredTrainingTime,
+                    )
+                  }
                 />
               </article>
             </div>
           </div>
         ) : null}
 
+        {/* =================================================
+            MESSAGE
+        ================================================= */}
+
         {message ? (
           <div className="mt-8 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {message}
+            {
+              message
+            }
           </div>
         ) : null}
+
+        {/* =================================================
+            FOOTER
+        ================================================= */}
 
         <footer className="mt-10 flex flex-col-reverse gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-zinc-600">
@@ -1385,22 +2193,32 @@ function OnboardingWizard({
           </p>
 
           <div className="flex gap-3">
-            {step > 0 ? (
+            {step >
+            0 ? (
               <button
                 type="button"
-                onClick={handleBack}
-                disabled={isSubmitting}
+                onClick={
+                  handleBack
+                }
+                disabled={
+                  isSubmitting
+                }
                 className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
               >
                 Back
               </button>
             ) : null}
 
-            {step < 5 ? (
+            {step <
+            5 ? (
               <button
                 type="button"
-                onClick={handleNext}
-                disabled={isSubmitting}
+                onClick={
+                  handleNext
+                }
+                disabled={
+                  isSubmitting
+                }
                 className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-black uppercase tracking-wider text-black transition hover:bg-amber-400 disabled:opacity-50"
               >
                 Continue
@@ -1408,8 +2226,12 @@ function OnboardingWizard({
             ) : (
               <button
                 type="button"
-                onClick={handleComplete}
-                disabled={isSubmitting}
+                onClick={
+                  handleComplete
+                }
+                disabled={
+                  isSubmitting
+                }
                 className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-black uppercase tracking-wider text-black transition hover:bg-amber-400 disabled:opacity-50"
               >
                 {isSubmitting
@@ -1421,10 +2243,5 @@ function OnboardingWizard({
         </footer>
       </div>
     </section>
-  )
+  );
 }
-
-/**
- * Quan trọng: đây là default export mà page.tsx cần.
- */
-export default OnboardingWizard

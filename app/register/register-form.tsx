@@ -1,169 +1,424 @@
-"use client"
+"use client";
 
 import {
   useMemo,
   useState,
   type FormEvent,
-} from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
+} from "react";
 
-import { PasswordField } from "@/components/auth/password-field"
-import { StatusMessage } from "@/components/auth/status-message"
-import { getFriendlyAuthError } from "@/lib/auth/errors"
-import { createClient } from "@/lib/supabase/client"
+import Link from "next/link";
 
-type PendingMethod = "email" | "google" | null
+import {
+  useRouter,
+} from "next/navigation";
+
+import {
+  PasswordField,
+} from "@/components/auth/password-field";
+
+import {
+  StatusMessage,
+} from "@/components/auth/status-message";
+
+import {
+  getFriendlyAuthError,
+} from "@/lib/auth/errors";
+
+import {
+  getAuthCallbackUrl,
+} from "@/lib/auth/redirect-url";
+
+import {
+  createClient,
+} from "@/lib/supabase/client";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+type PendingMethod =
+  | "email"
+  | "google"
+  | null;
+
+/* =========================================================
+   REGISTER FORM
+========================================================= */
 
 export function RegisterForm() {
-  const router = useRouter()
+  const router =
+    useRouter();
 
-  const [fullName, setFullName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] =
-    useState("")
-  const [acceptedTerms, setAcceptedTerms] =
-    useState(false)
+  const [
+    fullName,
+    setFullName,
+  ] =
+    useState("");
 
-  const [error, setError] = useState("")
-  const [pending, setPending] =
-    useState<PendingMethod>(null)
+  const [
+    email,
+    setEmail,
+  ] =
+    useState("");
 
-  const passwordStrength = useMemo(() => {
-    let score = 0
+  const [
+    password,
+    setPassword,
+  ] =
+    useState("");
 
-    if (password.length >= 8) score += 1
-    if (/[A-Z]/.test(password)) score += 1
-    if (/[0-9]/.test(password)) score += 1
-    if (/[^A-Za-z0-9]/.test(password)) score += 1
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] =
+    useState("");
 
-    return score
-  }, [password])
+  const [
+    acceptedTerms,
+    setAcceptedTerms,
+  ] =
+    useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState("");
+
+  const [
+    pending,
+    setPending,
+  ] =
+    useState<PendingMethod>(
+      null,
+    );
+
+  /* =======================================================
+     PASSWORD STRENGTH
+  ======================================================= */
+
+  const passwordStrength =
+    useMemo(
+      () => {
+        let score =
+          0;
+
+        if (
+          password.length >=
+          8
+        ) {
+          score +=
+            1;
+        }
+
+        if (
+          /[A-Z]/.test(
+            password,
+          )
+        ) {
+          score +=
+            1;
+        }
+
+        if (
+          /[0-9]/.test(
+            password,
+          )
+        ) {
+          score +=
+            1;
+        }
+
+        if (
+          /[^A-Za-z0-9]/.test(
+            password,
+          )
+        ) {
+          score +=
+            1;
+        }
+
+        return score;
+      },
+      [
+        password,
+      ],
+    );
+
+  /* =======================================================
+     EMAIL REGISTRATION
+  ======================================================= */
 
   async function handleRegister(
-    event: FormEvent<HTMLFormElement>
+    event:
+      FormEvent<HTMLFormElement>,
   ) {
-    event.preventDefault()
+    event.preventDefault();
 
-    setError("")
+    setError("");
 
-    const normalizedName = fullName.trim()
+    const normalizedName =
+      fullName.trim();
+
     const normalizedEmail =
-      email.trim().toLowerCase()
+      email
+        .trim()
+        .toLowerCase();
 
-    if (normalizedName.length < 2) {
-      setError("Vui lòng nhập họ tên hợp lệ.")
-      return
-    }
+    /* =====================================================
+       VALIDATION
+    ===================================================== */
 
-    if (!normalizedEmail) {
-      setError("Vui lòng nhập email.")
-      return
-    }
-
-    if (password.length < 8) {
-      setError("Mật khẩu phải có ít nhất 8 ký tự.")
-      return
-    }
-
-    if (password !== confirmPassword) {
-      setError("Hai mật khẩu không giống nhau.")
-      return
-    }
-
-    if (!acceptedTerms) {
+    if (
+      normalizedName.length <
+      2
+    ) {
       setError(
-        "Bạn cần đồng ý với điều khoản sử dụng."
-      )
-      return
+        "Please enter a valid full name.",
+      );
+
+      return;
     }
 
-    setPending("email")
+    if (
+      !normalizedEmail
+    ) {
+      setError(
+        "Please enter your email address.",
+      );
+
+      return;
+    }
+
+    if (
+      password.length <
+      8
+    ) {
+      setError(
+        "Password must contain at least 8 characters.",
+      );
+
+      return;
+    }
+
+    if (
+      password !==
+      confirmPassword
+    ) {
+      setError(
+        "The passwords do not match.",
+      );
+
+      return;
+    }
+
+    if (
+      !acceptedTerms
+    ) {
+      setError(
+        "You must agree to the Terms and Privacy Policy.",
+      );
+
+      return;
+    }
+
+    setPending(
+      "email",
+    );
 
     try {
-      const supabase = createClient()
+      const supabase =
+        createClient();
 
-      const { data, error: signUpError } =
-        await supabase.auth.signUp({
-          email: normalizedEmail,
-          password,
-          options: {
-            data: {
-              full_name: normalizedName,
+      /*
+       * IMPORTANT:
+       *
+       * Do NOT use an old deployment URL.
+       *
+       * Confirmation always returns through:
+       *
+       * /auth/callback?next=/dashboard
+       */
+      const callbackUrl =
+        getAuthCallbackUrl(
+          "/dashboard",
+        );
+
+      console.info(
+        "[AUTH] Signup callback:",
+        callbackUrl,
+      );
+
+      const {
+        data,
+        error:
+          signUpError,
+      } =
+        await supabase.auth.signUp(
+          {
+            email:
+              normalizedEmail,
+
+            password,
+
+            options: {
+              data: {
+                full_name:
+                  normalizedName,
+              },
+
+              emailRedirectTo:
+                callbackUrl,
             },
-            emailRedirectTo:
-              window.location.origin,
           },
-        })
+        );
 
-      if (signUpError) {
-        throw signUpError
+      if (
+        signUpError
+      ) {
+        throw signUpError;
       }
 
-      // Khi xác nhận email bị tắt trong Supabase.
-      if (data.session) {
-        router.replace("/dashboard")
-        router.refresh()
-        return
+      /*
+       * Email confirmation disabled in Supabase:
+       * Supabase immediately returns a session.
+       */
+      if (
+        data.session
+      ) {
+        router.replace(
+          "/dashboard",
+        );
+
+        router.refresh();
+
+        return;
       }
 
+      /*
+       * Email confirmation enabled.
+       */
       router.push(
         `/email-confirmation?email=${encodeURIComponent(
-          normalizedEmail
-        )}`
-      )
-    } catch (registerError) {
+          normalizedEmail,
+        )}`,
+      );
+    } catch (
+      registerError
+    ) {
+      console.error(
+        "[AUTH] Registration error:",
+        registerError,
+      );
+
       setError(
-        getFriendlyAuthError(registerError)
-      )
+        getFriendlyAuthError(
+          registerError,
+        ),
+      );
     } finally {
-      setPending(null)
+      setPending(
+        null,
+      );
     }
   }
+
+  /* =======================================================
+     GOOGLE REGISTRATION
+  ======================================================= */
 
   async function handleGoogleRegister() {
-    setError("")
-    setPending("google")
+    setError("");
+
+    setPending(
+      "google",
+    );
 
     try {
-      const supabase = createClient()
+      const supabase =
+        createClient();
 
       const callbackUrl =
-        `${window.location.origin}/auth/callback` +
-        "?next=/dashboard"
+        getAuthCallbackUrl(
+          "/dashboard",
+        );
 
-      const { error: googleError } =
-        await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo: callbackUrl,
+      console.info(
+        "[AUTH] Google callback:",
+        callbackUrl,
+      );
+
+      const {
+        error:
+          googleError,
+      } =
+        await supabase.auth.signInWithOAuth(
+          {
+            provider:
+              "google",
+
+            options: {
+              redirectTo:
+                callbackUrl,
+            },
           },
-        })
+        );
 
-      if (googleError) {
-        throw googleError
+      if (
+        googleError
+      ) {
+        throw googleError;
       }
-    } catch (googleError) {
+    } catch (
+      googleError
+    ) {
+      console.error(
+        "[AUTH] Google registration error:",
+        googleError,
+      );
+
       setError(
-        getFriendlyAuthError(googleError)
-      )
-      setPending(null)
+        getFriendlyAuthError(
+          googleError,
+        ),
+      );
+
+      setPending(
+        null,
+      );
     }
   }
 
-  const disabled = pending !== null
+  /* =======================================================
+     DISABLED
+  ======================================================= */
+
+  const disabled =
+    pending !==
+    null;
+
+  /* =======================================================
+     UI
+  ======================================================= */
 
   return (
     <div className="space-y-6">
       {error ? (
         <StatusMessage type="error">
-          {error}
+          {
+            error
+          }
         </StatusMessage>
       ) : null}
 
+      {/* ===================================================
+          EMAIL FORM
+      =================================================== */}
+
       <form
-        onSubmit={handleRegister}
+        onSubmit={
+          handleRegister
+        }
         className="space-y-4"
       >
         <TextField
@@ -171,10 +426,16 @@ export function RegisterForm() {
           label="Full name"
           type="text"
           autoComplete="name"
-          value={fullName}
-          disabled={disabled}
+          value={
+            fullName
+          }
+          disabled={
+            disabled
+          }
           placeholder="Your full name"
-          onChange={setFullName}
+          onChange={
+            setFullName
+          }
         />
 
         <TextField
@@ -182,67 +443,129 @@ export function RegisterForm() {
           label="Email address"
           type="email"
           autoComplete="email"
-          value={email}
-          disabled={disabled}
+          value={
+            email
+          }
+          disabled={
+            disabled
+          }
           placeholder="you@example.com"
-          onChange={setEmail}
+          onChange={
+            setEmail
+          }
         />
 
         <PasswordField
           id="register-password"
           label="Password"
-          value={password}
-          disabled={disabled}
-          minLength={8}
+          value={
+            password
+          }
+          disabled={
+            disabled
+          }
+          minLength={
+            8
+          }
           autoComplete="new-password"
           placeholder="Minimum 8 characters"
-          onChange={setPassword}
+          onChange={
+            setPassword
+          }
         />
 
         {password ? (
           <PasswordStrength
-            strength={passwordStrength}
+            strength={
+              passwordStrength
+            }
           />
         ) : null}
 
         <PasswordField
           id="confirm-password"
           label="Confirm password"
-          value={confirmPassword}
-          disabled={disabled}
-          minLength={8}
+          value={
+            confirmPassword
+          }
+          disabled={
+            disabled
+          }
+          minLength={
+            8
+          }
           autoComplete="new-password"
           placeholder="Enter your password again"
-          onChange={setConfirmPassword}
+          onChange={
+            setConfirmPassword
+          }
         />
 
-        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4 transition hover:border-white/20">
+        {/* =================================================
+            TERMS
+        ================================================= */}
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-white/3 p-4 transition hover:border-white/20">
           <input
             type="checkbox"
-            checked={acceptedTerms}
-            disabled={disabled}
-            onChange={(event) =>
-              setAcceptedTerms(
-                event.target.checked
-              )
+            checked={
+              acceptedTerms
             }
-            className="mt-1 h-4 w-4 accent-orange-500"
+            disabled={
+              disabled
+            }
+            onChange={
+              (
+                event,
+              ) =>
+                setAcceptedTerms(
+                  event
+                    .target
+                    .checked,
+                )
+            }
+            className="mt-1 size-4 accent-orange-500"
           />
 
           <span className="text-xs leading-5 text-zinc-500">
-            Tôi đồng ý với điều khoản sử dụng và chính
-            sách bảo mật của Muscle Fitness.
+            I agree to the{" "}
+
+            <Link
+              href="/terms"
+              className="font-semibold text-zinc-300 transition hover:text-orange-400"
+            >
+              Terms of Use
+            </Link>
+
+            {" "}and{" "}
+
+            <Link
+              href="/privacy"
+              className="font-semibold text-zinc-300 transition hover:text-orange-400"
+            >
+              Privacy Policy
+            </Link>
+
+            {" "}of Muscle Fitness.
           </span>
         </label>
 
+        {/* =================================================
+            SUBMIT
+        ================================================= */}
+
         <button
           type="submit"
-          disabled={disabled}
+          disabled={
+            disabled
+          }
           className="flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-orange-500 px-5 py-4 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-orange-400 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {pending === "email" ? (
+          {pending ===
+          "email" ? (
             <>
               <Spinner dark />
+
               Creating account...
             </>
           ) : (
@@ -253,20 +576,31 @@ export function RegisterForm() {
 
       <Divider />
 
+      {/* ===================================================
+          GOOGLE
+      =================================================== */}
+
       <button
         type="button"
-        disabled={disabled}
-        onClick={handleGoogleRegister}
+        disabled={
+          disabled
+        }
+        onClick={
+          handleGoogleRegister
+        }
         className="flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white px-5 py-4 text-sm font-black text-zinc-950 transition hover:bg-zinc-200 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {pending === "google" ? (
+        {pending ===
+        "google" ? (
           <>
             <Spinner />
+
             Connecting...
           </>
         ) : (
           <>
             <GoogleIcon />
+
             Continue with Google
           </>
         )}
@@ -274,6 +608,7 @@ export function RegisterForm() {
 
       <p className="text-center text-sm text-zinc-600">
         Already have an account?{" "}
+
         <Link
           href="/login"
           className="font-black text-orange-400 transition hover:text-orange-300"
@@ -282,8 +617,12 @@ export function RegisterForm() {
         </Link>
       </p>
     </div>
-  )
+  );
 }
+
+/* =========================================================
+   TEXT FIELD
+========================================================= */
 
 function TextField({
   id,
@@ -295,46 +634,94 @@ function TextField({
   placeholder,
   onChange,
 }: {
-  id: string
-  label: string
-  type: string
-  autoComplete: string
-  value: string
-  disabled: boolean
-  placeholder: string
-  onChange: (value: string) => void
+  id:
+    string;
+
+  label:
+    string;
+
+  type:
+    string;
+
+  autoComplete:
+    string;
+
+  value:
+    string;
+
+  disabled:
+    boolean;
+
+  placeholder:
+    string;
+
+  onChange:
+    (
+      value:
+        string,
+    ) => void;
 }) {
   return (
     <div>
       <label
-        htmlFor={id}
+        htmlFor={
+          id
+        }
         className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-zinc-400"
       >
-        {label}
+        {
+          label
+        }
       </label>
 
       <input
-        id={id}
-        name={id}
-        type={type}
-        required
-        value={value}
-        disabled={disabled}
-        autoComplete={autoComplete}
-        placeholder={placeholder}
-        onChange={(event) =>
-          onChange(event.target.value)
+        id={
+          id
         }
-        className="min-h-13 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-4 text-sm text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-orange-400/60 focus:bg-white/[0.05] focus:ring-4 focus:ring-orange-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+        name={
+          id
+        }
+        type={
+          type
+        }
+        required
+        value={
+          value
+        }
+        disabled={
+          disabled
+        }
+        autoComplete={
+          autoComplete
+        }
+        placeholder={
+          placeholder
+        }
+        onChange={
+          (
+            event,
+          ) =>
+            onChange(
+              event
+                .target
+                .value,
+            )
+        }
+        className="min-h-13 w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-4 text-sm text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-orange-400/60 focus:bg-white/5 focus:ring-4 focus:ring-orange-400/10 disabled:cursor-not-allowed disabled:opacity-50"
       />
     </div>
-  )
+  );
 }
+
+/* =========================================================
+   PASSWORD STRENGTH
+========================================================= */
 
 function PasswordStrength({
   strength,
 }: {
-  strength: number
+  strength:
+    number;
 }) {
   const labels = [
     "Very weak",
@@ -342,33 +729,57 @@ function PasswordStrength({
     "Medium",
     "Strong",
     "Excellent",
-  ]
+  ];
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+    <div className="rounded-2xl border border-white/10 bg-white/2 p-3">
       <div className="grid grid-cols-4 gap-2">
-        {[1, 2, 3, 4].map((level) => (
-          <span
-            key={level}
-            className={[
-              "h-1.5 rounded-full transition",
-              strength >= level
-                ? "bg-orange-400"
-                : "bg-white/10",
-            ].join(" ")}
-          />
-        ))}
+        {[
+          1,
+          2,
+          3,
+          4,
+        ].map(
+          (
+            level,
+          ) => (
+            <span
+              key={
+                level
+              }
+              className={[
+                "h-1.5 rounded-full transition",
+
+                strength >=
+                level
+                  ? "bg-orange-400"
+                  : "bg-white/10",
+              ].join(
+                " ",
+              )}
+            />
+          ),
+        )}
       </div>
 
       <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-600">
         Password strength:{" "}
+
         <span className="text-zinc-400">
-          {labels[strength]}
+          {
+            labels[
+              strength
+            ]
+          }
         </span>
       </p>
     </div>
-  )
+  );
 }
+
+/* =========================================================
+   DIVIDER
+========================================================= */
 
 function Divider() {
   return (
@@ -381,31 +792,44 @@ function Divider() {
 
       <span className="h-px flex-1 bg-white/10" />
     </div>
-  )
+  );
 }
+
+/* =========================================================
+   SPINNER
+========================================================= */
 
 function Spinner({
   dark = false,
 }: {
-  dark?: boolean
+  dark?:
+    boolean;
 }) {
   return (
     <span
+      aria-hidden="true"
       className={[
-        "h-5 w-5 animate-spin rounded-full border-2",
+        "size-5 animate-spin rounded-full border-2",
+
         dark
           ? "border-black/30 border-t-black"
           : "border-zinc-400 border-t-zinc-950",
-      ].join(" ")}
+      ].join(
+        " ",
+      )}
     />
-  )
+  );
 }
+
+/* =========================================================
+   GOOGLE ICON
+========================================================= */
 
 function GoogleIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-5 w-5"
+      className="size-5"
       aria-hidden="true"
     >
       <path
@@ -428,5 +852,5 @@ function GoogleIcon() {
         d="M12 5.95c1.47 0 2.79.51 3.83 1.5l2.87-2.87C16.97 2.97 14.7 2 12 2a10 10 0 0 0-8.96 5.47l3.35 2.61C7.18 7.71 9.39 5.95 12 5.95Z"
       />
     </svg>
-  )
+  );
 }
