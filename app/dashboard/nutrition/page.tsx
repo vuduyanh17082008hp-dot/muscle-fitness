@@ -24,8 +24,10 @@ import {
   engineActivityToDbOverride,
   engineTrainingModeToDbOverride,
 } from "@/lib/nutrition/profile-mapping"
+import { buildBudgetPlan } from "@/lib/nutrition/budget"
 
 import { NutritionSettingsForm } from "./nutrition-settings-form"
+import { BudgetPlanner } from "@/components/nutrition/budget-planner"
 
 export const dynamic = "force-dynamic"
 
@@ -113,8 +115,13 @@ export default async function NutritionPlanPage() {
     redirect("/login?next=/dashboard/nutrition")
   }
 
-  const { plan, estimatedFields, missingRequiredFields, overrides } =
-    await loadNutritionContext(supabase, user.id)
+  const {
+    plan,
+    estimatedFields,
+    missingRequiredFields,
+    overrides,
+    weeklyFoodBudgetSgd,
+  } = await loadNutritionContext(supabase, user.id)
 
   /* =======================================================
      MISSING PROFILE DATA — DO NOT FABRICATE A PLAN
@@ -157,6 +164,8 @@ export default async function NutritionPlanPage() {
   }
 
   const { input, target } = plan
+
+  const budgetPlan = buildBudgetPlan(plan, weeklyFoodBudgetSgd)
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 pb-16">
@@ -320,6 +329,17 @@ export default async function NutritionPlanPage() {
           ))}
         </ul>
       </section>
+
+      {/* ===================================================
+          BUDGET-AWARE PLANNER
+      =================================================== */}
+
+      <BudgetPlanner
+        initialBudget={weeklyFoodBudgetSgd}
+        initialResult={budgetPlan}
+        proteinTarget={target.protein}
+        calorieTarget={target.calories}
+      />
 
       {/* ===================================================
           GRAM-BASED MEAL PLAN

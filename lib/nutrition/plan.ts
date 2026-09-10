@@ -216,15 +216,18 @@ const GOAL_ADJUSTMENT_PERCENT: Record<NutritionGoal, number> = {
 /**
  * Base protein target is per training mode. Fat loss is allowed to
  * move toward the upper end of that mode's evidence-based range;
- * maintenance and lean bulk use the mode's base value directly (a
- * Strength / Bodybuilding lean bulk at 70 kg should read ~140 g,
- * i.e. exactly 2.0 g/kg — not a reduced "surplus" protein number).
+ * maintenance and lean bulk use the mode's base value directly.
+ *
+ * Strength / Bodybuilding is fixed at exactly 2.0 g protein per kg
+ * of current bodyweight for every goal (fat loss, maintenance, lean
+ * bulk) — e.g. 70 kg -> 140 g, 80 kg -> 160 g, 60 kg -> 120 g. This
+ * must not be overridden by a reduced 1.6/1.8 g/kg fallback.
  */
 const PROTEIN_G_PER_KG: Record<
   TrainingMode,
   Record<NutritionGoal, number>
 > = {
-  strength: { fat_loss: 2.2, maintenance: 2.0, lean_bulk: 2.0 },
+  strength: { fat_loss: 2.0, maintenance: 2.0, lean_bulk: 2.0 },
   hybrid: { fat_loss: 2.0, maintenance: 1.9, lean_bulk: 1.9 },
   hiit: { fat_loss: 1.9, maintenance: 1.8, lean_bulk: 1.8 },
   team_sport: { fat_loss: 1.8, maintenance: 1.7, lean_bulk: 1.7 },
@@ -416,7 +419,13 @@ function findFood(id: string): FoodTemplate {
    equivalent food from the same functional category.
 ========================================================= */
 
-const SUBSTITUTION_ORDER: Record<FoodCategory, string[]> = {
+/**
+ * Exported so other deterministic engines (e.g. the budget planner in
+ * lib/nutrition/budget.ts) can reuse the same "these foods are
+ * functionally equivalent" knowledge instead of maintaining a second,
+ * possibly-drifting list.
+ */
+export const SUBSTITUTION_ORDER: Record<FoodCategory, string[]> = {
   protein: ["chicken_breast", "cod", "eggs", "greek_yogurt", "whey_protein", "salmon"],
   carb: ["rice", "potato", "oats", "wholegrain_bread", "rice_cakes", "honey"],
   fat: ["olive_oil", "peanut_butter"],

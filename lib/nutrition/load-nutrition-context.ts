@@ -23,6 +23,10 @@ export type NutritionContext = {
     trainingMode: DbTrainingModeOverride | null
     goal: DbNutritionGoalOverride | null
   }
+  /** From user_preferences.weekly_food_budget — null when never set. */
+  weeklyFoodBudgetSgd: number | null
+  cookingAbility: string | null
+  mealPrepFrequency: string | null
 }
 
 const PREFERENCES_COLUMNS_WITH_NUTRITION_INTELLIGENCE = `
@@ -32,14 +36,20 @@ const PREFERENCES_COLUMNS_WITH_NUTRITION_INTELLIGENCE = `
   allergies,
   activity_level_override,
   training_mode_override,
-  nutrition_goal_override
+  nutrition_goal_override,
+  weekly_food_budget,
+  cooking_ability,
+  meal_prep_frequency
 `
 
 const PREFERENCES_COLUMNS_FALLBACK = `
   meals_per_day,
   food_preferences,
   excluded_foods,
-  allergies
+  allergies,
+  weekly_food_budget,
+  cooking_ability,
+  meal_prep_frequency
 `
 
 /**
@@ -129,10 +139,22 @@ export async function loadNutritionContext(
       preferences,
     })
 
+  const rawBudget = preferences?.weekly_food_budget
+  const weeklyFoodBudgetSgd =
+    rawBudget === null || rawBudget === undefined || rawBudget === ""
+      ? null
+      : Number(rawBudget)
+
   return {
     plan: input ? buildNutritionPlan(input) : null,
     estimatedFields,
     missingRequiredFields,
     overrides,
+    weeklyFoodBudgetSgd:
+      weeklyFoodBudgetSgd !== null && Number.isFinite(weeklyFoodBudgetSgd)
+        ? weeklyFoodBudgetSgd
+        : null,
+    cookingAbility: preferences?.cooking_ability ?? null,
+    mealPrepFrequency: preferences?.meal_prep_frequency ?? null,
   }
 }

@@ -31,6 +31,7 @@ import {
   Menu,
   MessageSquareText,
   PieChart,
+  ScanEye,
   Settings,
   Sparkles,
   Utensils,
@@ -99,6 +100,11 @@ const navSections: NavSection[] = [
         label: "Training Plan",
         href: "/dashboard/workouts",
         icon: Dumbbell,
+      },
+      {
+        label: "Form Coach",
+        href: "/dashboard/workouts/form-coach",
+        icon: ScanEye,
       },
       {
         label: "Training Split",

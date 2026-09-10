@@ -102,3 +102,52 @@ export async function updateNutritionSettingsAction(
 
   return { success: true, message: "Nutrition plan updated." }
 }
+
+/* =========================================================
+   BUDGET-AWARE NUTRITION PLANNER
+========================================================= */
+
+export async function updateWeeklyFoodBudgetAction(
+  formData: FormData,
+): Promise<NutritionSettingsActionResult> {
+  const rawBudget = String(formData.get("weeklyFoodBudget") ?? "")
+  const budget = rawBudget === "" ? null : Number(rawBudget)
+
+  if (budget !== null && (!Number.isFinite(budget) || budget < 0 || budget > 1_000_000)) {
+    return { success: false, message: "Please enter a valid weekly budget." }
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return {
+      success: false,
+      message: "Your session has expired. Please sign in again.",
+    }
+  }
+
+  const { error } = await supabase.from("user_preferences").upsert(
+    {
+      user_id: user.id,
+      weekly_food_budget: budget,
+    },
+    { onConflict: "user_id" },
+  )
+
+  if (error) {
+    return {
+      success: false,
+      message: `Unable to save your weekly budget: ${error.message}`,
+    }
+  }
+
+  revalidatePath("/dashboard/nutrition")
+  revalidatePath("/dashboard/nutrition/shopping-list")
+
+  return { success: true, message: "Weekly food budget updated." }
+}

@@ -7,6 +7,7 @@ import {
 } from "@/lib/nutrition/plan";
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
+import { buildBudgetPlan } from "@/lib/nutrition/budget";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -396,6 +397,20 @@ function detectIntent(
         "dinh dưỡng",
         "bữa",
         "ăn gì",
+        "budget",
+        "cheap",
+        "cheaper",
+        "afford",
+        "cost",
+        "price",
+        "expensive",
+        "swap",
+        "substitute",
+        "substitution",
+        "shopping list",
+        "ngân sách",
+        "rẻ",
+        "giá",
       ],
     );
 
@@ -611,12 +626,31 @@ function summarizeNutritionPlan(
   plan: Awaited<
     ReturnType<typeof loadNutritionContext>
   >["plan"],
+  weeklyFoodBudgetSgd: number | null,
 ): unknown {
   if (!plan) {
     return null;
   }
 
+  const budgetPlan = buildBudgetPlan(plan, weeklyFoodBudgetSgd);
+
   return {
+    budget: {
+      weeklyBudgetSgd: budgetPlan.weeklyBudgetSgd,
+      estimatedWeeklyCostSgd: budgetPlan.estimatedWeeklyCostSgd,
+      status: budgetPlan.status,
+      remainingSgd: budgetPlan.remainingSgd,
+      shortfallSgd: budgetPlan.shortfallSgd,
+      appliedSubstitutions: budgetPlan.appliedSubstitutions.map(
+        (sub) => `${sub.fromName} -> ${sub.toName} (saves ~${sub.estimatedSavingSgd} SGD/week)`,
+      ),
+      suggestedSubstitutions: budgetPlan.suggestedSubstitutions.map(
+        (sub) => `${sub.fromName} -> ${sub.toName} (saves ~${sub.estimatedSavingSgd} SGD/week)`,
+      ),
+      priceDataDisclaimer:
+        "All prices are ESTIMATED market prices from a demo dataset, not a live feed.",
+    },
+
     trainingStyle:
       TRAINING_MODE_LABELS[
         plan.input.trainingMode
@@ -810,6 +844,7 @@ async function loadUserContext(
     currentNutritionPlan:
       summarizeNutritionPlan(
         nutritionContext.plan,
+        nutritionContext.weeklyFoodBudgetSgd,
       ),
 
     recovery:
@@ -2218,6 +2253,31 @@ When useful include:
 - fats
 - meal timing
 - reason it fits the client's goal
+
+============================================================
+BUDGET NUTRITION
+============================================================
+
+currentNutritionPlan.budget in CLIENT PROFILE is calculated
+deterministically by the Muscle Fitness budget planner (weekly
+estimated cost, budget status, applied and suggested substitutions).
+You explain and interpret it. You never invent a price, never invent
+a substitution, and never perform the cost optimisation yourself.
+
+All prices are ESTIMATED market prices from a demo dataset, not a
+live feed — say "estimated" when discussing cost, never "live price".
+
+For questions like "make this cheaper", "can I replace X with Y",
+or "I only have N SGD this week": explain what the deterministic
+planner already computed (appliedSubstitutions /
+suggestedSubstitutions), and point the client to updating the
+"Weekly food budget" field on their Nutrition Plan page to trigger a
+fresh calculation — do not calculate a new plan yourself.
+
+If budget.status is "budget_exceeded", clearly say the current
+targets cannot be reasonably matched within that budget using the
+available price data, and mention the suggested alternatives already
+computed rather than inventing new ones.
 
 ============================================================
 RECOVERY

@@ -12,6 +12,7 @@ import {
   SHOPPING_LIST_DAY_OPTIONS,
   type ShoppingListDayOption,
 } from "@/lib/nutrition/shopping-list"
+import { estimateShoppingListCost } from "@/lib/nutrition/food-prices"
 
 import { ShoppingListClient } from "./shopping-list-client"
 
@@ -75,6 +76,7 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
   }
 
   const shoppingList = buildShoppingList(plan, days)
+  const costSummary = estimateShoppingListCost(shoppingList)
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 pb-16">
@@ -104,6 +106,15 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
           {shoppingList.groups.length} categories.
         </p>
 
+        <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/8 px-4 py-2.5">
+          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-400">
+            Estimated market price
+          </span>
+          <span className="text-lg font-black text-white">
+            {costSummary.totalSgd.toFixed(2)} SGD
+          </span>
+        </div>
+
         <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Shopping list duration">
           {SHOPPING_LIST_DAY_OPTIONS.map((option) => (
             <Link
@@ -122,7 +133,14 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
         </div>
       </header>
 
-      <ShoppingListClient key={days} groups={shoppingList.groups} days={days} />
+      <ShoppingListClient
+        key={days}
+        groups={shoppingList.groups}
+        days={days}
+        itemCostsSgd={Object.fromEntries(
+          costSummary.items.map((item) => [item.foodId, item.costSgd]),
+        )}
+      />
 
       <p className="flex items-start gap-2 rounded-2xl border border-white/10 bg-white/[0.02] p-5 text-xs leading-6 text-zinc-500">
         <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />

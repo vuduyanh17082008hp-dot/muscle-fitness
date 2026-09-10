@@ -379,6 +379,32 @@ export default async function WorkoutsPage() {
       </header>
 
       {/* ===================================================
+          FORM COACH — BETA
+      =================================================== */}
+
+      <Link
+        href="/dashboard/workouts/form-coach"
+        className="group flex flex-col items-start justify-between gap-4 rounded-3xl border border-amber-400/20 bg-amber-400/[0.05] p-6 transition hover:border-amber-400/40 hover:bg-amber-400/[0.08] sm:flex-row sm:items-center sm:p-7"
+      >
+        <div>
+          <span className="rounded-full bg-amber-400 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-black">
+            Beta
+          </span>
+
+          <h2 className="mt-4 text-xl font-black text-white sm:text-2xl">
+            Form Coach — camera-based squat, push-up &amp; plank feedback
+          </h2>
+
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+            Use your webcam for live rep counting and form cues, analysed
+            locally in your browser.
+          </p>
+        </div>
+
+        <ArrowRight className="h-6 w-6 shrink-0 text-amber-400 transition group-hover:translate-x-1" />
+      </Link>
+
+      {/* ===================================================
           YOUR CURRENT TRAINING PLAN
       =================================================== */}
 

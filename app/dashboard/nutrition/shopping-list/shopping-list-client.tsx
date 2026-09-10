@@ -9,16 +9,23 @@ import type { ShoppingListGroup } from "@/lib/nutrition/shopping-list"
 type ShoppingListClientProps = {
   groups: ShoppingListGroup[]
   days: number
+  itemCostsSgd?: Record<string, number | null>
 }
 
-function buildPlainTextList(groups: ShoppingListGroup[], days: number): string {
+function buildPlainTextList(
+  groups: ShoppingListGroup[],
+  days: number,
+  itemCostsSgd?: Record<string, number | null>,
+): string {
   const lines: string[] = [`Muscle Fitness — Shopping List (${days} day${days === 1 ? "" : "s"})`, ""]
 
   for (const group of groups) {
     lines.push(group.label.toUpperCase())
 
     for (const item of group.items) {
-      lines.push(`- ${item.name}: ${item.displayQuantity}`)
+      const cost = itemCostsSgd?.[item.foodId]
+      const costSuffix = cost !== undefined && cost !== null ? ` (~${cost.toFixed(2)} SGD, est.)` : ""
+      lines.push(`- ${item.name}: ${item.displayQuantity}${costSuffix}`)
     }
 
     lines.push("")
@@ -27,7 +34,7 @@ function buildPlainTextList(groups: ShoppingListGroup[], days: number): string {
   return lines.join("\n").trim()
 }
 
-export function ShoppingListClient({ groups, days }: ShoppingListClientProps) {
+export function ShoppingListClient({ groups, days, itemCostsSgd }: ShoppingListClientProps) {
   const storageKey = `mf-shopping-list-checked-${days}`
 
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
@@ -62,7 +69,7 @@ export function ShoppingListClient({ groups, days }: ShoppingListClientProps) {
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(buildPlainTextList(groups, days))
+      await navigator.clipboard.writeText(buildPlainTextList(groups, days, itemCostsSgd))
       setCopyState("copied")
       window.setTimeout(() => setCopyState("idle"), 2000)
     } catch {
@@ -142,11 +149,16 @@ export function ShoppingListClient({ groups, days }: ShoppingListClientProps) {
                       </span>
 
                       <span
-                        className={`shrink-0 text-sm font-semibold ${
+                        className={`shrink-0 text-right text-sm font-semibold ${
                           isChecked ? "text-zinc-700" : "text-white"
                         }`}
                       >
                         {item.displayQuantity}
+                        {itemCostsSgd?.[item.foodId] != null ? (
+                          <span className="ml-2 text-xs font-medium text-zinc-500">
+                            ~{itemCostsSgd[item.foodId]!.toFixed(2)} SGD
+                          </span>
+                        ) : null}
                       </span>
                     </label>
                   </li>

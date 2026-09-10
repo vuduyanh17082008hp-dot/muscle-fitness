@@ -201,6 +201,9 @@ export type RawPreferencesRow = {
   activity_level_override?: string | null
   training_mode_override?: string | null
   nutrition_goal_override?: string | null
+  weekly_food_budget?: number | string | null
+  cooking_ability?: string | null
+  meal_prep_frequency?: string | null
 } | null
 
 export type NutritionMappingResult = {

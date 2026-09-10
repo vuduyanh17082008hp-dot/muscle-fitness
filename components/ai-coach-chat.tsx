@@ -23,6 +23,7 @@ import {
   type DanteActivity,
 } from "@/components/dante/dante-presence";
 import { cn } from "@/lib/utils";
+import { FORM_COACH_HANDOFF_KEY } from "@/lib/form-coach/handoff";
 
 /* =========================================================
    TYPES
@@ -132,6 +133,32 @@ export default function AICoachChat({
       behavior: "smooth",
     });
   }, [messages, isLoading]);
+
+  /* =======================================================
+     FORM COACH HANDOFF — auto-send a session summary left by
+     the Form Coach camera (see lib/form-coach/handoff.ts).
+  ======================================================= */
+
+  useEffect(() => {
+    let summary: string | null = null;
+
+    try {
+      summary = window.sessionStorage.getItem(FORM_COACH_HANDOFF_KEY);
+
+      if (summary) {
+        window.sessionStorage.removeItem(FORM_COACH_HANDOFF_KEY);
+      }
+    } catch {
+      summary = null;
+    }
+
+    if (summary) {
+      void sendMessage(summary);
+    }
+
+    // Runs once on mount only — this is a one-time handoff read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* =======================================================
      SEND MESSAGE
