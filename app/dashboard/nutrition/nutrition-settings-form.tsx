@@ -2,56 +2,78 @@
 
 import { useId, useState, useTransition } from "react"
 
+import { useRouter } from "next/navigation"
+
+import { CheckCircle2, Loader2, XCircle } from "lucide-react"
+
 import {
-  ACTIVITY_LEVEL_LABELS,
-  NUTRITION_GOAL_LABELS,
-  TRAINING_MODE_LABELS,
-  type ActivityLevel,
-  type NutritionGoal,
-  type TrainingMode,
-} from "@/lib/nutrition/plan"
+  DB_ACTIVITY_LEVEL_OVERRIDE_LABELS,
+  DB_NUTRITION_GOAL_OVERRIDE_LABELS,
+  DB_TRAINING_MODE_OVERRIDE_LABELS,
+  type DbActivityLevelOverride,
+  type DbNutritionGoalOverride,
+  type DbTrainingModeOverride,
+} from "@/lib/nutrition/profile-mapping"
 
 import { updateNutritionSettingsAction } from "./actions"
 
 type NutritionSettingsFormProps = {
-  trainingMode: TrainingMode
-  activityLevel: ActivityLevel
-  goalOverride: NutritionGoal | "auto"
+  trainingModeOverride: DbTrainingModeOverride
+  activityLevelOverride: DbActivityLevelOverride
+  goalOverride: DbNutritionGoalOverride | "auto"
 }
 
-const TRAINING_MODES = Object.keys(TRAINING_MODE_LABELS) as TrainingMode[]
-const ACTIVITY_LEVELS = Object.keys(ACTIVITY_LEVEL_LABELS) as ActivityLevel[]
-const GOAL_OVERRIDES: Array<NutritionGoal | "auto"> = [
-  "auto",
-  "fat_loss",
-  "maintenance",
-  "lean_bulk",
-]
+type SaveState = "idle" | "saving" | "success" | "error"
+
+const TRAINING_MODES = Object.keys(
+  DB_TRAINING_MODE_OVERRIDE_LABELS,
+) as DbTrainingModeOverride[]
+
+const ACTIVITY_LEVELS = Object.keys(
+  DB_ACTIVITY_LEVEL_OVERRIDE_LABELS,
+) as DbActivityLevelOverride[]
+
+const GOAL_OVERRIDES = Object.keys(
+  DB_NUTRITION_GOAL_OVERRIDE_LABELS,
+) as DbNutritionGoalOverride[]
 
 export function NutritionSettingsForm({
-  trainingMode,
-  activityLevel,
+  trainingModeOverride,
+  activityLevelOverride,
   goalOverride,
 }: NutritionSettingsFormProps) {
+  const router = useRouter()
+
   const trainingModeId = useId()
   const activityLevelId = useId()
   const goalOverrideId = useId()
 
-  const [status, setStatus] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<SaveState>("idle")
+  const [message, setMessage] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function handleSubmit(formData: FormData) {
+    setSaveState("saving")
+    setMessage(null)
+
     startTransition(async () => {
       const result = await updateNutritionSettingsAction(formData)
-      setStatus(result.message)
+
+      setSaveState(result.success ? "success" : "error")
+      setMessage(result.message)
+
+      if (result.success) {
+        // The server action already revalidates both routes; refresh
+        // this client tree too so the numbers update without a manual
+        // reload, and so a real browser refresh reads the same saved
+        // values back from the database (not just React state).
+        router.refresh()
+      }
     })
   }
 
   return (
-    <form
-      action={handleSubmit}
-      className="grid gap-4 sm:grid-cols-3"
-    >
+    <form action={handleSubmit} className="grid gap-4 sm:grid-cols-3">
       <div>
         <label
           htmlFor={trainingModeId}
@@ -62,13 +84,13 @@ export function NutritionSettingsForm({
 
         <select
           id={trainingModeId}
-          name="trainingMode"
-          defaultValue={trainingMode}
+          name="trainingModeOverride"
+          defaultValue={trainingModeOverride}
           className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-3 text-sm font-medium text-white outline-none transition focus:border-amber-400/40"
         >
           {TRAINING_MODES.map((mode) => (
             <option key={mode} value={mode}>
-              {TRAINING_MODE_LABELS[mode]}
+              {DB_TRAINING_MODE_OVERRIDE_LABELS[mode]}
             </option>
           ))}
         </select>
@@ -84,13 +106,13 @@ export function NutritionSettingsForm({
 
         <select
           id={activityLevelId}
-          name="activityLevel"
-          defaultValue={activityLevel}
+          name="activityLevelOverride"
+          defaultValue={activityLevelOverride}
           className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-3 text-sm font-medium text-white outline-none transition focus:border-amber-400/40"
         >
           {ACTIVITY_LEVELS.map((level) => (
             <option key={level} value={level}>
-              {ACTIVITY_LEVEL_LABELS[level]}
+              {DB_ACTIVITY_LEVEL_OVERRIDE_LABELS[level]}
             </option>
           ))}
         </select>
@@ -111,28 +133,43 @@ export function NutritionSettingsForm({
           className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-3 text-sm font-medium text-white outline-none transition focus:border-amber-400/40"
         >
           <option value="auto">Use onboarding goal</option>
-          {GOAL_OVERRIDES.filter(
-            (value): value is NutritionGoal => value !== "auto",
-          ).map((goal) => (
+          {GOAL_OVERRIDES.map((goal) => (
             <option key={goal} value={goal}>
-              {NUTRITION_GOAL_LABELS[goal]}
+              {DB_NUTRITION_GOAL_OVERRIDE_LABELS[goal]}
             </option>
           ))}
         </select>
       </div>
 
-      <div className="sm:col-span-3 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 sm:col-span-3">
         <button
           type="submit"
           disabled={isPending}
-          className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPending ? "Saving…" : "Update nutrition plan"}
+          {saveState === "saving" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : null}
+          {saveState === "saving" ? "Saving…" : "Update nutrition plan"}
         </button>
 
-        {status ? (
-          <p className="text-xs text-zinc-400" role="status">
-            {status}
+        {saveState === "success" && message ? (
+          <p
+            role="status"
+            className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400"
+          >
+            <CheckCircle2 className="size-3.5" />
+            {message}
+          </p>
+        ) : null}
+
+        {saveState === "error" && message ? (
+          <p
+            role="alert"
+            className="flex items-center gap-1.5 text-xs font-semibold text-red-400"
+          >
+            <XCircle className="size-3.5" />
+            {message}
           </p>
         ) : null}
       </div>

@@ -6,6 +6,9 @@ import { buildNutritionPlan, type NutritionPlan } from "@/lib/nutrition/plan"
 
 import {
   mapProfileToNutritionInput,
+  type DbActivityLevelOverride,
+  type DbNutritionGoalOverride,
+  type DbTrainingModeOverride,
   type RawFitnessProfileRow,
   type RawPreferencesRow,
   type RawProfileRow,
@@ -15,6 +18,11 @@ export type NutritionContext = {
   plan: NutritionPlan | null
   estimatedFields: string[]
   missingRequiredFields: string[]
+  overrides: {
+    activityLevel: DbActivityLevelOverride | null
+    trainingMode: DbTrainingModeOverride | null
+    goal: DbNutritionGoalOverride | null
+  }
 }
 
 const PREFERENCES_COLUMNS_WITH_NUTRITION_INTELLIGENCE = `
@@ -22,8 +30,8 @@ const PREFERENCES_COLUMNS_WITH_NUTRITION_INTELLIGENCE = `
   food_preferences,
   excluded_foods,
   allergies,
-  training_mode,
-  activity_level,
+  activity_level_override,
+  training_mode_override,
   nutrition_goal_override
 `
 
@@ -35,9 +43,9 @@ const PREFERENCES_COLUMNS_FALLBACK = `
 `
 
 /**
- * The nutrition-intelligence columns (training_mode / activity_level /
- * nutrition_goal_override) ship via
- * supabase/migrations/20260910090000_nutrition_intelligence.sql.
+ * The nutrition-intelligence override columns (activity_level_override /
+ * training_mode_override / nutrition_goal_override) ship via
+ * supabase/migrations/20260911090000_nutrition_preference_overrides.sql.
  * If that migration has not been applied yet in a given environment,
  * PostgREST rejects the unknown columns. Rather than crashing the
  * dashboard, fall back to the base column set and treat the new
@@ -93,7 +101,7 @@ export async function loadNutritionContext(
 
     supabase
       .from("fitness_profiles")
-      .select("height_cm, weight_kg, goal, training_days")
+      .select("height_cm, weight_kg, goal, training_days, priority_muscles")
       .eq("user_id", userId)
       .maybeSingle(),
 
@@ -114,7 +122,7 @@ export async function loadNutritionContext(
     )
   }
 
-  const { input, estimatedFields, missingRequiredFields } =
+  const { input, estimatedFields, missingRequiredFields, overrides } =
     mapProfileToNutritionInput({
       profile: (profileResponse.data ?? null) as RawProfileRow,
       fitnessProfile: (fitnessResponse.data ?? null) as RawFitnessProfileRow,
@@ -125,5 +133,6 @@ export async function loadNutritionContext(
     plan: input ? buildNutritionPlan(input) : null,
     estimatedFields,
     missingRequiredFields,
+    overrides,
   }
 }

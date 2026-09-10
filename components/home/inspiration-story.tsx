@@ -1,9 +1,9 @@
 import {
   ArrowRight,
   Dumbbell,
+  Flame,
   Footprints,
   Gauge,
-  Heart,
 } from "lucide-react";
 
 const moments = [
@@ -18,7 +18,7 @@ const moments = [
       "One small decision",
 
     text:
-      "Not a perfect plan. Not a dramatic promise. Just one walk, one session, one reason to come back tomorrow.",
+      "You do not need the perfect plan. You need one reason to return tomorrow.",
   },
 
   {
@@ -32,7 +32,7 @@ const moments = [
       "Progress slows",
 
     text:
-      "Motivation fades. The scale stalls. Training gets harder. Instead of quitting, the plan changes.",
+      "Motivation fades. Progress stalls. Sometimes the answer is not quitting — the plan needs to change.",
   },
 
   {
@@ -46,21 +46,21 @@ const moments = [
       "Strength changes the goal",
 
     text:
-      "The question stops being only “How much weight can I lose?” and becomes “What am I capable of becoming?”",
+      "The question changes from “How much can I lose?” to “What can I become?”",
   },
 
   {
     icon:
-      Heart,
+      Flame,
 
     label:
-      "PEACE",
+      "FORWARD",
 
     title:
-      "Confidence catches up",
+      "Keep moving",
 
     text:
-      "The body changes, but the deeper win is learning to respect the person who kept showing up.",
+      "A pawn can be anything if it pushes forward.",
   },
 ] as const;
 
@@ -177,31 +177,26 @@ export function InspirationStory() {
               "
             >
               <p>
-                At first, fitness felt like something built for other
-                people. The gym was intimidating, progress seemed
-                impossibly far away, and every mirror became another
-                reminder of what had not changed.
+                At first, the gym felt built for someone else. Progress
+                looked distant, and confidence even further away.
               </p>
 
               <p>
-                The beginning was almost unimpressive: a short walk, a
-                few minutes on a treadmill, a basic strength session,
-                then one decision to return the next day. There was no
-                sudden confidence. There was only repetition.
+                So the beginning stayed small: one walk, one session, one
+                reason to return tomorrow.
               </p>
 
               <p>
-                Then the plateau came. Motivation disappeared. Progress
-                slowed. Instead of treating that moment as failure, the
-                plan changed: training became more structured, nutrition
-                became more deliberate, recovery started to matter, and
-                expectations became more patient.
+                Then progress slowed. Motivation disappeared. Instead of
+                quitting, the plan changed. Training became deliberate.
+                Nutrition became intentional. Recovery began to matter.
               </p>
 
               <p className="font-semibold text-zinc-200">
-                Eventually the goal was no longer simply to become
-                lighter. It was to become stronger, more capable, more
-                disciplined, and more at peace with the body being built.
+                Eventually, the goal was no longer simply to look
+                different. It was to become stronger, more capable, more
+                disciplined — and more at peace with the person being
+                built.
               </p>
             </div>
 
@@ -222,8 +217,7 @@ export function InspirationStory() {
                 text-white
               "
             >
-              “The greatest transformation was becoming proud of the
-              person who refused to stop.”
+              “A pawn can be anything if it pushes forward.”
             </blockquote>
           </div>
 
@@ -358,31 +352,70 @@ export function InspirationStory() {
           </div>
         </div>
 
-        <a
-          href="#discipline"
+        <div
           className="
-            mt-12
+            mt-14
 
-            inline-flex
+            flex
+            flex-col
+            items-start
 
-            items-center
+            gap-6
 
-            gap-2
+            border-t
+            border-white/10
 
-            text-sm
-            font-bold
+            pt-8
 
-            text-zinc-400
-
-            transition
-
-            hover:text-amber-400
+            sm:flex-row
+            sm:items-center
+            sm:justify-between
           "
         >
-          Keep moving
+          <p
+            className="
+              text-sm
+              font-bold
 
-          <ArrowRight className="size-4" />
-        </a>
+              uppercase
+
+              tracking-[0.2em]
+
+              text-zinc-500
+            "
+          >
+            You will always wish you started sooner. But{" "}
+            <span className="text-amber-400">
+              today is the youngest you will ever be.
+            </span>
+          </p>
+
+          <a
+            href="#discipline"
+            className="
+              inline-flex
+
+              shrink-0
+
+              items-center
+
+              gap-2
+
+              text-sm
+              font-bold
+
+              text-zinc-400
+
+              transition
+
+              hover:text-amber-400
+            "
+          >
+            Keep moving
+
+            <ArrowRight className="size-4" />
+          </a>
+        </div>
       </div>
     </section>
   );

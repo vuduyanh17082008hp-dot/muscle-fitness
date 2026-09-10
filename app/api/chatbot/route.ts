@@ -5,6 +5,8 @@ import {
   ACTIVITY_LEVEL_LABELS,
   NUTRITION_GOAL_LABELS,
 } from "@/lib/nutrition/plan";
+import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
+import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +25,7 @@ type UserContext = {
   fitnessProfile: unknown;
   preferences: unknown;
   currentNutritionPlan: unknown;
+  recovery: unknown;
 };
 
 type Intent = {
@@ -30,6 +33,7 @@ type Intent = {
   nutrition: boolean;
   supplement: boolean;
   health: boolean;
+  recovery: boolean;
 };
 
 type PubMedArticle = {
@@ -83,8 +87,26 @@ type OpenFdaResult = {
   url: string;
 };
 
+type EuropePmcArticle = {
+  id: string;
+  source: string;
+  title: string;
+  journal: string;
+  published: string;
+  abstract: string;
+  url: string;
+};
+
+type MedlinePlusResult = {
+  title: string;
+  snippet: string;
+  url: string;
+};
+
 type EvidenceContext = {
   pubmed: PubMedArticle[];
+  europePmc: EuropePmcArticle[];
+  medlinePlus: MedlinePlusResult[];
   usda: UsdaFood[];
   openFoodFacts: OpenFoodFactsProduct[];
   pubchem: PubChemResult | null;
@@ -452,11 +474,51 @@ function detectIntent(
       ],
     );
 
+  const recovery =
+    includesAny(
+      text,
+      [
+        "recovery",
+        "recover",
+        "sleep",
+        "insomnia",
+        "stress",
+        "stressed",
+        "fatigue",
+        "fatigued",
+        "tired",
+        "exhausted",
+        "sore",
+        "soreness",
+        "doms",
+        "overreaching",
+        "overtraining",
+        "burnout",
+        "burnt out",
+        "deload",
+        "rest day",
+        "readiness",
+        "recovery score",
+        "resting heart rate",
+        "illness",
+        "sick",
+        "injury",
+        "pain",
+        "phục hồi",
+        "giấc ngủ",
+        "mệt mỏi",
+        "căng thẳng",
+        "đau nhức",
+        "quá sức",
+      ],
+    );
+
   return {
     training,
     nutrition,
     supplement,
     health,
+    recovery,
   };
 }
 
@@ -590,6 +652,58 @@ function summarizeNutritionPlan(
   };
 }
 
+/* =========================================================
+   RECOVERY SUMMARY
+
+   Deterministic score/trend/training-load data is summarized into
+   a compact object — never raw check-in rows — so Dante gets
+   structured context instead of a database dump.
+========================================================= */
+
+function summarizeRecoveryContext(
+  recovery: Awaited<ReturnType<typeof loadRecoveryContext>>,
+): unknown {
+  const { todayScoreResult, averages7Days, trainingLoad } = recovery;
+
+  return {
+    today: {
+      hasCheckin: recovery.today !== null,
+      score: todayScoreResult.score,
+      status:
+        todayScoreResult.status !== null
+          ? RECOVERY_STATUS_LABEL[todayScoreResult.status]
+          : null,
+      missingInputs: todayScoreResult.missingInputs,
+      lowestDrivers: todayScoreResult.drivers
+        .filter((driver) => driver.available)
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 2)
+        .map((driver) => `${driver.label}: ${driver.score}/100`),
+      painIllness: recovery.today?.pain_illness ?? null,
+      baselineComparison: todayScoreResult.baseline,
+    },
+
+    recent7DayAverages: {
+      recoveryScore: averages7Days.score,
+      sleepHours: averages7Days.sleepHours,
+      stress: averages7Days.stress,
+      fatigue: averages7Days.fatigue,
+      soreness: averages7Days.soreness,
+      readiness: averages7Days.readiness,
+      checkinsLogged: averages7Days.sampleSize,
+    },
+
+    trainingLoad: {
+      state: trainingLoad.state,
+      reason: trainingLoad.reason,
+      sessionsLast7Days: trainingLoad.sessionsLast7Days,
+      restDaysLast7Days: trainingLoad.restDaysLast7Days,
+      averageSessionRpe: trainingLoad.averageSessionRpe,
+      lastSessionDaysAgo: trainingLoad.lastSessionDaysAgo,
+    },
+  };
+}
+
 async function loadUserContext(
   userId: string,
 ): Promise<UserContext> {
@@ -601,6 +715,7 @@ async function loadUserContext(
     fitnessResponse,
     preferenceResponse,
     nutritionContext,
+    recoveryContext,
   ] =
     await Promise.all([
       supabase
@@ -638,6 +753,18 @@ async function loadUserContext(
         supabase,
         userId,
       ),
+
+      loadRecoveryContext(
+        supabase,
+        userId,
+      ).catch((error: unknown) => {
+        console.warn(
+          "[DANTE RECOVERY]",
+          error,
+        );
+
+        return null;
+      }),
     ]);
 
   if (
@@ -684,6 +811,13 @@ async function loadUserContext(
       summarizeNutritionPlan(
         nutritionContext.plan,
       ),
+
+    recovery:
+      recoveryContext
+        ? summarizeRecoveryContext(
+            recoveryContext,
+          )
+        : null,
   };
 }
 
@@ -974,6 +1108,225 @@ async function searchPubMed(
   ) {
     console.warn(
       "[DANTE PUBMED]",
+      error,
+    );
+
+    return [];
+  }
+}
+
+/* =========================================================
+   EUROPE PMC
+
+   Second-priority literature source (systematic reviews, RCTs,
+   large cohorts) used mainly for recovery / health-adjacent
+   questions, and as a PubMed fallback.
+========================================================= */
+
+async function searchEuropePmc(
+  message: string,
+): Promise<EuropePmcArticle[]> {
+  try {
+    const url =
+      new URL(
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+      );
+
+    url.searchParams.set(
+      "query",
+      `${truncate(message, 180)} AND (SRC:MED)`,
+    );
+
+    url.searchParams.set(
+      "format",
+      "json",
+    );
+
+    url.searchParams.set(
+      "resultType",
+      "core",
+    );
+
+    url.searchParams.set(
+      "pageSize",
+      "4",
+    );
+
+    const response =
+      await fetchWithTimeout(
+        url.toString(),
+        {
+          cache: "no-store",
+        },
+        7000,
+      );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data =
+      (await response.json()) as unknown;
+
+    if (
+      !isRecord(data) ||
+      !isRecord(data.resultList) ||
+      !Array.isArray(data.resultList.result)
+    ) {
+      return [];
+    }
+
+    return data.resultList.result
+      .map(
+        (item): EuropePmcArticle | null => {
+          if (!isRecord(item)) {
+            return null;
+          }
+
+          const id = getString(item.id);
+          const title = getString(item.title);
+
+          if (!id || !title) {
+            return null;
+          }
+
+          const pmid = getString(item.pmid);
+          const source = getString(item.source) || "MED";
+
+          return {
+            id,
+
+            source,
+
+            title,
+
+            journal:
+              getString(item.journalTitle),
+
+            published:
+              getString(item.pubYear),
+
+            abstract:
+              truncate(
+                getString(item.abstractText),
+                1600,
+              ),
+
+            url: pmid
+              ? `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`
+              : `https://europepmc.org/article/${source}/${id}`,
+          };
+        },
+      )
+      .filter(
+        (article): article is EuropePmcArticle =>
+          article !== null,
+      )
+      .slice(0, 4);
+  } catch (error) {
+    console.warn(
+      "[DANTE EUROPE PMC]",
+      error,
+    );
+
+    return [];
+  }
+}
+
+/* =========================================================
+   MEDLINEPLUS
+
+   Consumer-friendly health information — used to ground
+   recovery / health-adjacent answers in plain-language,
+   trustworthy NIH content.
+========================================================= */
+
+async function searchMedlinePlus(
+  message: string,
+): Promise<MedlinePlusResult[]> {
+  try {
+    const url =
+      new URL(
+        "https://wsearch.nlm.nih.gov/ws/query",
+      );
+
+    url.searchParams.set(
+      "db",
+      "healthTopics",
+    );
+
+    url.searchParams.set(
+      "term",
+      truncate(message, 150),
+    );
+
+    url.searchParams.set(
+      "retmax",
+      "3",
+    );
+
+    const response =
+      await fetchWithTimeout(
+        url.toString(),
+        {
+          cache: "no-store",
+        },
+        7000,
+      );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const xml =
+      await response.text();
+
+    const documentBlocks =
+      xml.match(
+        /<document[^>]*url="([^"]*)"[^>]*>[\s\S]*?<\/document>/g,
+      ) ?? [];
+
+    return documentBlocks
+      .map(
+        (block): MedlinePlusResult | null => {
+          const url =
+            block.match(
+              /url="([^"]*)"/,
+            )?.[1] ?? "";
+
+          const title =
+            decodeXml(
+              block.match(
+                /<content name="title">([\s\S]*?)<\/content>/,
+              )?.[1] ?? "",
+            );
+
+          const snippet =
+            decodeXml(
+              block.match(
+                /<content name="snippet">([\s\S]*?)<\/content>/,
+              )?.[1] ?? "",
+            );
+
+          if (!url || !title) {
+            return null;
+          }
+
+          return {
+            title,
+            snippet: truncate(snippet, 500),
+            url,
+          };
+        },
+      )
+      .filter(
+        (result): result is MedlinePlusResult =>
+          result !== null,
+      )
+      .slice(0, 3);
+  } catch (error) {
+    console.warn(
+      "[DANTE MEDLINEPLUS]",
       error,
     );
 
@@ -1625,10 +1978,17 @@ async function getEvidence(
     intent.training ||
     intent.nutrition ||
     intent.supplement ||
+    intent.health ||
+    intent.recovery;
+
+  const needConsumerEvidence =
+    intent.recovery ||
     intent.health;
 
   const [
     pubmed,
+    europePmc,
+    medlinePlus,
     usda,
     openFoodFacts,
     pubchem,
@@ -1637,6 +1997,22 @@ async function getEvidence(
     await Promise.all([
       needPubMed
         ? searchPubMed(
+            message,
+          )
+        : Promise.resolve(
+            [],
+          ),
+
+      needConsumerEvidence
+        ? searchEuropePmc(
+            message,
+          )
+        : Promise.resolve(
+            [],
+          ),
+
+      needConsumerEvidence
+        ? searchMedlinePlus(
             message,
           )
         : Promise.resolve(
@@ -1681,6 +2057,8 @@ async function getEvidence(
 
   return {
     pubmed,
+    europePmc,
+    medlinePlus,
     usda,
     openFoodFacts,
     pubchem,
@@ -1722,6 +2100,21 @@ SOURCE PRIORITY
 For research questions:
 
 Prefer PubMed evidence supplied in EXTERNAL EVIDENCE.
+
+For recovery and other health-adjacent questions (sleep, stress,
+fatigue, soreness, overreaching, overtraining, deloads, pain,
+illness), prioritize sources in this order when supplied:
+
+1. PubMed / NCBI
+2. Europe PMC
+3. MedlinePlus (for plain-language, consumer-friendly explanations)
+
+If none of the above are supplied in EXTERNAL EVIDENCE for a
+recovery or health-adjacent question, say exactly:
+"External evidence is temporarily unavailable." — then continue
+answering from general coaching knowledge. Recovery score,
+check-in and trend data still come from the CLIENT PROFILE and
+remain fully usable even when evidence retrieval fails.
 
 For food calories and macronutrients:
 
@@ -1781,6 +2174,10 @@ Relevant fields may include:
   gram-based meals and training-specific notes — already computed by
   the Muscle Fitness nutrition engine, so use it directly instead of
   recalculating)
+- recovery (today's recovery score, status, lowest-scoring drivers,
+  7-day averages and training-load state — already computed
+  deterministically by the Muscle Fitness recovery engine; use it
+  directly, never recalculate or invent a different score)
 
 Never invent missing client information.
 
@@ -1823,6 +2220,39 @@ When useful include:
 - reason it fits the client's goal
 
 ============================================================
+RECOVERY
+============================================================
+
+When discussing recovery:
+
+The recovery score in CLIENT PROFILE is calculated deterministically
+by the Muscle Fitness recovery engine from sleep, stress, fatigue,
+soreness, mood and readiness. You explain and interpret this score.
+You never recalculate it, restate it differently, or invent a
+different number.
+
+Use the lowest-scoring drivers to explain WHY the score is what it
+is (e.g. "your score is lower today mainly because of sleep and
+stress").
+
+Use the 7-day averages to answer questions about trends.
+
+Use trainingLoad (green / amber / red, with sessionsLast7Days,
+restDaysLast7Days, averageSessionRpe) to answer whether today's
+training should change. Reflect its state honestly:
+
+- green: normal training is reasonable
+- amber: maintain quality, consider trimming unnecessary volume
+- red: recommend prioritising recovery or a lower-stress session
+
+Never tell a client to skip or cancel a workout outright — offer
+adjustment options and let the client decide.
+
+If recovery data is missing or the client has not checked in today,
+say so plainly and suggest completing today's check-in rather than
+guessing.
+
+============================================================
 SUPPLEMENTS
 ============================================================
 
@@ -1846,7 +2276,15 @@ HEALTH SAFETY
 
 You provide health education, not diagnosis.
 
-Do not diagnose diseases.
+Do not diagnose diseases or conditions, including but not limited to:
+
+- depression
+- anxiety disorders
+- sleep disorders
+- overtraining syndrome
+- injuries
+- infections
+- cardiovascular conditions
 
 Do not replace a licensed clinician.
 
@@ -1854,6 +2292,26 @@ For potentially serious symptoms, medication interactions,
 pregnancy, significant kidney/liver/heart conditions,
 or other high-risk medical circumstances,
 recommend appropriate professional medical evaluation.
+
+EMERGENCY ESCALATION
+
+If the client describes any of the following, do not continue
+normal training or recovery optimisation. Respond with brief,
+direct concern and clearly recommend urgent professional or
+emergency medical care before anything else:
+
+- chest pain
+- severe shortness of breath
+- fainting or loss of consciousness
+- neurological symptoms (e.g. sudden numbness, confusion, slurred
+  speech, severe unexplained headache)
+- rapidly worsening or severe pain
+- severe illness
+- a mental-health crisis or mention of self-harm
+
+For a mental-health crisis or self-harm mention, respond with care,
+avoid judgment, and clearly point toward immediate professional or
+emergency support rather than training or nutrition guidance.
 
 ============================================================
 PRIMARY RESPONSE LANGUAGE
@@ -2279,6 +2737,36 @@ function getSources(
 
       url:
         article.url,
+    });
+  }
+
+  for (
+    const article of evidence.europePmc
+  ) {
+    sources.push({
+      type:
+        "Europe PMC",
+
+      title:
+        article.title,
+
+      url:
+        article.url,
+    });
+  }
+
+  for (
+    const result of evidence.medlinePlus
+  ) {
+    sources.push({
+      type:
+        "MedlinePlus",
+
+      title:
+        result.title,
+
+      url:
+        result.url,
     });
   }
 

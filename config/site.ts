@@ -103,6 +103,14 @@ export const siteConfig: SiteConfig = {
 
       {
         title:
+          "Recovery",
+
+        href:
+          "/dashboard/recovery",
+      },
+
+      {
+        title:
           "Progress",
 
         href:

@@ -17,6 +17,7 @@ import {
 import {
   InspirationStory,
 } from "@/components/home/inspiration-story";
+import { DanteRobot } from "@/components/dante/dante-robot";
 
 /* =========================================================
    CONTENT
@@ -51,7 +52,7 @@ const productSystems = [
     title: "Recovery",
     text:
       "Sleep, stress and check-in context that helps coaching reflect how the client is actually recovering.",
-    href: "/dashboard",
+    href: "/dashboard/recovery",
   },
 
   {
@@ -669,8 +670,22 @@ export default function HomePage() {
               sm:p-7
             "
           >
+            <Link
+              href="/chatbot"
+              className="mb-5 flex justify-center"
+              aria-label="Meet Dante — open the AI coach"
+            >
+              <DanteRobot
+                state="idle"
+                size="md"
+                interactive
+              />
+            </Link>
+
             <p
               className="
+                text-center
+
                 text-[10px]
                 font-black
 

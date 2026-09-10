@@ -77,6 +77,9 @@ export type MacroTarget = {
   fatPerKg: number
 }
 
+/** See lib/nutrition/food-data/types.ts for the full FoodPreparationState set this is aligned with. */
+export type MealMeasurementBasis = "raw" | "cooked" | "as-served"
+
 export type MealIngredient = {
   foodId: string
   name: string
@@ -86,6 +89,13 @@ export type MealIngredient = {
   protein: number
   carbs: number
   fat: number
+  /**
+   * What the gram amount above measures. This must never be
+   * conflated with a different basis — 150 g raw chicken breast and
+   * 150 g cooked chicken breast are different foods (see PHASE 5,
+   * "raw vs cooked must not be mixed").
+   */
+  measurementBasis: MealMeasurementBasis
 }
 
 export type Meal = {
@@ -203,16 +213,23 @@ const GOAL_ADJUSTMENT_PERCENT: Record<NutritionGoal, number> = {
    MACRO TARGETS
 ========================================================= */
 
+/**
+ * Base protein target is per training mode. Fat loss is allowed to
+ * move toward the upper end of that mode's evidence-based range;
+ * maintenance and lean bulk use the mode's base value directly (a
+ * Strength / Bodybuilding lean bulk at 70 kg should read ~140 g,
+ * i.e. exactly 2.0 g/kg — not a reduced "surplus" protein number).
+ */
 const PROTEIN_G_PER_KG: Record<
   TrainingMode,
   Record<NutritionGoal, number>
 > = {
-  strength: { fat_loss: 2.2, maintenance: 2.0, lean_bulk: 1.8 },
-  hybrid: { fat_loss: 2.0, maintenance: 1.8, lean_bulk: 1.7 },
-  hiit: { fat_loss: 1.9, maintenance: 1.7, lean_bulk: 1.6 },
-  team_sport: { fat_loss: 1.8, maintenance: 1.6, lean_bulk: 1.6 },
-  running: { fat_loss: 1.6, maintenance: 1.4, lean_bulk: 1.4 },
-  general: { fat_loss: 1.8, maintenance: 1.4, lean_bulk: 1.6 },
+  strength: { fat_loss: 2.2, maintenance: 2.0, lean_bulk: 2.0 },
+  hybrid: { fat_loss: 2.0, maintenance: 1.9, lean_bulk: 1.9 },
+  hiit: { fat_loss: 1.9, maintenance: 1.8, lean_bulk: 1.8 },
+  team_sport: { fat_loss: 1.8, maintenance: 1.7, lean_bulk: 1.7 },
+  running: { fat_loss: 1.7, maintenance: 1.6, lean_bulk: 1.6 },
+  general: { fat_loss: 1.8, maintenance: 1.6, lean_bulk: 1.6 },
 }
 
 const FAT_G_PER_KG: Record<TrainingMode, number> = {
@@ -224,7 +241,15 @@ const FAT_G_PER_KG: Record<TrainingMode, number> = {
   general: 0.8,
 }
 
-const MIN_FAT_CALORIE_SHARE = 0.2
+/**
+ * Physiological safety floor only — 15% of calories from fat is a
+ * commonly cited minimum for hormonal health. This must stay low
+ * enough that a mode's normal g/kg fat target (e.g. Strength's
+ * 0.9 g/kg, which sits around 18% of calories at a lean-bulk
+ * intake) is never pushed upward unnecessarily. Remaining calories
+ * beyond protein + this fat target go to carbohydrate.
+ */
+const MIN_FAT_CALORIE_SHARE = 0.15
 const MIN_FAT_G_PER_KG = 0.5
 
 function roundTo(value: number, step: number): number {
@@ -344,26 +369,35 @@ export type FoodTemplate = {
   proteinPer100g: number
   carbsPer100g: number
   fatPer100g: number
+  /**
+   * What preparation state these per-100g values describe. Chosen to
+   * match how each ingredient is actually used in the meal
+   * blueprints below (e.g. "Chicken Breast" here is a cooked, edible
+   * portion value, matching the gram amounts a meal-prep plan
+   * actually uses) — never mix this up with a raw-weight figure for
+   * the same food.
+   */
+  preparationState: MealMeasurementBasis
 }
 
 export const FOOD_TEMPLATES: FoodTemplate[] = [
-  { id: "oats", name: "Oats", category: "carb", caloriesPer100g: 389, proteinPer100g: 16.9, carbsPer100g: 66, fatPer100g: 6.9 },
-  { id: "rice", name: "Rice", category: "carb", caloriesPer100g: 130, proteinPer100g: 2.7, carbsPer100g: 28, fatPer100g: 0.3 },
-  { id: "rice_cakes", name: "Rice Cakes", category: "carb", caloriesPer100g: 387, proteinPer100g: 8, carbsPer100g: 81, fatPer100g: 2.8 },
-  { id: "potato", name: "Potato", category: "carb", caloriesPer100g: 87, proteinPer100g: 1.9, carbsPer100g: 20, fatPer100g: 0.1 },
-  { id: "wholegrain_bread", name: "Wholegrain Bread", category: "carb", caloriesPer100g: 247, proteinPer100g: 13, carbsPer100g: 41, fatPer100g: 3.4 },
-  { id: "chicken_breast", name: "Chicken Breast", category: "protein", caloriesPer100g: 165, proteinPer100g: 31, carbsPer100g: 0, fatPer100g: 3.6 },
-  { id: "cod", name: "Cod", category: "protein", caloriesPer100g: 82, proteinPer100g: 18, carbsPer100g: 0, fatPer100g: 0.7 },
-  { id: "salmon", name: "Salmon", category: "protein", caloriesPer100g: 208, proteinPer100g: 22, carbsPer100g: 0, fatPer100g: 13 },
-  { id: "eggs", name: "Eggs", category: "protein", caloriesPer100g: 155, proteinPer100g: 13, carbsPer100g: 1.1, fatPer100g: 11 },
-  { id: "greek_yogurt", name: "Greek Yogurt", category: "protein", caloriesPer100g: 59, proteinPer100g: 10, carbsPer100g: 3.6, fatPer100g: 0.4 },
-  { id: "whey_protein", name: "Whey Protein", category: "protein", caloriesPer100g: 380, proteinPer100g: 80, carbsPer100g: 7, fatPer100g: 4 },
-  { id: "banana", name: "Banana", category: "fruit", caloriesPer100g: 89, proteinPer100g: 1.1, carbsPer100g: 22.8, fatPer100g: 0.3 },
-  { id: "berries", name: "Berries", category: "fruit", caloriesPer100g: 50, proteinPer100g: 0.7, carbsPer100g: 12, fatPer100g: 0.3 },
-  { id: "vegetables", name: "Vegetables", category: "vegetable", caloriesPer100g: 35, proteinPer100g: 2.4, carbsPer100g: 7, fatPer100g: 0.4 },
-  { id: "olive_oil", name: "Olive Oil", category: "fat", caloriesPer100g: 884, proteinPer100g: 0, carbsPer100g: 0, fatPer100g: 100 },
-  { id: "peanut_butter", name: "Peanut Butter", category: "fat", caloriesPer100g: 588, proteinPer100g: 25, carbsPer100g: 20, fatPer100g: 50 },
-  { id: "honey", name: "Honey", category: "carb", caloriesPer100g: 304, proteinPer100g: 0.3, carbsPer100g: 82, fatPer100g: 0 },
+  { id: "oats", name: "Oats", category: "carb", caloriesPer100g: 389, proteinPer100g: 16.9, carbsPer100g: 66, fatPer100g: 6.9, preparationState: "raw" },
+  { id: "rice", name: "Rice", category: "carb", caloriesPer100g: 130, proteinPer100g: 2.7, carbsPer100g: 28, fatPer100g: 0.3, preparationState: "cooked" },
+  { id: "rice_cakes", name: "Rice Cakes", category: "carb", caloriesPer100g: 387, proteinPer100g: 8, carbsPer100g: 81, fatPer100g: 2.8, preparationState: "as-served" },
+  { id: "potato", name: "Potato", category: "carb", caloriesPer100g: 87, proteinPer100g: 1.9, carbsPer100g: 20, fatPer100g: 0.1, preparationState: "cooked" },
+  { id: "wholegrain_bread", name: "Wholegrain Bread", category: "carb", caloriesPer100g: 247, proteinPer100g: 13, carbsPer100g: 41, fatPer100g: 3.4, preparationState: "as-served" },
+  { id: "chicken_breast", name: "Chicken Breast", category: "protein", caloriesPer100g: 165, proteinPer100g: 31, carbsPer100g: 0, fatPer100g: 3.6, preparationState: "cooked" },
+  { id: "cod", name: "Cod", category: "protein", caloriesPer100g: 82, proteinPer100g: 18, carbsPer100g: 0, fatPer100g: 0.7, preparationState: "cooked" },
+  { id: "salmon", name: "Salmon", category: "protein", caloriesPer100g: 208, proteinPer100g: 22, carbsPer100g: 0, fatPer100g: 13, preparationState: "cooked" },
+  { id: "eggs", name: "Eggs", category: "protein", caloriesPer100g: 155, proteinPer100g: 13, carbsPer100g: 1.1, fatPer100g: 11, preparationState: "raw" },
+  { id: "greek_yogurt", name: "Greek Yogurt", category: "protein", caloriesPer100g: 59, proteinPer100g: 10, carbsPer100g: 3.6, fatPer100g: 0.4, preparationState: "as-served" },
+  { id: "whey_protein", name: "Whey Protein", category: "protein", caloriesPer100g: 380, proteinPer100g: 80, carbsPer100g: 7, fatPer100g: 4, preparationState: "as-served" },
+  { id: "banana", name: "Banana", category: "fruit", caloriesPer100g: 89, proteinPer100g: 1.1, carbsPer100g: 22.8, fatPer100g: 0.3, preparationState: "raw" },
+  { id: "berries", name: "Berries", category: "fruit", caloriesPer100g: 50, proteinPer100g: 0.7, carbsPer100g: 12, fatPer100g: 0.3, preparationState: "raw" },
+  { id: "vegetables", name: "Vegetables", category: "vegetable", caloriesPer100g: 35, proteinPer100g: 2.4, carbsPer100g: 7, fatPer100g: 0.4, preparationState: "cooked" },
+  { id: "olive_oil", name: "Olive Oil", category: "fat", caloriesPer100g: 884, proteinPer100g: 0, carbsPer100g: 0, fatPer100g: 100, preparationState: "as-served" },
+  { id: "peanut_butter", name: "Peanut Butter", category: "fat", caloriesPer100g: 588, proteinPer100g: 25, carbsPer100g: 20, fatPer100g: 50, preparationState: "as-served" },
+  { id: "honey", name: "Honey", category: "carb", caloriesPer100g: 304, proteinPer100g: 0.3, carbsPer100g: 82, fatPer100g: 0, preparationState: "as-served" },
 ]
 
 function findFood(id: string): FoodTemplate {
@@ -768,6 +802,7 @@ function buildIngredient(
     protein: Math.round(food.proteinPer100g * factor * 10) / 10,
     carbs: Math.round(food.carbsPer100g * factor * 10) / 10,
     fat: Math.round(food.fatPer100g * factor * 10) / 10,
+    measurementBasis: food.preparationState,
   }
 }
 
@@ -781,6 +816,42 @@ function sumMealTotals(ingredients: MealIngredient[]): Meal["totals"] {
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 },
   )
+}
+
+/**
+ * `adaptMealCount()` merges trailing blueprint meals when the user
+ * has fewer meals per day than the blueprint was authored with.
+ * Two merged meals can each independently include the same garnish
+ * (e.g. "Vegetables"), which would otherwise render as two separate
+ * rows with the same food in one meal. Collapse those into a single
+ * row with combined grams/macros instead.
+ */
+function mergeDuplicateIngredients(
+  ingredients: MealIngredient[],
+): MealIngredient[] {
+  const order: string[] = []
+  const totalsByFoodId = new Map<string, MealIngredient>()
+
+  for (const ingredient of ingredients) {
+    const existing = totalsByFoodId.get(ingredient.foodId)
+
+    if (!existing) {
+      order.push(ingredient.foodId)
+      totalsByFoodId.set(ingredient.foodId, { ...ingredient })
+      continue
+    }
+
+    totalsByFoodId.set(ingredient.foodId, {
+      ...existing,
+      grams: existing.grams + ingredient.grams,
+      calories: existing.calories + ingredient.calories,
+      protein: Math.round((existing.protein + ingredient.protein) * 10) / 10,
+      carbs: Math.round((existing.carbs + ingredient.carbs) * 10) / 10,
+      fat: Math.round((existing.fat + ingredient.fat) * 10) / 10,
+    })
+  }
+
+  return order.map((foodId) => totalsByFoodId.get(foodId) as MealIngredient)
 }
 
 function buildMeals(
@@ -833,12 +904,14 @@ function buildMeals(
       ingredients.push(buildIngredient(resolvedId, grams))
     }
 
+    const dedupedIngredients = mergeDuplicateIngredients(ingredients)
+
     return {
       id: blueprintMeal.id,
       name: blueprintMeal.name,
       purpose: blueprintMeal.purpose,
-      ingredients,
-      totals: sumMealTotals(ingredients),
+      ingredients: dedupedIngredients,
+      totals: sumMealTotals(dedupedIngredients),
     }
   })
 
