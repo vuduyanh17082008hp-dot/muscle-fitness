@@ -1,66 +1,44 @@
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
-
-function getSupabaseConfig() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL
-
-  const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL."
-    )
-  }
-
-  if (!key) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY."
-    )
-  }
-
-  return {
-    url,
-    key,
-  }
-}
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 export async function createClient() {
-  const cookieStore = await cookies()
-  const { url, key } = getSupabaseConfig()
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL. Add it to .env.local and restart the Next.js server."
+    );
+  }
+
+  if (!supabaseAnonKey) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_ANON_KEY. Add it to .env.local and restart the Next.js server."
+    );
+  }
+
+  const cookieStore = await cookies();
 
   return createServerClient(
-    url,
-    key,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll()
+          return cookieStore.getAll();
         },
 
-        setAll(cookiesToSet, _headersToSet) {
+        setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(
-              ({ name, value, options }) => {
-                cookieStore.set(
-                  name,
-                  value,
-                  options
-                )
-              }
-            )
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
           } catch {
-            /*
-             * Server Components không phải lúc nào
-             * cũng có quyền ghi cookie.
-             *
-             * Proxy sẽ đảm nhiệm việc refresh cookie.
-             */
+            // Cookie mutation may be unavailable in Server Components.
+            // Middleware can handle session refresh.
           }
         },
       },
     }
-  )
+  );
 }

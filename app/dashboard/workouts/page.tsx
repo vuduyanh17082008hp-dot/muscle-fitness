@@ -326,6 +326,12 @@ export default async function WorkoutsPage() {
         recommended,
     );
 
+  const activePlan =
+    plans.find(
+      (plan) =>
+        plan.status === "active",
+    ) ?? null;
+
   return (
     <main className="space-y-10">
       {/* ===================================================
@@ -371,6 +377,64 @@ export default async function WorkoutsPage() {
           </Link>
         </div>
       </header>
+
+      {/* ===================================================
+          YOUR CURRENT TRAINING PLAN
+      =================================================== */}
+
+      {activePlan ? (
+        <section>
+          <div className="mb-5 flex items-center gap-2 text-emerald-400">
+            <Dumbbell className="h-4 w-4" />
+
+            <p className="text-xs font-black uppercase tracking-[0.22em]">
+              Your current training plan
+            </p>
+          </div>
+
+          <Link
+            href={`/dashboard/workouts/plans/${activePlan.id}`}
+            className="group block rounded-3xl border border-emerald-500/20 bg-emerald-500/6 p-6 transition hover:border-emerald-500/40 hover:bg-emerald-500/10 sm:p-8"
+          >
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <span className="rounded-full bg-emerald-400 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-black">
+                  Active
+                </span>
+
+                <h2 className="mt-4 text-2xl font-black text-white">
+                  {activePlan.name}
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-zinc-400">
+                  Goal: {activePlan.goal || "General fitness"} ·{" "}
+                  {activePlan.days_per_week} days/week · {activePlan.weeks} weeks
+                </p>
+
+                <p className="mt-3 text-xs text-zinc-600">
+                  Open the full programme for every workout day, exercise,
+                  sets, reps, RIR and rest periods.
+                </p>
+              </div>
+
+              <ArrowRight className="h-6 w-6 text-emerald-400 transition group-hover:translate-x-1" />
+            </div>
+          </Link>
+        </section>
+      ) : (
+        <section className="rounded-3xl border border-dashed border-white/10 bg-white/[0.02] p-6 sm:p-8">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-600">
+            Your current training plan
+          </p>
+
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+            You do not have an active training plan yet. Build the
+            recommended plan below, or choose a split, to generate the
+            full programme — every workout day, exercise, sets, reps and
+            rest periods.
+          </p>
+        </section>
+      )}
 
       {/* ===================================================
           RECOMMENDED

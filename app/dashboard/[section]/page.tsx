@@ -10,7 +10,6 @@ import {
   CheckSquare2,
   MessageSquareText,
   Settings,
-  Utensils,
   Zap,
 } from "lucide-react"
 
@@ -30,13 +29,6 @@ const sections: Record<string, SectionConfig> = {
       "Your daily focus for training, nutrition and recovery.",
     project: "Dashboard",
     icon: Zap,
-  },
-  nutrition: {
-    title: "Nutrition",
-    description:
-      "Calorie and macro targets from your onboarding profile.",
-    project: "Nutrition",
-    icon: Utensils,
   },
   progress: {
     title: "Progress",
@@ -176,8 +168,7 @@ export default async function DashboardSectionPage({
         </p>
       </section>
 
-      {(sectionKey === "nutrition" ||
-        sectionKey === "today" ||
+      {(sectionKey === "today" ||
         sectionKey === "progress") && (
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">

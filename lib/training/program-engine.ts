@@ -784,7 +784,7 @@ function fullBodyDay(
   ];
 }
 
-function getSplitTargets(
+export function getSplitTargets(
   preferences: TrainingPreferences
 ): DayTarget[] {
   const days =

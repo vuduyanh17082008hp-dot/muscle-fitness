@@ -1,4 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
+import {
+  TRAINING_MODE_LABELS,
+  ACTIVITY_LEVEL_LABELS,
+  NUTRITION_GOAL_LABELS,
+} from "@/lib/nutrition/plan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +22,7 @@ type UserContext = {
   profile: unknown;
   fitnessProfile: unknown;
   preferences: unknown;
+  currentNutritionPlan: unknown;
 };
 
 type Intent = {
@@ -538,6 +545,51 @@ function extractSupplement(
    LOAD CLIENT DATA
 ========================================================= */
 
+function summarizeNutritionPlan(
+  plan: Awaited<
+    ReturnType<typeof loadNutritionContext>
+  >["plan"],
+): unknown {
+  if (!plan) {
+    return null;
+  }
+
+  return {
+    trainingStyle:
+      TRAINING_MODE_LABELS[
+        plan.input.trainingMode
+      ],
+
+    activityLevel:
+      ACTIVITY_LEVEL_LABELS[
+        plan.input.activityLevel
+      ],
+
+    goal:
+      NUTRITION_GOAL_LABELS[
+        plan.input.goal
+      ],
+
+    estimatedMaintenanceCalories:
+      plan.maintenanceCalories,
+
+    dailyTargets:
+      plan.target,
+
+    meals:
+      plan.meals.map(
+        (meal) => ({
+          name: meal.name,
+          purpose: meal.purpose,
+          totals: meal.totals,
+        }),
+      ),
+
+    trainingNotes:
+      plan.trainingNotes,
+  };
+}
+
 async function loadUserContext(
   userId: string,
 ): Promise<UserContext> {
@@ -548,6 +600,7 @@ async function loadUserContext(
     profileResponse,
     fitnessResponse,
     preferenceResponse,
+    nutritionContext,
   ] =
     await Promise.all([
       supabase
@@ -580,6 +633,11 @@ async function loadUserContext(
           userId,
         )
         .maybeSingle(),
+
+      loadNutritionContext(
+        supabase,
+        userId,
+      ),
     ]);
 
   if (
@@ -621,6 +679,11 @@ async function loadUserContext(
     preferences:
       preferenceResponse.data ??
       null,
+
+    currentNutritionPlan:
+      summarizeNutritionPlan(
+        nutritionContext.plan,
+      ),
   };
 }
 
@@ -1713,6 +1776,11 @@ Relevant fields may include:
 - physical limitations
 - available equipment
 - priority muscles
+- currentNutritionPlan (the client's active training style, activity
+  level, goal, estimated maintenance calories, daily macro targets,
+  gram-based meals and training-specific notes — already computed by
+  the Muscle Fitness nutrition engine, so use it directly instead of
+  recalculating)
 
 Never invent missing client information.
 
@@ -1788,15 +1856,60 @@ or other high-risk medical circumstances,
 recommend appropriate professional medical evaluation.
 
 ============================================================
-ANSWER STYLE
+PRIMARY RESPONSE LANGUAGE
 ============================================================
 
-Vietnamese question -> Vietnamese answer.
-English question -> English answer.
+English is DANTE's primary and default language.
+
+Always answer in clear, natural English unless the client explicitly
+asks for another response language.
+
+Do not automatically switch to Vietnamese merely because:
+
+- the client writes the question in Vietnamese
+- the client profile contains Vietnamese text
+- preferences or prior context contain Vietnamese text
+- retrieved external evidence contains Vietnamese text
+- the browser, device, or inferred locale appears to be Vietnamese
+
+A Vietnamese question without an explicit language request must still
+receive an English answer.
+
+Examples:
+
+Client:
+"Tôi nên ăn bao nhiêu protein một ngày?"
+
+Response language:
+English.
+
+Client:
+"Trả lời bằng tiếng Việt: tôi nên ăn bao nhiêu protein một ngày?"
+
+Response language:
+Vietnamese.
+
+A request for another language applies only to the relevant response
+unless the client explicitly asks DANTE to continue using that language.
+
+If language preference is ambiguous, use English.
+
+Keep standard fitness and sports-science terminology in English where
+appropriate, including exercise names such as Bench Press, Romanian
+Deadlift, Lat Pulldown, Leg Press, Lateral Raise and similar established
+terms.
+
+============================================================
+ANSWER STYLE
+============================================================
 
 Use clean Markdown.
 
 Be practical and specific.
+
+Use professional, natural English by default.
+
+Avoid awkward literal translations and unnecessary language mixing.
 
 Do not expose internal reasoning.
 
@@ -1859,6 +1972,12 @@ Answer the client directly.
 Use the evidence when relevant.
 
 Do not quote long passages from source material.
+
+Unless the client explicitly requested another response language,
+the entire final user-facing answer MUST be in English.
+
+Do not infer Vietnamese output from the language of the client's
+question, profile, preferences, or retrieved context.
 
 Return only the final user-facing answer.
 `;

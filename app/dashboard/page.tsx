@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Home } from "lucide-react";
+import { ArrowRight, Home } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 
 export const dynamic =
   "force-dynamic";
@@ -295,6 +296,18 @@ export default async function DashboardPage() {
   }
 
   /* =======================================================
+     NUTRITION PLAN
+     Single source of truth shared with /dashboard/nutrition —
+     see lib/nutrition/load-nutrition-context.ts.
+  ======================================================= */
+
+  const { plan: nutritionPlan } =
+    await loadNutritionContext(
+      supabase,
+      user.id,
+    );
+
+  /* =======================================================
      DISPLAY NAME
   ======================================================= */
 
@@ -459,17 +472,17 @@ export default async function DashboardPage() {
           <StatCard
             label="Calories"
             value={formatValue(
-              fitness
-                ?.calories_target
+              nutritionPlan
+                ?.target.calories
             )}
-            description="Initial daily energy target."
+            description="Estimated daily energy target."
           />
 
           <StatCard
             label="Protein"
             value={formatValue(
-              fitness
-                ?.protein_target_g,
+              nutritionPlan
+                ?.target.protein,
               " g"
             )}
             description="Daily protein target."
@@ -478,8 +491,8 @@ export default async function DashboardPage() {
           <StatCard
             label="Carbohydrates"
             value={formatValue(
-              fitness
-                ?.carbs_target_g,
+              nutritionPlan
+                ?.target.carbs,
               " g"
             )}
             description="Daily carbohydrate target."
@@ -488,13 +501,23 @@ export default async function DashboardPage() {
           <StatCard
             label="Fat"
             value={formatValue(
-              fitness
-                ?.fat_target_g,
+              nutritionPlan
+                ?.target.fat,
               " g"
             )}
             description="Daily dietary fat target."
           />
         </section>
+
+        <div className="mt-4">
+          <Link
+            href="/dashboard/nutrition"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-amber-400 transition hover:text-amber-300"
+          >
+            View full nutrition plan
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
 
         {/* =================================================
             DETAILS

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useState,
   type ReactNode,
 } from "react";
@@ -24,9 +25,11 @@ import {
   Dumbbell,
   Home,
   LayoutDashboard,
+  Layers3,
   LogOut,
   Menu,
   MessageSquareText,
+  PieChart,
   Settings,
   Sparkles,
   Utensils,
@@ -49,128 +52,120 @@ type NavItem = {
   exact?: boolean;
 };
 
+type NavSection = {
+  title: string;
+  items: NavItem[];
+};
+
 type SidebarContentProps = {
   pathname: string;
+  hash: string;
   onNavigate?: () => void;
 };
 
 /* =========================================================
    NAVIGATION
+
+   Grouped to match the Muscle Fitness client information
+   architecture: Overview, Your Plan (training + nutrition),
+   Tracking, Coaching, Account.
 ========================================================= */
 
-const navItems:
-  NavItem[] = [
+const navSections: NavSection[] = [
   {
-    label:
-      "Overview",
+    title: "Overview",
 
-    href:
-      "/dashboard",
-
-    icon:
-      LayoutDashboard,
-
-    exact:
-      true,
+    items: [
+      {
+        label: "Overview",
+        href: "/dashboard",
+        icon: LayoutDashboard,
+        exact: true,
+      },
+      {
+        label: "Today",
+        href: "/dashboard/today",
+        icon: Zap,
+      },
+    ],
   },
 
   {
-    label:
-      "Today",
+    title: "Your Plan",
 
-    href:
-      "/dashboard/today",
-
-    icon:
-      Zap,
+    items: [
+      {
+        label: "Training Plan",
+        href: "/dashboard/workouts",
+        icon: Dumbbell,
+      },
+      {
+        label: "Training Split",
+        href: "/dashboard/split",
+        icon: Layers3,
+      },
+      {
+        label: "Nutrition Plan",
+        href: "/dashboard/nutrition",
+        icon: Utensils,
+      },
+      {
+        label: "Macro Targets",
+        href: "/dashboard/nutrition#macros",
+        icon: PieChart,
+      },
+    ],
   },
 
   {
-    label:
-      "Workouts",
+    title: "Tracking",
 
-    href:
-      "/dashboard/workouts",
-
-    icon:
-      Dumbbell,
+    items: [
+      {
+        label: "Progress",
+        href: "/dashboard/progress",
+        icon: ChartNoAxesCombined,
+      },
+      {
+        label: "Check-in",
+        href: "/dashboard/check-in",
+        icon: CheckSquare2,
+      },
+    ],
   },
 
   {
-    label:
-      "Nutrition",
+    title: "Coaching",
 
-    href:
-      "/dashboard/nutrition",
-
-    icon:
-      Utensils,
+    items: [
+      {
+        label: "AI Coach",
+        href: "/dashboard/ai-coach",
+        icon: Bot,
+      },
+      {
+        label: "Messages",
+        href: "/dashboard/messages",
+        icon: MessageSquareText,
+      },
+      {
+        label: "Calendar",
+        href: "/dashboard/calendar",
+        icon: CalendarDays,
+      },
+    ],
   },
 
   {
-    label:
-      "Progress",
+    title: "Account",
 
-    href:
-      "/dashboard/progress",
-
-    icon:
-      ChartNoAxesCombined,
-  },
-
-  {
-    label:
-      "Check-in",
-
-    href:
-      "/dashboard/check-in",
-
-    icon:
-      CheckSquare2,
-  },
-
-  {
-    label:
-      "AI Coach",
-
-    href:
-      "/dashboard/ai-coach",
-
-    icon:
-      Bot,
-  },
-
-  {
-    label:
-      "Messages",
-
-    href:
-      "/dashboard/messages",
-
-    icon:
-      MessageSquareText,
-  },
-
-  {
-    label:
-      "Calendar",
-
-    href:
-      "/dashboard/calendar",
-
-    icon:
-      CalendarDays,
-  },
-
-  {
-    label:
-      "Settings",
-
-    href:
-      "/dashboard/settings",
-
-    icon:
-      Settings,
+    items: [
+      {
+        label: "Settings",
+        href: "/dashboard/settings",
+        icon: Settings,
+      },
+    ],
   },
 ];
 
@@ -178,23 +173,29 @@ const navItems:
    ACTIVE ROUTE
 ========================================================= */
 
+function splitHref(href: string): { path: string; hash: string | null } {
+  const [path, hash] = href.split("#");
+  return { path, hash: hash ?? null };
+}
+
 function isActive(
   pathname: string,
+  currentHash: string,
   item: NavItem,
 ): boolean {
+  const { path, hash } = splitHref(item.href);
+
+  if (hash) {
+    return pathname === path && currentHash === `#${hash}`;
+  }
+
   if (item.exact) {
-    return (
-      pathname ===
-      item.href
-    );
+    return pathname === path;
   }
 
   return (
-    pathname ===
-      item.href ||
-    pathname.startsWith(
-      `${item.href}/`,
-    )
+    pathname === path ||
+    pathname.startsWith(`${path}/`)
   );
 }
 
@@ -204,6 +205,7 @@ function isActive(
 
 function SidebarContent({
   pathname,
+  hash,
   onNavigate,
 }: SidebarContentProps) {
   return (
@@ -232,56 +234,50 @@ function SidebarContent({
         </Link>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
-        {navItems.map(
-          (
-            item,
-          ) => {
-            const active =
-              isActive(
-                pathname,
-                item,
-              );
+      <nav
+        aria-label="Dashboard navigation"
+        className="flex-1 space-y-5 overflow-y-auto px-3 py-5"
+      >
+        {navSections.map((section) => (
+          <div key={section.title}>
+            <p className="mb-1.5 px-3 text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
+              {section.title}
+            </p>
 
-            const Icon =
-              item.icon;
+            <div className="space-y-1">
+              {section.items.map((item) => {
+                const active = isActive(pathname, hash, item);
+                const Icon = item.icon;
 
-            return (
-              <Link
-                key={
-                  item.href
-                }
-                href={
-                  item.href
-                }
-                onClick={
-                  onNavigate
-                }
-                className={`group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
-                  active
-                    ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
-                    : "border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/4 hover:text-white"
-                }`}
-              >
-                <Icon className="size-4 shrink-0" />
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    className={`group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+                      active
+                        ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
+                        : "border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/4 hover:text-white"
+                    }`}
+                  >
+                    <Icon className="size-4 shrink-0" />
 
-                <span className="flex-1">
-                  {
-                    item.label
-                  }
-                </span>
+                    <span className="flex-1">{item.label}</span>
 
-                <ChevronRight
-                  className={`size-4 transition ${
-                    active
-                      ? "translate-x-0 opacity-100"
-                      : "-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-60"
-                  }`}
-                />
-              </Link>
-            );
-          },
-        )}
+                    <ChevronRight
+                      className={`size-4 transition ${
+                        active
+                          ? "translate-x-0 opacity-100"
+                          : "-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-60"
+                      }`}
+                    />
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       <div className="border-t border-white/10 p-3">
@@ -357,6 +353,22 @@ export function DashboardShell({
   ] =
     useState(false);
 
+  const [hash, setHash] = useState("");
+
+  useEffect(() => {
+    function updateHash() {
+      setHash(window.location.hash);
+    }
+
+    updateHash();
+
+    window.addEventListener("hashchange", updateHash);
+
+    return () => {
+      window.removeEventListener("hashchange", updateHash);
+    };
+  }, [pathname]);
+
   function closeMobileMenu() {
     setMobileOpen(
       false,
@@ -374,6 +386,7 @@ export function DashboardShell({
           pathname={
             pathname
           }
+          hash={hash}
         />
       </aside>
 
@@ -452,6 +465,7 @@ export function DashboardShell({
               pathname={
                 pathname
               }
+              hash={hash}
               onNavigate={
                 closeMobileMenu
               }
