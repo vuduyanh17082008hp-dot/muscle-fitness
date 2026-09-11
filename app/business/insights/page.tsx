@@ -7,6 +7,7 @@ import {
 import { redirect } from "next/navigation";
 
 import { getCurrentBusiness } from "@/lib/business/get-current-business";
+import { PageVisual } from "@/components/visual/page-visual";
 
 export default async function BusinessAIInsightsPage() {
   const business = await getCurrentBusiness();
@@ -17,18 +18,24 @@ export default async function BusinessAIInsightsPage() {
 
   return (
     <div className="mx-auto max-w-7xl p-6 lg:p-10">
-      <p className="text-sm font-medium text-zinc-500">
-        AI BUSINESS INTELLIGENCE
-      </p>
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 p-6">
+        <PageVisual page="business" intensity="secondary" glow={false} />
 
-      <h1 className="mt-2 text-3xl font-bold">
-        AI Insights
-      </h1>
+        <div className="relative z-10">
+          <p className="text-sm font-medium text-zinc-500">
+            AI BUSINESS INTELLIGENCE
+          </p>
 
-      <p className="mt-2 max-w-2xl leading-7 text-zinc-400">
-        Turn member activity and fitness data into actionable business
-        intelligence for {business.name}.
-      </p>
+          <h1 className="mt-2 text-3xl font-bold">
+            AI Insights
+          </h1>
+
+          <p className="mt-2 max-w-2xl leading-7 text-zinc-400">
+            Turn member activity and fitness data into actionable business
+            intelligence for {business.name}.
+          </p>
+        </div>
+      </div>
 
       <div className="mt-8 grid gap-4 md:grid-cols-3">
         <InsightCard

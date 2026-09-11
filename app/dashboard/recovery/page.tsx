@@ -12,6 +12,7 @@ import { RecoveryCheckinForm } from "@/components/recovery/recovery-checkin-form
 import { TrainingRecoveryCard } from "@/components/recovery/training-recovery-card";
 import { RecoveryTrendsChart } from "@/components/recovery/recovery-trends-chart";
 import { RecoveryKnowledgeHub } from "@/components/recovery/recovery-knowledge-hub";
+import { PageVisual } from "@/components/visual/page-visual";
 
 export const dynamic = "force-dynamic";
 
@@ -57,20 +58,24 @@ export default async function RecoveryPage() {
           HEADER
       ================================================= */}
 
-      <section className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-6 sm:p-8">
-        <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-amber-400">
-          Recovery Intelligence
-        </p>
+      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-6 sm:p-8">
+        <PageVisual page="recovery" />
 
-        <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
-          Train hard. Recover intelligently.
-        </h1>
+        <div className="relative z-10">
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-amber-400">
+            Recovery Intelligence
+          </p>
 
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
-          A practical readiness estimate built from your sleep, stress,
-          fatigue, soreness, mood and training data — connected to Dante for
-          evidence-aware recovery coaching.
-        </p>
+          <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+            Train hard. Recover intelligently.
+          </h1>
+
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+            A practical readiness estimate built from your sleep, stress,
+            fatigue, soreness, mood and training data — connected to Dante for
+            evidence-aware recovery coaching.
+          </p>
+        </div>
       </section>
 
       {/* =================================================

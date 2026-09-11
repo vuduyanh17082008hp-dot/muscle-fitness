@@ -6,6 +6,8 @@ import {
   Gauge,
 } from "lucide-react";
 
+import { Reveal, StaggerContainer, StaggerItem } from "@/components/animation/reveal";
+
 const moments = [
   {
     icon:
@@ -112,7 +114,7 @@ export function InspirationStory() {
         >
           {/* STORY */}
 
-          <div>
+          <Reveal duration={0.8} y={16}>
             <p
               className="
                 text-xs
@@ -219,11 +221,11 @@ export function InspirationStory() {
             >
               “A pawn can be anything if it pushes forward.”
             </blockquote>
-          </div>
+          </Reveal>
 
           {/* MOMENTS */}
 
-          <div
+          <StaggerContainer
             className="
               grid
 
@@ -241,10 +243,8 @@ export function InspirationStory() {
                   moment.icon;
 
                 return (
+                  <StaggerItem key={moment.label}>
                   <article
-                    key={
-                      moment.label
-                    }
                     className="
                       group
 
@@ -346,10 +346,11 @@ export function InspirationStory() {
                       {moment.text}
                     </p>
                   </article>
+                  </StaggerItem>
                 );
               },
             )}
-          </div>
+          </StaggerContainer>
         </div>
 
         <div

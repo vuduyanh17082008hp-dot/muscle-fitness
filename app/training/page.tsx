@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { PageVisual } from "@/components/visual/page-visual";
 
 export const dynamic =
   "force-dynamic";
@@ -2367,8 +2368,10 @@ export default async function TrainingPage() {
             HERO
         ================================================= */}
 
-        <header className="overflow-hidden rounded-3xl border border-white/10 bg-linear-to-br from-[#171717] via-[#0d0d0d] to-black p-7 sm:p-10">
-          <div className="grid gap-8 xl:grid-cols-[1.5fr_1fr]">
+        <header className="relative overflow-hidden rounded-3xl border border-white/10 bg-linear-to-br from-[#171717] via-[#0d0d0d] to-black p-7 sm:p-10">
+          <PageVisual page="training" />
+
+          <div className="relative z-10 grid gap-8 xl:grid-cols-[1.5fr_1fr]">
             <div>
               <div className="flex items-center gap-2 text-amber-500">
                 <Sparkles className="h-4 w-4" />

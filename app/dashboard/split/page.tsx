@@ -12,6 +12,7 @@ import {
 
 import { createClient } from "@/lib/supabase/server"
 import { getSplitTargets } from "@/lib/training/program-engine"
+import { PageVisual } from "@/components/visual/page-visual"
 import {
   DEFAULT_TRAINING_PREFERENCES,
   type MuscleGroup,
@@ -165,7 +166,10 @@ export default async function TrainingSplitPage() {
           HEADER
       =================================================== */}
 
-      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
+      <header className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
+        <PageVisual page="trainingSplit" />
+
+        <div className="relative z-10">
         <span className="inline-grid size-14 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
           <Layers3 className="size-6" />
         </span>
@@ -205,6 +209,7 @@ export default async function TrainingSplitPage() {
             to personalise this page.
           </p>
         ) : null}
+        </div>
       </header>
 
       {/* ===================================================

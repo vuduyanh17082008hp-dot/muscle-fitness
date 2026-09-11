@@ -8,6 +8,8 @@ import {
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import { buildBudgetPlan } from "@/lib/nutrition/budget";
+import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
+import { MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +29,7 @@ type UserContext = {
   preferences: unknown;
   currentNutritionPlan: unknown;
   recovery: unknown;
+  trainingIntelligence: unknown;
 };
 
 type Intent = {
@@ -738,6 +741,51 @@ function summarizeRecoveryContext(
   };
 }
 
+/* =========================================================
+   TRAINING INTELLIGENCE SUMMARY
+
+   Deterministic per-muscle effective volume, change, frequency and
+   recommendation — computed by lib/training + lib/athlete-state.
+   Dante explains these numbers; it never recomputes or overrides
+   them (see the "TRAINING INTELLIGENCE" section of
+   DANTE_INSTRUCTIONS below).
+========================================================= */
+
+function summarizeTrainingIntelligence(
+  athleteState: Awaited<ReturnType<typeof buildAthleteState>> | null,
+): unknown {
+  if (!athleteState || !athleteState.training.hasAnyLoggedData) {
+    return {
+      hasLoggedTrainingData: false,
+      note: "No logged workout sets are available yet for muscle-level training analytics.",
+    };
+  }
+
+  return {
+    hasLoggedTrainingData: true,
+    dataWindow: athleteState.dataWindow,
+    muscles: athleteState.training.muscles.map((entry) => ({
+      muscle: MUSCLE_DISPLAY_NAME[entry.muscle],
+      currentWeekEffectiveSets: entry.analytics.currentWeek.totalEffectiveSets,
+      directSets: entry.analytics.currentWeek.directSets,
+      indirectEffectiveSets: entry.analytics.currentWeek.indirectEffectiveSets,
+      previousWeekEffectiveSets: entry.analytics.previousWeek?.totalEffectiveSets ?? null,
+      changePercent: entry.analytics.changePercent,
+      frequencyThisWeek: entry.analytics.frequency,
+      personalTypicalWeeklyVolume: entry.baseline.typicalWeeklyVolume,
+      personalRecentRange: entry.baseline.recentRange,
+      contributingExercises: entry.analytics.currentWeek.contributingExercises.map((c) => ({
+        exerciseName: athleteState.training.exerciseNames[c.exerciseId] ?? "Unknown exercise",
+        role: c.role,
+        effectiveSets: c.effectiveSets,
+      })),
+      recommendation: entry.recommendation.recommendation,
+      recommendationConfidence: entry.recommendation.confidence,
+      recommendationSignals: entry.recommendation.signals,
+    })),
+  };
+}
+
 async function loadUserContext(
   userId: string,
 ): Promise<UserContext> {
@@ -750,6 +798,7 @@ async function loadUserContext(
     preferenceResponse,
     nutritionContext,
     recoveryContext,
+    athleteState,
   ] =
     await Promise.all([
       supabase
@@ -797,6 +846,11 @@ async function loadUserContext(
           error,
         );
 
+        return null;
+      }),
+
+      buildAthleteState(supabase, userId).catch((error: unknown) => {
+        console.warn("[DANTE TRAINING INTELLIGENCE]", error);
         return null;
       }),
     ]);
@@ -853,6 +907,8 @@ async function loadUserContext(
             recoveryContext,
           )
         : null,
+
+    trainingIntelligence: summarizeTrainingIntelligence(athleteState),
   };
 }
 
@@ -2213,6 +2269,11 @@ Relevant fields may include:
   7-day averages and training-load state — already computed
   deterministically by the Muscle Fitness recovery engine; use it
   directly, never recalculate or invent a different score)
+- trainingIntelligence (per-muscle direct/indirect effective sets,
+  week-over-week change, personal baseline, contributing exercises
+  and a deterministic recommendation with confidence — already
+  computed by the Muscle Fitness Training Intelligence engine; see
+  the TRAINING INTELLIGENCE section below)
 
 Never invent missing client information.
 
@@ -2311,6 +2372,44 @@ adjustment options and let the client decide.
 If recovery data is missing or the client has not checked in today,
 say so plainly and suggest completing today's check-in rather than
 guessing.
+
+============================================================
+TRAINING INTELLIGENCE
+============================================================
+
+currentNutritionPlan and recovery are computed deterministically —
+so is trainingIntelligence. It comes from the Muscle Fitness
+Training Intelligence engine: logged working sets are matched
+against a versioned exercise→muscle contribution map to produce, per
+muscle, direct sets (from exercises where it is the primary target),
+indirect effective sets (fractional contribution from exercises
+where it is a secondary target), a week-over-week change, a
+personal baseline built from the client's own training history, and
+one of a fixed set of recommendations (MAINTAIN, INCREASE_GRADUALLY,
+REDUCE_SLIGHTLY, REDISTRIBUTE, MONITOR, INSUFFICIENT_DATA) with a
+confidence level.
+
+You explain and interpret these numbers. You NEVER recompute a
+muscle's effective volume, invent a different recommendation
+category, invent a confidence level, or invent which exercises
+contributed to a muscle — contributingExercises already lists the
+real exercises and their modeled contribution.
+
+When asked things like "how much chest volume did I do", "why does
+my triceps show more volume than I directly trained", "should I add
+more chest work", or "what changed this week", answer using the
+matching muscle's fields directly.
+
+If hasLoggedTrainingData is false, say plainly that there is not yet
+enough logged training data for muscle-level analytics, rather than
+guessing at a volume number.
+
+Contribution coefficients (e.g. "triceps get 0.5 credit per Bench
+Press set") are modeling estimates, not exact physiology — describe
+them as "modeled" or "estimated" contribution, never as a measured
+fact. Never claim a specific volume is "scientifically optimal" —
+recommendations reflect the client's own recent history and general
+dose-response research, not a universal ideal number.
 
 ============================================================
 SUPPLEMENTS
