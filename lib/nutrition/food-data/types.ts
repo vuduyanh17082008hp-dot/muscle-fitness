@@ -50,6 +50,9 @@ export type NormalizedFood = {
   brand?: string | null
   barcode?: string | null
 
+  /** Grams per single serving, when the source provides it (e.g. Open Food Facts `serving_quantity`). Used only to pre-fill the quantity input — never assumed equal to 100g. */
+  servingSizeGrams?: number | null
+
   rawDescription?: string | null
 
   retrievedAt?: string
@@ -59,10 +62,28 @@ export type NormalizedFood = {
    *            barcode lookup, or a Foundation/SR Legacy raw food
    *            that clearly matches the query).
    * "medium" — a reasonable keyword-ranked match.
+   * "low"    — an estimated/best-effort match (see `isEstimated`).
    * "fallback" — the local curated table, used only when no
    *            external source is available or configured.
    */
-  confidence?: "high" | "medium" | "fallback"
+  confidence?: "high" | "medium" | "low" | "fallback"
+
+  /**
+   * True when one or more of `per100g`'s values were not present in
+   * the original source record and were filled in from a comparable
+   * USDA-backed match instead of the source's own measured data.
+   * Never set nutrient values from an estimate without also setting
+   * this — the UI must be able to say "estimated" instead of
+   * presenting a filled-in number as exact (spec: "Missing Macro
+   * Data").
+   */
+  isEstimated?: boolean
+
+  /** Which source record the estimate was derived from, e.g. `usda-123456`. */
+  estimatedFrom?: string
+
+  /** Human-readable reason the estimate was needed, e.g. "missing protein/fat from source". */
+  estimationReason?: string
 }
 
 export type FoodSearchCategory = "raw" | "packaged" | "any"

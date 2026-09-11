@@ -25,9 +25,11 @@ import {
   engineTrainingModeToDbOverride,
 } from "@/lib/nutrition/profile-mapping"
 import { buildBudgetPlan } from "@/lib/nutrition/budget"
+import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
 
 import { NutritionSettingsForm } from "./nutrition-settings-form"
 import { BudgetPlanner } from "@/components/nutrition/budget-planner"
+import { NutritionTracker } from "@/components/nutrition/nutrition-tracker"
 
 export const dynamic = "force-dynamic"
 
@@ -166,9 +168,24 @@ export default async function NutritionPlanPage() {
   const { input, target } = plan
 
   const budgetPlan = buildBudgetPlan(plan, weeklyFoodBudgetSgd)
+  const foodLog = await loadFoodLogForDate(supabase, user.id)
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 pb-16">
+      {/* ===================================================
+          TRACK FOOD — daily consumed macros + logging
+      =================================================== */}
+
+      <NutritionTracker
+        initialEntries={foodLog.entries}
+        target={{
+          calories: target.calories,
+          protein: target.protein,
+          carbs: target.carbs,
+          fat: target.fat,
+        }}
+      />
+
       {/* ===================================================
           HEADER
       =================================================== */}

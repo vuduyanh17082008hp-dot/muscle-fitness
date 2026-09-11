@@ -25,6 +25,7 @@ import "server-only"
  */
 
 import type { FoodPreparationState, NormalizedFood } from "./types"
+import { fillMissingMacrosFromUsda, type PartialMacros } from "./estimate"
 
 const SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl"
 const PRODUCT_URL_V3 = "https://world.openfoodfacts.org/api/v3/product"
@@ -120,6 +121,7 @@ function normalizeProduct(
     },
     brand: typeof product.brands === "string" ? product.brands.split(",")[0]?.trim() ?? null : null,
     barcode: code,
+    servingSizeGrams: toNumberOrNull(product.serving_quantity),
     rawDescription: typeof product.generic_name === "string" ? product.generic_name : name,
     retrievedAt: new Date().toISOString(),
     confidence: "medium",
@@ -145,7 +147,7 @@ export async function searchPackagedFood(
   url.searchParams.set("page_size", String(Math.min(Math.max(limit, 1), 20)))
   url.searchParams.set(
     "fields",
-    "code,product_name,generic_name,brands,nutriments",
+    "code,product_name,generic_name,brands,nutriments,serving_quantity",
   )
 
   try {
@@ -185,6 +187,47 @@ export async function searchPackagedFood(
   }
 }
 
+type PartialProduct = {
+  name: string
+  brand: string | null
+  rawDescription: string | null
+  servingSizeGrams: number | null
+  macros: PartialMacros
+}
+
+/**
+ * Like `normalizeProduct`, but never discards a product just because
+ * some macro fields are missing — the caller decides whether/how to
+ * fill the gaps (see `getProductByBarcode`'s USDA-grounded fallback).
+ * Returns null only when the product has no usable name at all.
+ */
+function extractPartialProduct(product: Record<string, unknown>): PartialProduct | null {
+  const name = typeof product.product_name === "string" ? product.product_name.trim() : ""
+
+  if (!name) {
+    return null
+  }
+
+  const nutriments = isRecord(product.nutriments) ? product.nutriments : {}
+  const sodiumGrams = toNumberOrNull(nutriments["sodium_100g"])
+
+  return {
+    name,
+    brand: typeof product.brands === "string" ? product.brands.split(",")[0]?.trim() ?? null : null,
+    rawDescription: typeof product.generic_name === "string" ? product.generic_name : name,
+    servingSizeGrams: toNumberOrNull(product.serving_quantity),
+    macros: {
+      calories: toNumberOrNull(nutriments["energy-kcal_100g"]),
+      protein: toNumberOrNull(nutriments["proteins_100g"]),
+      carbs: toNumberOrNull(nutriments["carbohydrates_100g"]),
+      fat: toNumberOrNull(nutriments["fat_100g"]),
+      fiber: toNumberOrNull(nutriments["fiber_100g"]),
+      sugar: toNumberOrNull(nutriments["sugars_100g"]),
+      sodiumMg: sodiumGrams === null ? null : Math.round(sodiumGrams * 1000),
+    },
+  }
+}
+
 export async function getProductByBarcode(barcode: string): Promise<NormalizedFood | null> {
   const trimmedBarcode = barcode.trim()
   if (!trimmedBarcode) return null
@@ -196,7 +239,7 @@ export async function getProductByBarcode(barcode: string): Promise<NormalizedFo
   const url = new URL(`${PRODUCT_URL_V3}/${encodeURIComponent(trimmedBarcode)}.json`)
   url.searchParams.set(
     "fields",
-    "code,product_name,generic_name,brands,nutriments",
+    "code,product_name,generic_name,brands,nutriments,serving_quantity",
   )
 
   try {
@@ -215,7 +258,41 @@ export async function getProductByBarcode(barcode: string): Promise<NormalizedFo
       return null
     }
 
-    const normalized = normalizeProduct(trimmedBarcode, data.product)
+    const partial = extractPartialProduct(data.product)
+
+    if (!partial) {
+      setCached(cacheKey, null)
+      return null
+    }
+
+    // Missing Macro Data fallback: fill gaps from a comparable USDA
+    // match rather than dropping the product or showing zero.
+    const estimation = await fillMissingMacrosFromUsda(partial.name, partial.macros)
+
+    if (!estimation) {
+      setCached(cacheKey, null)
+      return null
+    }
+
+    const normalized: NormalizedFood = {
+      id: `off-${trimmedBarcode}`,
+      name: partial.name,
+      source: "open-food-facts",
+      sourceId: trimmedBarcode,
+      sourceLabel: "Open Food Facts",
+      preparationState: inferPreparationState(),
+      per100g: estimation.macros,
+      brand: partial.brand,
+      barcode: trimmedBarcode,
+      servingSizeGrams: partial.servingSizeGrams,
+      rawDescription: partial.rawDescription,
+      retrievedAt: new Date().toISOString(),
+      confidence: estimation.isEstimated ? estimation.confidence : "medium",
+      isEstimated: estimation.isEstimated,
+      estimatedFrom: estimation.estimatedFrom,
+      estimationReason: estimation.estimationReason,
+    }
+
     setCached(cacheKey, normalized)
     return normalized
   } catch (error) {

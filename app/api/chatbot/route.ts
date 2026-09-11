@@ -10,6 +10,8 @@ import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import { buildBudgetPlan } from "@/lib/nutrition/budget";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
+import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
+import { compareToTargets } from "@/lib/nutrition/food-log/totals";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +32,7 @@ type UserContext = {
   currentNutritionPlan: unknown;
   recovery: unknown;
   trainingIntelligence: unknown;
+  todayFoodLog: unknown;
 };
 
 type Intent = {
@@ -751,6 +754,45 @@ function summarizeRecoveryContext(
    DANTE_INSTRUCTIONS below).
 ========================================================= */
 
+/* =========================================================
+   TODAY'S FOOD LOG SUMMARY
+
+   Deterministic — computed by lib/nutrition/food-log/totals.ts from
+   the user's actually logged foods today, compared against the
+   EXISTING nutrition plan target (never a separate/invented target).
+   Dante explains this; it never recalculates consumed/remaining
+   itself (see "TRACKED NUTRITION" in DANTE_INSTRUCTIONS below).
+========================================================= */
+
+function summarizeTodayFoodLog(
+  foodLog: Awaited<ReturnType<typeof loadFoodLogForDate>>,
+  target: { calories: number; protein: number; carbs: number; fat: number } | null,
+): unknown {
+  if (!target) {
+    return {
+      hasTarget: false,
+      note: "No nutrition plan target is available yet — complete onboarding to set targets.",
+    };
+  }
+
+  const comparison = compareToTargets(foodLog.totals, target);
+
+  return {
+    hasTarget: true,
+    date: foodLog.date,
+    calories: comparison.calories,
+    protein: comparison.protein,
+    carbs: comparison.carbs,
+    fat: comparison.fat,
+    itemsLoggedToday: foodLog.entries.length,
+    foodsLoggedToday: foodLog.entries.slice(-8).map((entry) =>
+      entry.servingName && entry.servingsConsumed
+        ? `${entry.foodName} (${entry.servingsConsumed} ${entry.servingName}${entry.servingsConsumed === 1 ? "" : "s"} / ${entry.quantityGrams} g)`
+        : `${entry.foodName} (${entry.quantityGrams} g)`,
+    ),
+  };
+}
+
 function summarizeTrainingIntelligence(
   athleteState: Awaited<ReturnType<typeof buildAthleteState>> | null,
 ): unknown {
@@ -799,6 +841,7 @@ async function loadUserContext(
     nutritionContext,
     recoveryContext,
     athleteState,
+    todayFoodLog,
   ] =
     await Promise.all([
       supabase
@@ -853,6 +896,8 @@ async function loadUserContext(
         console.warn("[DANTE TRAINING INTELLIGENCE]", error);
         return null;
       }),
+
+      loadFoodLogForDate(supabase, userId),
     ]);
 
   if (
@@ -909,6 +954,18 @@ async function loadUserContext(
         : null,
 
     trainingIntelligence: summarizeTrainingIntelligence(athleteState),
+
+    todayFoodLog: summarizeTodayFoodLog(
+      todayFoodLog,
+      nutritionContext.plan
+        ? {
+            calories: nutritionContext.plan.target.calories,
+            protein: nutritionContext.plan.target.protein,
+            carbs: nutritionContext.plan.target.carbs,
+            fat: nutritionContext.plan.target.fat,
+          }
+        : null,
+    ),
   };
 }
 
@@ -2274,6 +2331,10 @@ Relevant fields may include:
   and a deterministic recommendation with confidence — already
   computed by the Muscle Fitness Training Intelligence engine; see
   the TRAINING INTELLIGENCE section below)
+- todayFoodLog (today's actually logged food: consumed/target/remaining
+  calories, protein, carbs and fat, plus recent food names — already
+  computed from the client's real food log by
+  lib/nutrition/food-log/totals.ts; see TRACKED NUTRITION below)
 
 Never invent missing client information.
 
@@ -2410,6 +2471,36 @@ them as "modeled" or "estimated" contribution, never as a measured
 fact. Never claim a specific volume is "scientifically optimal" —
 recommendations reflect the client's own recent history and general
 dose-response research, not a universal ideal number.
+
+============================================================
+TRACKED NUTRITION
+============================================================
+
+todayFoodLog is computed deterministically from the client's actual
+logged foods today (barcode scans, searches, photo estimates and
+manual entries all flow into the same log) compared against their
+EXISTING nutrition plan target — never a separate or invented target.
+
+You explain and interpret these numbers. You NEVER recalculate
+consumed/remaining yourself, never invent a different target, and
+never add hypothetical food to the log in your answer as if it were
+already eaten.
+
+When asked things like "how much protein do I have left today",
+"suggest a meal that fits my remaining macros", or "am I eating
+enough carbs for my workout", use calories/protein/carbs/fat's
+consumed, target and remaining fields directly — e.g. target 140,
+consumed 92 → answer "48 g remaining", not a recalculated or rounded-
+differently number.
+
+If hasTarget is false, say plainly that no nutrition target is set up
+yet rather than guessing one. If itemsLoggedToday is 0, say nothing
+has been logged today yet rather than assuming a typical day.
+
+foodsLoggedToday lists what was logged with its portion (e.g. "Whey
+Protein (1 scoop / 30 g)") — use it for context ("you've had oats and
+chicken today") but never restate per-item macros from memory; only
+todayFoodLog's calories/protein/carbs/fat totals are authoritative.
 
 ============================================================
 SUPPLEMENTS
