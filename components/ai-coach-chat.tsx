@@ -16,6 +16,15 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 
+import { DanteRobot } from "@/components/dante/dante-robot";
+import {
+  DANTE_STATE_LABEL,
+  useDantePresence,
+  type DanteActivity,
+} from "@/components/dante/dante-presence";
+import { cn } from "@/lib/utils";
+import { FORM_COACH_HANDOFF_KEY } from "@/lib/form-coach/handoff";
+
 /* =========================================================
    TYPES
 ========================================================= */
@@ -32,18 +41,68 @@ type ChatbotResponse = {
   model?: string;
 };
 
+export type QuickPrompt = {
+  label: string;
+  prompt: string;
+};
+
+const QUICK_PROMPTS: QuickPrompt[] = [
+  {
+    label: "Today's Training",
+    prompt:
+      "What should I train today based on my current plan and recovery?",
+  },
+  {
+    label: "Nutrition",
+    prompt: "Review my nutrition targets and suggest adjustments.",
+  },
+  {
+    label: "Recovery",
+    prompt: "How is my recovery and what should I prioritize this week?",
+  },
+  {
+    label: "Progress",
+    prompt: "Summarize my recent progress and what to focus on next.",
+  },
+];
+
+/* =========================================================
+   PUBLIC PROPS
+========================================================= */
+
+export type AICoachChatProps = {
+  welcomeMessage?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  quickPrompts?: QuickPrompt[];
+  compact?: boolean;
+  className?: string;
+};
+
+const DEFAULT_WELCOME_MESSAGE =
+  "Hi. I'm **Dante**, your Muscle Fitness intelligence coach. Ask me about your training, nutrition, recovery or progress.";
+
+const DEFAULT_HERO_SUBTITLE =
+  "I understand your training profile, nutrition targets and current plan. Ask me about your training, nutrition, recovery or progress.";
+
 /* =========================================================
    COMPONENT
 ========================================================= */
 
-export default function AICoachChat() {
+export default function AICoachChat({
+  welcomeMessage = DEFAULT_WELCOME_MESSAGE,
+  heroTitle = "Your AI Performance Coach",
+  heroSubtitle = DEFAULT_HERO_SUBTITLE,
+  quickPrompts = QUICK_PROMPTS,
+  compact = false,
+  className,
+}: AICoachChatProps = {}) {
   const [messages, setMessages] =
     useState<ChatMessage[]>([
       {
         id: "welcome",
         role: "assistant",
-        content:
-          "Hi. I'm **Dante**, your Muscle Fitness intelligence coach. Ask me about your training, nutrition, recovery or progress.",
+        content: welcomeMessage,
       },
     ]);
 
@@ -52,6 +111,13 @@ export default function AICoachChat() {
 
   const [isLoading, setIsLoading] =
     useState(false);
+
+  const [activity, setActivity] =
+    useState<DanteActivity>("idle");
+
+  const visualState = useDantePresence(activity);
+
+  const isEmpty = messages.length === 1;
 
   const messagesEndRef =
     useRef<HTMLDivElement | null>(
@@ -69,12 +135,38 @@ export default function AICoachChat() {
   }, [messages, isLoading]);
 
   /* =======================================================
+     FORM COACH HANDOFF — auto-send a session summary left by
+     the Form Coach camera (see lib/form-coach/handoff.ts).
+  ======================================================= */
+
+  useEffect(() => {
+    let summary: string | null = null;
+
+    try {
+      summary = window.sessionStorage.getItem(FORM_COACH_HANDOFF_KEY);
+
+      if (summary) {
+        window.sessionStorage.removeItem(FORM_COACH_HANDOFF_KEY);
+      }
+    } catch {
+      summary = null;
+    }
+
+    if (summary) {
+      void sendMessage(summary);
+    }
+
+    // Runs once on mount only — this is a one-time handoff read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* =======================================================
      SEND MESSAGE
   ======================================================= */
 
-  async function sendMessage() {
+  async function sendMessage(override?: string) {
     const trimmed =
-      input.trim();
+      (override ?? input).trim();
 
     if (
       !trimmed ||
@@ -96,6 +188,7 @@ export default function AICoachChat() {
 
     setInput("");
     setIsLoading(true);
+    setActivity("thinking");
 
     try {
       const controller =
@@ -174,11 +267,15 @@ export default function AICoachChat() {
         ...previous,
         assistantMessage,
       ]);
+
+      setActivity("success");
     } catch (error: unknown) {
       console.error(
         "[DANTE FRONTEND ERROR]",
         error
       );
+
+      setActivity("error");
 
       let errorMessage =
         "Dante could not respond. Please try again.";
@@ -238,12 +335,169 @@ export default function AICoachChat() {
     }
   }
 
+  function handleInputFocus() {
+    if (!isLoading) {
+      setActivity("listening");
+    }
+  }
+
+  function handleInputBlur() {
+    if (!isLoading) {
+      setActivity("idle");
+    }
+  }
+
+  function handleQuickPrompt(prompt: string) {
+    void sendMessage(prompt);
+  }
+
   /* =======================================================
      UI
   ======================================================= */
 
   return (
-    <div className="flex h-[72vh] min-h-170 w-full flex-col font-sans">
+    <div
+      className={cn(
+        "flex w-full flex-col font-sans",
+        compact ? "h-[600px] min-h-[520px]" : "h-[72vh] min-h-170",
+        className,
+      )}
+    >
+
+      {/* ===================================================
+          DANTE STATUS BAR — active conversation only
+      =================================================== */}
+
+      {!isEmpty && (
+        <div
+          className="
+            mb-4
+            flex
+            items-center
+            justify-between
+            gap-3
+            rounded-2xl
+            border
+            border-white/10
+            bg-[#12151c]
+            px-5
+            py-3.5
+          "
+        >
+          <div className="flex items-center gap-3">
+            <DanteRobot
+              state={visualState}
+              size="sm"
+              interactive
+            />
+
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#f4bd25]">
+                Dante
+              </p>
+
+              <p className="text-sm font-medium text-white/55">
+                AI Performance Coach
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/40">
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full transition-colors",
+                visualState === "error"
+                  ? "bg-rose-400"
+                  : visualState === "idle"
+                    ? "bg-emerald-400"
+                    : "bg-[#f4bd25]",
+              )}
+            />
+
+            {visualState === "idle" ? "Ready" : visualState}
+          </div>
+        </div>
+      )}
+
+      <span
+        aria-live="polite"
+        className="sr-only"
+      >
+        {DANTE_STATE_LABEL[visualState]}
+      </span>
+
+      {/* ===================================================
+          EMPTY STATE — DANTE INTRODUCTION
+      =================================================== */}
+
+      {isEmpty && (
+        <div
+          className="
+            mb-4
+            flex
+            flex-col
+            items-center
+            rounded-3xl
+            border
+            border-white/10
+            bg-gradient-to-b
+            from-[#181c25]
+            to-[#12151c]
+            px-6
+            py-10
+            text-center
+          "
+        >
+          <DanteRobot
+            state={visualState}
+            size="lg"
+            interactive
+          />
+
+          <p className="mt-6 text-xs font-bold uppercase tracking-[0.28em] text-[#f4bd25]">
+            Dante
+          </p>
+
+          <h2 className="mt-2 text-2xl font-bold text-white md:text-3xl">
+            {heroTitle}
+          </h2>
+
+          <p className="mt-3 max-w-md text-sm leading-6 text-white/50">
+            {heroSubtitle}
+          </p>
+
+          <div className="mt-7 flex flex-wrap justify-center gap-2.5">
+            {quickPrompts.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => handleQuickPrompt(item.prompt)}
+                disabled={isLoading}
+                className="
+                  rounded-full
+                  border
+                  border-[#f4bd25]/25
+                  bg-[#f4bd25]/8
+                  px-4
+                  py-2.5
+                  text-xs
+                  font-bold
+                  uppercase
+                  tracking-wide
+                  text-[#f4bd25]
+                  transition
+                  hover:border-[#f4bd25]/50
+                  hover:bg-[#f4bd25]/14
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                "
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ===================================================
           CHAT WINDOW
@@ -657,38 +911,16 @@ export default function AICoachChat() {
           {isLoading && (
             <div className="flex items-start gap-3">
 
-              <div
-                className="
-                  hidden
-                  h-9
-                  w-9
-                  shrink-0
-                  items-center
-                  justify-center
-                  rounded-xl
-                  border
-                  border-[#f4bd25]/30
-                  bg-[#f4bd25]/10
-                  text-sm
-                  font-bold
-                  text-[#f4bd25]
-                  sm:flex
-                "
-              >
-                D
+              <div className="mt-1 hidden shrink-0 sm:block">
+                <DanteRobot
+                  state="thinking"
+                  size="sm"
+                />
               </div>
 
               <div className="rounded-3xl rounded-tl-md bg-[#252b37] px-5 py-4">
-                <div className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#f4bd25]">
-                  Dante
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-[#f4bd25] [animation-delay:-0.30s]" />
-
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-[#f4bd25] [animation-delay:-0.15s]" />
-
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-[#f4bd25]" />
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#f4bd25]">
+                  Dante is thinking…
                 </div>
               </div>
             </div>
@@ -738,6 +970,12 @@ export default function AICoachChat() {
             }}
             onKeyDown={
               handleKeyDown
+            }
+            onFocus={
+              handleInputFocus
+            }
+            onBlur={
+              handleInputBlur
             }
             disabled={
               isLoading

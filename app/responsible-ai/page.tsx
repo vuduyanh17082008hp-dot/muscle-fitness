@@ -8,6 +8,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { PageVisual } from "@/components/visual/page-visual";
+
 const safeguards = [
   {
     title:
@@ -86,7 +88,11 @@ export default function ResponsibleAIPage() {
 
         <header
           className="
+            relative
+
             mt-10
+
+            overflow-hidden
 
             rounded-3xl
 
@@ -100,6 +106,9 @@ export default function ResponsibleAIPage() {
             sm:p-10
           "
         >
+          <PageVisual page="responsibleAi" />
+
+          <div className="relative z-10">
           <div className="flex items-center gap-2 text-emerald-400">
             <ShieldCheck className="size-5" />
 
@@ -152,6 +161,7 @@ export default function ResponsibleAIPage() {
             depends on knowing where that system is useful and where
             human professional judgment still matters.
           </p>
+          </div>
         </header>
 
         <section

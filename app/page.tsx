@@ -17,6 +17,9 @@ import {
 import {
   InspirationStory,
 } from "@/components/home/inspiration-story";
+import { DanteRobot } from "@/components/dante/dante-robot";
+import { Reveal, StaggerContainer, StaggerItem } from "@/components/animation/reveal";
+import { PageVisual } from "@/components/visual/page-visual";
 
 /* =========================================================
    CONTENT
@@ -51,7 +54,7 @@ const productSystems = [
     title: "Recovery",
     text:
       "Sleep, stress and check-in context that helps coaching reflect how the client is actually recovering.",
-    href: "/dashboard",
+    href: "/dashboard/recovery",
   },
 
   {
@@ -458,8 +461,8 @@ export default function HomePage() {
         >
           {/* HERO COPY */}
 
-          <div>
-            <div
+          <StaggerContainer stagger={0.12}>
+            <StaggerItem
               className="
                 inline-flex
 
@@ -490,41 +493,45 @@ export default function HomePage() {
               <Sparkles className="size-3.5" />
 
               AI-powered · Evidence-aware · Personalized
-            </div>
+            </StaggerItem>
 
-            <h1
+            <StaggerItem
               className="
                 mt-7
 
                 max-w-5xl
-
-                text-5xl
-                font-black
-
-                uppercase
-
-                leading-[0.88]
-
-                tracking-[-0.055em]
-
-                sm:text-6xl
-                md:text-7xl
-
-                lg:text-[88px]
               "
             >
-              Your training.
+              <h1
+                className="
+                  text-5xl
+                  font-black
 
-              <span className="block text-zinc-600">
-                Your data.
-              </span>
+                  uppercase
 
-              <span className="block text-amber-400">
-                Your coach.
-              </span>
-            </h1>
+                  leading-[0.88]
 
-            <p
+                  tracking-[-0.055em]
+
+                  sm:text-6xl
+                  md:text-7xl
+
+                  lg:text-[88px]
+                "
+              >
+                Your training.
+
+                <span className="block text-zinc-600">
+                  Your data.
+                </span>
+
+                <span className="block text-amber-400">
+                  Your coach.
+                </span>
+              </h1>
+            </StaggerItem>
+
+            <StaggerItem
               className="
                 mt-8
 
@@ -541,9 +548,9 @@ export default function HomePage() {
               Muscle Fitness connects training, nutrition and recovery
               around one real client profile — then gives Dante the
               context to turn that information into practical coaching.
-            </p>
+            </StaggerItem>
 
-            <div
+            <StaggerItem
               className="
                 mt-9
 
@@ -630,9 +637,9 @@ export default function HomePage() {
 
                 <BrainCircuit className="size-4 text-amber-400" />
               </Link>
-            </div>
+            </StaggerItem>
 
-            <p
+            <StaggerItem
               className="
                 mt-10
 
@@ -647,13 +654,18 @@ export default function HomePage() {
               "
             >
               Today is the youngest you will ever be.
-            </p>
-          </div>
+            </StaggerItem>
+          </StaggerContainer>
 
           {/* DANTE FLOW */}
 
-          <div
+          <Reveal
+            delay={0.2}
             className="
+              relative
+
+              overflow-hidden
+
               rounded-3xl
 
               border
@@ -669,8 +681,25 @@ export default function HomePage() {
               sm:p-7
             "
           >
-            <p
-              className="
+            <PageVisual page="dante" />
+
+            <div className="relative z-10">
+              <Link
+                href="/chatbot"
+                className="mb-5 flex justify-center"
+                aria-label="Meet Dante — open the AI coach"
+              >
+                <DanteRobot
+                  state="idle"
+                  size="md"
+                  interactive
+                />
+              </Link>
+
+              <p
+                className="
+                  text-center
+
                 text-[10px]
                 font-black
 
@@ -767,7 +796,8 @@ export default function HomePage() {
                 ),
               )}
             </div>
-          </div>
+            </div>
+          </Reveal>
         </div>
       </section>
 
@@ -946,7 +976,7 @@ export default function HomePage() {
             One profile. One system. One coach.
           </h2>
 
-          <div
+          <StaggerContainer
             className="
               mt-10
 
@@ -966,8 +996,8 @@ export default function HomePage() {
                   system.icon;
 
                 return (
+                  <StaggerItem key={system.title}>
                   <Link
-                    key={system.title}
                     href={system.href}
                     className="
                       group
@@ -1050,10 +1080,11 @@ export default function HomePage() {
                       "
                     />
                   </Link>
+                  </StaggerItem>
                 );
               },
             )}
-          </div>
+          </StaggerContainer>
         </div>
       </section>
 
@@ -1077,17 +1108,7 @@ export default function HomePage() {
           lg:py-32
         "
       >
-        <div
-          aria-hidden="true"
-          className="
-            pointer-events-none
-
-            absolute
-            inset-0
-
-            bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.09),transparent_35%)]
-          "
-        />
+        <PageVisual page="dante" intensity="secondary" glow />
 
         <div className="relative mx-auto max-w-7xl">
           <div
@@ -1099,7 +1120,7 @@ export default function HomePage() {
               lg:grid-cols-[0.85fr_1.15fr]
             "
           >
-            <div>
+            <Reveal>
               <div className="inline-flex items-center gap-2 text-amber-400">
                 <BrainCircuit className="size-4" />
 
@@ -1180,9 +1201,10 @@ export default function HomePage() {
 
                 <ArrowRight className="size-4" />
               </Link>
-            </div>
+            </Reveal>
 
-            <div
+            <Reveal
+              delay={0.15}
               className="
                 rounded-3xl
 
@@ -1296,7 +1318,7 @@ export default function HomePage() {
                   when the data is not strong enough.
                 </p>
               </div>
-            </div>
+            </Reveal>
           </div>
         </div>
       </section>

@@ -4,8 +4,10 @@ import { redirect } from "next/navigation"
 import {
   Activity,
   AlertTriangle,
+  Database,
   Flame,
   HeartPulse,
+  ShoppingCart,
   Target,
   TrendingUp,
   Utensils,
@@ -18,8 +20,16 @@ import {
   NUTRITION_GOAL_LABELS,
   TRAINING_MODE_LABELS,
 } from "@/lib/nutrition/plan"
+import {
+  engineActivityToDbOverride,
+  engineTrainingModeToDbOverride,
+} from "@/lib/nutrition/profile-mapping"
+import { buildBudgetPlan } from "@/lib/nutrition/budget"
+import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
 
 import { NutritionSettingsForm } from "./nutrition-settings-form"
+import { BudgetPlanner } from "@/components/nutrition/budget-planner"
+import { NutritionTracker } from "@/components/nutrition/nutrition-tracker"
 
 export const dynamic = "force-dynamic"
 
@@ -107,8 +117,13 @@ export default async function NutritionPlanPage() {
     redirect("/login?next=/dashboard/nutrition")
   }
 
-  const { plan, estimatedFields, missingRequiredFields } =
-    await loadNutritionContext(supabase, user.id)
+  const {
+    plan,
+    estimatedFields,
+    missingRequiredFields,
+    overrides,
+    weeklyFoodBudgetSgd,
+  } = await loadNutritionContext(supabase, user.id)
 
   /* =======================================================
      MISSING PROFILE DATA — DO NOT FABRICATE A PLAN
@@ -152,8 +167,25 @@ export default async function NutritionPlanPage() {
 
   const { input, target } = plan
 
+  const budgetPlan = buildBudgetPlan(plan, weeklyFoodBudgetSgd)
+  const foodLog = await loadFoodLogForDate(supabase, user.id)
+
   return (
     <div className="mx-auto max-w-6xl space-y-10 pb-16">
+      {/* ===================================================
+          TRACK FOOD — daily consumed macros + logging
+      =================================================== */}
+
+      <NutritionTracker
+        initialEntries={foodLog.entries}
+        target={{
+          calories: target.calories,
+          protein: target.protein,
+          carbs: target.carbs,
+          fat: target.fat,
+        }}
+      />
+
       {/* ===================================================
           HEADER
       =================================================== */}
@@ -176,7 +208,11 @@ export default async function NutritionPlanPage() {
           the settings below any time your training changes.
         </p>
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <p className="mt-6 text-[11px] font-black uppercase tracking-[0.22em] text-zinc-500">
+          Current Plan
+        </p>
+
+        <div className="mt-2 flex flex-wrap gap-2">
           <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3.5 py-1.5 text-xs font-semibold text-amber-200">
             {TRAINING_MODE_LABELS[input.trainingMode]}
           </span>
@@ -190,20 +226,30 @@ export default async function NutritionPlanPage() {
           </span>
         </div>
 
-        <div className="mt-7 border-t border-white/10 pt-6">
-          <NutritionSettingsForm
-            trainingMode={input.trainingMode}
-            activityLevel={input.activityLevel}
-            goalOverride={input.goal}
-          />
-        </div>
-
         {estimatedFields.length > 0 ? (
-          <p className="mt-5 flex items-start gap-2 text-xs leading-5 text-zinc-500">
+          <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-zinc-500">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
             Estimated: {estimatedFields.join(" · ")}
           </p>
         ) : null}
+
+        <div className="mt-7 border-t border-white/10 pt-6">
+          <p className="mb-4 text-[11px] font-black uppercase tracking-[0.22em] text-zinc-500">
+            Adjust Your Plan
+          </p>
+
+          <NutritionSettingsForm
+            trainingModeOverride={
+              overrides.trainingMode ??
+              engineTrainingModeToDbOverride(input.trainingMode)
+            }
+            activityLevelOverride={
+              overrides.activityLevel ??
+              engineActivityToDbOverride(input.activityLevel)
+            }
+            goalOverride={overrides.goal ?? "auto"}
+          />
+        </div>
       </header>
 
       {/* ===================================================
@@ -302,15 +348,36 @@ export default async function NutritionPlanPage() {
       </section>
 
       {/* ===================================================
+          BUDGET-AWARE PLANNER
+      =================================================== */}
+
+      <BudgetPlanner
+        initialBudget={weeklyFoodBudgetSgd}
+        initialResult={budgetPlan}
+        proteinTarget={target.protein}
+        calorieTarget={target.calories}
+      />
+
+      {/* ===================================================
           GRAM-BASED MEAL PLAN
       =================================================== */}
 
       <section>
-        <SectionHeading
-          eyebrow="Gram-Based Meal Plan"
-          title={`${plan.meals.length} meals for ${TRAINING_MODE_LABELS[input.trainingMode]}`}
-          description="Portions are scaled toward your targets and rounded to realistic serving sizes, so totals will be close to — not exactly — your daily targets."
-        />
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <SectionHeading
+            eyebrow="Gram-Based Meal Plan"
+            title={`${plan.meals.length} meals for ${TRAINING_MODE_LABELS[input.trainingMode]}`}
+            description="Portions are scaled toward your targets and rounded to realistic serving sizes, so totals will be close to — not exactly — your daily targets."
+          />
+
+          <Link
+            href="/dashboard/nutrition/shopping-list"
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
+          >
+            <ShoppingCart className="size-4" />
+            Generate Shopping List
+          </Link>
+        </div>
 
         <div className="grid gap-5 lg:grid-cols-2">
           {plan.meals.map((meal) => (
@@ -343,7 +410,7 @@ export default async function NutritionPlanPage() {
                   <tbody>
                     {meal.ingredients.map((ingredient) => (
                       <tr
-                        key={ingredient.foodId}
+                        key={`${meal.id}-${ingredient.foodId}`}
                         className="border-b border-white/5 last:border-0"
                       >
                         <td className="py-2 text-zinc-200">
@@ -351,6 +418,11 @@ export default async function NutritionPlanPage() {
                         </td>
                         <td className="py-2 pl-3 text-right font-semibold text-white">
                           {ingredient.grams} g
+                          {ingredient.measurementBasis !== "as-served" ? (
+                            <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">
+                              {ingredient.measurementBasis}
+                            </span>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -420,6 +492,62 @@ export default async function NutritionPlanPage() {
             </li>
           ))}
         </ol>
+      </section>
+
+      {/* ===================================================
+          NUTRITION DATA SOURCES
+      =================================================== */}
+
+      <section className="rounded-3xl border border-white/10 bg-white/[0.02] p-6 sm:p-8">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-xl border border-white/10 bg-white/5 text-zinc-400">
+            <Database className="size-5" />
+          </span>
+
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">
+            Nutrition Data Sources
+          </p>
+        </div>
+
+        <dl className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <dt className="text-sm font-bold text-zinc-200">
+              USDA FoodData Central
+            </dt>
+            <dd className="mt-1 text-xs leading-5 text-zinc-500">
+              Primary source for whole and raw foods (Foundation and SR
+              Legacy data). Public domain, U.S. Department of Agriculture.
+            </dd>
+          </div>
+
+          <div>
+            <dt className="text-sm font-bold text-zinc-200">
+              Open Food Facts
+            </dt>
+            <dd className="mt-1 text-xs leading-5 text-zinc-500">
+              Used for packaged and branded food products. Community
+              database under the Open Database License (ODbL).
+            </dd>
+          </div>
+
+          <div>
+            <dt className="text-sm font-bold text-zinc-200">
+              Local fallback
+            </dt>
+            <dd className="mt-1 text-xs leading-5 text-zinc-500">
+              A small curated table used only when external sources are
+              unavailable or unconfigured.
+            </dd>
+          </div>
+        </dl>
+
+        <p className="mt-5 text-xs leading-5 text-zinc-600">
+          Nutrition values are estimates and can vary by brand,
+          preparation, cooking method and database record. Ingredient
+          weights above are shown on the weight basis actually used
+          (raw, cooked or as-served) — see docs/NUTRITION_DATA_SOURCES.md
+          for the full source research.
+        </p>
       </section>
 
       {/* ===================================================

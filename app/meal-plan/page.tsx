@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 import styles from "./page.module.css";
+import { DanteRobot } from "@/components/dante/dante-robot";
 
 /* =========================================================
    TYPES
@@ -1656,6 +1658,34 @@ export default function MealPlanPage() {
           }
         />
       )}
+
+      {/* DANTE — CONTEXTUAL ASSISTANT CTA */}
+
+      <section className="relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center gap-5 px-5 py-16 text-center sm:flex-row sm:justify-between sm:text-left">
+        <div className="flex items-center gap-4">
+          <DanteRobot
+            state="idle"
+            size="sm"
+            interactive
+          />
+
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[0.18em] text-white/90">
+              Need help adjusting your plan?
+            </p>
+            <p className="mt-1 text-sm text-white/55">
+              Dante knows your profile, targets and current meals.
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href="/chatbot"
+          className="inline-flex shrink-0 items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-5 py-3 text-xs font-black uppercase tracking-[0.14em] text-amber-400 transition hover:border-amber-400/50 hover:bg-amber-400/16"
+        >
+          Ask Dante about your nutrition →
+        </Link>
+      </section>
     </main>
   );
 }
@@ -1679,6 +1709,8 @@ function GeneratedPlan({
   mealsPerDay: number;
   dietPreference: DietPreference;
 }) {
+  const router = useRouter();
+
   const distribution =
     MEAL_DISTRIBUTIONS[mealsPerDay] ??
     Array.from({
@@ -1884,7 +1916,12 @@ function GeneratedPlan({
           <span>→</span>
         </button>
 
-        <button type="button">
+        <button
+          type="button"
+          onClick={() =>
+            router.push("/dashboard/nutrition/shopping-list")
+          }
+        >
           GENERATE SHOPPING LIST
         </button>
       </div>
@@ -1895,7 +1932,11 @@ function GeneratedPlan({
         nutrition, pregnancy, breastfeeding,
         medical conditions and eating
         disorders require appropriate
-        professional guidance.
+        professional guidance. This calculator
+        is not connected to your saved profile —
+        for a shopping list built from your real,
+        saved meal plan, sign in and open your
+        Nutrition Plan on the dashboard.
       </p>
     </section>
   );

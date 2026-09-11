@@ -95,10 +95,26 @@ export const siteConfig: SiteConfig = {
 
       {
         title:
+          "Training Intelligence",
+
+        href:
+          "/dashboard/training-intelligence",
+      },
+
+      {
+        title:
           "Nutrition",
 
         href:
           "/dashboard/nutrition",
+      },
+
+      {
+        title:
+          "Recovery",
+
+        href:
+          "/dashboard/recovery",
       },
 
       {
