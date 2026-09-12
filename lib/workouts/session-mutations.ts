@@ -1,6 +1,7 @@
 import "server-only"
 
 import { createClient } from "@/lib/supabase/server"
+import { emitEvent } from "@/lib/events/emit"
 
 type UnknownRecord = Record<string, unknown>
 
@@ -422,6 +423,21 @@ export async function mutateFinishWorkout(
         message: error.message,
       }
     }
+
+    // Structured event (spec Part B §14) — a real Supabase client is
+    // used here rather than the loosely-typed one above, since
+    // emitEvent() takes the properly-typed SupabaseClient.
+    const eventClient = await createClient()
+    await emitEvent(eventClient, {
+      type: "WORKOUT_COMPLETED",
+      userId,
+      payload: {
+        workoutSessionId: sessionId,
+        totalVolumeKg: null,
+        totalSets: null,
+        sessionRpe: sessionRpe ?? null,
+      },
+    })
 
     return {
       success: true,

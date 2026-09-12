@@ -6,10 +6,11 @@ import { requireUser } from "@/lib/auth/guard";
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { buildRecoveryRecommendation } from "@/lib/recovery/recommendation";
 
-import AICoachChat from "@/components/ai-coach-chat";
+import DanteChat from "@/components/dante-chat";
 import { RecoveryScoreCard } from "@/components/recovery/recovery-score-card";
 import { RecoveryCheckinForm } from "@/components/recovery/recovery-checkin-form";
 import { TrainingRecoveryCard } from "@/components/recovery/training-recovery-card";
+import { MuscleReadinessPanel } from "@/components/dante/muscle-readiness-panel";
 import { RecoveryTrendsChart } from "@/components/recovery/recovery-trends-chart";
 import { RecoveryKnowledgeHub } from "@/components/recovery/recovery-knowledge-hub";
 import { PageVisual } from "@/components/visual/page-visual";
@@ -100,6 +101,12 @@ export default async function RecoveryPage() {
       <TrainingRecoveryCard summary={context.trainingLoad} />
 
       {/* =================================================
+          DANTE CORE — READINESS (per-muscle recovery)
+      ================================================= */}
+
+      <MuscleReadinessPanel />
+
+      {/* =================================================
           TRENDS
       ================================================= */}
 
@@ -119,7 +126,7 @@ export default async function RecoveryPage() {
           </h2>
         </div>
 
-        <AICoachChat
+        <DanteChat
           compact
           heroTitle="Your Recovery Coach"
           heroSubtitle="I can see today's recovery score, your last 7 days of trends and your recent training load. Ask me anything about sleep, stress, soreness or when to back off."

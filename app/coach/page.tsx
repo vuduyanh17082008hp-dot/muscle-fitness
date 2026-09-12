@@ -5,7 +5,7 @@ import { Reveal } from "@/components/animation/reveal";
 import { PageVisual } from "@/components/visual/page-visual";
 
 export const metadata: Metadata = {
-  title: "AI Coach | Muscle Fitness",
+  title: "Dante | Muscle Fitness",
 };
 
 export default function CoachPage() {
@@ -17,7 +17,7 @@ export default function CoachPage() {
 
           <div className="relative z-10">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-500">
-              AI Coach
+              Dante
             </p>
 
             <h1 className="mt-4 text-4xl font-black tracking-tight">
@@ -25,10 +25,10 @@ export default function CoachPage() {
             </h1>
 
             <p className="mt-4 max-w-xl text-sm leading-7 text-zinc-400">
-              Use the coach chat for general training and nutrition
+              Use Dante for general training and nutrition
               questions. Answers are educational only and are not
               medical advice. For authenticated dashboard access, open
-              AI Coach from your client dashboard.
+              Dante from your client dashboard.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
@@ -36,14 +36,14 @@ export default function CoachPage() {
                 href="/chatbot"
                 className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
               >
-                Open coach chat
+                Open Dante chat
               </Link>
 
               <Link
                 href="/dashboard/ai-coach"
                 className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:border-white/20"
               >
-                Dashboard AI Coach
+                Dante in dashboard
               </Link>
 
               <Link

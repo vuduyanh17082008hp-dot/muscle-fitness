@@ -27,7 +27,7 @@ export default function CoachLoading() {
           </p>
 
           <h1 className="mt-3 text-xl font-bold text-white">
-            Đang khởi tạo AI Coach...
+            Đang khởi tạo Dante...
           </h1>
 
           <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-zinc-500">
@@ -41,7 +41,7 @@ export default function CoachLoading() {
           </div>
 
           <span className="sr-only">
-            Đang khởi tạo AI Coach
+            Đang khởi tạo Dante
           </span>
         </div>
       </div>

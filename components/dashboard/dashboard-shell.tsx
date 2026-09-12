@@ -151,7 +151,7 @@ const navSections: NavSection[] = [
 
     items: [
       {
-        label: "AI Coach",
+        label: "Dante",
         href: "/dashboard/ai-coach",
         icon: Bot,
       },

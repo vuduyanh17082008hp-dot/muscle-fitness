@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2, Pencil, Trash2 } from "lucide-react"
 
 import { TrackFoodModal } from "@/components/nutrition/track-food-modal"
 import type { ConfirmedFood } from "@/components/nutrition/types"

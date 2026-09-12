@@ -6,6 +6,7 @@ import { scaleMacrosToGrams } from "@/lib/nutrition/food-log-calculator"
 import type { NormalizedFoodMacros } from "@/lib/nutrition/food-data/types"
 import type { EstimationConfidence, FoodLogSource, MealType } from "./types"
 import { mapFoodLogRow, todayIso, type FoodLogRow } from "./load-food-log-context"
+import { emitEvent } from "@/lib/events/emit"
 
 export type CreateFoodLogInput = {
   mealType: MealType
@@ -84,7 +85,20 @@ export async function createFoodLog(
     return { success: false, error: error?.message ?? "Unable to save this food." }
   }
 
-  return { success: true, data: mapFoodLogRow(data as FoodLogRow) }
+  const savedEntry = mapFoodLogRow(data as FoodLogRow)
+
+  await emitEvent(supabase, {
+    type: "FOOD_LOGGED",
+    userId,
+    payload: {
+      foodLogId: savedEntry.id,
+      mealType: savedEntry.mealType,
+      calories: savedEntry.calories,
+      source: savedEntry.source,
+    },
+  })
+
+  return { success: true, data: savedEntry }
 }
 
 export type UpdateFoodLogQuantityInput = {

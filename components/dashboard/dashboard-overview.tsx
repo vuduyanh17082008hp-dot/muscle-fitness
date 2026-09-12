@@ -246,7 +246,7 @@ export function DashboardOverview({
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold text-white transition hover:bg-white/[0.08]"
             >
               <Sparkles className="size-4 text-violet-300" />
-              Ask AI Coach
+              Ask Dante
             </Link>
           </div>
         </div>
@@ -443,7 +443,7 @@ export function DashboardOverview({
               icon={Activity}
               title="Recovery data is empty"
               description="Log sleep, energy, soreness and stress to calculate your score."
-              href="/dashboard/today"
+              href="/dashboard/recovery"
               action="Complete today's log"
             />
           )}
@@ -678,7 +678,7 @@ export function DashboardOverview({
             </span>
 
             <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.17em] text-violet-300/60">
-              AI Coach shortcut
+              Dante shortcut
             </p>
 
             <h2 className="mt-1 max-w-lg text-2xl font-black text-white">
@@ -693,7 +693,7 @@ export function DashboardOverview({
               href="/dashboard/ai-coach"
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-200 px-4 py-3 text-sm font-black text-violet-950 transition hover:bg-white"
             >
-              Open AI Coach
+              Open Dante
               <Bot className="size-4" />
             </Link>
           </div>

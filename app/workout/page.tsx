@@ -1,6 +1,5 @@
 "use client";
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import ExerciseCard from '@/components/ExerciseCard';
 import toast from 'react-hot-toast';
 

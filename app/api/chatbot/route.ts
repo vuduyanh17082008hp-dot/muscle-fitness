@@ -12,6 +12,7 @@ import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { compareToTargets } from "@/lib/nutrition/food-log/totals";
+import { checkSafety } from "@/lib/dante-core/safety-layer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -3233,6 +3234,47 @@ export async function POST(
       detectIntent(
         userMessage,
       );
+
+    /* -----------------------------------------------------
+       SAFETY LAYER (Dante Core, spec Part A §8)
+
+       Runs before any LLM call or context loading. A matched
+       red-flag message short-circuits straight to a fixed,
+       conservative escalation response — never a normal Dante
+       reply. See lib/dante-core/safety-layer.ts for the pattern
+       list and the reasoning behind it.
+    ----------------------------------------------------- */
+
+    const safetyCheck =
+      checkSafety(
+        userMessage,
+      );
+
+    if (
+      safetyCheck.triggered &&
+      safetyCheck.responseOverride
+    ) {
+      console.warn(
+        "[DANTE SAFETY LAYER TRIGGERED]",
+        { category: safetyCheck.category },
+      );
+
+      return Response.json(
+        {
+          ok: true,
+          reply: safetyCheck.responseOverride,
+          message: safetyCheck.responseOverride,
+          model: "dante-core-safety-layer",
+          mode: "production",
+          intent,
+          externalKnowledgeUsed: false,
+          sources: [],
+          safetyTriggered: true,
+          safetyCategory: safetyCheck.category,
+        },
+        { status: 200 },
+      );
+    }
 
     /* -----------------------------------------------------
        PROFILE + EXTERNAL DATA
