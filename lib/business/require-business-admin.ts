@@ -71,7 +71,7 @@ export async function requireBusinessAdmin(): Promise<BusinessAdminContext> {
     .limit(1);
 
   if (staffError || !adminRows?.length) {
-    redirect("/admin/unauthorized");
+    redirect("/unauthorized");
   }
 
   const staff = adminRows[0];
@@ -90,7 +90,7 @@ export async function requireBusinessAdmin(): Promise<BusinessAdminContext> {
     .limit(1);
 
   if (businessError || !businesses?.length) {
-    redirect("/admin/unauthorized");
+    redirect("/unauthorized");
   }
 
   const business = businesses[0];

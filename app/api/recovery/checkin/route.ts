@@ -5,6 +5,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { computeRecoveryScore } from "@/lib/recovery/score"
 import type { RecoveryCheckinRow } from "@/lib/recovery/types"
+import { emitEvent } from "@/lib/events/emit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -139,6 +140,18 @@ export async function POST(request: Request) {
       { status: 500 },
     )
   }
+
+  await emitEvent(supabase, {
+    type: "CHECKIN_COMPLETED",
+    userId: user.id,
+    payload: { checkinDate: todayIso() },
+  })
+
+  await emitEvent(supabase, {
+    type: "RECOVERY_UPDATED",
+    userId: user.id,
+    payload: { recoveryScore: result.score, status: result.status },
+  })
 
   return NextResponse.json({
     success: true,

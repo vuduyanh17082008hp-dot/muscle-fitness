@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import { emitEvent } from "@/lib/events/emit";
 
 export async function GET() {
   const supabase = await createClient();
@@ -91,6 +92,12 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+
+  await emitEvent(supabase, {
+    type: "BODYWEIGHT_UPDATED",
+    userId: user.id,
+    payload: { weightKg },
+  });
 
   return NextResponse.json({
     success: true,

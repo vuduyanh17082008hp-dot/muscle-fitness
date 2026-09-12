@@ -898,9 +898,9 @@ export default function FrontPage() {
 
             <div>
               <SectionHeading
-                eyebrow="AI COACH PREVIEW"
+                eyebrow="DANTE PREVIEW"
                 title="USE YOUR DATA TO MAKE THE NEXT DECISION."
-                description="The AI Coach is designed to connect training, nutrition, recovery and progress information instead of giving generic advice without context."
+                description="Dante is designed to connect training, nutrition, recovery and progress information instead of giving generic advice without context."
               />
 
               <Reveal className="mt-9 space-y-4">

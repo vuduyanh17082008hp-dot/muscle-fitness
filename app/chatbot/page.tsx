@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import AICoachChat from "@/components/ai-coach-chat";
+import DanteChat from "@/components/dante-chat";
 
 export default function ChatbotPage() {
   return (
@@ -115,7 +115,7 @@ export default function ChatbotPage() {
             CHAT
         ================================================= */}
 
-        <AICoachChat />
+        <DanteChat />
       </div>
     </main>
   );

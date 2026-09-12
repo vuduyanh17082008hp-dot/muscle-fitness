@@ -45,10 +45,10 @@ const sections: Record<string, SectionConfig> = {
     icon: CheckSquare2,
   },
   "ai-coach": {
-    title: "AI Coach",
+    title: "Dante",
     description:
       "Ask training and nutrition questions with your profile context.",
-    project: "AI Coach",
+    project: "Dante",
     icon: Bot,
   },
   messages: {
@@ -242,7 +242,7 @@ export default async function DashboardSectionPage({
       {sectionKey === "ai-coach" && (
         <section className="rounded-3xl border border-white/10 bg-[#101216] p-6">
           <p className="text-sm leading-6 text-zinc-400">
-            Use the AI Coach chat for general training and
+            Use Dante for general training and
             nutrition guidance. Responses are not medical advice.
           </p>
 
@@ -251,7 +251,7 @@ export default async function DashboardSectionPage({
               href="/chatbot"
               className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
             >
-              Open AI Coach chat
+              Open Dante chat
             </Link>
             <Link
               href="/coach"

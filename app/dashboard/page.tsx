@@ -4,6 +4,7 @@ import { ArrowRight, Home } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
+import { DailyIntelligenceCard } from "@/components/dante/daily-intelligence-card";
 
 export const dynamic =
   "force-dynamic";
@@ -463,6 +464,12 @@ export default async function DashboardPage() {
             </div>
           </div>
         </header>
+
+        {/* =================================================
+            TODAY — DANTE DAILY INTELLIGENCE
+        ================================================= */}
+
+        <DailyIntelligenceCard />
 
         {/* =================================================
             MACRO CARDS

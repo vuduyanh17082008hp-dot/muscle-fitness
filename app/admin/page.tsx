@@ -47,6 +47,12 @@ export default async function AdminHomePage() {
 
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
+            href="/admin/ai-evaluation"
+            className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-5 py-3 text-sm font-semibold text-amber-300 transition hover:border-amber-400/50"
+          >
+            AI Evaluation Dashboard
+          </Link>
+          <Link
             href="/dashboard"
             className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:border-white/20"
           >

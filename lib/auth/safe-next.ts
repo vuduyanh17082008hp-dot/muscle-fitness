@@ -20,7 +20,6 @@ export function getSafeNext(
   const blockedRoutes = [
     "/training",
     "/onboarding",
-    "/onboarding-backup",
     "/profile-setup",
   ]
 

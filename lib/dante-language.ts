@@ -256,7 +256,7 @@ is written in Vietnamese.
 export const DANTE_ENGLISH_UI = {
   assistantName: "Dante",
 
-  title: "Dante AI Coach",
+  title: "Dante",
 
   subtitle:
     "Profile-aware, evidence-aware performance coaching.",

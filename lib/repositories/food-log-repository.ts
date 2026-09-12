@@ -1,7 +1,7 @@
 // lib/repositories/food-log-repository.ts
 // FIX: Thay vì import từ 'meal-plan/meal' (vốn là component React, không export type), 
-// ta import Meal cùng với DailyNutritionLog, MealFood từ file types chung.
-import { DailyNutritionLog, MealFood, Meal } from '@/lib/client/client-profile';
+// ta import Meal cùng với DailyNutritionLog từ file types chung.
+import { DailyNutritionLog, Meal } from '@/lib/client/client-profile';
 import { getFoodById, calculateFoodNutrition } from '@/lib/nutrition/food';
 
 export interface IFoodLogRepository {

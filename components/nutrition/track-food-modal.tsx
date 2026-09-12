@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { Barcode, Plus, Search, Sparkles, X } from "lucide-react"
+import { Barcode, MapPin, Plus, Search, Sparkles, X } from "lucide-react"
 
 import { suggestMealType } from "@/components/nutrition/meal-type"
 import { FoodQuantityConfirm } from "@/components/nutrition/food-quantity-confirm"
@@ -10,11 +10,12 @@ import { FoodSearchPanel } from "@/components/nutrition/food-search-panel"
 import { BarcodeScanner } from "@/components/nutrition/barcode-scanner"
 import { ManualFoodForm } from "@/components/nutrition/manual-food-form"
 import { PhotoEstimatePanel } from "@/components/nutrition/photo-estimate-panel"
+import { HawkerLensPanel } from "@/components/nutrition/hawkerlens-panel"
 import type { ConfirmedFood } from "@/components/nutrition/types"
 import type { NormalizedFood } from "@/lib/nutrition/food-data/types"
 import type { MealType } from "@/lib/nutrition/food-log/types"
 
-type Mode = "menu" | "barcode" | "barcode_confirm" | "search" | "photo" | "manual"
+type Mode = "menu" | "barcode" | "barcode_confirm" | "search" | "photo" | "manual" | "hawkerlens"
 
 type TrackFoodModalProps = {
   onAddFood: (food: ConfirmedFood) => Promise<boolean>
@@ -114,6 +115,11 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
             <div className="flex flex-col gap-3">
               <MenuButton icon={Barcode} label="Scan Barcode" onClick={() => setMode("barcode")} />
               <MenuButton icon={Search} label="Search Food" onClick={() => setMode("search")} />
+              <MenuButton
+                icon={MapPin}
+                label="HawkerLens SG — Scan a Hawker Dish"
+                onClick={() => setMode("hawkerlens")}
+              />
               <MenuButton icon={Sparkles} label="Photo Estimate" onClick={() => setMode("photo")} />
               <MenuButton icon={Plus} label="Manual Entry" onClick={() => setMode("manual")} />
             </div>
@@ -151,6 +157,20 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
                 setManualPrefillName(name)
                 setMode("manual")
               }}
+              onClose={() => setMode("menu")}
+            />
+          ) : mode === "hawkerlens" ? (
+            <HawkerLensPanel
+              mealType={mealType}
+              onMealTypeChange={setMealType}
+              onSaved={() => {
+                setSavedFlash(true)
+                setTimeout(() => {
+                  setSavedFlash(false)
+                  handleOpenChange(false)
+                }, 900)
+              }}
+              onSwitchToPhotoEstimate={() => setMode("photo")}
               onClose={() => setMode("menu")}
             />
           ) : mode === "manual" ? (

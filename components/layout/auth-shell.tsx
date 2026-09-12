@@ -67,7 +67,7 @@ export function AuthShell({
 
             <p className="mt-8 max-w-xl text-sm leading-7 text-white/50">
               Theo dõi luyện tập, xây dựng kế hoạch dinh dưỡng
-              và nhận hướng dẫn từ AI Coach trong một hệ thống
+              và nhận hướng dẫn từ Dante trong một hệ thống
               thống nhất.
             </p>
           </div>

@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ArrowLeft,
-  BarChart3,
   CheckCircle2,
   ChevronRight,
   Dumbbell,
