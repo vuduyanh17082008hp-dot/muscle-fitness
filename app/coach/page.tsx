@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { Reveal } from "@/components/animation/reveal";
 import { PageVisual } from "@/components/visual/page-visual";
+import { DanteAvatar } from "@/components/dante-avatar/dante-avatar";
 
 export const metadata: Metadata = {
   title: "Dante | Muscle Fitness",
@@ -14,6 +15,11 @@ export default function CoachPage() {
       <Reveal>
         <section className="relative mx-auto max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-8">
           <PageVisual page="dante" />
+
+          <DanteAvatar
+            appState="explanation"
+            className="pointer-events-none absolute -right-6 top-0 hidden h-full w-64 sm:block"
+          />
 
           <div className="relative z-10">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-500">
