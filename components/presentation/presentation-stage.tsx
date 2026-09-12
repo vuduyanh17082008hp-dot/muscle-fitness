@@ -58,7 +58,6 @@ export function PresentationStage() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-arms only when index/playing change, not on every beat object identity change
   }, [index, playing, beat.autoAdvance, beat.durationMs, isLast]);
 
   useEffect(() => {
