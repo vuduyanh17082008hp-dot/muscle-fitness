@@ -1,26 +1,112 @@
 # Architecture
 
-Snapshot as of the 2026-09-12 stabilization pass. See `CLAUDE.md` for
-day-to-day working conventions; this document is the fuller picture.
+Snapshot updated through the final AI-ecosystem-integration pass (Dante
+Core, SetVision, HawkerLens SG, the event model, the benchmark dashboard,
+Dante 3D, and Presentation Mode). See `CLAUDE.md` for day-to-day working
+conventions; this document is the fuller picture. See
+`docs/dante-core.md`, `docs/setvision.md`, `docs/hawkerlens.md`,
+`docs/dante-avatar.md`, `docs/presentation.md`, and `docs/ai-evaluation.md`
+for each subsystem's full detail.
 
-## Data flow
+## Final ecosystem data flow
 
 ```
-User
- -> Muscle Fitness (Next.js app)
- -> Training / Nutrition / Recovery / Progress (feature pages + API routes)
- -> Supabase (Postgres, RLS, auth)
- -> lib/athlete-state/build-athlete-state.ts   (deterministic aggregation)
- -> Dante (app/api/chatbot/route.ts)            (explains, does not compute)
- -> Adaptive recommendation shown to user
- -> New data logged
- -> (loop)
+                USER
+                 |
+                 v
+         MUSCLE FITNESS
+                 |
+    +------------+------------+
+    |            |            |
+    v            v            v
+SETVISION    DANTE CORE    HAWKERLENS
+    |            ^            |
+    +------------+------------+
+                 |
+           STRUCTURED DATA
+      (lib/athlete-state, lib/dante-core/readiness-engine,
+       SetVisionAnalysis, HawkerLensResult — never raw table dumps)
+                 |
+                 v
+          ADAPTIVE DECISION
+      (lib/dante-core/autoregulation-engine -> TraceableDecision)
+                 |
+                 v
+               USER
+                 |
+                 +---- events (lib/events) ----> Dante Daily Intelligence
+                 |                                (recomputed on meaningful
+                 |                                 events, cached, not
+                 |                                 recomputed per render)
+                 +--------------------------------------------- (loop)
 ```
 
-The structured-context layer (`buildAthleteState`) is the boundary Dante
-Core will eventually replace/extend. It is the only thing that should ever
-be handed to an LLM as "what does this user look like right now" — never a
-raw table dump.
+SetVision and HawkerLens are each independently usable (`/dashboard/
+workouts/setvision`, the HawkerLens scan panel in nutrition tracking) with
+no dependency on Dante Core — Dante Core only OPTIONALLY consumes their
+output (`SetVisionSessionSignal`, and HawkerLens data reaching Dante only
+indirectly via the food log / nutrition adherence numbers). Neither module
+imports from `lib/dante-core/`, and `lib/dante-core/` never imports from
+`lib/setvision/` or `lib/hawkerlens/` — the coupling is one-directional,
+data-shaped, and happens at the call site (API routes / components), never
+inside the library code itself. This was a deliberate check against the
+spec's "do not create direct dependencies that make each AI module
+unusable independently."
+
+## Structured-context layers (plural, now)
+
+| Layer | Feeds | Lives in |
+|---|---|---|
+| `buildAthleteState()` | The chatbot's free-form conversation | `lib/athlete-state/` |
+| `evaluateReadiness()` | Autoregulation decisions, the daily intelligence summary | `lib/dante-core/readiness-engine.ts` |
+| `SetVisionAnalysis` | The autoregulation engine's `setVision` input, the results UI | `lib/setvision/types.ts` |
+| `HawkerLensResult` | The nutrition confirmation UI, food_logs on save | `lib/hawkerlens/types.ts` |
+
+All four exist because they serve genuinely different consumers with
+different shapes — this was a deliberate decision against collapsing them
+into one mega-object, which would couple unrelated features together.
+
+## Event model (spec Part B §14)
+
+`lib/events/emit.ts::emitEvent()` — six event types
+(`WORKOUT_COMPLETED`, `SET_ANALYZED`, `FOOD_LOGGED`, `RECOVERY_UPDATED`,
+`BODYWEIGHT_UPDATED`, `CHECKIN_COMPLETED`), each appended to `app_events`
+(a real, queryable audit table) and, for five of the six (all but
+`BODYWEIGHT_UPDATED`, which doesn't feed any cached number), triggering a
+recompute of `dante_daily_intelligence` — cached per user per day, not
+recomputed on every dashboard render. Wired into: `lib/workouts/
+session-mutations.ts` (finish workout), `app/api/recovery/checkin/route.ts`,
+`lib/nutrition/food-log/mutations.ts::createFoodLog` (every input method —
+barcode/search/photo/HawkerLens/manual — funnels through this one function,
+so one `emitEvent` call covers all of them), `app/api/setvision/
+results/route.ts`, and `app/api/progress/route.ts` (bodyweight).
+
+## Dante Daily Intelligence (spec Part B §15)
+
+`lib/dante-core/daily-intelligence.ts::buildDailyIntelligence()` —
+aggregates `evaluateReadiness()`, today's scheduled `workout_sessions.name`
+(training focus), calorie-target-vs-consumed (nutrition adherence %), and
+recovery status, then asks the LLM for ONE short grounded sentence (with a
+deterministic template fallback if the LLM call fails). Rendered on the
+main dashboard via `components/dante/daily-intelligence-card.tsx`, backed
+by `/api/dante/daily`.
+
+## Closed loop (spec Part B §16) — what's real vs. demonstrated
+
+The REAL, live version of this loop already exists in the product:
+`/dashboard/workouts/setvision`'s "Ask Dante" button sends a real
+`SetVisionAnalysis`'s velocity-loss signal to `/api/dante/recommendation`,
+which returns a real `TraceableDecision` rendered via `DecisionCard`. What
+does NOT yet exist: an automatic feed-forward where that decision changes
+what the NEXT logged session's `workout_session_exercises` target load
+actually is — that would require wiring the decision into the program/
+progression engine (`lib/training/progression-engine.ts`), which was
+judged too large a change to make blind in this pass (see "Not touched,
+and why" below). The full narrative loop (plan → train → SetVision →
+Dante → retrain → improve → save → next plan) IS demonstrated end-to-end,
+with real production UI, in Presentation Mode's `closed_loop` beat — using
+hand-authored demo numbers, not a replay of a real historical session. See
+`docs/presentation.md`.
 
 ## Role systems
 
@@ -148,3 +234,15 @@ needs a redirect, not a blind rename, and is left as follow-up work.
   real, confirmed issues, deliberately deferred — each touches live
   auth/onboarding/workout-history flows that need browser-level testing to
   change safely, which isn't available in this environment.
+- **Feed-forward from a Dante decision into the actual program/progression
+  engine** (see "Closed loop" above): a real architectural change to
+  `lib/training/progression-engine.ts`'s inputs, deferred rather than made
+  blind without the ability to test the real workout-session flow live.
+- **A service-role Supabase client**: introduced nowhere in this pass. The
+  AI Evaluation dashboard's usage counts are RLS-scoped to the requesting
+  admin's own rows rather than system-wide, specifically to avoid adding
+  the first service-role client (a new secret, a new privilege boundary)
+  as a side effect of a dashboard feature. See `docs/ai-evaluation.md`.
+- **A real Dante 3D character model, real TTS narration, and lip sync**:
+  see `docs/dante-avatar.md` — the pipeline is real, the assets aren't, and
+  the doc says so plainly rather than papering over it.

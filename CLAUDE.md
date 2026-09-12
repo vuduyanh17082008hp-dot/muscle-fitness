@@ -9,8 +9,15 @@ Intelligence Platform**. Long-term this app is one layer of a larger system:
 Muscle Fitness (product layer)
 Dante Core        (adaptive decision intelligence — lib/dante-core/, see docs/dante-core.md)
 SetVision         (training computer vision — lib/setvision/, see docs/setvision.md)
-HawkerLens SG     (Singapore food intelligence — future)
+HawkerLens SG     (Singapore food intelligence — lib/hawkerlens/, see docs/hawkerlens.md)
+Dante 3D          (virtual coach avatar — components/dante-avatar/, see docs/dante-avatar.md)
+Presentation Mode (/presentation — see docs/presentation.md)
 ```
+
+All four AI modules (Dante Core, SetVision, HawkerLens, and the avatar) are
+independently usable — none imports from another, and none breaks if
+another is removed. See docs/architecture.md's "Final ecosystem data flow"
+for the exact coupling rules.
 
 Product thesis (architectural principle, not marketing copy to repeat
 everywhere): most fitness apps record what you did — Muscle Fitness helps
@@ -75,12 +82,13 @@ having new code read tables directly for Dante-facing output.
 ## Nutrition
 
 Real, Supabase-backed CRUD — not mocked. Barcode (Open Food Facts), search
-(USDA → Open Food Facts → local fallback), and photo estimation
-(`lib/nutrition/photo-estimate.ts`) all normalize into one `ConfirmedFood`
-shape (`components/nutrition/types.ts`) before hitting
+(USDA → Open Food Facts → local fallback), photo estimation
+(`lib/nutrition/photo-estimate.ts`), and now HawkerLens SG
+(`lib/hawkerlens/`) all normalize into one `ConfirmedFood` shape
+(`components/nutrition/types.ts`) before hitting
 `app/api/nutrition/log/route.ts`. The server always recomputes macros from
 `per100g × quantity` — never trusts client-submitted totals. Keep it that
-way when adding new input sources (e.g. HawkerLens later).
+way when adding new input sources.
 
 The only mock/hardcoded nutrition data in the app is the public,
 unauthenticated `/meal-plan` calculator (`app/meal-plan/page.tsx`) — it
@@ -136,6 +144,45 @@ applied (not done automatically by this pass — review before running).
 
 ## HawkerLens SG
 
-Do not build yet. When it arrives, it should plug into nutrition the same
-way barcode/search/photo do today — produce a `ConfirmedFood`-shaped entry,
-nothing bespoke.
+`lib/hawkerlens/` — Groq-vision-based (closed-set prompt, not a fine-tuned
+model — no training dataset exists) dish classification + component
+decomposition for 10 MVP Singapore hawker dishes, with a mandatory
+calorie/protein RANGE (never a bare number) and three separately-tracked
+uncertainty dimensions. Plugs into nutrition the same way barcode/search/
+photo do — produces a normal `food_logs` row via the same `createFoodLog()`
+path, `source: "ai_estimate"`. Product surface: the "HawkerLens SG" option
+in the nutrition tracker's Track Food modal. **Curated dish nutrition data
+is an internal estimate, not a verified Singapore-specific source** — see
+docs/hawkerlens.md. Persistence needs
+`supabase/migrations/20260917090000_hawkerlens.sql` applied (not done
+automatically — review before running).
+
+## Events and Daily Intelligence
+
+`lib/events/emit.ts::emitEvent()` — six typed events, each logged to
+`app_events` and (for five of six) triggering a cached recompute of
+`dante_daily_intelligence` (`lib/dante-core/daily-intelligence.ts`), read
+by the dashboard's `DailyIntelligenceCard`. Needs
+`supabase/migrations/20260918090000_events_and_intelligence.sql` applied.
+When adding a new mutation that should feed Dante's daily summary, call
+`emitEvent()` at the end of it rather than teaching the summary builder to
+poll a new table directly.
+
+## AI Evaluation Dashboard
+
+`/admin/ai-evaluation` (admin-only). Every metric is labeled Real or Demo
+Data — see docs/ai-evaluation.md before trusting or quoting any number from
+it. SetVision/HawkerLens accuracy metrics are currently Demo Data (no real
+labeled dataset exists); Dante's safety-layer and determinism checks are
+Real (live-computed on page load).
+
+## Dante 3D / Presentation Mode
+
+`components/dante-avatar/` — a real Three.js/React Three Fiber pose state
+machine driving a procedural PLACEHOLDER humanoid (no sculpted character
+model exists — see docs/dante-avatar.md for exactly what's real vs. a
+stand-in, and how to swap in a real `.glb` later without touching the pose
+system). `/presentation` is a fully static, zero-network-dependency
+deterministic demo route (see docs/presentation.md) — do not add a
+Supabase/API call to it; that would violate its core "works with everything
+down" requirement.
