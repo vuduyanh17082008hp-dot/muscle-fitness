@@ -266,6 +266,25 @@ export async function updateSession(
     string | null =
       null;
 
+  /*
+   * getClaims() verifies the JWT locally (signature + exp) without a
+   * round trip to Supabase — fast, and the normal path. But it is a
+   * DIFFERENT verification strategy than every page guard
+   * (lib/auth/guard.ts, lib/auth/permissions.ts) uses, which all call
+   * getUser() (a live round trip). If getClaims() itself errors — a
+   * transient JWKS fetch failure, a momentary key-rotation gap — that
+   * is not the same thing as "no session", and must not be treated as
+   * one: doing so would redirect a fully valid, getUser()-passable
+   * session to /login from middleware alone, while the destination
+   * page would have authenticated fine if reached directly. This is
+   * exactly the "intermittently signed out" failure mode. On a
+   * getClaims() ERROR specifically (never on a clean "no claims"
+   * result, which is a legitimate logged-out state), fall back once
+   * to getUser() before concluding the session is invalid. This adds
+   * resilience without weakening validation — getUser() is the
+   * stricter, network-verified check already trusted everywhere else
+   * in the app.
+   */
   try {
     const {
       data,
@@ -280,6 +299,19 @@ export async function updateSession(
     ) {
       userId =
         data.claims.sub;
+    } else if (
+      error
+    ) {
+      const fallback =
+        await supabase.auth.getUser();
+
+      if (
+        !fallback.error &&
+        fallback.data.user
+      ) {
+        userId =
+          fallback.data.user.id;
+      }
     }
   } catch (
     error
@@ -292,6 +324,26 @@ export async function updateSession(
       "[SUPABASE AUTH ERROR]",
       error,
     );
+
+    try {
+      const fallback =
+        await supabase.auth.getUser();
+
+      if (
+        !fallback.error &&
+        fallback.data.user
+      ) {
+        userId =
+          fallback.data.user.id;
+      }
+    } catch (
+      fallbackError
+    ) {
+      console.error(
+        "[SUPABASE AUTH ERROR] getUser() fallback also failed",
+        fallbackError,
+      );
+    }
   }
 
   const isAuthenticated =

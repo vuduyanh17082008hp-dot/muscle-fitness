@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, Home } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
-import { DailyIntelligenceCard } from "@/components/dante/daily-intelligence-card";
+import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
+import { loadReadinessForUser } from "@/lib/dante-core/server/load-readiness-for-user";
+import { getOrBuildDailyIntelligence } from "@/lib/dante-core/daily-intelligence";
+import { PerformanceCard } from "@/components/ui/performance-card";
+import { PerformanceHalo } from "@/components/dashboard/performance-halo";
+import { DanteIntelligencePanel } from "@/components/dante/dante-intelligence-panel";
 
 export const dynamic =
   "force-dynamic";
@@ -67,37 +72,15 @@ function humanize(
     );
 }
 
-/* =========================================================
-   STAT CARD
-========================================================= */
-
-function StatCard({
-  label,
-  value,
-  description,
-}: {
-  label: string;
-  value:
-    | string
-    | number;
-  description: string;
-}) {
-  return (
-    <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-600">
-        {label}
-      </p>
-
-      <p className="mt-3 text-3xl font-black text-white">
-        {value}
-      </p>
-
-      <p className="mt-2 text-xs leading-5 text-zinc-500">
-        {description}
-      </p>
-    </article>
-  );
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
 }
+
+const LOAD_STATE_STATUS: Record<string, { label: string; tone: "good" | "warning" | "critical" }> = {
+  green: { label: "On track", tone: "good" },
+  amber: { label: "Elevated load", tone: "warning" },
+  red: { label: "High load", tone: "critical" },
+};
 
 /* =========================================================
    INFORMATION ROW
@@ -297,16 +280,38 @@ export default async function DashboardPage() {
   }
 
   /* =======================================================
-     NUTRITION PLAN
-     Single source of truth shared with /dashboard/nutrition —
-     see lib/nutrition/load-nutrition-context.ts.
+     TODAY — READINESS, DANTE, TRAIN/FUEL/RECOVER
+
+     Real data only: Dante Core's readiness engine (deterministic —
+     see lib/dante-core/readiness-engine.ts) and the cached daily
+     narrative (lib/dante-core/daily-intelligence.ts) both already
+     exist and back /api/dante/readiness and the old DailyIntelligenceCard
+     respectively. Loaded here server-side so the Today Hero renders
+     with real data on first paint instead of a client-side fetch.
   ======================================================= */
 
-  const { plan: nutritionPlan } =
-    await loadNutritionContext(
-      supabase,
-      user.id,
-    );
+  const [
+    { readiness, recoveryContext },
+    dailyIntelligence,
+    { plan: nutritionPlan },
+    foodLog,
+    todaySessionResponse,
+  ] = await Promise.all([
+    loadReadinessForUser(supabase, user.id),
+    getOrBuildDailyIntelligence(supabase, user.id),
+    loadNutritionContext(supabase, user.id),
+    loadFoodLogForDate(supabase, user.id),
+    supabase
+      .from("workout_sessions")
+      .select("id, name")
+      .eq("user_id", user.id)
+      .gte("scheduled_for", `${todayIso()}T00:00:00.000Z`)
+      .lte("scheduled_for", `${todayIso()}T23:59:59.999Z`)
+      .order("scheduled_for", { ascending: true })
+      .limit(1),
+  ]);
+
+  const todaySession = todaySessionResponse.data?.[0] ?? null;
 
   /* =======================================================
      DISPLAY NAME
@@ -320,6 +325,30 @@ export default async function DashboardPage() {
     "Athlete";
 
   /* =======================================================
+     THREE PILLARS — real values only, each independently
+     nullable rather than fabricated when data is missing.
+  ======================================================= */
+
+  const sessionsLast7Days = recoveryContext.trainingLoad.sessionsLast7Days;
+  const trainingDaysTarget = fitness?.training_days ?? null;
+
+  const trainValue =
+    trainingDaysTarget && trainingDaysTarget > 0
+      ? Math.round((sessionsLast7Days / trainingDaysTarget) * 100)
+      : null;
+
+  const fuelValue = dailyIntelligence.nutritionAdherencePercent;
+  const recoverValue = recoveryContext.todayScoreResult.score;
+
+  const loadStatus = LOAD_STATE_STATUS[recoveryContext.trainingLoad.state] ?? null;
+
+  const ctaHref = todaySession
+    ? `/dashboard/workouts/session/${todaySession.id}`
+    : "/dashboard/workouts/plans/new";
+
+  const ctaLabel = todaySession ? "Start workout" : "Build a plan";
+
+  /* =======================================================
      PAGE
   ======================================================= */
 
@@ -328,215 +357,188 @@ export default async function DashboardPage() {
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
 
         {/* =================================================
-            HERO
+            GREETING
         ================================================= */}
 
-        <header
-          className="
-            overflow-hidden
-            rounded-[28px]
-            border
-            border-white/10
-            bg-linear-to-br
-            from-zinc-900
-            via-[#111111]
-            to-black
-            p-7
-            shadow-2xl
-            shadow-black
-            sm:p-10
-          "
-        >
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+        <p className="text-sm text-zinc-500">
+          Welcome back, <span className="text-zinc-300">{displayName}</span>
+        </p>
 
-            {/* =============================================
-                INTRO
-            ============================================= */}
+        {/* =================================================
+            TODAY HERO — one dominant performance state, not
+            a row of equal-weight cards.
+        ================================================= */}
 
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-500">
-                Muscle Fitness Dashboard
-              </p>
+        <section className="mt-4 overflow-hidden rounded-[24px] border border-white/10 bg-linear-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-10">
+          <p className="text-[11px] font-black uppercase tracking-[0.3em] text-amber-400">
+            Today
+          </p>
 
-              <h1 className="mt-4 max-w-3xl text-4xl font-black uppercase tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Welcome back,{" "}
+          <div className="mt-6 flex flex-col items-center gap-8 lg:flex-row lg:items-center lg:justify-between lg:gap-12">
+            <PerformanceHalo
+              className="lg:order-2 lg:w-[280px] lg:shrink-0"
+              center={{
+                score: readiness.readinessScore,
+                status: dailyIntelligence.recoveryStatus,
+                confidence: readiness.confidence,
+              }}
+              train={{
+                label: "Train",
+                value: trainValue,
+                detail:
+                  trainingDaysTarget
+                    ? `${sessionsLast7Days} of ${trainingDaysTarget} sessions this week`
+                    : `${sessionsLast7Days} sessions in the last 7 days`,
+                color: "var(--color-domain-training)",
+              }}
+              fuel={{
+                label: "Fuel",
+                value: fuelValue,
+                detail:
+                  fuelValue !== null
+                    ? `${fuelValue}% of today's calorie target`
+                    : "No nutrition target set",
+                color: "var(--color-domain-nutrition)",
+              }}
+              recover={{
+                label: "Recover",
+                value: recoverValue,
+                detail: recoveryContext.today
+                  ? `${humanize(readiness.systemicFatigue)} systemic fatigue`
+                  : "No check-in yet today",
+                color: "var(--color-domain-recovery)",
+              }}
+            />
 
-                <span className="text-amber-500">
-                  {displayName}
-                </span>
+            <div className="w-full text-center lg:order-1 lg:max-w-xl lg:text-left">
+              <h1 className="text-2xl font-bold text-white sm:text-3xl">
+                {todaySession
+                  ? todaySession.name ?? "Today's session"
+                  : "No session scheduled today"}
               </h1>
 
-              <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-400 sm:text-base">
-                Your foundation is complete.
-                Use your targets below to
-                guide training, nutrition and
-                recovery.
+              <p className="mt-3 text-sm leading-6 text-zinc-400 sm:text-base">
+                {dailyIntelligence.narrative}
               </p>
-            </div>
 
-            {/* =============================================
-                ACTION BUTTONS
-            ============================================= */}
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
+                <Link
+                  href={ctaHref}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 text-sm font-black uppercase tracking-wider text-black transition-colors duration-200 hover:bg-amber-300"
+                >
+                  {ctaLabel}
+                  <ArrowRight className="size-4" />
+                </Link>
 
-            <div className="flex flex-wrap gap-3">
-
-              {/* RETURN HOME */}
-
-              <Link
-                href="/"
-                className="
-                  inline-flex
-                  items-center
-                  justify-center
-                  gap-2
-                  rounded-xl
-                  border
-                  border-amber-500/25
-                  bg-amber-500/10
-                  px-5
-                  py-3
-                  text-sm
-                  font-semibold
-                  text-amber-400
-                  transition
-                  hover:border-amber-500/50
-                  hover:bg-amber-500/20
-                  hover:text-amber-300
-                "
-              >
-                <Home
-                  aria-hidden="true"
-                  className="h-4 w-4"
-                />
-
-                Return home
-              </Link>
-
-              {/* EDIT PROFILE */}
-
-              <Link
-                href="/onboarding?edit=1"
-                className="
-                  inline-flex
-                  items-center
-                  justify-center
-                  rounded-xl
-                  border
-                  border-white/10
-                  bg-white/4
-                  px-5
-                  py-3
-                  text-sm
-                  font-semibold
-                  text-zinc-300
-                  transition
-                  hover:border-white/20
-                  hover:bg-white/8
-                  hover:text-white
-                "
-              >
-                Edit profile
-              </Link>
-
-              {/* OPEN TRAINING */}
-
-              <Link
-                href="/training"
-                className="
-                  inline-flex
-                  items-center
-                  justify-center
-                  rounded-xl
-                  bg-amber-500
-                  px-5
-                  py-3
-                  text-sm
-                  font-black
-                  uppercase
-                  tracking-wider
-                  text-black
-                  transition
-                  hover:bg-amber-400
-                "
-              >
-                Open training
-              </Link>
+                <Link
+                  href="/onboarding?edit=1"
+                  className="inline-flex h-12 items-center justify-center rounded-xl border border-white/10 bg-white/4 px-5 text-sm font-semibold text-zinc-300 transition-colors duration-200 hover:border-white/20 hover:bg-white/8 hover:text-white"
+                >
+                  Edit profile
+                </Link>
+              </div>
             </div>
           </div>
-        </header>
+        </section>
 
         {/* =================================================
-            TODAY — DANTE DAILY INTELLIGENCE
+            THREE PERFORMANCE PILLARS
         ================================================= */}
 
-        <DailyIntelligenceCard />
-
-        {/* =================================================
-            MACRO CARDS
-        ================================================= */}
-
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label="Calories"
-            value={formatValue(
-              nutritionPlan
-                ?.target.calories
-            )}
-            description="Estimated daily energy target."
+        <section className="mt-8 grid gap-4 lg:grid-cols-3">
+          <PerformanceCard
+            variant="training"
+            icon="dumbbell"
+            title={todaySession ? todaySession.name ?? "Today's session" : "Rest day"}
+            subtitle={todaySession ? "Today's planned session" : "No session scheduled today"}
+            status={loadStatus ?? undefined}
+            metric={{ value: sessionsLast7Days, unit: "sessions / 7d" }}
+            progress={
+              trainValue !== null
+                ? {
+                    value: trainValue,
+                    label:
+                      trainingDaysTarget
+                        ? `${sessionsLast7Days} of ${trainingDaysTarget} sessions this week`
+                        : undefined,
+                  }
+                : undefined
+            }
+            actions={
+              <Link
+                href={ctaHref}
+                className="inline-flex items-center gap-1.5 text-sm font-bold text-amber-300 transition-colors duration-200 hover:text-amber-200"
+              >
+                {ctaLabel}
+                <ArrowRight className="size-3.5" />
+              </Link>
+            }
           />
 
-          <StatCard
-            label="Protein"
-            value={formatValue(
-              nutritionPlan
-                ?.target.protein,
-              " g"
-            )}
-            description="Daily protein target."
+          <PerformanceCard
+            variant="nutrition"
+            icon="utensils"
+            title="Nutrition"
+            subtitle={`${foodLog.totals.calories} of ${formatValue(nutritionPlan?.target.calories)} kcal today`}
+            metric={{ value: fuelValue ?? "—", unit: fuelValue !== null ? "%" : undefined }}
+            progress={
+              fuelValue !== null
+                ? { value: fuelValue, label: `${foodLog.totals.protein}g protein logged` }
+                : undefined
+            }
+            href="/dashboard/nutrition"
           />
 
-          <StatCard
-            label="Carbohydrates"
-            value={formatValue(
-              nutritionPlan
-                ?.target.carbs,
-              " g"
-            )}
-            description="Daily carbohydrate target."
-          />
-
-          <StatCard
-            label="Fat"
-            value={formatValue(
-              nutritionPlan
-                ?.target.fat,
-              " g"
-            )}
-            description="Daily dietary fat target."
+          <PerformanceCard
+            variant="recovery"
+            icon="heart-pulse"
+            title="Recovery"
+            subtitle={
+              recoveryContext.today
+                ? `${humanize(readiness.systemicFatigue)} systemic fatigue`
+                : "No check-in yet today"
+            }
+            metric={{ value: recoverValue ?? "—" }}
+            progress={
+              recoverValue !== null
+                ? {
+                    value: recoverValue,
+                    label:
+                      recoveryContext.today?.sleep_hours != null
+                        ? `${recoveryContext.today.sleep_hours}h sleep last night`
+                        : "Sleep not logged",
+                  }
+                : undefined
+            }
+            href="/dashboard/recovery"
           />
         </section>
 
-        <div className="mt-4">
-          <Link
-            href="/dashboard/nutrition"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-amber-400 transition hover:text-amber-300"
-          >
-            View full nutrition plan
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+        {/* =================================================
+            DANTE — intelligence across all three pillars
+        ================================================= */}
+
+        <div className="mt-6">
+          <DanteIntelligencePanel
+            recommendation={dailyIntelligence.narrative}
+            why={readiness.limitingFactors}
+            confidence={readiness.confidence}
+          />
         </div>
 
         {/* =================================================
-            DETAILS
+            DETAILS — profile reference, not a daily decision;
+            kept below the fold, one flat card each rather than
+            nested cards.
         ================================================= */}
 
-        <section className="mt-8 grid gap-6 xl:grid-cols-2">
+        <section className="mt-10 grid gap-6 xl:grid-cols-2">
 
           {/* ===============================================
               TRAINING PROFILE
           =============================================== */}
 
-          <article className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+          <article className="rounded-2xl border border-white/10 p-6 sm:p-8">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-500">
                 Training profile
@@ -633,7 +635,7 @@ export default async function DashboardPage() {
               NUTRITION + LIFESTYLE
           =============================================== */}
 
-          <article className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+          <article className="rounded-2xl border border-white/10 p-6 sm:p-8">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-500">
                 Nutrition and lifestyle

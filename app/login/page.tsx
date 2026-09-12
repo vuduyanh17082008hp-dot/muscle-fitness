@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { Logo } from "@/components/brand/logo";
 
 type LoadingType = "email" | "google" | null;
 
@@ -27,39 +28,39 @@ function getLoginErrorMessage(message: string): string {
     normalizedMessage.includes("invalid login credentials") ||
     normalizedMessage.includes("invalid credentials")
   ) {
-    return "Email hoặc mật khẩu không chính xác. Nếu tài khoản được tạo bằng Google, hãy đăng nhập bằng Google.";
+    return "Incorrect email or password. If your account was created with Google, sign in with Google instead.";
   }
 
   if (normalizedMessage.includes("email not confirmed")) {
-    return "Email chưa được xác nhận. Hãy kiểm tra hộp thư của bạn.";
+    return "Your email hasn't been confirmed yet. Please check your inbox.";
   }
 
   if (
     normalizedMessage.includes("too many requests") ||
     normalizedMessage.includes("rate limit")
   ) {
-    return "Bạn đã thử đăng nhập quá nhiều lần. Hãy đợi vài phút rồi thử lại.";
+    return "Too many sign-in attempts. Please wait a few minutes and try again.";
   }
 
   if (normalizedMessage.includes("provider is not enabled")) {
-    return "Phương thức đăng nhập này chưa được bật trong Supabase.";
+    return "This sign-in method isn't enabled yet.";
   }
 
   if (
     normalizedMessage.includes("failed to fetch") ||
     normalizedMessage.includes("network")
   ) {
-    return "Không thể kết nối tới Supabase. Hãy kiểm tra Internet và file .env.local.";
+    return "Couldn't reach the server. Please check your connection and try again.";
   }
 
   if (
     normalizedMessage.includes("missing supabase") ||
     normalizedMessage.includes("environment")
   ) {
-    return "Thiếu cấu hình Supabase trong file .env.local.";
+    return "The app isn't configured correctly. Please try again later.";
   }
 
-  return message || "Không thể hoàn tất yêu cầu. Vui lòng thử lại.";
+  return message || "Couldn't complete this request. Please try again.";
 }
 
 function getSafeRedirect(next: string | null): string {
@@ -111,12 +112,12 @@ function LoginContent() {
       .toLowerCase();
 
     if (!normalizedEmail) {
-      setError("Vui lòng nhập địa chỉ email.");
+      setError("Please enter your email address.");
       return;
     }
 
     if (!password) {
-      setError("Vui lòng nhập mật khẩu.");
+      setError("Please enter your password.");
       return;
     }
 
@@ -155,7 +156,7 @@ function LoginContent() {
         );
 
         setError(
-          "Đăng nhập thành công nhưng không tạo được phiên đăng nhập. Hãy thử lại.",
+          "Signed in, but couldn't start your session. Please try again.",
         );
 
         return;
@@ -172,7 +173,7 @@ function LoginContent() {
       const message =
         unknownError instanceof Error
           ? unknownError.message
-          : "Không thể kết nối tới hệ thống đăng nhập.";
+          : "Couldn't reach the sign-in system.";
 
       setError(getLoginErrorMessage(message));
     } finally {
@@ -232,7 +233,7 @@ function LoginContent() {
       const message =
         unknownError instanceof Error
           ? unknownError.message
-          : "Không thể đăng nhập bằng Google.";
+          : "Couldn't sign in with Google.";
 
       setError(getLoginErrorMessage(message));
       setLoadingType(null);
@@ -257,24 +258,9 @@ function LoginContent() {
 
       <section className="relative w-full max-w-[580px] rounded-[34px] border border-white/10 bg-black/90 p-6 shadow-[0_30px_120px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:p-10">
         {/* Brand */}
-        <Link
-          href="/"
-          className="inline-flex items-center gap-4"
-        >
-          <span className="flex h-16 w-16 items-center justify-center rounded-full border border-orange-500/20 bg-orange-500/10 text-lg font-black text-orange-400">
-            MF
-          </span>
+        <Logo showTextOnMobile />
 
-          <span>
-            <span className="block text-lg font-black uppercase tracking-[0.25em] text-white sm:text-xl">
-              Muscle Fitness
-            </span>
-
-            <span className="mt-1 block text-sm text-zinc-600">
-              Built through discipline
-            </span>
-          </span>
-        </Link>
+        <p className="mt-3 text-sm text-zinc-600">Built through discipline</p>
 
         {/* Heading */}
         <div className="mt-10">
@@ -364,7 +350,7 @@ function LoginContent() {
               </label>
 
               <Link
-                href="/auth/forgot-password"
+                href="/forgot-password"
                 className="text-sm font-bold text-zinc-300 transition hover:text-orange-400"
               >
                 Forgot password?
@@ -411,8 +397,8 @@ function LoginContent() {
                 disabled={isLoading}
                 aria-label={
                   showPassword
-                    ? "Ẩn mật khẩu"
-                    : "Hiện mật khẩu"
+                    ? "Hide password"
+                    : "Show password"
                 }
                 className="absolute right-5 top-1/2 -translate-y-1/2 text-zinc-600 transition hover:text-white disabled:cursor-not-allowed"
               >
@@ -475,7 +461,7 @@ function LoginContent() {
         <p className="mt-8 text-center text-sm text-zinc-600">
           New to Muscle Fitness?{" "}
           <Link
-            href="/auth/register"
+            href="/register"
             className="font-bold text-orange-400 transition hover:text-orange-300"
           >
             Create an account

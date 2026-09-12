@@ -1,9 +1,10 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ChevronLeft, ChevronRight, Loader2, Pencil, Trash2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, UtensilsCrossed } from "lucide-react"
 
 import { TrackFoodModal } from "@/components/nutrition/track-food-modal"
+import { EmptyState } from "@/components/dashboard/empty-state"
 import type { ConfirmedFood } from "@/components/nutrition/types"
 import {
   MEAL_TYPES,
@@ -244,7 +245,7 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
       </div>
 
       {isToday && (recentFoods.length > 0 || frequentFoods.length > 0) ? (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div id="history" className="grid gap-4 sm:grid-cols-2 scroll-mt-24">
           {recentFoods.length > 0 ? (
             <FoodShortcutList title="Recent Foods" items={recentFoods} onAddAgain={handleAddAgain} />
           ) : null}
@@ -263,14 +264,15 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
             Loading…
           </div>
         ) : entries.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
-            <p className="text-sm text-zinc-500">Nothing logged yet.</p>
-            {isToday ? (
-              <p className="mt-1 text-sm text-zinc-500">
-                Track your first meal to start today&apos;s nutrition summary.
-              </p>
-            ) : null}
-          </div>
+          <EmptyState
+            icon={UtensilsCrossed}
+            title="Nothing logged yet"
+            description={
+              isToday
+                ? "Track your first meal to start today's nutrition summary."
+                : "No food was logged on this day."
+            }
+          />
         ) : (
           <div className="space-y-6">
             {MEAL_TYPES.filter((meal) => grouped[meal].length > 0).map((meal) => (

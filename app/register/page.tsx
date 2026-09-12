@@ -23,9 +23,9 @@ export default async function RegisterPage() {
     <AuthShell
       eyebrow="Create your account"
       title="Start stronger"
-      description="Tạo tài khoản để lưu kế hoạch luyện tập, dinh dưỡng và toàn bộ tiến độ cá nhân."
+      description="Create an account to save your training plan, nutrition and progress."
       sideTitle="Your transformation starts here."
-      sideDescription="Không cần chờ đến khi hoàn hảo. Hãy bắt đầu bằng dữ liệu thật, một kế hoạch rõ ràng và sự kỷ luật được xây dựng từng ngày."
+      sideDescription="Don't wait for the perfect moment. Start with real data, a clear plan, and discipline built one day at a time."
       step="01 / 04"
     >
       <RegisterForm />

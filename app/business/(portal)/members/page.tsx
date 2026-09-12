@@ -1,6 +1,4 @@
 import {
-  CheckCircle2,
-  Clock3,
   Search,
   UserPlus,
   Users,
@@ -9,6 +7,9 @@ import { redirect } from "next/navigation";
 
 import { getCurrentBusiness } from "@/lib/business/get-current-business";
 import { createClient } from "@/lib/supabase/server";
+import { PerformanceCard } from "@/components/ui/performance-card";
+import { EmptyState } from "@/components/dashboard/empty-state";
+import { ErrorState } from "@/components/dashboard/error-state";
 
 type MemberRow = {
   id: string;
@@ -25,12 +26,20 @@ type Profile = {
   avatar_url: string | null;
 };
 
-export default async function BusinessMembersPage() {
+type MembersPageProps = {
+  searchParams: Promise<{ q?: string }>;
+};
+
+export default async function BusinessMembersPage({
+  searchParams,
+}: MembersPageProps) {
   const business = await getCurrentBusiness();
 
   if (!business) {
     redirect("/business/setup");
   }
+
+  const { q: query = "" } = await searchParams;
 
   const supabase = await createClient();
 
@@ -53,15 +62,10 @@ export default async function BusinessMembersPage() {
 
     return (
       <div className="mx-auto max-w-7xl p-6 lg:p-10">
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6">
-          <h1 className="text-xl font-semibold text-red-300">
-            Unable to load members
-          </h1>
-
-          <p className="mt-2 text-sm text-red-300/80">
-            {membersError.message}
-          </p>
-        </div>
+        <ErrorState
+          title="Unable to load members"
+          description="Something went wrong loading your member directory. Please try again."
+        />
       </div>
     );
   }
@@ -102,6 +106,22 @@ export default async function BusinessMembersPage() {
     (member) => member.status === "pending"
   ).length;
 
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const visibleMembers = normalizedQuery
+    ? enrichedMembers.filter((member) => {
+        const haystack = [
+          member.profile?.full_name,
+          member.profile?.email,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return haystack.includes(normalizedQuery);
+      })
+    : enrichedMembers;
+
   return (
     <div className="mx-auto max-w-7xl p-6 lg:p-10">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
@@ -121,7 +141,9 @@ export default async function BusinessMembersPage() {
 
         <button
           type="button"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+          disabled
+          title="Adding members directly is coming soon"
+          className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200/50 opacity-60"
         >
           <UserPlus className="h-4 w-4" />
           Add Member
@@ -129,23 +151,9 @@ export default async function BusinessMembersPage() {
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <StatCard
-          icon={<Users className="h-5 w-5" />}
-          label="Total Members"
-          value={enrichedMembers.length}
-        />
-
-        <StatCard
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          label="Active"
-          value={activeMembers}
-        />
-
-        <StatCard
-          icon={<Clock3 className="h-5 w-5" />}
-          label="Pending"
-          value={pendingMembers}
-        />
+        <PerformanceCard icon="users" title="Total Members" metric={{ value: enrichedMembers.length }} />
+        <PerformanceCard icon="check-circle" title="Active" metric={{ value: activeMembers }} />
+        <PerformanceCard icon="clock" title="Pending" metric={{ value: pendingMembers }} />
       </div>
 
       <section className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
@@ -154,35 +162,39 @@ export default async function BusinessMembersPage() {
             <h2 className="font-semibold">Member Directory</h2>
 
             <p className="mt-1 text-sm text-zinc-500">
-              {enrichedMembers.length} registered member
+              {visibleMembers.length} of {enrichedMembers.length} member
               {enrichedMembers.length === 1 ? "" : "s"}
             </p>
           </div>
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
+          <form method="GET" className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
 
             <input
               type="search"
+              name="q"
+              defaultValue={query}
               placeholder="Search members..."
+              aria-label="Search members by name or email"
               className="w-full rounded-xl border border-white/10 bg-black/30 py-2.5 pl-10 pr-4 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-white/20 sm:w-72"
             />
-          </div>
+          </form>
         </div>
 
         {enrichedMembers.length === 0 ? (
-          <div className="flex min-h-80 flex-col items-center justify-center p-8 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5">
-              <Users className="h-6 w-6 text-zinc-500" />
-            </div>
-
-            <h3 className="mt-4 font-semibold">No members yet</h3>
-
-            <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-500">
-              Add members to your Muscle Fitness workspace to start tracking
-              engagement, training progress and retention.
-            </p>
-          </div>
+          <EmptyState
+            className="rounded-none border-0"
+            icon={Users}
+            title="No members yet"
+            description="Add members to your Muscle Fitness workspace to start tracking engagement, training progress and retention."
+          />
+        ) : visibleMembers.length === 0 ? (
+          <EmptyState
+            className="rounded-none border-0"
+            icon={Search}
+            title="No members match your search"
+            description={`Nobody matched "${query}". Try a different name or email.`}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table
@@ -201,7 +213,7 @@ export default async function BusinessMembersPage() {
               </thead>
 
               <tbody>
-                {enrichedMembers.map((member) => {
+                {visibleMembers.map((member) => {
                   const profile = member.profile;
 
                   const displayName =
@@ -268,27 +280,6 @@ export default async function BusinessMembersPage() {
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-      <div className="flex items-center gap-3 text-zinc-500">
-        {icon}
-
-        <p className="text-sm">{label}</p>
-      </div>
-
-      <p className="mt-4 text-3xl font-bold text-white">{value}</p>
-    </div>
-  );
-}
 
 function StatusBadge({ status }: { status: string }) {
   let classes = "bg-zinc-500/10 text-zinc-400";

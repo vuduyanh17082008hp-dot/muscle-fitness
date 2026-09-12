@@ -1,12 +1,9 @@
-import {
-  Bot,
-  BrainCircuit,
-  TrendingDown,
-  Zap,
-} from "lucide-react";
+import { Bot } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { getCurrentBusiness } from "@/lib/business/get-current-business";
+import { PerformanceCard } from "@/components/ui/performance-card";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 export default async function BusinessAIInsightsPage() {
   const business = await getCurrentBusiness();
@@ -31,22 +28,22 @@ export default async function BusinessAIInsightsPage() {
       </p>
 
       <div className="mt-8 grid gap-4 md:grid-cols-3">
-        <InsightCard
-          icon={<TrendingDown className="h-5 w-5" />}
+        <PerformanceCard
+          icon="trending-down"
           title="Churn Risk"
-          description="Identify members whose engagement is declining before they leave."
+          subtitle="Identify members whose engagement is declining before they leave."
         />
 
-        <InsightCard
-          icon={<BrainCircuit className="h-5 w-5" />}
+        <PerformanceCard
+          icon="brain-circuit"
           title="Behaviour Insights"
-          description="Understand training consistency and member engagement patterns."
+          subtitle="Understand training consistency and member engagement patterns."
         />
 
-        <InsightCard
-          icon={<Zap className="h-5 w-5" />}
+        <PerformanceCard
+          icon="zap"
           title="Recommended Actions"
-          description="Generate practical actions trainers can take to improve retention."
+          subtitle="Generate practical actions trainers can take to improve retention."
         />
       </div>
 
@@ -59,47 +56,13 @@ export default async function BusinessAIInsightsPage() {
           </h2>
         </div>
 
-        <div className="mt-6 flex min-h-72 items-center justify-center rounded-xl border border-dashed border-white/10 p-6 text-center">
-          <div>
-            <Bot className="mx-auto h-8 w-8 text-zinc-600" />
-
-            <p className="mt-4 font-medium">
-              AI analysis will appear here
-            </p>
-
-            <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-zinc-500">
-              Groq can be connected here to analyse business metrics,
-              member behaviour, engagement and retention patterns.
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          className="mt-6 min-h-72"
+          icon={Bot}
+          title="AI analysis will appear here"
+          description="Groq can be connected here to analyse business metrics, member behaviour, engagement and retention patterns."
+        />
       </section>
     </div>
-  );
-}
-
-function InsightCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <article className="rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:bg-white/10">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-        {icon}
-      </div>
-
-      <h2 className="mt-5 font-semibold">
-        {title}
-      </h2>
-
-      <p className="mt-2 text-sm leading-6 text-zinc-500">
-        {description}
-      </p>
-    </article>
   );
 }

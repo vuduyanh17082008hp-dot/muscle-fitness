@@ -13,6 +13,14 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { SectionTabs } from "@/components/dashboard/section-tabs";
+
+const TRAIN_TABS = [
+  { label: "Today", href: "/dashboard/today" },
+  { label: "Plan", href: "/dashboard/split" },
+  { label: "Form Coach", href: "/dashboard/workouts/form-coach" },
+  { label: "History", href: "/dashboard/workouts/history" },
+];
 
 import {
   getRecommendedPreset,
@@ -334,6 +342,8 @@ export default async function WorkoutsPage() {
 
   return (
     <main className="space-y-10">
+      <SectionTabs tabs={TRAIN_TABS} />
+
       {/* ===================================================
           HERO
       =================================================== */}

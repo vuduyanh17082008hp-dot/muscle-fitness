@@ -30,51 +30,21 @@ import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-conte
 import { NutritionSettingsForm } from "./nutrition-settings-form"
 import { BudgetPlanner } from "@/components/nutrition/budget-planner"
 import { NutritionTracker } from "@/components/nutrition/nutrition-tracker"
+import { SectionTabs } from "@/components/dashboard/section-tabs"
+import { PerformanceCard } from "@/components/ui/performance-card"
 
 export const dynamic = "force-dynamic"
+
+const NUTRITION_TABS = [
+  { label: "Today", href: "/dashboard/nutrition#today" },
+  { label: "Plan", href: "/dashboard/nutrition#plan" },
+  { label: "History", href: "/dashboard/nutrition#history" },
+  { label: "Insights", href: "/dashboard/ai-coach" },
+]
 
 /* =========================================================
    SMALL PRESENTATION HELPERS
 ========================================================= */
-
-function StatTile({
-  label,
-  value,
-  suffix,
-  accent = false,
-}: {
-  label: string
-  value: string | number
-  suffix?: string
-  accent?: boolean
-}) {
-  return (
-    <div
-      className={`rounded-2xl border p-5 ${
-        accent
-          ? "border-amber-400/25 bg-amber-400/8"
-          : "border-white/10 bg-white/[0.035]"
-      }`}
-    >
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-        {label}
-      </p>
-
-      <p
-        className={`mt-3 text-3xl font-black ${
-          accent ? "text-amber-300" : "text-white"
-        }`}
-      >
-        {value}
-        {suffix ? (
-          <span className="ml-1 text-base font-semibold text-zinc-500">
-            {suffix}
-          </span>
-        ) : null}
-      </p>
-    </div>
-  )
-}
 
 function SectionHeading({
   eyebrow,
@@ -172,25 +142,29 @@ export default async function NutritionPlanPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 pb-16">
+      <SectionTabs tabs={NUTRITION_TABS} />
+
       {/* ===================================================
           TRACK FOOD — daily consumed macros + logging
       =================================================== */}
 
-      <NutritionTracker
-        initialEntries={foodLog.entries}
-        target={{
-          calories: target.calories,
-          protein: target.protein,
-          carbs: target.carbs,
-          fat: target.fat,
-        }}
-      />
+      <div id="today" className="scroll-mt-24">
+        <NutritionTracker
+          initialEntries={foodLog.entries}
+          target={{
+            calories: target.calories,
+            protein: target.protein,
+            carbs: target.carbs,
+            fat: target.fat,
+          }}
+        />
+      </div>
 
       {/* ===================================================
           HEADER
       =================================================== */}
 
-      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
+      <header id="plan" className="scroll-mt-24 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
         <span className="inline-grid size-14 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
           <Utensils className="size-6" />
         </span>
@@ -264,23 +238,16 @@ export default async function NutritionPlanPage() {
         />
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatTile label="Calories" value={target.calories} accent />
-          <StatTile label="Protein" value={target.protein} suffix="g" />
-          <StatTile label="Carbohydrates" value={target.carbs} suffix="g" />
-          <StatTile label="Fat" value={target.fat} suffix="g" />
+          <PerformanceCard variant="nutrition" title="Calories" metric={{ value: target.calories }} />
+          <PerformanceCard variant="nutrition" title="Protein" metric={{ value: target.protein, unit: "g" }} />
+          <PerformanceCard variant="nutrition" title="Carbohydrates" metric={{ value: target.carbs, unit: "g" }} />
+          <PerformanceCard variant="nutrition" title="Fat" metric={{ value: target.fat, unit: "g" }} />
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <StatTile label="BMR (Mifflin-St Jeor)" value={plan.bmr} suffix="kcal" />
-          <StatTile
-            label="PAL multiplier"
-            value={plan.pal.toFixed(3)}
-          />
-          <StatTile
-            label="Estimated maintenance"
-            value={plan.maintenanceCalories}
-            suffix="kcal"
-          />
+          <PerformanceCard title="BMR (Mifflin-St Jeor)" metric={{ value: plan.bmr, unit: "kcal" }} />
+          <PerformanceCard title="PAL multiplier" metric={{ value: plan.pal.toFixed(3) }} />
+          <PerformanceCard title="Estimated maintenance" metric={{ value: plan.maintenanceCalories, unit: "kcal" }} />
         </div>
 
         <p className="mt-3 text-xs leading-5 text-zinc-600">
@@ -299,17 +266,9 @@ export default async function NutritionPlanPage() {
           </p>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <StatTile
-              label="Protein / kg"
-              value={target.proteinPerKg}
-              suffix="g/kg"
-            />
-            <StatTile
-              label="Carbs / kg"
-              value={target.carbsPerKg}
-              suffix="g/kg"
-            />
-            <StatTile label="Fat / kg" value={target.fatPerKg} suffix="g/kg" />
+            <PerformanceCard title="Protein / kg" metric={{ value: target.proteinPerKg, unit: "g/kg" }} />
+            <PerformanceCard title="Carbs / kg" metric={{ value: target.carbsPerKg, unit: "g/kg" }} />
+            <PerformanceCard title="Fat / kg" metric={{ value: target.fatPerKg, unit: "g/kg" }} />
           </div>
         </div>
       </section>

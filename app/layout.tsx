@@ -8,10 +8,54 @@ import type {
 } from "react";
 
 import {
+  Inter,
+  Barlow_Condensed,
+  Bebas_Neue,
+} from "next/font/google";
+
+import {
   AuthProvider,
 } from "@/app/context/AuthContext";
 
 import "./globals.css";
+
+/*
+ * Typography system:
+ *  - Inter        -> UI / body / data (var(--font-inter))
+ *  - Barlow Condensed -> display / section / sport headings, the
+ *    default for every h1-h6 (var(--font-barlow-condensed))
+ *  - Bebas Neue   -> rare brand/campaign moments only, e.g. the
+ *    wordmark (var(--font-bebas)) — never the general heading font
+ *
+ * These were previously referenced as CSS custom properties in
+ * globals.css (--font-body / --font-heading) but never actually
+ * loaded anywhere, so the whole app was silently rendering in the
+ * fallback stack (Arial / Impact) instead of the intended typeface.
+ */
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const barlowCondensed = Barlow_Condensed({
+  subsets: ["latin"],
+  // 86+ existing components pair a heading element with Tailwind's
+  // font-black (900)/font-bold (700)/font-semibold (600) utilities;
+  // loading all the weights those actually request avoids browser
+  // font-synthesis (fake bold) on every one of them.
+  weight: ["500", "600", "700", "900"],
+  variable: "--font-barlow-condensed",
+  display: "swap",
+});
+
+const bebasNeue = Bebas_Neue({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-bebas",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -172,6 +216,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
+      className={`${inter.variable} ${barlowCondensed.variable} ${bebasNeue.variable}`}
     >
       <body
         className="

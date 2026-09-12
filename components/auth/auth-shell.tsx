@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
-import Link from "next/link"
+
+import { Logo } from "@/components/brand/logo"
 
 type AuthShellProps = {
   eyebrow: string
@@ -38,21 +39,7 @@ export function AuthShell({
 
       <div className="relative z-10 grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(440px,560px)]">
         <section className="hidden min-h-screen flex-col justify-between border-r border-white/10 p-10 lg:flex xl:p-14">
-          <Link href="/" className="inline-flex items-center gap-4">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-orange-400/30 bg-orange-500/10 text-sm font-black text-orange-400 shadow-[0_0_40px_rgba(249,115,22,0.12)]">
-              MF
-            </span>
-
-            <span>
-              <span className="block text-sm font-black tracking-[0.28em]">
-                MUSCLE FITNESS
-              </span>
-
-              <span className="mt-1 block text-xs text-zinc-600">
-                Built through discipline
-              </span>
-            </span>
-          </Link>
+          <Logo showTextOnMobile tagline="Built through discipline" />
 
           <div className="max-w-2xl">
             <div className="mb-7 flex items-center gap-4">
@@ -90,18 +77,7 @@ export function AuthShell({
 
         <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8 lg:px-10">
           <div className="w-full max-w-md">
-            <Link
-              href="/"
-              className="mb-8 inline-flex items-center gap-3 lg:hidden"
-            >
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-orange-400/30 bg-orange-500/10 text-sm font-black text-orange-400">
-                MF
-              </span>
-
-              <span className="text-xs font-black tracking-[0.25em]">
-                MUSCLE FITNESS
-              </span>
-            </Link>
+            <Logo showTextOnMobile className="mb-8 lg:hidden" />
 
             <div className="rounded-[32px] border border-white/10 bg-zinc-950/75 p-6 shadow-[0_32px_100px_rgba(0,0,0,0.65)] backdrop-blur-2xl sm:p-8">
               <div className="mb-8">

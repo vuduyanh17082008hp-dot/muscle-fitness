@@ -102,7 +102,7 @@ export default async function BusinessDashboardPage() {
 
         <Link
           href="/business/ai-insights"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
         >
           <Bot className="h-4 w-4" />
           Generate AI Insights

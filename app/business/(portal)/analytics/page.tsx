@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 
 import { getCurrentBusiness } from "@/lib/business/get-current-business";
 import { createClient } from "@/lib/supabase/server";
+import { PerformanceCard } from "@/components/ui/performance-card";
 
 export default async function BusinessAnalyticsPage() {
   const business = await getCurrentBusiness();
@@ -53,20 +54,9 @@ export default async function BusinessAnalyticsPage() {
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <MetricCard
-          label="Total Members"
-          value={totalMembers.toString()}
-        />
-
-        <MetricCard
-          label="Active Members"
-          value={activeMembers.toString()}
-        />
-
-        <MetricCard
-          label="Active Rate"
-          value={`${retentionRate}%`}
-        />
+        <PerformanceCard icon="users" title="Total Members" metric={{ value: totalMembers }} />
+        <PerformanceCard icon="users" title="Active Members" metric={{ value: activeMembers }} />
+        <PerformanceCard icon="trending-up" title="Active Rate" metric={{ value: retentionRate, unit: "%" }} />
       </div>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-2">
@@ -82,26 +72,6 @@ export default async function BusinessAnalyticsPage() {
           icon={<TrendingUp className="h-5 w-5" />}
         />
       </div>
-    </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-      <p className="text-sm text-zinc-500">
-        {label}
-      </p>
-
-      <p className="mt-3 text-3xl font-bold">
-        {value}
-      </p>
     </div>
   );
 }

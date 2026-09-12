@@ -29,7 +29,7 @@ export function LoadingState({
     label ??
     title ??
     message ??
-    "Đang tải..."
+    "Loading..."
 
   return (
     <div
@@ -100,7 +100,7 @@ export function LoadingState({
           <span className="sr-only">
             {typeof displayLabel === "string"
               ? displayLabel
-              : "Đang tải"}
+              : "Loading"}
           </span>
         </div>
       </section>

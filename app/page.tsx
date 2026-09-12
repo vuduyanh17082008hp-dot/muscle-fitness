@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/brand/logo";
 
 import {
   Activity,
@@ -177,65 +178,7 @@ export default function HomePage() {
         >
           {/* BRAND */}
 
-          <Link
-            href="/"
-            className="flex items-center gap-3"
-          >
-            <div
-              className="
-                grid
-                size-10
-                place-items-center
-
-                rounded-xl
-
-                border
-                border-amber-400/30
-
-                bg-amber-400/10
-
-                text-xs
-                font-black
-
-                text-amber-400
-              "
-            >
-              MF
-            </div>
-
-            <div>
-              <p
-                className="
-                  text-sm
-                  font-black
-
-                  uppercase
-
-                  tracking-[0.2em]
-                "
-              >
-                Muscle Fitness
-              </p>
-
-              <p
-                className="
-                  hidden
-
-                  text-[9px]
-
-                  uppercase
-
-                  tracking-[0.2em]
-
-                  text-zinc-600
-
-                  sm:block
-                "
-              >
-                AI-powered personal training
-              </p>
-            </div>
-          </Link>
+          <Logo tagline="AI-powered personal training" />
 
           {/* DESKTOP NAV */}
 

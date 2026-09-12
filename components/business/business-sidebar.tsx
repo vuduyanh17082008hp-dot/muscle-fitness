@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Activity,
   BarChart3,
   Bot,
   BriefcaseBusiness,
@@ -13,6 +12,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
+import { Logo } from "@/components/brand/logo";
 
 type BusinessSidebarProps = {
   businessName: string;
@@ -70,24 +71,7 @@ export default function BusinessSidebar({
       ====================================================== */}
 
       <div className="border-b border-white/10 px-6 py-6">
-        <Link
-          href="/business"
-          className="flex items-center gap-3"
-        >
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-black">
-            <Activity className="h-6 w-6" />
-          </div>
-
-          <div className="min-w-0">
-            <p className="truncate text-base font-bold text-white">
-              Muscle Fitness
-            </p>
-
-            <p className="text-xs text-zinc-500">
-              Business Portal
-            </p>
-          </div>
-        </Link>
+        <Logo href="/business" tagline="Business Portal" showTextOnMobile />
       </div>
 
       {/* ======================================================
@@ -95,8 +79,8 @@ export default function BusinessSidebar({
       ====================================================== */}
 
       <div className="px-4 py-5">
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-          <div className="mb-2 flex items-center gap-2 text-zinc-500">
+        <div className="rounded-xl border border-amber-400/15 bg-amber-400/[0.04] p-4">
+          <div className="mb-2 flex items-center gap-2 text-amber-400/80">
             <BriefcaseBusiness className="h-4 w-4" />
 
             <span className="text-xs uppercase tracking-wider">
@@ -131,10 +115,10 @@ export default function BusinessSidebar({
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition ${
+              className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors duration-200 ${
                 active
-                  ? "bg-white text-black"
-                  : "text-zinc-400 hover:bg-white/10 hover:text-white"
+                  ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
+                  : "border-transparent text-zinc-400 hover:bg-white/10 hover:text-white"
               }`}
             >
               <Icon className="h-5 w-5" />

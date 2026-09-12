@@ -34,14 +34,32 @@
   --color-danger: #dc2626;
   --color-warning: #f59e0b;
 
+  /* Domain accents — one per product pillar (Train / Fuel / Recover /
+     Progress / Dante), kept muted/restrained rather than a rainbow
+     SaaS palette. Dante shares the warm gold/bronze primary since
+     Dante IS the training-intelligence voice; every other domain
+     gets its own quiet hue so a glance at a card border/icon tells
+     you which pillar you're in without shouting. */
+  --color-domain-training: #c2540c; /* Train — burnt orange */
+  --color-domain-nutrition: #7fa66d; /* Fuel — muted green */
+  --color-domain-recovery: #8f80c4; /* Recover — muted violet */
+  --color-domain-progress: #5fa3b3; /* Progress — restrained cyan */
+  --color-domain-dante: var(--color-accent-light); /* Dante — gold */
+
   /* Border */
   --color-border: rgba(255, 255, 255, 0.1);
   --color-border-light: rgba(255, 255, 255, 0.17);
   --color-border-accent: rgba(184, 115, 51, 0.5);
 
-  /* Fonts */
+  /* Fonts — loaded via next/font in app/layout.tsx, which sets the
+     --font-inter / --font-barlow-condensed / --font-bebas variables
+     on <html>. Inter is the UI/body/data face; Barlow Condensed is
+     the default heading face (display + section headings); Bebas
+     Neue is reserved for rare brand/campaign moments (the wordmark),
+     never used as the general heading font. */
   --font-body: var(--font-inter), Arial, Helvetica, sans-serif;
-  --font-heading: var(--font-bebas), Impact, sans-serif;
+  --font-heading: var(--font-barlow-condensed), Arial Narrow, sans-serif;
+  --font-brand: var(--font-bebas), Impact, sans-serif;
 
   /* Radius */
   --radius-xs: 4px;
@@ -100,7 +118,14 @@ html {
   min-width: 320px;
   scroll-behavior: smooth;
   scrollbar-gutter: stable;
+  scroll-padding-top: var(--navbar-height);
   background: var(--color-background);
+}
+
+@media (max-width: 640px) {
+  html {
+    scroll-padding-top: 72px;
+  }
 }
 
 body {
@@ -212,10 +237,14 @@ h6 {
   margin: 0;
   color: var(--color-text-primary);
   font-family: var(--font-heading);
-  font-weight: 400;
-  line-height: 0.95;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
+  font-weight: 600;
+  line-height: 0.98;
+  /* Condensed sport-headline identity without shouting: previously
+     0.045em tracking + Bebas Neue read as very loud at any size.
+     Barlow Condensed already carries the athletic feel on its own,
+     so tracking is dialed back and uppercase is opt-in per heading
+     rather than a blanket rule. */
+  letter-spacing: 0.01em;
 }
 
 p {
@@ -228,6 +257,46 @@ p {
 
 .font-body {
   font-family: var(--font-body);
+}
+
+/* Rare brand/campaign moments only — the wordmark, hero splash
+   copy. Never use this for general page/section headings. */
+.font-brand {
+  font-family: var(--font-brand);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* =========================================================
+   TYPOGRAPHY SCALE
+
+   Canonical sizes for the roles the design system actually
+   distinguishes. Metrics use tabular numerals so digits don't
+   jitter horizontally as they change.
+   ========================================================= */
+
+.text-hero-metric {
+  font-family: var(--font-heading);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(2.5rem, 2rem + 3vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: 0.01em;
+}
+
+.text-page-title {
+  font-family: var(--font-heading);
+  font-size: clamp(2rem, 1.7rem + 1.2vw, 2.5rem);
+  line-height: 1;
+}
+
+.text-section-title {
+  font-family: var(--font-heading);
+  font-size: clamp(1.25rem, 1.15rem + 0.4vw, 1.5rem);
+  line-height: 1.1;
+}
+
+.tabular-metric {
+  font-variant-numeric: tabular-nums;
 }
 
 .text-gradient-bronze {
@@ -420,90 +489,22 @@ input:-webkit-autofill:focus {
     transition-duration: 0.01ms !important;
   }
 }
-html {
-  scroll-behavior: smooth;
-  background: #0d0b0a;
-}
-
-body {
-  margin: 0;
-  overflow-x: hidden;
-  background: #0d0b0a;
-  color: #f3eadf;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-::selection {
-  background: #c7a06b;
-  color: #17100a;
-}
-
-a,
-button {
-  -webkit-tap-highlight-color: transparent;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-/* My Story page */
-
-html {
-  scroll-padding-top: 80px;
-  scroll-behavior: smooth;
-}
-
-.story-page {
-  isolation: isolate;
-}
-
-.story-page ::selection {
-  background: rgba(217, 119, 6, 0.45);
-  color: white;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  .story-page *,
-  .story-page *::before,
-  .story-page *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-/* =========================================================
-   MY STORY — GLOBAL FIXES
-========================================================= */
-
-html {
-  scroll-padding-top: 88px;
-  scroll-behavior: smooth;
-}
-
-body {
-  margin: 0;
-  overflow-x: hidden;
-  background: #000;
-}
+/*
+ * CLEANUP NOTE: this file previously had THREE overlapping
+ * html/body/reduced-motion blocks stacked here (apparent copy-paste
+ * leftovers from page-specific work, one explicitly labeled
+ * "My Story page"). The later, unscoped `body { background: #0d0b0a }`
+ * and `body { background: #000 }` rules were winning the cascade over
+ * the actual design-system background (the bronze radial-gradient
+ * `body` rule above, which uses --color-* tokens) — i.e. the intended
+ * premium gradient background was being flattened to solid black on
+ * every page, site-wide, by accident. Consolidated into one
+ * definition; `html`/`body` base styles and reduced-motion handling
+ * are both already fully covered earlier in this file (see the RESET
+ * section above), so nothing here needs restating. `.story-page`
+ * selector-scoped rules (isolation, custom selection color) are kept
+ * since they're harmless and don't leak to other pages.
+ */
 
 .story-page {
   position: relative;
@@ -518,27 +519,6 @@ body {
 .story-page ::selection {
   background: rgba(180, 83, 9, 0.55);
   color: #ffffff;
-}
-
-@media (max-width: 640px) {
-  html {
-    scroll-padding-top: 72px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  .story-page *,
-  .story-page *::before,
-  .story-page *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
 }
 @keyframes loading-bar {
   0% {

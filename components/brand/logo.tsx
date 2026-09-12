@@ -1,21 +1,30 @@
 import Link from "next/link";
-import { Dumbbell } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { BrandMark } from "@/components/brand/mark";
 
 type LogoProps = {
   className?: string;
   showTextOnMobile?: boolean;
+  /** Where the mark links — defaults to the public marketing home; pass "/dashboard" inside the app shell. */
+  href?: string;
+  /** Optional third line under the wordmark for context, e.g. "Client OS" or "Business Portal". */
+  tagline?: string;
+  onClick?: () => void;
 };
 
 export function Logo({
   className,
   showTextOnMobile = false,
+  href = "/",
+  tagline,
+  onClick,
 }: LogoProps) {
   return (
     <Link
-      href="/"
+      href={href}
       aria-label="Muscle Fitness home"
+      onClick={onClick}
       className={cn(
         "group inline-flex shrink-0 items-center gap-3",
         className,
@@ -24,7 +33,7 @@ export function Logo({
       <span
         className="
           relative grid size-10 shrink-0 place-items-center
-          overflow-hidden rounded-[6px]
+          overflow-hidden rounded-[10px]
           border border-[var(--color-border-accent)]
           bg-[var(--color-accent-soft)]
           transition duration-300
@@ -40,15 +49,13 @@ export function Logo({
           "
         />
 
-        <Dumbbell
-          aria-hidden="true"
+        <BrandMark
           className="
             relative size-5
             text-[var(--color-accent-light)]
             transition duration-300
             group-hover:scale-110
           "
-          strokeWidth={2.1}
         />
       </span>
 
@@ -62,7 +69,8 @@ export function Logo({
       >
         <span
           className="
-            block font-heading
+            font-brand
+            block
             text-[1.6rem] tracking-[0.09em]
             text-white
           "
@@ -80,6 +88,12 @@ export function Logo({
         >
           Fitness
         </span>
+
+        {tagline ? (
+          <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+            {tagline}
+          </span>
+        ) : null}
       </span>
     </Link>
   );

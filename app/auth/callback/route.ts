@@ -1,141 +1,57 @@
-import { createServerClient } from "@supabase/ssr";
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-function getSafeRedirect(
-  value: string | null,
-): string {
+import { createClient } from "@/lib/supabase/server";
+import { handleOAuthCallback } from "@/lib/auth/handle-oauth-callback";
+
+function getSafeRedirect(value: string | null): string {
   if (!value) {
     return "/dashboard";
   }
 
-  if (
-    !value.startsWith("/") ||
-    value.startsWith("//")
-  ) {
+  if (!value.startsWith("/") || value.startsWith("//")) {
     return "/dashboard";
   }
 
   return value;
 }
 
-function redirectToLoginWithError(
-  request: NextRequest,
-  message: string,
-) {
-  const loginUrl = new URL(
-    "/login",
-    request.url,
-  );
-
-  loginUrl.searchParams.set(
-    "error",
-    message,
-  );
-
+function redirectToLoginWithError(request: NextRequest, message: string) {
+  const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set("error", message);
   return NextResponse.redirect(loginUrl);
 }
 
-export async function GET(
-  request: NextRequest,
-) {
+export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
 
-  const code =
-    requestUrl.searchParams.get("code");
+  const code = requestUrl.searchParams.get("code");
 
   const oauthError =
-    requestUrl.searchParams.get(
-      "error_description",
-    ) ??
+    requestUrl.searchParams.get("error_description") ??
     requestUrl.searchParams.get("error");
 
-  const next = getSafeRedirect(
-    requestUrl.searchParams.get("next"),
-  );
+  const next = getSafeRedirect(requestUrl.searchParams.get("next"));
 
   if (oauthError) {
-    return redirectToLoginWithError(
-      request,
-      oauthError,
-    );
+    return redirectToLoginWithError(request, oauthError);
   }
 
   if (!code) {
-    return redirectToLoginWithError(
-      request,
-      "Authentication code was not received.",
-    );
+    return redirectToLoginWithError(request, "Authentication code was not received.");
   }
 
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  // Canonical server client (env validation, cookie handling) rather
+  // than a second hand-rolled createServerClient call — this route
+  // used to construct its own, which is exactly the kind of
+  // duplicate Supabase client the rest of the app avoids.
+  const supabase = await createClient();
 
-  const supabaseKey =
-    process.env
-      .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-      ?.trim() ||
-    process.env
-      .NEXT_PUBLIC_SUPABASE_ANON_KEY
-      ?.trim();
+  const result = await handleOAuthCallback(supabase, code);
 
-  if (!supabaseUrl || !supabaseKey) {
-    return redirectToLoginWithError(
-      request,
-      "Missing Supabase configuration in .env.local.",
-    );
+  if (!result.success) {
+    return redirectToLoginWithError(request, result.errorMessage);
   }
 
-  const response = NextResponse.redirect(
-    new URL(next, request.url),
-  );
-
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(
-            ({
-              name,
-              value,
-              options,
-            }) => {
-              response.cookies.set(
-                name,
-                value,
-                options,
-              );
-            },
-          );
-        },
-      },
-    },
-  );
-
-  const { error } =
-    await supabase.auth.exchangeCodeForSession(
-      code,
-    );
-
-  if (error) {
-    console.error(
-      "OAuth callback error:",
-      error,
-    );
-
-    return redirectToLoginWithError(
-      request,
-      error.message,
-    );
-  }
-
-  return response;
+  return NextResponse.redirect(new URL(next, request.url));
 }

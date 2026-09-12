@@ -45,12 +45,6 @@ export default function SetVisionPage() {
       </header>
 
       <VideoAnalyzerClient />
-
-      <p className="text-center text-xs text-zinc-700">
-        <Link href="/dashboard/workouts/setvision/annotate" className="hover:text-zinc-500">
-          Internal: ground-truth annotation tool
-        </Link>
-      </p>
     </div>
   );
 }

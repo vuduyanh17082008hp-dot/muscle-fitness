@@ -133,10 +133,23 @@ export async function POST(request: Request) {
     .single()
 
   if (error) {
-    console.error("[RECOVERY CHECKIN]", error)
+    // Structured, non-sensitive server log: real failure reason (e.g.
+    // "Could not find the table 'public.recovery_checkins' in the
+    // schema cache") lands in logs for diagnosis, never in the
+    // response body — the client only ever sees a safe generic
+    // message, consistent with every other route in this app
+    // (app/api/dante/*, app/api/setvision/*).
+    console.error("[RECOVERY CHECKIN] save failed", {
+      code: error.code,
+      message: error.message,
+      userId: user.id,
+    })
 
     return NextResponse.json(
-      { error: "Unable to save your check-in. Please try again." },
+      {
+        error: "Unable to save your check-in. Please try again.",
+        details: process.env.NODE_ENV === "development" ? error.message : undefined,
+      },
       { status: 500 },
     )
   }

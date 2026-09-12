@@ -26,22 +26,20 @@ import {
   HeartPulse,
   Home,
   LayoutDashboard,
-  Layers3,
   LogOut,
   Menu,
   MessageSquareText,
-  PieChart,
-  ScanEye,
   Settings,
   Sparkles,
   Utensils,
   X,
-  Zap,
 } from "lucide-react";
 
 import {
   logoutAction,
 } from "@/app/dashboard/actions";
+
+import { Logo } from "@/components/brand/logo";
 
 /* =========================================================
    TYPES
@@ -73,6 +71,16 @@ type SidebarContentProps = {
    Tracking, Coaching, Account.
 ========================================================= */
 
+/*
+ * Primary navigation is deliberately flat and short — Overview,
+ * Train, Nutrition, Recovery, Progress, Dante. Everything that used
+ * to be its own sidebar entry under "Your Plan"/"Tracking"/"Coaching"
+ * (Today, Form Coach, Training Split, Macro Targets, Check-in) is
+ * still fully reachable — as a contextual tab on the section it
+ * belongs to (see components/dashboard/section-tabs.tsx wired into
+ * the Train/Nutrition/Progress landing pages) rather than a flat
+ * link here. No route was removed, only re-homed in the nav.
+ */
 const navSections: NavSection[] = [
   {
     title: "Overview",
@@ -85,75 +93,41 @@ const navSections: NavSection[] = [
         exact: true,
       },
       {
-        label: "Today",
-        href: "/dashboard/today",
-        icon: Zap,
-      },
-    ],
-  },
-
-  {
-    title: "Your Plan",
-
-    items: [
-      {
-        label: "Training Plan",
+        label: "Train",
         href: "/dashboard/workouts",
         icon: Dumbbell,
       },
       {
-        label: "Form Coach",
-        href: "/dashboard/workouts/form-coach",
-        icon: ScanEye,
-      },
-      {
-        label: "Training Split",
-        href: "/dashboard/split",
-        icon: Layers3,
-      },
-      {
-        label: "Nutrition Plan",
+        label: "Nutrition",
         href: "/dashboard/nutrition",
         icon: Utensils,
-      },
-      {
-        label: "Macro Targets",
-        href: "/dashboard/nutrition#macros",
-        icon: PieChart,
       },
       {
         label: "Recovery",
         href: "/dashboard/recovery",
         icon: HeartPulse,
       },
-    ],
-  },
-
-  {
-    title: "Tracking",
-
-    items: [
       {
         label: "Progress",
         href: "/dashboard/progress",
         icon: ChartNoAxesCombined,
       },
       {
-        label: "Check-in",
-        href: "/dashboard/check-in",
-        icon: CheckSquare2,
+        label: "Dante",
+        href: "/dashboard/ai-coach",
+        icon: Bot,
       },
     ],
   },
 
   {
-    title: "Coaching",
+    title: "More",
 
     items: [
       {
-        label: "Dante",
-        href: "/dashboard/ai-coach",
-        icon: Bot,
+        label: "Check-in",
+        href: "/dashboard/check-in",
+        icon: CheckSquare2,
       },
       {
         label: "Messages",
@@ -165,13 +139,6 @@ const navSections: NavSection[] = [
         href: "/dashboard/calendar",
         icon: CalendarDays,
       },
-    ],
-  },
-
-  {
-    title: "Account",
-
-    items: [
       {
         label: "Settings",
         href: "/dashboard/settings",
@@ -179,6 +146,26 @@ const navSections: NavSection[] = [
       },
     ],
   },
+];
+
+/* =========================================================
+   MOBILE PRIMARY NAV
+
+   A persistent thumb-reachable bottom bar for the 5 sections used
+   most often on a phone. This is additive, not a duplicate of the
+   existing hamburger drawer above: the drawer still holds the full
+   nav tree (Form Coach, Training Split, Recovery, Check-in,
+   Messages, Calendar, Settings); this bar is just a fast path to the
+   handful of sections someone opens every day.
+========================================================= */
+
+const mobilePrimaryNav: NavItem[] = [
+  { label: "Overview", href: "/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Train", href: "/dashboard/workouts", icon: Dumbbell },
+  { label: "Nutrition", href: "/dashboard/nutrition", icon: Utensils },
+  { label: "Recovery", href: "/dashboard/recovery", icon: HeartPulse },
+  { label: "Progress", href: "/dashboard/progress", icon: ChartNoAxesCombined },
+  { label: "Dante", href: "/dashboard/ai-coach", icon: Bot },
 ];
 
 /* =========================================================
@@ -223,27 +210,7 @@ function SidebarContent({
   return (
     <>
       <div className="flex h-20 items-center border-b border-white/10 px-5">
-        <Link
-          href="/dashboard"
-          onClick={
-            onNavigate
-          }
-          className="flex items-center gap-3"
-        >
-          <span className="grid size-10 place-items-center rounded-xl border border-amber-400/30 bg-amber-400/10 text-amber-300 shadow-[0_0_35px_rgba(251,191,36,0.12)]">
-            <Dumbbell className="size-5" />
-          </span>
-
-          <span>
-            <span className="block text-sm font-black tracking-[0.16em] text-white">
-              MUSCLE FITNESS
-            </span>
-
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500">
-              Client OS
-            </span>
-          </span>
-        </Link>
+        <Logo href="/dashboard" tagline="Client OS" showTextOnMobile onClick={onNavigate} />
       </div>
 
       <nav
@@ -347,6 +314,39 @@ function SidebarContent({
 }
 
 /* =========================================================
+   MOBILE BOTTOM NAV
+========================================================= */
+
+function MobileBottomNav({ pathname, hash }: { pathname: string; hash: string }) {
+  return (
+    <nav
+      aria-label="Primary"
+      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-white/10 bg-[#08090b]/95 backdrop-blur-xl lg:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      {mobilePrimaryNav.map((item) => {
+        const active = isActive(pathname, hash, item);
+        const Icon = item.icon;
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={active ? "page" : undefined}
+            className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[9px] font-bold uppercase transition ${
+              active ? "text-amber-300" : "text-zinc-500"
+            }`}
+          >
+            <Icon className="size-[18px]" />
+            <span className="whitespace-nowrap">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/* =========================================================
    DASHBOARD SHELL
 ========================================================= */
 
@@ -407,18 +407,7 @@ export function DashboardShell({
       =================================================== */}
 
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/10 bg-[#08090b]/90 px-4 backdrop-blur-xl lg:hidden">
-        <Link
-          href="/dashboard"
-          className="flex min-w-0 items-center gap-2.5"
-        >
-          <span className="grid size-9 place-items-center rounded-xl border border-amber-400/30 bg-amber-400/10 text-amber-300">
-            <Dumbbell className="size-4" />
-          </span>
-
-          <span className="truncate text-xs font-black tracking-[0.16em]">
-            MUSCLE FITNESS
-          </span>
-        </Link>
+        <Logo href="/dashboard" showTextOnMobile className="min-w-0" />
 
         <div className="flex shrink-0 items-center gap-2">
           <Link
@@ -490,13 +479,19 @@ export function DashboardShell({
           MAIN
       =================================================== */}
 
-      <main className="min-h-screen lg:pl-72">
+      <main className="min-h-screen pb-20 lg:pb-0 lg:pl-72">
         <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">
           {
             children
           }
         </div>
       </main>
+
+      {/* ===================================================
+          MOBILE BOTTOM NAV
+      =================================================== */}
+
+      <MobileBottomNav pathname={pathname} hash={hash} />
     </div>
   );
 }

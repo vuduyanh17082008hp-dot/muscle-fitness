@@ -1,12 +1,15 @@
 import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
 
+import { cn } from '@/lib/cn'
+
 type EmptyStateProps = {
   icon: LucideIcon
   title: string
   description: string
   href?: string
   action?: string
+  className?: string
 }
 
 export function EmptyState({
@@ -15,9 +18,10 @@ export function EmptyState({
   description,
   href,
   action,
+  className,
 }: EmptyStateProps) {
   return (
-    <div className="flex min-h-44 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/20 px-5 py-8 text-center">
+    <div className={cn("flex min-h-44 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/20 px-5 py-8 text-center", className)}>
       <span className="mb-3 grid size-11 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-zinc-500">
         <Icon className="size-5" />
       </span>

@@ -1,6 +1,5 @@
 import {
   ArrowLeft,
-  BriefcaseBusiness,
   LockKeyhole,
   Mail,
   ShieldCheck,
@@ -9,6 +8,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { Logo } from "@/components/brand/logo";
 
 import { adminLoginAction } from "./actions";
 
@@ -82,15 +82,9 @@ export default async function AdminLoginPage({
         ===================================================== */}
 
         <section className="rounded-3xl border border-white/10 bg-white/5 p-7 shadow-2xl sm:p-8">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-black">
-            <BriefcaseBusiness className="h-6 w-6" />
-          </div>
+          <Logo tagline="Business Portal" showTextOnMobile />
 
-          <p className="mt-6 text-xs font-semibold tracking-[0.18em] text-zinc-500">
-            MUSCLE FITNESS BUSINESS
-          </p>
-
-          <h1 className="mt-3 text-3xl font-bold tracking-tight">
+          <h1 className="mt-6 text-3xl font-bold tracking-tight">
             Admin Login
           </h1>
 
@@ -167,7 +161,7 @@ export default async function AdminLoginPage({
 
             <button
               type="submit"
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 font-semibold text-black transition hover:bg-zinc-200"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 font-semibold text-black transition hover:bg-amber-400"
             >
               <ShieldCheck className="h-4 w-4" />
               Login as Admin

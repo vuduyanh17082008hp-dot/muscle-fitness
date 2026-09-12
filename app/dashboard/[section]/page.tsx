@@ -14,6 +14,17 @@ import {
 } from "lucide-react"
 
 import { createClient } from "@/lib/supabase/server"
+import { SectionTabs } from "@/components/dashboard/section-tabs"
+import { EmptyState } from "@/components/dashboard/empty-state"
+import { PerformanceCard } from "@/components/ui/performance-card"
+import DanteChat from "@/components/dante-chat"
+
+const PROGRESS_TABS = [
+  { label: "Overview", href: "/dashboard/progress#overview" },
+  { label: "Strength", href: "/dashboard/training-intelligence" },
+  { label: "Body", href: "/dashboard/progress#body" },
+  { label: "Recovery", href: "/dashboard/recovery" },
+]
 
 type SectionConfig = {
   title: string
@@ -143,75 +154,52 @@ export default async function DashboardSectionPage({
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-1 py-2">
-      <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-6 sm:p-8">
-        <span className="inline-grid size-14 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
-          <Icon className="size-6" />
-        </span>
+      {sectionKey === "progress" ? <SectionTabs tabs={PROGRESS_TABS} /> : null}
 
-        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
-          {section.project}
-        </p>
-
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
-          {section.title}
-        </h1>
-
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
-          {section.description}
-        </p>
-
-        <p className="mt-4 text-sm text-zinc-500">
-          Signed in as{" "}
-          <span className="text-zinc-300">
-            {displayName}
+      {/* DanteChat renders its own hero (title/subtitle/quick prompts)
+          when the conversation is empty — showing this generic hero
+          too would be a redundant second focal point on the same
+          screen, so it's skipped for ai-coach specifically. */}
+      {sectionKey !== "ai-coach" ? (
+        <section id="overview" className="scroll-mt-24 rounded-[20px] border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-6 sm:p-8">
+          <span className="inline-grid size-14 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+            <Icon className="size-6" />
           </span>
-        </p>
-      </section>
+
+          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+            {section.project}
+          </p>
+
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
+            {section.title}
+          </h1>
+
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+            {section.description}
+          </p>
+
+          <p className="mt-4 text-sm text-zinc-500">
+            Signed in as{" "}
+            <span className="text-zinc-300">
+              {displayName}
+            </span>
+          </p>
+        </section>
+      ) : null}
 
       {(sectionKey === "today" ||
         sectionKey === "progress") && (
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">
-              Calories
-            </p>
-            <p className="mt-3 text-3xl font-black text-white">
-              {formatValue(fitness?.calories_target)}
-            </p>
-          </article>
-
-          <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">
-              Protein
-            </p>
-            <p className="mt-3 text-3xl font-black text-white">
-              {formatValue(fitness?.protein_target_g, " g")}
-            </p>
-          </article>
-
-          <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">
-              Carbs
-            </p>
-            <p className="mt-3 text-3xl font-black text-white">
-              {formatValue(fitness?.carbs_target_g, " g")}
-            </p>
-          </article>
-
-          <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">
-              Fat
-            </p>
-            <p className="mt-3 text-3xl font-black text-white">
-              {formatValue(fitness?.fat_target_g, " g")}
-            </p>
-          </article>
+          <PerformanceCard variant="nutrition" title="Calories" metric={{ value: formatValue(fitness?.calories_target) }} />
+          <PerformanceCard variant="nutrition" title="Protein" metric={{ value: formatValue(fitness?.protein_target_g, " g") }} />
+          <PerformanceCard variant="nutrition" title="Carbs" metric={{ value: formatValue(fitness?.carbs_target_g, " g") }} />
+          <PerformanceCard variant="nutrition" title="Fat" metric={{ value: formatValue(fitness?.fat_target_g, " g") }} />
         </section>
       )}
 
       {(sectionKey === "progress" ||
         sectionKey === "today") && (
-        <section className="rounded-3xl border border-white/10 bg-[#101216] p-6">
+        <section id="body" className="scroll-mt-24 rounded-[20px] border border-white/10 bg-[#101216] p-6">
           <h2 className="text-lg font-bold text-white">
             Current metrics
           </h2>
@@ -239,32 +227,10 @@ export default async function DashboardSectionPage({
         </section>
       )}
 
-      {sectionKey === "ai-coach" && (
-        <section className="rounded-3xl border border-white/10 bg-[#101216] p-6">
-          <p className="text-sm leading-6 text-zinc-400">
-            Use Dante for general training and
-            nutrition guidance. Responses are not medical advice.
-          </p>
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link
-              href="/chatbot"
-              className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
-            >
-              Open Dante chat
-            </Link>
-            <Link
-              href="/coach"
-              className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:border-white/20"
-            >
-              Coach overview
-            </Link>
-          </div>
-        </section>
-      )}
+      {sectionKey === "ai-coach" && <DanteChat />}
 
       {sectionKey === "settings" && (
-        <section className="rounded-3xl border border-white/10 bg-[#101216] p-6">
+        <section className="rounded-[20px] border border-white/10 bg-[#101216] p-6">
           <p className="text-sm leading-6 text-zinc-400">
             Update personal details, goals and preferences through
             onboarding. Onboarding completed:{" "}
@@ -282,32 +248,34 @@ export default async function DashboardSectionPage({
         </section>
       )}
 
-      {(sectionKey === "check-in" ||
-        sectionKey === "messages" ||
-        sectionKey === "calendar") && (
-        <section className="rounded-3xl border border-white/10 bg-[#101216] p-6">
-          <p className="text-sm leading-6 text-zinc-500">
-            This section is available for navigation and testing.
-            Deeper logging, messaging and calendar sync will continue
-            on the existing database foundation without replacing
-            working auth, onboarding or workout flows.
-          </p>
+      {sectionKey === "check-in" && (
+        <EmptyState
+          icon={Icon}
+          title="Weekly check-in is coming soon"
+          description="A weekly adherence and coach review will live here. In the meantime, your daily recovery check-in already feeds Dante's readiness score."
+          href="/dashboard/recovery"
+          action="Go to daily check-in"
+        />
+      )}
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link
-              href="/dashboard"
-              className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-zinc-300 transition hover:border-white/20"
-            >
-              Back to overview
-            </Link>
-            <Link
-              href="/dashboard/workouts"
-              className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
-            >
-              Go to workouts
-            </Link>
-          </div>
-        </section>
+      {sectionKey === "messages" && (
+        <EmptyState
+          icon={Icon}
+          title="Messages are coming soon"
+          description="Direct conversations with your coach will live here. Ask Dante in the meantime for training and nutrition guidance."
+          href="/dashboard/ai-coach"
+          action="Ask Dante"
+        />
+      )}
+
+      {sectionKey === "calendar" && (
+        <EmptyState
+          icon={Icon}
+          title="Calendar is coming soon"
+          description="A unified view of training days and check-ins will live here. Your scheduled sessions are already visible in Train."
+          href="/dashboard/workouts"
+          action="Go to Train"
+        />
       )}
     </div>
   )

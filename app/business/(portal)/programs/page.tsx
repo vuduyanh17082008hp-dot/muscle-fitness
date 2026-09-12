@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { getCurrentBusiness } from "@/lib/business/get-current-business";
 import { createClient } from "@/lib/supabase/server";
+import { ErrorState } from "@/components/dashboard/error-state";
 
 export default async function BusinessProgramsPage() {
   const business = await getCurrentBusiness();
@@ -20,17 +21,14 @@ export default async function BusinessProgramsPage() {
     .order("created_at", { ascending: false });
 
   if (error) {
+    console.error("BUSINESS PROGRAMS ERROR:", error);
+
     return (
       <div className="mx-auto max-w-7xl p-6 lg:p-10">
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6">
-          <h1 className="font-semibold text-red-300">
-            Unable to load programs
-          </h1>
-
-          <p className="mt-2 text-sm text-red-300/80">
-            {error.message}
-          </p>
-        </div>
+        <ErrorState
+          title="Unable to load programs"
+          description="Something went wrong loading your training programs. Please try again."
+        />
       </div>
     );
   }
@@ -54,7 +52,9 @@ export default async function BusinessProgramsPage() {
 
         <button
           type="button"
-          className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+          disabled
+          title="Creating programs is coming soon"
+          className="flex cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200/50 opacity-60"
         >
           <Plus className="h-4 w-4" />
           New Program

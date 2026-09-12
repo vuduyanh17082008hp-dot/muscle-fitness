@@ -12,6 +12,7 @@ import { collectPoseFrames } from "@/components/setvision/collect-pose-frames";
 import { PoseOverlayCanvas } from "@/components/form-coach/pose-overlay-canvas";
 import { SetVisionResultsPanel } from "@/components/setvision/results-panel";
 import { DecisionCard } from "@/components/dante/decision-card";
+import { ErrorState } from "@/components/dashboard/error-state";
 
 type Status = "idle" | "ready" | "processing" | "done" | "error";
 
@@ -93,10 +94,11 @@ export function VideoAnalyzer() {
       setAnalysis(result);
       setStatus("done");
     } catch (error) {
+      // Log the real cause for diagnostics, but never surface a raw
+      // pose-detection/library error string to the user — it's
+      // rarely actionable and reads as a broken product.
       console.error("[SETVISION] analysis failed", error);
-      setErrorMessage(
-        error instanceof Error ? error.message : "Could not analyze this video.",
-      );
+      setErrorMessage("We couldn't analyze this video. Try a clearer, well-lit clip with the full lift visible in frame.");
       setStatus("error");
     }
   }, [exerciseOverride]);
@@ -287,7 +289,12 @@ export function VideoAnalyzer() {
         ) : null}
 
         {errorMessage ? (
-          <p className="mt-4 text-sm text-rose-400">{errorMessage}</p>
+          <ErrorState
+            className="mt-4"
+            title="Analysis failed"
+            description={errorMessage}
+            onRetry={handleAnalyze}
+          />
         ) : null}
       </article>
 

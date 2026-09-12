@@ -1,12 +1,12 @@
 import {
-  ShieldCheck,
   UserRoundCog,
-  Users,
 } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { getCurrentBusiness } from "@/lib/business/get-current-business";
 import { createClient } from "@/lib/supabase/server";
+import { PerformanceCard } from "@/components/ui/performance-card";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 type StaffRow = {
   id: string;
@@ -167,7 +167,9 @@ export default async function TrainersPage() {
 
         <button
           type="button"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+          disabled
+          title="Inviting trainers is coming soon"
+          className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-200/50 opacity-60"
         >
           <UserRoundCog className="h-4 w-4" />
 
@@ -180,29 +182,9 @@ export default async function TrainersPage() {
       ======================================================== */}
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <StatCard
-          icon={
-            <Users className="h-5 w-5" />
-          }
-          label="Team Members"
-          value={staff.length}
-        />
-
-        <StatCard
-          icon={
-            <UserRoundCog className="h-5 w-5" />
-          }
-          label="Trainers"
-          value={trainerCount}
-        />
-
-        <StatCard
-          icon={
-            <ShieldCheck className="h-5 w-5" />
-          }
-          label="Admins"
-          value={adminCount}
-        />
+        <PerformanceCard icon="users" title="Team Members" metric={{ value: staff.length }} />
+        <PerformanceCard icon="user-cog" title="Trainers" metric={{ value: trainerCount }} />
+        <PerformanceCard icon="shield-check" title="Admins" metric={{ value: adminCount }} />
       </div>
 
       {/* ========================================================
@@ -222,7 +204,11 @@ export default async function TrainersPage() {
         </div>
 
         {staff.length === 0 ? (
-          <EmptyState />
+          <EmptyState
+            icon={UserRoundCog}
+            title="No trainers or staff yet"
+            description="Add trainers and staff to manage members, training programs and business operations."
+          />
         ) : (
           <div className="divide-y divide-white/10">
             {staff.map((member) => {
@@ -276,36 +262,6 @@ export default async function TrainersPage() {
         )}
       </section>
     </div>
-  );
-}
-
-// ============================================================
-// STAT CARD
-// ============================================================
-
-function StatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-}) {
-  return (
-    <article className="rounded-2xl border border-white/10 bg-white/5 p-5">
-      <div className="flex items-center gap-3 text-zinc-500">
-        {icon}
-
-        <p className="text-sm">
-          {label}
-        </p>
-      </div>
-
-      <p className="mt-4 text-3xl font-bold text-white">
-        {value}
-      </p>
-    </article>
   );
 }
 
@@ -372,28 +328,6 @@ function RoleBadge({
   );
 }
 
-// ============================================================
-// EMPTY STATE
-// ============================================================
-
-function EmptyState() {
-  return (
-    <div className="flex min-h-72 flex-col items-center justify-center p-8 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5">
-        <UserRoundCog className="h-7 w-7 text-zinc-500" />
-      </div>
-
-      <h2 className="mt-4 font-semibold">
-        No trainers or staff yet
-      </h2>
-
-      <p className="mt-2 max-w-md text-sm leading-6 text-zinc-500">
-        Add trainers and staff to manage members,
-        training programs and business operations.
-      </p>
-    </div>
-  );
-}
 
 // ============================================================
 // HELPERS
