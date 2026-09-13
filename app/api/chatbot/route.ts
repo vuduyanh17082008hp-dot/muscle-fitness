@@ -15,6 +15,13 @@ import { MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { compareToTargets } from "@/lib/nutrition/food-log/totals";
 import { checkSafety } from "@/lib/dante-core/safety-layer";
+import { loadTodaySession } from "@/lib/training/load-today-session";
+import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
+import {
+  buildRecoveryInsight,
+  buildNutritionInsight,
+} from "@/lib/dante-core/build-chat-insight";
+import type { DanteInsight } from "@/lib/dante-core/insight";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +45,13 @@ type UserContext = {
   todayFoodLog: unknown;
   /** Digital Twin additions (Personal Baseline Engine, Muscle Recovery Map, Dante Memory, data freshness) — never a raw database row, see lib/athlete-state/build-dante-context.ts. */
   digitalTwin: unknown;
+  /**
+   * Today's Plan — the SAME canonical daily-action list the Dashboard
+   * renders (lib/daily-plan/build-today-plan.ts), never a second,
+   * independently-derived schedule. Compact: title/status/subtitle
+   * only, no ids/routes (those aren't useful to the LLM).
+   */
+  dailyPlan: Array<{ title: string; status: string; subtitle: string | null }>;
 };
 
 type Intent = {
@@ -835,7 +849,8 @@ function summarizeTrainingIntelligence(
 
 async function loadUserContext(
   userId: string,
-): Promise<UserContext> {
+  intent: Intent,
+): Promise<{ context: UserContext; chatInsight: DanteInsight | null }> {
   const supabase =
     await createClient();
 
@@ -847,6 +862,7 @@ async function loadUserContext(
     athleteState,
     todayFoodLog,
     memory,
+    todaySession,
   ] =
     await Promise.all([
       // Only the one field actually used below — never a raw `select("*")`
@@ -900,6 +916,11 @@ async function loadUserContext(
       loadFoodLogForDate(supabase, userId),
 
       loadDanteMemory(supabase, userId),
+
+      loadTodaySession(supabase, userId).catch((error: unknown) => {
+        console.warn("[DANTE TODAY SESSION]", error);
+        return null;
+      }),
     ]);
 
   if (
@@ -926,7 +947,41 @@ async function loadUserContext(
     ? buildDanteContext(athleteState, memory, preferencesRow)
     : null;
 
-  return {
+  /* -----------------------------------------------------
+     TODAY'S PLAN — the exact same derivation the Dashboard
+     uses (lib/daily-plan/build-today-plan.ts), from data
+     already loaded above. Never a second schedule.
+  ----------------------------------------------------- */
+
+  const dailyPlanActions = buildTodayPlan({
+    todaySession,
+    hasCheckinToday: recoveryContext ? recoveryContext.today !== null : false,
+    proteinTargetG: nutritionContext.plan?.target.protein ?? null,
+    proteinLoggedG: todayFoodLog.totals.protein,
+  });
+
+  /* -----------------------------------------------------
+     "WHY THIS?" CHAT INSIGHT — only built when the relevant
+     deterministic engine has real evidence worth showing.
+     Recovery takes priority since a training-load flag is
+     more time-sensitive than a nutrition deficit.
+  ----------------------------------------------------- */
+
+  let chatInsight: DanteInsight | null = null;
+
+  if (intent.recovery && recoveryContext) {
+    chatInsight = buildRecoveryInsight(recoveryContext);
+  }
+
+  if (!chatInsight && intent.nutrition) {
+    chatInsight = buildNutritionInsight({
+      hasTarget: nutritionContext.plan !== null,
+      proteinTargetG: nutritionContext.plan?.target.protein ?? null,
+      proteinConsumedG: todayFoodLog.totals.protein,
+    });
+  }
+
+  const context: UserContext = {
     profile: {
       fullName: (profileResponse.data as { full_name: string | null } | null)?.full_name ?? null,
     },
@@ -997,7 +1052,15 @@ async function loadUserContext(
           }
         : null,
     ),
+
+    dailyPlan: dailyPlanActions.map((action) => ({
+      title: action.title,
+      status: action.status,
+      subtitle: action.subtitle,
+    })),
   };
+
+  return { context, chatInsight };
 }
 
 /* =========================================================
@@ -2369,6 +2432,7 @@ Relevant fields may include:
 - digitalTwin (personal baseline deviations, muscle recovery
   estimates, SetVision trends, user-set preferences and data
   freshness — see ATHLETE DIGITAL TWIN below)
+- dailyPlan (the client's real Today's Plan — see TODAY'S PLAN below)
 
 Never invent missing client information.
 
@@ -2535,6 +2599,23 @@ foodsLoggedToday lists what was logged with its portion (e.g. "Whey
 Protein (1 scoop / 30 g)") — use it for context ("you've had oats and
 chicken today") but never restate per-item macros from memory; only
 todayFoodLog's calories/protein/carbs/fat totals are authoritative.
+
+============================================================
+TODAY'S PLAN
+============================================================
+
+dailyPlan is the client's real, current Today's Plan — the exact same
+list rendered on their Dashboard (a scheduled workout, a nutrition
+target, a daily check-in), never a second or different schedule. Each
+entry has a title, a status (planned / active / completed / skipped),
+and an optional subtitle with real detail already computed elsewhere
+(e.g. exercise count, protein remaining).
+
+When asked "what should I do today" or similar, answer directly from
+dailyPlan's entries in order — do not invent a calendar item, a workout
+name, or a time that isn't in dailyPlan. If dailyPlan is empty, say
+plainly that nothing is scheduled yet rather than suggesting a made-up
+plan.
 
 ============================================================
 ATHLETE DIGITAL TWIN
@@ -3357,12 +3438,13 @@ export async function POST(
     ----------------------------------------------------- */
 
     const [
-      userContext,
+      { context: userContext, chatInsight },
       evidence,
     ] =
       await Promise.all([
         loadUserContext(
           user.id,
+          intent,
         ),
 
         getEvidence(
@@ -3431,6 +3513,13 @@ export async function POST(
           0,
 
         sources,
+
+        /*
+         * "Why This?" structured insight (see lib/dante-core/insight.ts)
+         * — null whenever no deterministic engine had real evidence
+         * worth surfacing for this message. Never fabricated.
+         */
+        insight: chatInsight,
       },
       {
         status: 200,

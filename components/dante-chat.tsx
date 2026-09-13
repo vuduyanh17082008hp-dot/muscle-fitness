@@ -11,6 +11,7 @@ import type {
   KeyboardEvent,
 } from "react";
 
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -24,6 +25,7 @@ import {
 } from "@/components/dante/dante-presence";
 import { cn } from "@/lib/utils";
 import { FORM_COACH_HANDOFF_KEY } from "@/lib/form-coach/handoff";
+import type { DanteInsight } from "@/lib/dante-core/insight";
 
 /* =========================================================
    TYPES
@@ -33,12 +35,15 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** "Why This?" evidence, when this reply carried a real, deterministic recommendation. Never fabricated by the LLM. */
+  insight?: DanteInsight | null;
 };
 
 type ChatbotResponse = {
   reply?: string;
   error?: string;
   model?: string;
+  insight?: DanteInsight | null;
 };
 
 export type QuickPrompt = {
@@ -46,22 +51,30 @@ export type QuickPrompt = {
   prompt: string;
 };
 
+/**
+ * Natural-language conversation starters, not cold category labels
+ * (spec: "Better Empty State"). These are the generic fallback shown
+ * when no real-state-aware suggestions are supplied — see
+ * `contextualSuggestions` below and lib/dante-core/build-chat-suggestions.ts,
+ * which sharpens these into workout/protein/recovery-specific prompts
+ * from the user's actual data wherever a page supplies real signals.
+ */
 const QUICK_PROMPTS: QuickPrompt[] = [
   {
-    label: "Today's Training",
+    label: "🏋️ What should I train today?",
     prompt:
       "What should I train today based on my current plan and recovery?",
   },
   {
-    label: "Nutrition",
-    prompt: "Review my nutrition targets and suggest adjustments.",
+    label: "🥗 Help me plan meals for my remaining macros.",
+    prompt: "Help me plan meals for my remaining macros today.",
   },
   {
-    label: "Recovery",
-    prompt: "How is my recovery and what should I prioritize this week?",
+    label: "⚡ Am I recovered enough to train hard?",
+    prompt: "Am I recovered enough to train hard today?",
   },
   {
-    label: "Progress",
+    label: "📈 How am I progressing this month?",
     prompt: "Summarize my recent progress and what to focus on next.",
   },
 ];
@@ -75,6 +88,15 @@ export type DanteChatProps = {
   heroTitle?: string;
   heroSubtitle?: string;
   quickPrompts?: QuickPrompt[];
+  /**
+   * Real-state-aware conversation starters (spec: "Contextual
+   * Suggestions") — built server-side from the caller's own already-
+   * loaded data via lib/dante-core/build-chat-suggestions.ts. When
+   * provided, these replace `quickPrompts` in the empty state. Omit
+   * on pages with no per-user signal (e.g. the public /chatbot page)
+   * to fall back to the generic starters.
+   */
+  contextualSuggestions?: DanteInsight[];
   compact?: boolean;
   className?: string;
 };
@@ -85,6 +107,95 @@ const DEFAULT_WELCOME_MESSAGE =
 const DEFAULT_HERO_SUBTITLE =
   "I understand your training profile, nutrition targets and current plan. Ask me about your training, nutrition, recovery or progress.";
 
+const SEVERITY_DOT: Record<string, string> = {
+  warning: "bg-rose-400",
+  notice: "bg-amber-400",
+  info: "bg-[var(--mf-violet)]",
+};
+
+/**
+ * "Why This?" evidence panel (spec: "Why This?" / "Explainable
+ * Recommendation Model"). Renders a DanteInsight's real evidence and
+ * a real next-action button — nothing here is LLM-generated, and
+ * nothing renders when there's genuinely no evidence or action to
+ * show (an insight with empty `evidence`/`reasons`/`nextAction`
+ * simply shows nothing beyond its headline, which the markdown reply
+ * above it already covers).
+ */
+function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
+  const hasWhy = insight.reasons.length > 0 || insight.evidence.length > 0;
+
+  if (!hasWhy && !insight.nextAction) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 border-t border-white/8 pt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {insight.nextAction ? (
+          <Link
+            href={insight.nextAction.href}
+            className="inline-flex h-9 items-center rounded-xl bg-amber-400 px-4 text-xs font-black uppercase tracking-[0.06em] text-black transition hover:bg-amber-300"
+          >
+            {insight.nextAction.label}
+          </Link>
+        ) : null}
+
+        {hasWhy ? (
+          <details className="group">
+            <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-white/10 px-4 text-xs font-black uppercase tracking-[0.06em] text-zinc-400 transition hover:bg-white/[0.06]">
+              {insight.severity ? (
+                <span
+                  className={cn("size-1.5 rounded-full", SEVERITY_DOT[insight.severity])}
+                  aria-hidden="true"
+                />
+              ) : null}
+              Why this?
+            </summary>
+
+            <div className="mt-3 space-y-3 rounded-2xl border border-white/8 bg-black/20 p-4">
+              {insight.reasons.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {insight.reasons.map((reason, index) => (
+                    <li key={index} className="text-sm leading-6 text-zinc-300">
+                      • {reason}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {insight.evidence.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {insight.evidence.map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5"
+                    >
+                      <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-600">
+                        {item.label}
+                      </p>
+                      <p className="mt-0.5 text-sm font-bold text-white">{item.value}</p>
+                      {item.note ? (
+                        <p className="mt-0.5 text-[11px] text-zinc-500">{item.note}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {insight.confidence ? (
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                  {insight.confidence} confidence
+                </p>
+              ) : null}
+            </div>
+          </details>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /* =========================================================
    COMPONENT
 ========================================================= */
@@ -94,9 +205,17 @@ export default function DanteChat({
   heroTitle = "Your AI Performance Coach",
   heroSubtitle = DEFAULT_HERO_SUBTITLE,
   quickPrompts = QUICK_PROMPTS,
+  contextualSuggestions,
   compact = false,
   className,
 }: DanteChatProps = {}) {
+  const emptyStatePrompts: QuickPrompt[] =
+    contextualSuggestions && contextualSuggestions.length > 0
+      ? contextualSuggestions.map((insight) => ({
+          label: insight.action,
+          prompt: insight.prompt ?? insight.action,
+        }))
+      : quickPrompts;
   const [messages, setMessages] =
     useState<ChatMessage[]>([
       {
@@ -261,6 +380,7 @@ export default function DanteChat({
           id: crypto.randomUUID(),
           role: "assistant",
           content: data.reply,
+          insight: data.insight ?? null,
         };
 
       setMessages((previous) => [
@@ -277,28 +397,20 @@ export default function DanteChat({
 
       setActivity("error");
 
-      let errorMessage =
-        "Dante could not respond. Please try again.";
-
-      if (
-        error instanceof DOMException &&
-        error.name === "AbortError"
-      ) {
-        errorMessage =
-          "Dante is taking too long to respond. Please try again.";
-      } else if (
-        error instanceof Error
-      ) {
-        errorMessage =
-          error.message;
-      }
-
+      /*
+       * Reassuring, non-technical failure state (spec: "Failure
+       * State"). Never crash the page and never leave the user
+       * thinking their own data was affected — Groq failing has no
+       * bearing on training/nutrition/recovery data, which all lives
+       * in Supabase, not in this request. Technical detail still goes
+       * to the console above for debugging.
+       */
       const errorChatMessage: ChatMessage =
         {
           id: crypto.randomUUID(),
           role: "assistant",
           content:
-            `⚠️ **Dante encountered an error**\n\n${errorMessage}`,
+            "Dante is temporarily unavailable.\n\nYour training, nutrition and recovery data are still available.",
         };
 
       setMessages((previous) => [
@@ -466,24 +578,24 @@ export default function DanteChat({
             {heroSubtitle}
           </p>
 
-          <div className="mt-7 flex flex-wrap justify-center gap-2.5">
-            {quickPrompts.map((item) => (
+          <div className="mt-7 grid w-full max-w-md gap-2 sm:grid-cols-2">
+            {emptyStatePrompts.map((item) => (
               <button
                 key={item.label}
                 type="button"
                 onClick={() => handleQuickPrompt(item.prompt)}
                 disabled={isLoading}
                 className="
-                  rounded-full
+                  rounded-2xl
                   border
                   border-[var(--mf-violet)]/25
                   bg-[var(--mf-violet)]/8
                   px-4
-                  py-2.5
+                  py-3
+                  text-left
                   text-xs
-                  font-bold
-                  uppercase
-                  tracking-wide
+                  font-semibold
+                  leading-5
                   text-[var(--mf-violet)]
                   transition
                   hover:border-[var(--mf-violet)]/50
@@ -898,6 +1010,10 @@ export default function DanteChat({
                         >
                           {message.content}
                         </ReactMarkdown>
+
+                        {message.insight ? (
+                          <DanteInsightPanel insight={message.insight} />
+                        ) : null}
                       </div>
                     </div>
                   )}

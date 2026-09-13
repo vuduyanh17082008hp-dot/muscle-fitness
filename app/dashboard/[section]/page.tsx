@@ -19,7 +19,46 @@ import { EmptyState } from "@/components/dashboard/empty-state"
 import { CalendarAgenda } from "@/components/dashboard/calendar-agenda"
 import { PerformanceCard } from "@/components/ui/performance-card"
 import { loadCalendarRange } from "@/lib/daily-plan/load-calendar-range"
+import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context"
+import { loadTodaySession } from "@/lib/training/load-today-session"
+import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
+import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
+import { buildChatSuggestions } from "@/lib/dante-core/build-chat-suggestions"
+import type { DanteInsight } from "@/lib/dante-core/insight"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import DanteChat from "@/components/dante-chat"
+
+/**
+ * Contextual conversation starters for the "Ask Dante" section (spec:
+ * "Contextual Suggestions") — reuses the exact same loaders the
+ * Dashboard and Recovery pages already call, never a second read of
+ * the same tables through a different path.
+ */
+async function loadAiCoachSuggestions(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DanteInsight[]> {
+  const [recoveryContext, todaySession, nutritionContext, foodLog] =
+    await Promise.all([
+      loadRecoveryContext(supabase, userId).catch(() => null),
+      loadTodaySession(supabase, userId).catch(() => null),
+      loadNutritionContext(supabase, userId).catch(() => null),
+      loadFoodLogForDate(supabase, userId).catch(() => null),
+    ])
+
+  const proteinTargetG = nutritionContext?.plan?.target.protein ?? null
+  const proteinLoggedG = foodLog?.totals.protein ?? 0
+
+  return buildChatSuggestions({
+    recoveryScore: recoveryContext?.todayScoreResult.score ?? null,
+    hasCheckinToday: recoveryContext ? recoveryContext.today !== null : false,
+    todayWorkoutName: todaySession?.name ?? null,
+    todayWorkoutSessionId: todaySession?.id ?? null,
+    proteinRemainingG:
+      proteinTargetG !== null ? Math.max(0, Math.round(proteinTargetG - proteinLoggedG)) : null,
+    proteinTargetG,
+  })
+}
 
 const PROGRESS_TABS = [
   { label: "Overview", href: "/dashboard/progress#overview" },
@@ -133,6 +172,7 @@ export default async function DashboardSectionPage({
     profileResponse,
     fitnessResponse,
     calendarDays,
+    aiCoachSuggestions,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -148,6 +188,9 @@ export default async function DashboardSectionPage({
       .maybeSingle(),
     sectionKey === "calendar"
       ? loadCalendarRange(supabase, user.id)
+      : Promise.resolve(null),
+    sectionKey === "ai-coach"
+      ? loadAiCoachSuggestions(supabase, user.id)
       : Promise.resolve(null),
   ])
 
@@ -233,7 +276,9 @@ export default async function DashboardSectionPage({
         </section>
       )}
 
-      {sectionKey === "ai-coach" && <DanteChat />}
+      {sectionKey === "ai-coach" && (
+        <DanteChat contextualSuggestions={aiCoachSuggestions ?? undefined} />
+      )}
 
       {sectionKey === "settings" && (
         <section className="rounded-[20px] border border-white/10 bg-mf-surface p-6">
