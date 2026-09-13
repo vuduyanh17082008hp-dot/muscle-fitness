@@ -11,6 +11,9 @@
 
 export type DanteActionStatus = "proposed" | "confirmed" | "applied" | "rejected" | "failed";
 
+/** auto = applied without a confirm click; confirm = shown to the user first; block = never applied regardless of autonomy level. See lib/dante-core/autonomy/classify.ts, which computes this from config, never from a prompt. */
+export type ActionRiskClass = "auto" | "confirm" | "block";
+
 export type AdjustSetsRepsPayload = {
   type: "adjust_sets_reps";
   sessionId: string;
@@ -75,13 +78,31 @@ export const DIRECT_EFFECT_ACTION_TYPES: DanteActionType[] = [
   "modify_volume",
 ];
 
+/** One real-valued piece of evidence behind an action — reused from lib/dante-core/insight.ts's chat-facing shape so an action and its "Why This?" panel never disagree about what the evidence was. */
+export type ActionEvidenceItem = { label: string; value: string; note?: string | null };
+
 export type DanteProposedAction = {
   /** Deterministic per-proposal id (see buildProposedActionId) — stable across repeated GETs of the same underlying state, so confirming twice is safe/idempotent to detect. */
   id: string;
   payload: DanteActionPayload;
   reason: string;
-  /** Always true — kept explicit in the type so no code path can construct an action that skips confirmation. */
-  requiresConfirmation: true;
+  /**
+   * Whether the CLIENT must show a confirm/reject control before this
+   * reaches apply-action.ts. Widened from a hardcoded `true` so the
+   * autonomy gate (lib/dante-core/autonomy/gate.ts) can mark a
+   * small, low-risk action as auto-appliable — every existing caller
+   * that always set `true` keeps working unchanged; only the
+   * orchestrator's new auto-apply path ever produces `false`.
+   */
+  requiresConfirmation: boolean;
+  /** Which skill/engine produced this — see lib/dante-core/skills/registry.ts. Optional so existing construction sites (daily-decision-engine.ts) are unaffected. */
+  domain?: "training" | "programming" | "nutrition" | "recovery";
+  riskLevel?: ActionRiskClass;
+  evidence?: ActionEvidenceItem[];
+  /** The bound this action was checked against, e.g. { maxMagnitude: 1, unit: "sets" } — omitted for advisory actions with no magnitude. */
+  limits?: { maxMagnitude: number; unit: string } | null;
+  /** Free-text identifying the deterministic engine that computed this (e.g. "daily-decision-engine", "autoregulation-engine") — never "llm". */
+  provenance?: string;
 };
 
 /**

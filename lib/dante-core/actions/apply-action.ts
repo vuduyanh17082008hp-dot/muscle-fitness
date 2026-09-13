@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   DIRECT_EFFECT_ACTION_TYPES,
+  type ActionEvidenceItem,
+  type ActionRiskClass,
   type DanteActionPayload,
   type DanteActionStatus,
 } from "@/lib/dante-core/actions/types";
@@ -30,7 +32,14 @@ export type ApplyActionInput = {
   payload: DanteActionPayload;
   reason: string;
   confidence: number;
-  intent: "confirm" | "reject";
+  /** "auto" = the orchestrator's autonomy gate already decided this may apply without a confirm click (mission Part 12) — audited identically to "confirm" except `auto_applied: true`. apply-action.ts never makes that decision itself; it only executes and audits what the caller already decided. */
+  intent: "confirm" | "reject" | "auto";
+  /** Optional richer audit fields (mission Part 11) — every existing caller that omits these keeps working; the audit row simply has nulls for them. */
+  domain?: string;
+  riskLevel?: ActionRiskClass;
+  evidence?: ActionEvidenceItem[];
+  limits?: { maxMagnitude: number; unit: string } | null;
+  provenance?: string;
 };
 
 export type ApplyActionResult =
@@ -68,6 +77,17 @@ async function performDirectEffectMutation(
   }
 }
 
+function auditFields(input: ApplyActionInput) {
+  return {
+    domain: input.domain ?? null,
+    risk_level: input.riskLevel ?? null,
+    evidence: input.evidence ?? null,
+    limits: input.limits ?? null,
+    provenance: input.provenance ?? null,
+    auto_applied: input.intent === "auto",
+  };
+}
+
 export async function applyDanteAction(
   supabase: SupabaseClient,
   userId: string,
@@ -81,6 +101,7 @@ export async function applyDanteAction(
       payload: input.payload,
       reason: input.reason,
       decision_confidence: input.confidence,
+      ...auditFields(input),
     });
 
     return { ok: true, status: "rejected", message: "Suggestion dismissed." };
@@ -100,6 +121,7 @@ export async function applyDanteAction(
       reason: input.reason,
       decision_confidence: input.confidence,
       applied_result: { note: "Acknowledged — no direct data change for this action type." },
+      ...auditFields(input),
     });
 
     return { ok: true, status: "applied", message: "Noted." };
@@ -115,6 +137,7 @@ export async function applyDanteAction(
     reason: input.reason,
     decision_confidence: input.confidence,
     applied_result: result,
+    ...auditFields(input),
   });
 
   if (!result.success) {

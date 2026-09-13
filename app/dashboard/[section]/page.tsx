@@ -27,6 +27,7 @@ import { buildChatSuggestions } from "@/lib/dante-core/build-chat-suggestions"
 import type { DanteInsight } from "@/lib/dante-core/insight"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import DanteChat from "@/components/dante-chat"
+import { DanteLearnedPanel } from "@/components/dante/dante-learned-panel"
 
 /**
  * Contextual conversation starters for the "Ask Dante" section (spec:
@@ -277,7 +278,10 @@ export default async function DashboardSectionPage({
       )}
 
       {sectionKey === "ai-coach" && (
-        <DanteChat contextualSuggestions={aiCoachSuggestions ?? undefined} />
+        <>
+          <DanteChat contextualSuggestions={aiCoachSuggestions ?? undefined} />
+          <DanteLearnedPanel />
+        </>
       )}
 
       {sectionKey === "settings" && (
