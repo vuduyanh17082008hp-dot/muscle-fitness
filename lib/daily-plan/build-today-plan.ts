@@ -1,8 +1,19 @@
 import type { TodaySession } from "@/lib/training/load-today-session";
+import type { DailyDecisionCode } from "@/lib/dante-core/daily-decision-engine";
 import {
   sessionStateToActionStatus,
   type DailyAction,
 } from "@/lib/daily-plan/types";
+
+export type TodayAdaptiveContext = {
+  /** The real Daily Decision Engine outcome for today's session — never re-derived here. */
+  dailyDecisionCode: DailyDecisionCode;
+  /** The engine's own recommendation text — surfaced verbatim, never paraphrased into a guessed reason. */
+  dailyDecisionRecommendation: string;
+  recoveryStatusLabel: string | null;
+  /** Count of exercises in today's session where the Adaptive Program Engine returned INCREASE_LOAD — computed by the caller from buildAdaptiveProgram(), never invented here. */
+  readyToProgressCount: number;
+};
 
 export type BuildTodayPlanInput = {
   todaySession: TodaySession | null;
@@ -11,6 +22,8 @@ export type BuildTodayPlanInput = {
   /** Null when the user has no nutrition target set — never defaulted to 0. */
   proteinTargetG: number | null;
   proteinLoggedG: number;
+  /** Optional — omitted entirely (rather than defaulted) when the caller hasn't computed adaptive state, so the workout item still renders correctly without it. */
+  adaptive?: TodayAdaptiveContext;
 };
 
 /**
@@ -52,6 +65,27 @@ export function buildTodayPlan(input: BuildTodayPlanInput): DailyAction[] {
       parts.push(`~${input.todaySession.durationMinutes} min`);
     }
 
+    let adaptiveLabel: string | null = null;
+    let adaptiveDetail: string | null = null;
+
+    if (input.adaptive) {
+      const { dailyDecisionCode, dailyDecisionRecommendation, recoveryStatusLabel, readyToProgressCount } =
+        input.adaptive;
+
+      const sessionAdjusted = dailyDecisionCode === "modify_session" || dailyDecisionCode === "prioritize_recovery";
+
+      if (sessionAdjusted) {
+        adaptiveLabel = "Adjusted session";
+        adaptiveDetail = dailyDecisionRecommendation;
+      } else if (readyToProgressCount > 0) {
+        adaptiveLabel = "Progression available";
+        adaptiveDetail = `${readyToProgressCount} exercise${readyToProgressCount === 1 ? "" : "s"} ready to progress`;
+      } else {
+        adaptiveLabel = "Normal session";
+        adaptiveDetail = recoveryStatusLabel ? `Recovery: ${recoveryStatusLabel}` : null;
+      }
+    }
+
     actions.push({
       id: `workout-${input.todaySession.id}`,
       type: "workout",
@@ -65,6 +99,8 @@ export function buildTodayPlan(input: BuildTodayPlanInput): DailyAction[] {
       metadata: {
         exerciseCount: activeExerciseCount,
         durationMinutes: input.todaySession.durationMinutes,
+        adaptiveLabel,
+        adaptiveDetail,
       },
     });
   }

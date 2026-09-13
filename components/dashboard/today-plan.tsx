@@ -23,6 +23,12 @@ const TYPE_ICON: Record<DailyActionType, LucideIcon> = {
   calendar: CalendarClock,
 };
 
+const ADAPTIVE_LABEL_ACCENT: Record<string, string> = {
+  "Adjusted session": "text-amber-300",
+  "Progression available": "text-emerald-300",
+  "Normal session": "text-zinc-500",
+};
+
 function StatusIcon({ status }: { status: DailyAction["status"] }) {
   if (status === "completed") {
     return <CheckCircle2 className="size-5 text-emerald-400" aria-hidden="true" />;
@@ -53,6 +59,11 @@ function TodayPlanItem({ action }: { action: DailyAction }) {
   const time = formatScheduledTime(action.scheduledAt);
   const isDone = action.status === "completed" || action.status === "skipped";
 
+  const adaptiveLabel =
+    typeof action.metadata?.adaptiveLabel === "string" ? action.metadata.adaptiveLabel : null;
+  const adaptiveDetail =
+    typeof action.metadata?.adaptiveDetail === "string" ? action.metadata.adaptiveDetail : null;
+
   return (
     <Link
       href={action.actionUrl}
@@ -74,8 +85,17 @@ function TodayPlanItem({ action }: { action: DailyAction }) {
         </span>
 
         <span className="mt-0.5 block truncate text-xs text-zinc-500">
-          {[time, action.subtitle].filter(Boolean).join(" • ") || " "}
+          {[time, action.subtitle].filter(Boolean).join(" • ") || " "}
         </span>
+
+        {adaptiveLabel ? (
+          <span className="mt-1 block truncate text-xs">
+            <span className={`font-bold ${ADAPTIVE_LABEL_ACCENT[adaptiveLabel] ?? "text-zinc-400"}`}>
+              {adaptiveLabel}
+            </span>
+            {adaptiveDetail ? <span className="text-zinc-600"> — {adaptiveDetail}</span> : null}
+          </span>
+        ) : null}
       </span>
     </Link>
   );

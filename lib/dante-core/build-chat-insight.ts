@@ -1,6 +1,8 @@
 import type { RecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import type { DanteInsight, EvidenceItem } from "@/lib/dante-core/insight";
+import type { ProgramAdaptation } from "@/lib/dante-core/adaptive-program-engine";
+import type { TraceableDecision } from "@/lib/dante-core/types";
 
 /**
  * "Why This?" insight builders for chat responses (spec: Explainable
@@ -96,6 +98,85 @@ export function buildRecoveryInsight(recovery: RecoveryContext): DanteInsight | 
     evidence,
     confidence: recovery.todayScoreResult.baseline && recovery.todayScoreResult.baseline.sampleSize >= 5 ? "moderate" : "low",
     nextAction: { label: "View recovery", href: "/dashboard/recovery" },
+  };
+}
+
+/**
+ * Only returns an insight when the user's message clearly refers to a
+ * specific exercise that the Adaptive Program Engine already has a
+ * real recommendation for — deliberately requires a name match rather
+ * than defaulting to "the first exercise" so a "Why This?" panel
+ * never shows evidence for a different lift than the one asked about.
+ */
+export function buildTrainingInsight(
+  userMessage: string,
+  adaptiveTraining: TraceableDecision<ProgramAdaptation>[],
+  recoveryScore: number | null,
+  recoveryStatusLabel: string | null,
+): DanteInsight | null {
+  const text = userMessage.toLowerCase();
+
+  const match = adaptiveTraining.find((entry) => {
+    const name = entry.decision.exerciseName.toLowerCase();
+    if (text.includes(name)) return true;
+
+    // Real messages rarely spell out the full exercise name ("Bench
+    // Press") — matching on its distinctive words ("bench", "press")
+    // catches "should I increase bench today" without over-matching
+    // on short, generic words.
+    const significantWords = name.split(/\s+/).filter((word) => word.length >= 4);
+    return significantWords.some((word) => text.includes(word));
+  });
+
+  if (!match) return null;
+
+  const { decision: adaptation, why, confidence } = match;
+  const completedSets = adaptation.lastSessionSets.filter(
+    (set) => set.completed && set.reps !== null,
+  );
+
+  if (completedSets.length === 0) return null;
+
+  const evidence: EvidenceItem[] = [
+    {
+      label: "Performance",
+      value: completedSets.map((set) => set.reps).join(" / "),
+      note:
+        adaptation.action === "INCREASE_LOAD"
+          ? "Top of target range"
+          : `Target ${adaptation.targetRepMin}-${adaptation.targetRepMax}`,
+    },
+  ];
+
+  const rirValues = completedSets
+    .map((set) => set.rir)
+    .filter((value): value is number => value !== null);
+
+  if (rirValues.length > 0) {
+    evidence.push({ label: "RIR", value: String(rirValues[0]), note: "Reps remained in reserve" });
+  }
+
+  if (recoveryScore !== null) {
+    evidence.push({ label: "Recovery", value: String(recoveryScore), note: recoveryStatusLabel });
+  }
+
+  const action =
+    adaptation.action === "INCREASE_LOAD"
+      ? `Increase ${adaptation.exerciseName} to ${adaptation.suggestedWeightKg} kg next session.`
+      : adaptation.gated
+        ? `Progression paused for ${adaptation.exerciseName}.`
+        : adaptation.action === "DECREASE_LOAD"
+          ? `Reduce load for ${adaptation.exerciseName} next session.`
+          : `Maintain current load for ${adaptation.exerciseName}.`;
+
+  return {
+    id: `insight-training-${adaptation.exerciseId}`,
+    action,
+    category: "training",
+    severity: adaptation.gateReason === "pain" ? "warning" : undefined,
+    reasons: why,
+    evidence,
+    confidence,
   };
 }
 

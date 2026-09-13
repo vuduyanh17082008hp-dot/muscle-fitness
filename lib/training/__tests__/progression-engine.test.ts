@@ -49,6 +49,18 @@ describe("computeExerciseProgression — double progression", () => {
 
     expect(result.action).toBe("HOLD");
     expect(result.suggestedWeightKg).toBeNull();
+    // Distinct sub-status from a gated HOLD — lets UI show "Add reps" rather than a generic "Maintain".
+    expect(result.subAction).toBe("add_reps");
+    expect(result.gateReason).toBeNull();
+  });
+
+  it("an un-gated readiness-to-progress HOLD is not confused with a safety-gated one", () => {
+    const result = computeExerciseProgression(
+      input({ lastSessionSets: sets({ reps: 10, rir: 2 }) }),
+    );
+    expect(result.action).toBe("INCREASE_LOAD");
+    expect(result.subAction).toBeNull();
+    expect(result.gateReason).toBeNull();
   });
 
   it("suggests decreasing load when reps fall below the target range", () => {
@@ -85,6 +97,7 @@ describe("computeExerciseProgression — recovery-related adjustments", () => {
     expect(result.action).toBe("HOLD");
     expect(result.gated).toBe(true);
     expect(result.suggestedWeightKg).toBeNull();
+    expect(result.gateReason).toBe("recovery_priority");
   });
 
   it("holds progression when training load is red, even with good performance", () => {
@@ -97,6 +110,7 @@ describe("computeExerciseProgression — recovery-related adjustments", () => {
 
     expect(result.action).toBe("HOLD");
     expect(result.gated).toBe(true);
+    expect(result.gateReason).toBe("training_load");
   });
 });
 
@@ -115,6 +129,7 @@ describe("computeExerciseProgression — pain flag safety gate", () => {
     expect(result.action).toBe("HOLD");
     expect(result.gated).toBe(true);
     expect(result.suggestedWeightKg).toBeNull();
+    expect(result.gateReason).toBe("pain");
   });
 
   it("pain flag takes priority even when every safety-unrelated signal points to increasing load", () => {

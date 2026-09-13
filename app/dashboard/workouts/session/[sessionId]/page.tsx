@@ -19,6 +19,14 @@ import {
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/app-database.types";
+import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
+import { loadTrainingContext } from "@/lib/training/load-training-context";
+import { buildAdaptiveProgram, type ProgramAdaptation } from "@/lib/dante-core/adaptive-program-engine";
+import { logProgramAdaptations } from "@/lib/dante-core/program-adaptation-log";
+import { loadAdaptationHistory, type AdaptationHistoryEntry } from "@/lib/dante-core/load-adaptation-history";
+import type { RecoveryStatusInput, TrainingLoadStateInput } from "@/lib/training/recommendations";
+import type { TraceableDecision } from "@/lib/dante-core/types";
+import { AdaptiveRecommendationCard } from "@/components/training/adaptive-recommendation-card";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -267,6 +275,59 @@ export default async function WorkoutSessionPage({
         [],
     }));
 
+  /* =========================================================
+     ADAPTIVE RECOMMENDATIONS — only computed before the session
+     starts, when "what should I aim for" is actually useful (once
+     logging is underway the athlete is looking at real-time sets,
+     not a pre-session target). Reuses the exact same deterministic
+     engines the rest of Dante Core is built on
+     (buildAthleteState/loadTrainingContext/buildAdaptiveProgram) —
+     no second adaptive engine, no extra query when not needed.
+  ========================================================= */
+
+  const adaptationsByExerciseId = new Map<string, TraceableDecision<ProgramAdaptation>>();
+  let recoveryScore: number | null = null;
+  let recoveryStatusLabel: string | null = null;
+  let recoveryStatusCode: RecoveryStatusInput = null;
+  let trainingLoadState: TrainingLoadStateInput = null;
+  const historyByExerciseId = new Map<string, AdaptationHistoryEntry[]>();
+
+  if (session.session_state === "not_started" || session.session_state === null) {
+    const [athleteState, trainingContext] = await Promise.all([
+      buildAthleteState(supabase, user.id),
+      loadTrainingContext(supabase, user.id),
+    ]);
+
+    recoveryScore = athleteState.recovery.score;
+    recoveryStatusLabel = athleteState.recovery.status;
+    recoveryStatusCode = athleteState.recovery.recoveryStatusCode;
+    trainingLoadState = athleteState.recovery.trainingLoadState;
+
+    const adaptations = buildAdaptiveProgram(athleteState, trainingContext);
+
+    for (const decision of adaptations) {
+      adaptationsByExerciseId.set(decision.decision.exerciseId, decision);
+    }
+
+    // Best-effort audit log — never blocks rendering (mirrors the
+    // existing pattern in app/api/dante/daily-decision/route.ts).
+    logProgramAdaptations(supabase, user.id, adaptations).catch((error: unknown) => {
+      console.warn("[SESSION PAGE] Unable to log program adaptations:", error);
+    });
+
+    const exerciseIdsNeedingHistory = exercisesWithSets
+      .map((exercise) => exercise.exercise_id)
+      .filter((id): id is string => id !== null && adaptationsByExerciseId.has(id));
+
+    const histories = await Promise.all(
+      exerciseIdsNeedingHistory.map((exerciseId) => loadAdaptationHistory(supabase, user.id, exerciseId)),
+    );
+
+    exerciseIdsNeedingHistory.forEach((exerciseId, index) => {
+      historyByExerciseId.set(exerciseId, histories[index]);
+    });
+  }
+
   const completedSets =
     exerciseSets.filter(
       (set) => set.completed,
@@ -474,6 +535,20 @@ export default async function WorkoutSessionPage({
                   <SessionExerciseCard
                     key={exercise.id}
                     exercise={exercise}
+                    adaptation={
+                      exercise.exercise_id
+                        ? adaptationsByExerciseId.get(exercise.exercise_id) ?? null
+                        : null
+                    }
+                    history={
+                      exercise.exercise_id
+                        ? historyByExerciseId.get(exercise.exercise_id) ?? []
+                        : []
+                    }
+                    recoveryScore={recoveryScore}
+                    recoveryStatusLabel={recoveryStatusLabel}
+                    recoveryStatusCode={recoveryStatusCode}
+                    trainingLoadState={trainingLoadState}
                   />
                 ),
               )}
@@ -537,10 +612,22 @@ function InfoCard({
 
 type SessionExerciseCardProps = {
   exercise: SessionExerciseWithSets;
+  adaptation: TraceableDecision<ProgramAdaptation> | null;
+  history: AdaptationHistoryEntry[];
+  recoveryScore: number | null;
+  recoveryStatusLabel: string | null;
+  recoveryStatusCode: RecoveryStatusInput;
+  trainingLoadState: TrainingLoadStateInput;
 };
 
 function SessionExerciseCard({
   exercise,
+  adaptation,
+  history,
+  recoveryScore,
+  recoveryStatusLabel,
+  recoveryStatusCode,
+  trainingLoadState,
 }: SessionExerciseCardProps) {
   const completedSetCount =
     exercise.sets.filter(
@@ -605,9 +692,22 @@ function SessionExerciseCard({
 
       <div className="p-5 sm:p-6">
         {exercise.sets.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-zinc-700">
-            No sets have been recorded.
-          </p>
+          adaptation ? (
+            <AdaptiveRecommendationCard
+              adaptation={adaptation.decision}
+              confidence={adaptation.confidence}
+              reasons={adaptation.why}
+              recoveryScore={recoveryScore}
+              recoveryStatusLabel={recoveryStatusLabel}
+              history={history}
+              recoveryStatusCode={recoveryStatusCode}
+              trainingLoadState={trainingLoadState}
+            />
+          ) : (
+            <p className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-zinc-700">
+              No sets have been recorded.
+            </p>
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[620px] border-separate border-spacing-y-2">

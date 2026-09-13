@@ -24,6 +24,8 @@ export type DanteIntelligencePanelProps = {
   /** 0-1, or null when Dante Core had too little input to state one. */
   confidence: number | null;
   actions?: ReactNode;
+  /** The single most useful next step for today's adaptive state (mission: "Dashboard Next Action" — "Current state + next action only"), e.g. "View workout" when exercises are ready to progress, or "View changes" when today's session was adjusted. Always a real, existing route — omitted when there's nothing more specific than "Ask Dante". */
+  primaryAction?: { label: string; href: string };
 };
 
 function confidenceLabel(confidence: number): string {
@@ -37,6 +39,7 @@ export function DanteIntelligencePanel({
   why,
   confidence,
   actions,
+  primaryAction,
 }: DanteIntelligencePanelProps) {
   return (
     <section className="rounded-[20px] border border-amber-400/15 bg-gradient-to-br from-amber-400/[0.05] to-transparent p-6 sm:p-7">
@@ -64,9 +67,22 @@ export function DanteIntelligencePanel({
       ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
+        {primaryAction ? (
+          <Link
+            href={primaryAction.href}
+            className="inline-flex h-10 items-center justify-center rounded-xl bg-amber-400 px-4 text-sm font-black text-black transition-colors duration-200 hover:bg-amber-300"
+          >
+            {primaryAction.label}
+          </Link>
+        ) : null}
+
         <Link
           href="/dashboard/ai-coach"
-          className="inline-flex h-10 items-center justify-center rounded-xl bg-amber-400 px-4 text-sm font-black text-black transition-colors duration-200 hover:bg-amber-300"
+          className={
+            primaryAction
+              ? "inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-bold text-zinc-300 transition-colors duration-200 hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+              : "inline-flex h-10 items-center justify-center rounded-xl bg-amber-400 px-4 text-sm font-black text-black transition-colors duration-200 hover:bg-amber-300"
+          }
         >
           Ask Dante
         </Link>

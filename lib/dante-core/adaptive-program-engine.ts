@@ -1,6 +1,10 @@
 import type { AthleteState } from "@/lib/athlete-state/types";
 import type { TrainingContext } from "@/lib/training/load-training-context";
-import { computeExerciseProgression, type ProgressionAction } from "@/lib/training/progression-engine";
+import {
+  computeExerciseProgression,
+  type ProgressionAction,
+  type ProgressionGateReason,
+} from "@/lib/training/progression-engine";
 import type { ConfidenceLevel, TraceableDecision } from "@/lib/dante-core/types";
 
 /**
@@ -31,7 +35,14 @@ export type ProgramAdaptation = {
   suggestedWeightKg: number | null;
   /** True when a safety gate (pain flag / recovery priority / red training load) determined this outcome, overriding what performance alone would suggest. */
   gated: boolean;
+  gateReason: ProgressionGateReason;
+  /** Set only for an un-gated HOLD where reps are still building toward the top of the range — see lib/training/progression-engine.ts. */
+  subAction: "add_reps" | null;
   evidenceSampleSize: number;
+  /** The actual last-session sets this adaptation was computed from — carried through so UI can show "Last session: 80kg 10/10/10" without a second lookup. */
+  lastSessionSets: Array<{ weightKg: number | null; reps: number | null; rir: number | null; completed: boolean }>;
+  targetRepMin: number;
+  targetRepMax: number;
 };
 
 function evidenceConfidence(gated: boolean, sampleSize: number): ConfidenceLevel {
@@ -81,6 +92,11 @@ export function buildAdaptiveProgram(
       action: progression.action,
       suggestedWeightKg: progression.suggestedWeightKg,
       gated: progression.gated,
+      gateReason: progression.gateReason,
+      subAction: progression.subAction,
+      lastSessionSets: lastSession.sets,
+      targetRepMin: lastSession.targetRepMin,
+      targetRepMax: lastSession.targetRepMax,
       evidenceSampleSize,
     };
 

@@ -54,12 +54,24 @@ export type ProgressionInput = {
   loadIncrementKg?: number;
 };
 
+/** Which safety gate suppressed a performance-based suggestion, when `gated` is true. Null when not gated. Exists so UI code maps to a display status (e.g. CAUTION vs. RECOVER) without parsing `reason` text. */
+export type ProgressionGateReason = "pain" | "recovery_priority" | "training_load" | null;
+
 export type ProgressionResult = {
   action: ProgressionAction;
   suggestedWeightKg: number | null;
   reason: string;
   /** True when a safety gate suppressed what performance alone would have suggested. */
   gated: boolean;
+  gateReason: ProgressionGateReason;
+  /**
+   * Set only for an un-gated HOLD where reps are still building toward
+   * the top of the target range (double progression's "build reps
+   * first" phase) — lets UI code show a distinct "add reps" status
+   * instead of a generic "maintain", without re-deriving it from
+   * `reason` text.
+   */
+  subAction: "add_reps" | null;
 };
 
 const DEFAULT_LOAD_INCREMENT_KG = 2.5;
@@ -72,12 +84,15 @@ function round(value: number, decimals = 2): number {
   return Math.round(value * factor) / factor;
 }
 
-function isSafetyGated(input: ProgressionInput): { gated: boolean; reason: string | null } {
+function isSafetyGated(
+  input: ProgressionInput,
+): { gated: boolean; reason: string | null; gateReason: ProgressionGateReason } {
   if (input.recentPainFlag) {
     return {
       gated: true,
       reason:
         "A recent pain/illness flag was logged, so no load increase is suggested regardless of performance.",
+      gateReason: "pain",
     };
   }
 
@@ -85,6 +100,7 @@ function isSafetyGated(input: ProgressionInput): { gated: boolean; reason: strin
     return {
       gated: true,
       reason: "Recovery status is currently in the 'priority' range, so load progression is held.",
+      gateReason: "recovery_priority",
     };
   }
 
@@ -92,10 +108,11 @@ function isSafetyGated(input: ProgressionInput): { gated: boolean; reason: strin
     return {
       gated: true,
       reason: "Training load is currently elevated (red), so load progression is held.",
+      gateReason: "training_load",
     };
   }
 
-  return { gated: false, reason: null };
+  return { gated: false, reason: null, gateReason: null };
 }
 
 /**
@@ -116,6 +133,8 @@ export function computeExerciseProgression(
       suggestedWeightKg: null,
       reason: "No completed sets with recorded weight and reps were found for this exercise.",
       gated: false,
+      gateReason: null,
+      subAction: null,
     };
   }
 
@@ -139,6 +158,8 @@ export function computeExerciseProgression(
       suggestedWeightKg: null,
       reason: gate.reason ?? "Progression held for safety.",
       gated: true,
+      gateReason: gate.gateReason,
+      subAction: null,
     };
   }
 
@@ -154,6 +175,8 @@ export function computeExerciseProgression(
       suggestedWeightKg: round(averageWeight + increment),
       reason: `All working sets reached the top of the ${input.targetRepMin}-${input.targetRepMax} rep range at an acceptable effort level — suggesting a small load increase and resetting to the bottom of the range next session.`,
       gated: false,
+      gateReason: null,
+      subAction: null,
     };
   }
 
@@ -165,6 +188,8 @@ export function computeExerciseProgression(
       suggestedWeightKg: null,
       reason: `At least one working set fell below the target ${input.targetRepMin}-${input.targetRepMax} rep range.`,
       gated: false,
+      gateReason: null,
+      subAction: null,
     };
   }
 
@@ -173,5 +198,7 @@ export function computeExerciseProgression(
     suggestedWeightKg: null,
     reason: `Reps are within the ${input.targetRepMin}-${input.targetRepMax} rep range but have not yet reached the top at an acceptable effort — keep working within the range before increasing load.`,
     gated: false,
+    gateReason: null,
+    subAction: "add_reps",
   };
 }

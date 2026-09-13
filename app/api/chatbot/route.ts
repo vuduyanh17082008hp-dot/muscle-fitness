@@ -16,10 +16,13 @@ import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-conte
 import { compareToTargets } from "@/lib/nutrition/food-log/totals";
 import { checkSafety } from "@/lib/dante-core/safety-layer";
 import { loadTodaySession } from "@/lib/training/load-today-session";
+import { loadTrainingContext } from "@/lib/training/load-training-context";
+import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
 import {
   buildRecoveryInsight,
   buildNutritionInsight,
+  buildTrainingInsight,
 } from "@/lib/dante-core/build-chat-insight";
 import type { DanteInsight } from "@/lib/dante-core/insight";
 
@@ -52,6 +55,20 @@ type UserContext = {
    * only, no ids/routes (those aren't useful to the LLM).
    */
   dailyPlan: Array<{ title: string; status: string; subtitle: string | null }>;
+  /**
+   * Adaptive Training (mission Part 6): the SAME structured output the
+   * Adaptive Program Engine computed for Training/Today's Plan —
+   * never re-derived or second-guessed here. Compact: one entry per
+   * exercise with real evidence worth mentioning, no raw set-by-set
+   * history (see TRAINING ADAPTIVE RECOMMENDATIONS below).
+   */
+  adaptiveTraining: Array<{
+    exerciseName: string;
+    action: string;
+    nextTargetWeightKg: number | null;
+    reason: string;
+    confidence: string;
+  }>;
 };
 
 type Intent = {
@@ -850,6 +867,7 @@ function summarizeTrainingIntelligence(
 async function loadUserContext(
   userId: string,
   intent: Intent,
+  userMessage: string,
 ): Promise<{ context: UserContext; chatInsight: DanteInsight | null }> {
   const supabase =
     await createClient();
@@ -863,6 +881,7 @@ async function loadUserContext(
     todayFoodLog,
     memory,
     todaySession,
+    trainingContext,
   ] =
     await Promise.all([
       // Only the one field actually used below — never a raw `select("*")`
@@ -921,6 +940,11 @@ async function loadUserContext(
         console.warn("[DANTE TODAY SESSION]", error);
         return null;
       }),
+
+      loadTrainingContext(supabase, userId).catch((error: unknown) => {
+        console.warn("[DANTE ADAPTIVE TRAINING]", error);
+        return null;
+      }),
     ]);
 
   if (
@@ -961,15 +985,47 @@ async function loadUserContext(
   });
 
   /* -----------------------------------------------------
+     ADAPTIVE TRAINING (mission Part 6) — the SAME Adaptive
+     Program Engine output Training/Today's Plan render,
+     compacted to what Dante actually needs to explain a
+     progression decision. Dante never computes this itself.
+  ----------------------------------------------------- */
+
+  const rawAdaptiveProgram =
+    athleteState && trainingContext ? buildAdaptiveProgram(athleteState, trainingContext) : [];
+
+  const adaptiveTraining = rawAdaptiveProgram.map(({ decision, why, confidence }) => ({
+    exerciseName: decision.exerciseName,
+    action: decision.action,
+    nextTargetWeightKg: decision.suggestedWeightKg,
+    reason: why.join(" "),
+    confidence,
+  }));
+
+  /* -----------------------------------------------------
      "WHY THIS?" CHAT INSIGHT — only built when the relevant
-     deterministic engine has real evidence worth showing.
-     Recovery takes priority since a training-load flag is
-     more time-sensitive than a nutrition deficit.
+     deterministic engine has real evidence worth showing. A
+     training question that names a specific exercise Dante already
+     has a real recommendation for takes priority (it's the most
+     specific possible answer); recovery comes next since a
+     training-load flag is more time-sensitive than a nutrition
+     deficit.
   ----------------------------------------------------- */
 
   let chatInsight: DanteInsight | null = null;
 
-  if (intent.recovery && recoveryContext) {
+  if (intent.training && rawAdaptiveProgram.length > 0 && recoveryContext) {
+    chatInsight = buildTrainingInsight(
+      userMessage,
+      rawAdaptiveProgram,
+      recoveryContext.todayScoreResult.score,
+      recoveryContext.todayScoreResult.status !== null
+        ? RECOVERY_STATUS_LABEL[recoveryContext.todayScoreResult.status]
+        : null,
+    );
+  }
+
+  if (!chatInsight && intent.recovery && recoveryContext) {
     chatInsight = buildRecoveryInsight(recoveryContext);
   }
 
@@ -1058,6 +1114,8 @@ async function loadUserContext(
       status: action.status,
       subtitle: action.subtitle,
     })),
+
+    adaptiveTraining,
   };
 
   return { context, chatInsight };
@@ -2433,6 +2491,9 @@ Relevant fields may include:
   estimates, SetVision trends, user-set preferences and data
   freshness — see ATHLETE DIGITAL TWIN below)
 - dailyPlan (the client's real Today's Plan — see TODAY'S PLAN below)
+- adaptiveTraining (per-exercise progression decisions already made by
+  the Adaptive Program Engine — see TRAINING ADAPTIVE RECOMMENDATIONS
+  below)
 
 Never invent missing client information.
 
@@ -2616,6 +2677,41 @@ dailyPlan's entries in order — do not invent a calendar item, a workout
 name, or a time that isn't in dailyPlan. If dailyPlan is empty, say
 plainly that nothing is scheduled yet rather than suggesting a made-up
 plan.
+
+============================================================
+TRAINING ADAPTIVE RECOMMENDATIONS
+============================================================
+
+adaptiveTraining is computed deterministically by the Muscle Fitness
+Adaptive Program Engine — never by you. Each entry already reflects
+double progression AND every safety gate (pain flag, recovery
+priority, elevated training load): action is one of INCREASE_LOAD,
+HOLD, or DECREASE_LOAD, nextTargetWeightKg is the exact next-session
+weight when action is INCREASE_LOAD (null otherwise), reason is the
+engine's own real justification, and confidence is "high" / "moderate"
+/ "low".
+
+When the client asks something like "should I increase bench today",
+"why is my squat suggestion X", or "am I ready to progress on Y": find
+the matching exercise in adaptiveTraining and explain THAT entry's
+action/nextTargetWeightKg/reason directly. Do NOT independently decide
+whether to progress, hold, or reduce load — you are explaining an
+already-made decision, not making one. Never propose a different next
+weight than nextTargetWeightKg, and never invent a rep range, RIR, or
+recovery number that isn't already in adaptiveTraining, recovery, or
+trainingIntelligence.
+
+If the exercise the client asks about is not in adaptiveTraining, say
+plainly that there isn't a fresh recommendation for it yet (usually
+because no completed sets were logged for it recently) rather than
+guessing one.
+
+If action is HOLD because of a safety gate (the reason mentions pain,
+recovery priority, or elevated training load), treat this as a
+firm, non-negotiable pause on progression for that exercise — do not
+suggest working around it, and do not speculate about the underlying
+injury or condition. Point the client to their real check-in data
+(recovery above) rather than diagnosing anything yourself.
 
 ============================================================
 ATHLETE DIGITAL TWIN
@@ -3445,6 +3541,7 @@ export async function POST(
         loadUserContext(
           user.id,
           intent,
+          userMessage,
         ),
 
         getEvidence(

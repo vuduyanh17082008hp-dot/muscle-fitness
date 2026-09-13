@@ -11,6 +11,7 @@ import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { loadTodaySession } from "@/lib/training/load-today-session";
 import { buildDailyDecision } from "@/lib/dante-core/daily-decision-engine";
 import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
+import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { PerformanceCard } from "@/components/ui/performance-card";
 import { PerformanceHalo } from "@/components/dashboard/performance-halo";
 import { TodayPlanSection } from "@/components/dashboard/today-plan";
@@ -350,6 +351,23 @@ export default async function DashboardPage() {
   const ctaLabel = todaySession ? "Start workout" : "Build a plan";
 
   /* =======================================================
+     ADAPTIVE PROGRAM — reuses the exact athleteState/trainingContext
+     already loaded above for the daily decision; zero extra queries.
+  ======================================================= */
+
+  const programAdaptations = buildAdaptiveProgram(athleteState, trainingContext);
+
+  const todaySessionExerciseIds = new Set(
+    todaySession?.exercises.map((exercise) => exercise.exerciseId) ?? [],
+  );
+
+  const readyToProgressCount = programAdaptations.filter(
+    (adaptation) =>
+      adaptation.decision.action === "INCREASE_LOAD" &&
+      todaySessionExerciseIds.has(adaptation.decision.exerciseId),
+  ).length;
+
+  /* =======================================================
      TODAY'S PLAN — one canonical daily-action list, derived
      from the exact same real data already loaded above
      (no extra queries, no fabricated items).
@@ -360,6 +378,14 @@ export default async function DashboardPage() {
     hasCheckinToday: recoveryContext.today !== null,
     proteinTargetG: nutritionPlan?.target.protein ?? null,
     proteinLoggedG: foodLog.totals.protein,
+    adaptive: todaySession
+      ? {
+          dailyDecisionCode: dailyDecision.decision.decisionCode,
+          dailyDecisionRecommendation: dailyDecision.recommendation,
+          recoveryStatusLabel: athleteState.recovery.status,
+          readyToProgressCount,
+        }
+      : undefined,
   });
 
   /* =======================================================
@@ -537,6 +563,15 @@ export default async function DashboardPage() {
             recommendation={dailyIntelligence.narrative}
             why={readiness.limitingFactors}
             confidence={readiness.confidence}
+            primaryAction={
+              todaySession &&
+              (dailyDecision.decision.decisionCode === "modify_session" ||
+                dailyDecision.decision.decisionCode === "prioritize_recovery")
+                ? { label: "View changes", href: ctaHref }
+                : todaySession && readyToProgressCount > 0
+                  ? { label: "View workout", href: ctaHref }
+                  : undefined
+            }
             actions={
               proposedActions.length > 0 ? (
                 <DailyActionsRow
