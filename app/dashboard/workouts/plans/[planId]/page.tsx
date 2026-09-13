@@ -12,6 +12,7 @@ import {
   Flame,
   Layers3,
   ListChecks,
+  PlayCircle,
   Target,
 } from "lucide-react";
 
@@ -21,6 +22,7 @@ import type { Database } from "@/types/app-database.types";
 import {
   activateWorkoutPlanAction,
   archiveWorkoutPlanAction,
+  startWorkoutAction,
 } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -573,6 +575,7 @@ export default async function WorkoutPlanDetailsPage({
                 <WorkoutDayCard
                   key={day.id}
                   day={day}
+                  canStart={planDetails.status === "active"}
                 />
               ))}
             </div>
@@ -639,11 +642,18 @@ function MetricCard({
 
 type WorkoutDayCardProps = {
   day: WorkoutDayWithExercises;
+  canStart: boolean;
 };
 
 function WorkoutDayCard({
   day,
+  canStart,
 }: WorkoutDayCardProps) {
+  const startable =
+    canStart &&
+    !day.rest_day &&
+    day.exercises.length > 0;
+
   return (
     <article className="overflow-hidden rounded-3xl border border-white/10 bg-mf-surface">
       <header className="border-b border-white/10 p-5 sm:p-6">
@@ -678,14 +688,38 @@ function WorkoutDayCard({
             ) : null}
           </div>
 
-          <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-right">
-            <p className="text-lg font-black">
-              {day.exercises.length}
-            </p>
+          <div className="flex flex-col items-end gap-3">
+            <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-right">
+              <p className="text-lg font-black">
+                {day.exercises.length}
+              </p>
 
-            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-600">
-              Exercises
-            </p>
+              <p className="text-[10px] font-black uppercase tracking-wider text-zinc-600">
+                Exercises
+              </p>
+            </div>
+
+            {startable ? (
+              <form action={startWorkoutAction}>
+                <input
+                  type="hidden"
+                  name="workout_day_id"
+                  value={day.id}
+                />
+
+                <button
+                  type="submit"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-amber-300"
+                >
+                  <PlayCircle
+                    aria-hidden="true"
+                    className="h-4 w-4"
+                  />
+
+                  Start workout
+                </button>
+              </form>
+            ) : null}
           </div>
         </div>
       </header>

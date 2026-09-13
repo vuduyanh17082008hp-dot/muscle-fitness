@@ -31,8 +31,59 @@ export type TodaySession = {
   exercises: TodaySessionExercise[];
 };
 
-function todayIso(now: Date): string {
-  return now.toISOString().slice(0, 10);
+/**
+ * The UTC offset (in minutes) a given instant falls at in `timeZone` —
+ * e.g. +480 for Asia/Singapore. Used to convert the user's LOCAL
+ * calendar day into the UTC range `scheduled_for` is stored in,
+ * instead of assuming the server's UTC day is the user's day.
+ */
+function getUtcOffsetMinutes(date: Date, timeZone: string): number {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "shortOffset",
+    }).formatToParts(date);
+
+    const offsetPart = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT+0";
+    const match = offsetPart.match(/GMT([+-])(\d+)(?::(\d+))?/);
+
+    if (!match) {
+      return 0;
+    }
+
+    const sign = match[1] === "-" ? -1 : 1;
+    const hours = Number(match[2]);
+    const minutes = Number(match[3] ?? 0);
+
+    return sign * (hours * 60 + minutes);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * The user's LOCAL calendar day ("today" as they'd read it on a
+ * clock in their own time zone), expressed as a UTC range — so a
+ * session scheduled just after local midnight, while the server's
+ * UTC date has not rolled over yet, is still read as "today" instead
+ * of silently falling into "yesterday". Reuses the same
+ * `profiles.timezone` convention already used by `get_client_dashboard()`.
+ */
+export function localDayRangeUtc(now: Date, timeZone: string): { startIso: string; endIso: string } {
+  const offsetMinutes = getUtcOffsetMinutes(now, timeZone);
+  const shifted = new Date(now.getTime() + offsetMinutes * 60_000);
+
+  const year = shifted.getUTCFullYear();
+  const month = shifted.getUTCMonth();
+  const day = shifted.getUTCDate();
+
+  const startShifted = Date.UTC(year, month, day, 0, 0, 0, 0);
+  const endShifted = Date.UTC(year, month, day, 23, 59, 59, 999);
+
+  return {
+    startIso: new Date(startShifted - offsetMinutes * 60_000).toISOString(),
+    endIso: new Date(endShifted - offsetMinutes * 60_000).toISOString(),
+  };
 }
 
 export async function loadTodaySession(
@@ -40,15 +91,22 @@ export async function loadTodaySession(
   userId: string,
   now: Date = new Date(),
 ): Promise<TodaySession | null> {
-  const startOfDay = `${todayIso(now)}T00:00:00.000Z`;
-  const endOfDay = `${todayIso(now)}T23:59:59.999Z`;
+  const { data: profileRow } = await supabase
+    .from("profiles")
+    .select("timezone")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const timeZone = (profileRow as { timezone: string | null } | null)?.timezone || "UTC";
+
+  const { startIso, endIso } = localDayRangeUtc(now, timeZone);
 
   const { data: sessionRows, error: sessionError } = await supabase
     .from("workout_sessions")
     .select("id, name, scheduled_for, duration_minutes, session_state")
     .eq("user_id", userId)
-    .gte("scheduled_for", startOfDay)
-    .lte("scheduled_for", endOfDay)
+    .gte("scheduled_for", startIso)
+    .lte("scheduled_for", endIso)
     .order("scheduled_for", { ascending: true })
     .limit(1);
 

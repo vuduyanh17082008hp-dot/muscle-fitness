@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
@@ -1424,6 +1425,89 @@ export async function activateWorkoutPlanAction(
 
   revalidatePath(
     "/dashboard/workouts",
+  );
+}
+
+/* =========================================================
+   START WORKOUT (create/schedule today's session)
+
+   This is the only writer for `workout_sessions` — it delegates to
+   the existing `start_workout` SQL RPC (project_09_workout_system
+   migration), which derives the user from auth.uid() server-side
+   (never trusts a client-supplied user id) and is idempotent for an
+   already-in-progress session on the same day.
+========================================================= */
+
+export async function startWorkoutAction(
+  formData: FormData,
+): Promise<void> {
+  const parsedDayId =
+    uuidSchema.safeParse(
+      getFormString(
+        formData,
+        "workout_day_id",
+      ),
+    );
+
+  if (!parsedDayId.success) {
+    throw new Error(
+      "Workout day ID không hợp lệ.",
+    );
+  }
+
+  const { supabase } =
+    await requireUser();
+
+  const clientId =
+    await getDayClientId(
+      supabase,
+      parsedDayId.data,
+    );
+
+  await assertCanManageClient(
+    supabase,
+    clientId,
+  );
+
+  const {
+    data: sessionId,
+    error,
+  } = await supabase.rpc(
+    "start_workout",
+    {
+      p_workout_day_id:
+        parsedDayId.data,
+    },
+  );
+
+  if (
+    error ||
+    !sessionId
+  ) {
+    console.error(
+      "startWorkoutAction failed:",
+      error,
+    );
+
+    throw new Error(
+      getDatabaseMessage(
+        "Không thể bắt đầu buổi tập",
+        error?.message ??
+          "Không nhận được workout session ID.",
+      ),
+    );
+  }
+
+  revalidatePath(
+    "/dashboard",
+  );
+
+  revalidatePath(
+    "/dashboard/workouts",
+  );
+
+  redirect(
+    `/dashboard/workouts/session/${sessionId}`,
   );
 }
 
