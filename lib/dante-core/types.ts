@@ -171,4 +171,6 @@ export type TraceableDecision<TDecision> = {
   dataUsed: Record<string, string | number | null>;
   confidence: ConfidenceLevel;
   sources: KnowledgeSourceRef[];
+  /** Honest caveats on this specific decision (small sample, heuristic definition, demo data, etc.) — optional so existing callers are unaffected; DecisionCard renders it when present. */
+  limitations?: string[];
 };

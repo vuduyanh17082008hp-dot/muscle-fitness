@@ -392,12 +392,12 @@ export default function DanteChat({
             />
 
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#f4bd25]">
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-mf-violet">
                 Dante
               </p>
 
               <p className="text-sm font-medium text-white/55">
-                AI Performance Coach
+                Performance Intelligence
               </p>
             </div>
           </div>
@@ -410,7 +410,7 @@ export default function DanteChat({
                   ? "bg-rose-400"
                   : visualState === "idle"
                     ? "bg-emerald-400"
-                    : "bg-[#f4bd25]",
+                    : "bg-[var(--mf-violet)]",
               )}
             />
 
@@ -454,7 +454,7 @@ export default function DanteChat({
             interactive
           />
 
-          <p className="mt-6 text-xs font-bold uppercase tracking-[0.28em] text-[#f4bd25]">
+          <p className="mt-6 text-xs font-bold uppercase tracking-[0.28em] text-[var(--mf-violet)]">
             Dante
           </p>
 
@@ -476,18 +476,18 @@ export default function DanteChat({
                 className="
                   rounded-full
                   border
-                  border-[#f4bd25]/25
-                  bg-[#f4bd25]/8
+                  border-[var(--mf-violet)]/25
+                  bg-[var(--mf-violet)]/8
                   px-4
                   py-2.5
                   text-xs
                   font-bold
                   uppercase
                   tracking-wide
-                  text-[#f4bd25]
+                  text-[var(--mf-violet)]
                   transition
-                  hover:border-[#f4bd25]/50
-                  hover:bg-[#f4bd25]/14
+                  hover:border-[var(--mf-violet)]/50
+                  hover:bg-[var(--mf-violet)]/14
                   disabled:cursor-not-allowed
                   disabled:opacity-40
                 "
@@ -546,13 +546,15 @@ export default function DanteChat({
                         max-w-[80%]
                         rounded-3xl
                         rounded-br-md
-                        bg-[#f4bd25]
+                        bg-mf-surface
+                        border
+                        border-white/10
                         px-5
                         py-3.5
                         text-base
                         font-medium
                         leading-7
-                        text-black
+                        text-white
                         shadow-lg
                         shadow-black/10
                         md:max-w-[70%]
@@ -583,11 +585,11 @@ export default function DanteChat({
                           justify-center
                           rounded-xl
                           border
-                          border-[#f4bd25]/30
-                          bg-[#f4bd25]/10
+                          border-[var(--mf-violet)]/30
+                          bg-[var(--mf-violet)]/10
                           text-sm
                           font-bold
-                          text-[#f4bd25]
+                          text-[var(--mf-violet)]
                           sm:flex
                         "
                       >
@@ -604,7 +606,7 @@ export default function DanteChat({
                           rounded-tl-md
                           border
                           border-white/8
-                          bg-[#252b37]
+                          bg-mf-surface-elevated
                           px-5
                           py-4
                           text-base
@@ -618,7 +620,7 @@ export default function DanteChat({
                         {/* DANTE LABEL */}
 
                         <div className="mb-4 flex items-center gap-2">
-                          <span className="text-xs font-bold uppercase tracking-[0.18em] text-[#f4bd25]">
+                          <span className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--mf-violet)]">
                             Dante
                           </span>
 
@@ -685,7 +687,7 @@ export default function DanteChat({
                               children,
                             }) {
                               return (
-                                <h3 className="mb-3 mt-6 text-lg font-semibold text-[#f4bd25]">
+                                <h3 className="mb-3 mt-6 text-lg font-semibold text-[var(--mf-violet)]">
                                   {children}
                                 </h3>
                               );
@@ -713,7 +715,7 @@ export default function DanteChat({
                               children,
                             }) {
                               return (
-                                <ul className="mb-5 ml-5 list-disc space-y-2 marker:text-[#f4bd25]">
+                                <ul className="mb-5 ml-5 list-disc space-y-2 marker:text-[var(--mf-violet)]">
                                   {children}
                                 </ul>
                               );
@@ -723,7 +725,7 @@ export default function DanteChat({
                               children,
                             }) {
                               return (
-                                <ol className="mb-5 ml-5 list-decimal space-y-2 marker:font-semibold marker:text-[#f4bd25]">
+                                <ol className="mb-5 ml-5 list-decimal space-y-2 marker:font-semibold marker:text-[var(--mf-violet)]">
                                   {children}
                                 </ol>
                               );
@@ -810,7 +812,7 @@ export default function DanteChat({
                                     text-left
                                     text-sm
                                     font-bold
-                                    text-[#f4bd25]
+                                    text-[var(--mf-violet)]
                                     last:border-r-0
                                   "
                                 >
@@ -849,7 +851,7 @@ export default function DanteChat({
                               children,
                             }) {
                               return (
-                                <blockquote className="my-5 rounded-r-xl border-l-4 border-[#f4bd25] bg-black/20 px-5 py-4 text-white/75">
+                                <blockquote className="my-5 rounded-r-xl border-l-4 border-[var(--mf-violet)] bg-black/20 px-5 py-4 text-white/75">
                                   {children}
                                 </blockquote>
                               );
@@ -863,7 +865,7 @@ export default function DanteChat({
                               children,
                             }) {
                               return (
-                                <code className="rounded-md bg-black/35 px-1.5 py-1 font-mono text-sm text-[#f4bd25]">
+                                <code className="rounded-md bg-black/35 px-1.5 py-1 font-mono text-sm text-[var(--mf-violet)]">
                                   {children}
                                 </code>
                               );
@@ -918,8 +920,8 @@ export default function DanteChat({
                 />
               </div>
 
-              <div className="rounded-3xl rounded-tl-md bg-[#252b37] px-5 py-4">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#f4bd25]">
+              <div className="rounded-3xl rounded-tl-md bg-mf-surface-elevated px-5 py-4">
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--mf-violet)]">
                   Dante is thinking…
                 </div>
               </div>
@@ -1016,13 +1018,13 @@ export default function DanteChat({
             items-center
             justify-center
             rounded-full
-            bg-[#f4bd25]
+            bg-amber-400
             text-black
             shadow-lg
-            shadow-[#f4bd25]/10
+            shadow-amber-400/10
             transition
             hover:scale-105
-            hover:bg-[#ffd24a]
+            hover:bg-amber-300
             active:scale-95
             disabled:cursor-not-allowed
             disabled:opacity-30

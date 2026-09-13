@@ -18,7 +18,7 @@ export function ForgotPasswordForm({
   const [email, setEmail] = useState("")
   const [error, setError] = useState(
     invalidLink
-      ? "Liên kết reset không hợp lệ hoặc đã hết hạn."
+      ? "This reset link is invalid or has expired."
       : ""
   )
   const [sent, setSent] = useState(false)
@@ -43,8 +43,8 @@ export function ForgotPasswordForm({
           normalizedEmail,
           {
             /*
-             * Email template sẽ dùng RedirectTo
-             * để tạo đường dẫn /auth/confirm.
+             * The email template uses redirectTo to build the
+             * /auth/confirm link.
              */
             redirectTo: window.location.origin,
           }
@@ -73,8 +73,8 @@ export function ForgotPasswordForm({
           </strong>
 
           <span className="mt-1 block">
-            Nếu email này được đăng ký, bạn sẽ nhận
-            được liên kết đặt lại mật khẩu.
+            If this email is registered, you&apos;ll receive a link to
+            reset your password.
           </span>
         </StatusMessage>
 

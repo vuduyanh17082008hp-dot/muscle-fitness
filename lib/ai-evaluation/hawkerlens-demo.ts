@@ -45,6 +45,7 @@ const DEMO_ENTRIES: BenchmarkEntry[] = [
       uncertainty: { modelConfidence: 0.86, portionConfidence: 0.68, nutritionConfidence: 0.6 },
       overallConfidence: 0.73,
       message: null,
+      isDemo: false,
     },
   },
   {
@@ -80,6 +81,7 @@ const DEMO_ENTRIES: BenchmarkEntry[] = [
       uncertainty: { modelConfidence: 0.52, portionConfidence: 0.5, nutritionConfidence: 0.5 },
       overallConfidence: 0.51,
       message: null,
+      isDemo: false,
     },
   },
 ];

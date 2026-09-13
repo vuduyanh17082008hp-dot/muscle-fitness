@@ -37,7 +37,7 @@ export function LoadingState({
       aria-live="polite"
       aria-busy="true"
       className={joinClassNames(
-        "flex w-full items-center justify-center bg-[#070707] text-white",
+        "flex w-full items-center justify-center bg-mf-bg text-white",
         fullScreen
           ? "min-h-screen"
           : compact
@@ -49,7 +49,7 @@ export function LoadingState({
       <section
         className={joinClassNames(
           "relative overflow-hidden border border-white/10",
-          "bg-gradient-to-br from-[#141414] via-[#0d0d0d] to-black",
+          "bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg",
           "text-center shadow-2xl shadow-black/70",
           compact
             ? "w-full max-w-sm rounded-2xl px-5 py-6"

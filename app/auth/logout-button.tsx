@@ -51,16 +51,16 @@ export function LogoutButton({
       }
 
       /*
-       * replace() để người dùng không nhấn Back
-       * và quay lại dashboard đã được cache.
+       * replace() so the user can't hit Back and land on a
+       * cached dashboard view.
        */
       router.replace(
         "/login?message=logged-out"
       )
 
       /*
-       * Yêu cầu Next.js tải lại Server Components,
-       * đảm bảo user session đã bị xóa.
+       * Ask Next.js to reload Server Components so the cleared
+       * session is reflected everywhere.
        */
       router.refresh()
     } catch (logoutError) {
@@ -70,7 +70,7 @@ export function LogoutButton({
       )
 
       setError(
-        "Không thể đăng xuất. Hãy thử lại."
+        "Couldn't log out. Please try again."
       )
 
       setLoading(false)

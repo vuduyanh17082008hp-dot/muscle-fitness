@@ -22,9 +22,12 @@ import type { DantePoseName } from "@/components/dante-avatar/poses";
 
 export function DanteAvatarScene({
   pose,
+  paused = false,
   className,
 }: {
   pose: DantePoseName;
+  /** Stops the render loop entirely (spec §13: pause 3D when off-screen / tab hidden) rather than just hiding the canvas. */
+  paused?: boolean;
   className?: string;
 }) {
   return (
@@ -32,6 +35,7 @@ export function DanteAvatarScene({
       className={className}
       shadows
       dpr={[1, 1.5]}
+      frameloop={paused ? "never" : "always"}
       camera={{ position: [0, 0.3, 3.2], fov: 35 }}
       gl={{ antialias: true, alpha: true }}
     >

@@ -261,6 +261,15 @@ export function HawkerLensPanel({
             </select>
           </label>
 
+          {result.isDemo ? (
+            <div className="rounded-2xl border border-sky-400/25 bg-sky-400/5 p-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-sky-300">
+                Demo mode — not a real analysis
+              </p>
+              <p className="mt-1 text-xs leading-5 text-zinc-400">{result.message}</p>
+            </div>
+          ) : null}
+
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-400">
               {result.dish?.replace(/_/g, " ")}
@@ -326,10 +335,11 @@ export function HawkerLensPanel({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={saving || !components.some((c) => c.included)}
+            disabled={saving || result.isDemo || !components.some((c) => c.included)}
+            title={result.isDemo ? "Demo results can't be logged — connect a vision model to analyze real photos." : undefined}
             className="min-h-12 rounded-xl bg-amber-500 text-sm font-black uppercase tracking-wide text-black hover:bg-amber-400 disabled:opacity-40"
           >
-            {saving ? "Saving…" : "Confirm & Add"}
+            {saving ? "Saving…" : result.isDemo ? "Demo — logging disabled" : "Confirm & Add"}
           </button>
         </div>
       ) : null}

@@ -14,6 +14,9 @@ import { MuscleReadinessPanel } from "@/components/dante/muscle-readiness-panel"
 import { RecoveryTrendsChart } from "@/components/recovery/recovery-trends-chart";
 import { RecoveryKnowledgeHub } from "@/components/recovery/recovery-knowledge-hub";
 import { PageVisual } from "@/components/visual/page-visual";
+import { loadRadarContext } from "@/lib/health-radar/load-radar-context";
+import { buildRecoveryRadar } from "@/lib/health-radar/recovery-radar-engine";
+import { DecisionCard } from "@/components/dante/decision-card";
 
 export const dynamic = "force-dynamic";
 
@@ -53,17 +56,20 @@ export default async function RecoveryPage() {
     context.trainingLoad,
   );
 
+  const radarInput = await loadRadarContext(supabase, userId);
+  const radar = buildRecoveryRadar(radarInput);
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-1 py-2">
       {/* =================================================
           HEADER
       ================================================= */}
 
-      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-6 sm:p-8">
+      <section className="relative overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg p-6 sm:p-8">
         <PageVisual page="recovery" />
 
         <div className="relative z-10">
-          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-amber-400">
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-mf-violet">
             Recovery Intelligence
           </p>
 
@@ -87,6 +93,12 @@ export default async function RecoveryPage() {
         result={context.todayScoreResult}
         recommendation={recommendation}
       />
+
+      {/* =================================================
+          PERFORMANCE / RECOVERY RADAR
+      ================================================= */}
+
+      <DecisionCard decision={radar} />
 
       {/* =================================================
           CHECK-IN

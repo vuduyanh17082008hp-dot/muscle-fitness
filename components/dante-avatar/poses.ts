@@ -22,7 +22,8 @@ export type DantePoseName =
   | "side_chest"
   | "point_to_ui"
   | "explain_gesture"
-  | "handoff";
+  | "handoff"
+  | "wave";
 
 export type LimbRotations = {
   spine: [number, number, number];
@@ -109,6 +110,21 @@ export const DANTE_POSES: Record<DantePoseName, LimbRotations> = {
     elbowL: [0.3, 0, 0],
     elbowR: [0.3, 0, 0],
     head: [0.05, 0, 0],
+  },
+
+  // Greeting (spec Part D "Dante wave greeting"): raises the right
+  // arm and turns slightly toward the viewer. This is the "hold"
+  // target the arm damps toward; the side-to-side wave motion itself
+  // (elbow oscillation, 1-2 cycles) is layered on top in
+  // use-dante-pose.ts, timed independently so it plays once rather
+  // than looping. Shoulder/elbow only — torso and head turn is
+  // deliberately minimal.
+  wave: {
+    ...NEUTRAL,
+    spine: [0, 0.08, 0],
+    head: [0, 0.08, 0],
+    shoulderR: [0.25, 0, -1.75],
+    elbowR: [1.0, 0, 0],
   },
 };
 

@@ -117,7 +117,7 @@ export function BudgetPlanner({
   const status = STATUS_COPY[result.status]
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+    <section className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">

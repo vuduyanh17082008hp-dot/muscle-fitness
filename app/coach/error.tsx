@@ -23,12 +23,12 @@ export default function CoachError({
   return (
     <div className="mx-auto max-w-xl space-y-4 py-12">
       <ErrorMessage
-        title="Dante đang gián đoạn"
-        message="Không thể khởi tạo phiên tư vấn. Vui lòng thử lại."
+        title="Dante is temporarily unavailable"
+        message="We couldn't start this coaching session. Please try again."
       />
 
       <Button onClick={reset}>
-        Kết nối lại
+        Reconnect
       </Button>
     </div>
   );

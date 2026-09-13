@@ -48,7 +48,7 @@ export function DecisionCard<TDecision>({
   );
 
   return (
-    <article className="rounded-3xl border border-white/10 bg-[#0d0f12] p-6 sm:p-8">
+    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-amber-400" aria-hidden="true" />
@@ -129,6 +129,21 @@ export function DecisionCard<TDecision>({
             {decision.sources.map((source) => (
               <li key={source.id} className="text-xs leading-5 text-zinc-500">
                 {source.title} — {source.authors}, {source.source} ({source.year})
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {decision.limitations && decision.limitations.length > 0 ? (
+        <div className="mt-5 rounded-xl border border-white/[0.07] bg-black/20 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+            Limitations
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {decision.limitations.map((limitation, i) => (
+              <li key={i} className="text-xs leading-5 text-zinc-500">
+                • {limitation}
               </li>
             ))}
           </ul>

@@ -205,7 +205,7 @@ export function VideoAnalyzer() {
 
   return (
     <div className="space-y-6">
-      <article className="rounded-3xl border border-white/10 bg-[#0d0f12] p-6 sm:p-8">
+      <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
           1. Upload a set
         </p>
@@ -302,7 +302,7 @@ export function VideoAnalyzer() {
         <>
           <SetVisionResultsPanel analysis={analysis} />
 
-          <article className="rounded-3xl border border-white/10 bg-[#0d0f12] p-6 sm:p-8">
+          <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
               2. Save this analysis (optional)
             </p>
@@ -327,7 +327,7 @@ export function VideoAnalyzer() {
             ) : null}
           </article>
 
-          <article className="rounded-3xl border border-white/10 bg-[#0d0f12] p-6 sm:p-8">
+          <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
               3. Ask Dante what this means for your next set
             </p>

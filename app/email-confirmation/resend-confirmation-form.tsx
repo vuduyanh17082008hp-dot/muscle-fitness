@@ -67,7 +67,7 @@ export function ResendConfirmationForm({
       }
 
       setSuccess(
-        "Email xác nhận mới đã được gửi."
+        "A new confirmation email has been sent."
       )
       setCountdown(60)
     } catch (resendError) {

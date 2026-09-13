@@ -42,7 +42,13 @@ function ScoreRing({ score }: { score: number }) {
 
   return (
     <div className="relative grid size-36 shrink-0 place-items-center sm:size-40">
-      <svg viewBox="0 0 128 128" className="size-full -rotate-90">
+      {/* Subtle breathing glow — calm, restrained, respects prefers-reduced-motion via motion-safe:. */}
+      <div
+        aria-hidden="true"
+        className="motion-safe:animate-[breathing-glow_4s_ease-in-out_infinite] absolute inset-2 rounded-full bg-mf-violet/10 blur-xl"
+      />
+
+      <svg viewBox="0 0 128 128" className="relative size-full -rotate-90">
         <circle
           cx="64"
           cy="64"
@@ -88,10 +94,10 @@ export function RecoveryScoreCard({
     .sort((a, b) => a.score - b.score);
 
   return (
-    <article className="rounded-3xl border border-white/10 bg-[#0d0f12] p-6 sm:p-8">
+    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Gauge className="size-4 text-amber-400" aria-hidden="true" />
+          <Gauge className="size-4 text-mf-violet" aria-hidden="true" />
           <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
             Today&apos;s Recovery Score
           </p>

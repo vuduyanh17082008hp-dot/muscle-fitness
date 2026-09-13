@@ -17,6 +17,7 @@ import type {
 } from "lucide-react";
 
 import {
+  Beaker,
   Bot,
   CalendarDays,
   ChartNoAxesCombined,
@@ -128,6 +129,11 @@ const navSections: NavSection[] = [
         label: "Check-in",
         href: "/dashboard/check-in",
         icon: CheckSquare2,
+      },
+      {
+        label: "Experiments",
+        href: "/dashboard/experiments",
+        icon: Beaker,
       },
       {
         label: "Messages",
@@ -321,7 +327,7 @@ function MobileBottomNav({ pathname, hash }: { pathname: string; hash: string })
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-white/10 bg-[#08090b]/95 backdrop-blur-xl lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-white/10 bg-mf-bg/95 backdrop-blur-xl lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {mobilePrimaryNav.map((item) => {
@@ -388,12 +394,12 @@ export function DashboardShell({
   }
 
   return (
-    <div className="min-h-screen bg-[#08090b] text-zinc-100">
+    <div className="min-h-screen bg-mf-bg text-zinc-100">
       {/* ===================================================
           DESKTOP SIDEBAR
       =================================================== */}
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-white/10 bg-[#0b0d10]/95 backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-white/10 bg-mf-surface/95 backdrop-blur-xl lg:flex">
         <SidebarContent
           pathname={
             pathname
@@ -406,7 +412,7 @@ export function DashboardShell({
           MOBILE HEADER
       =================================================== */}
 
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/10 bg-[#08090b]/90 px-4 backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/10 bg-mf-bg/90 px-4 backdrop-blur-xl lg:hidden">
         <Logo href="/dashboard" showTextOnMobile className="min-w-0" />
 
         <div className="flex shrink-0 items-center gap-2">
@@ -450,7 +456,7 @@ export function DashboardShell({
             className="absolute inset-0 bg-black/75 backdrop-blur-sm"
           />
 
-          <aside className="absolute inset-y-0 left-0 flex w-[88%] max-w-80 flex-col border-r border-white/10 bg-[#0b0d10] shadow-2xl">
+          <aside className="absolute inset-y-0 left-0 flex w-[88%] max-w-80 flex-col border-r border-white/10 bg-mf-surface shadow-2xl">
             <button
               type="button"
               onClick={

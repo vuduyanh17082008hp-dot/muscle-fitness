@@ -4,7 +4,7 @@ import DanteChat from "@/components/dante-chat";
 
 export default function ChatbotPage() {
   return (
-    <main className="min-h-screen bg-black px-4 py-6 text-white md:px-8">
+    <main className="min-h-screen bg-mf-bg px-4 py-6 text-white md:px-8">
       <div className="mx-auto w-full max-w-6xl">
         {/* =================================================
             TOP BAR
@@ -29,9 +29,9 @@ export default function ChatbotPage() {
               font-semibold
               text-white
               transition
-              hover:border-[#f4bd25]/50
-              hover:bg-[#f4bd25]/10
-              hover:text-[#f4bd25]
+              hover:border-[var(--mf-violet)]/50
+              hover:bg-[var(--mf-violet)]/10
+              hover:text-[var(--mf-violet)]
             "
           >
             <svg
@@ -84,18 +84,18 @@ export default function ChatbotPage() {
                 justify-center
                 rounded-2xl
                 border
-                border-[#f4bd25]/30
-                bg-[#f4bd25]/10
+                border-[var(--mf-violet)]/30
+                bg-[var(--mf-violet)]/10
                 text-xl
                 font-bold
-                text-[#f4bd25]
+                text-[var(--mf-violet)]
               "
             >
               D
             </div>
 
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#f4bd25]">
+              <p className="text-xs font-bold uppercase tracking-[0.28em] text-[var(--mf-violet)]">
                 Muscle Fitness Intelligence
               </p>
 

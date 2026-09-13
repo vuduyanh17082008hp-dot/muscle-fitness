@@ -32,7 +32,7 @@ export function DashboardNav({
 
   return (
     <nav
-      aria-label="Điều hướng dashboard"
+      aria-label="Dashboard navigation"
       className={
         isHorizontal
           ? "flex min-w-max items-center gap-2"
@@ -55,14 +55,14 @@ export function DashboardNav({
 
               active
                 ? [
-                    "bg-[var(--sidebar-active)]",
-                    "text-foreground",
-                    "shadow-[inset_0_0_0_1px_var(--border)]",
+                    "bg-white/[0.08]",
+                    "text-white",
+                    "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]",
                   ].join(" ")
                 : [
-                    "text-muted-foreground",
-                    "hover:bg-muted",
-                    "hover:text-foreground",
+                    "text-zinc-500",
+                    "hover:bg-white/[0.04]",
+                    "hover:text-white",
                   ].join(" "),
 
               isHorizontal ? "justify-center" : "",
@@ -74,7 +74,7 @@ export function DashboardNav({
                 className={[
                   "absolute left-0 top-1/2",
                   "h-5 w-0.5 -translate-y-1/2",
-                  "rounded-full bg-primary",
+                  "rounded-full bg-mf-sunset",
                 ].join(" ")}
               />
             ) : null}

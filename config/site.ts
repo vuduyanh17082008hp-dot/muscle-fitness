@@ -90,7 +90,7 @@ export const siteConfig: SiteConfig = {
           "Training",
 
         href:
-          "/dashboard/training",
+          "/dashboard/workouts",
       },
 
       {

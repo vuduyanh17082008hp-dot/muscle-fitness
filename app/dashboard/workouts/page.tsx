@@ -14,13 +14,29 @@ import {
 
 import { createClient } from "@/lib/supabase/server";
 import { SectionTabs } from "@/components/dashboard/section-tabs";
+import { loadTodaySession } from "@/lib/training/load-today-session";
+import { resolveCanonicalMuscle, MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
+import { PrimaryButton } from "@/components/ui/button";
 
 const TRAIN_TABS = [
-  { label: "Today", href: "/dashboard/today" },
+  { label: "Today", href: "/dashboard/workouts" },
   { label: "Plan", href: "/dashboard/split" },
-  { label: "Form Coach", href: "/dashboard/workouts/form-coach" },
+  { label: "Exercises", href: "/dashboard/workouts/library" },
   { label: "History", href: "/dashboard/workouts/history" },
 ];
+
+/** A rough, honestly-labeled ("~") estimate from each exercise's own target sets and rest time — never a fabricated fixed number. 45s is an assumed average set-execution time, not measured. */
+const ASSUMED_SET_EXECUTION_SECONDS = 45;
+
+function estimateSessionMinutes(exercises: Array<{ targetSets: number | null; restSeconds: number | null }>): number {
+  const totalSeconds = exercises.reduce((sum, exercise) => {
+    const sets = exercise.targetSets ?? 3;
+    const rest = exercise.restSeconds ?? 90;
+    return sum + sets * (rest + ASSUMED_SET_EXECUTION_SECONDS);
+  }, 0);
+
+  return Math.max(1, Math.round(totalSeconds / 60));
+}
 
 import {
   getRecommendedPreset,
@@ -257,6 +273,7 @@ export default async function WorkoutsPage() {
     fitnessResponse,
     plansResponse,
     externalTemplates,
+    todaySession,
   ] =
     await Promise.all([
       supabase
@@ -306,6 +323,7 @@ export default async function WorkoutsPage() {
         .limit(4),
 
       loadWgerTemplates(),
+      loadTodaySession(supabase, user.id),
     ]);
 
   const fitness =
@@ -340,51 +358,98 @@ export default async function WorkoutsPage() {
         plan.status === "active",
     ) ?? null;
 
+  const activeExercises = todaySession?.exercises.filter((exercise) => !exercise.isSkipped) ?? [];
+
+  const muscleLabels = Array.from(
+    new Set(
+      activeExercises
+        .map((exercise) => resolveCanonicalMuscle(exercise.primaryMuscle))
+        .filter((muscle): muscle is NonNullable<typeof muscle> => muscle !== null)
+        .map((muscle) => MUSCLE_DISPLAY_NAME[muscle]),
+    ),
+  );
+
+  const estimatedMinutes = activeExercises.length > 0 ? estimateSessionMinutes(activeExercises) : null;
+  const hasTodaySession = todaySession !== null && activeExercises.length > 0;
+
   return (
     <main className="space-y-10">
       <SectionTabs tabs={TRAIN_TABS} />
 
       {/* ===================================================
-          HERO
+          HERO — leads with TODAY'S SESSION when one is
+          scheduled; the main action (Start workout) is the
+          single dominant element, not one of several
+          equal-weight cards.
       =================================================== */}
 
-      <header className="overflow-hidden rounded-3xl border border-white/10 bg-linear-to-br from-[#171717] via-[#0d0d0d] to-black p-7 sm:p-9">
+      <header className="overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg p-7 sm:p-9">
         <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 text-amber-400">
               <Dumbbell className="h-4 w-4" />
 
               <p className="text-xs font-black uppercase tracking-[0.28em]">
-                Workout System
+                {hasTodaySession ? "Today's Session" : "Workout System"}
               </p>
             </div>
 
-            <h1 className="mt-4 text-4xl font-black uppercase tracking-tight sm:text-5xl">
-              Build your
-              <span className="block text-amber-400">
-                training programme.
-              </span>
-            </h1>
+            {hasTodaySession ? (
+              <>
+                <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
+                  {todaySession!.name ?? "Today's session"}
+                </h1>
 
-            <p className="mt-5 max-w-3xl text-sm leading-7 text-zinc-400 sm:text-base">
-              Choose a proven split,
-              customise every training
-              day, set muscle priorities,
-              control intensity and
-              volume, or start from an
-              open-source community
-              template.
-            </p>
+                {muscleLabels.length > 0 ? (
+                  <p className="mt-3 text-sm font-bold uppercase tracking-[0.14em] text-amber-300">
+                    {muscleLabels.join(" • ")}
+                  </p>
+                ) : null}
+
+                <p className="mt-4 text-sm text-zinc-400 sm:text-base">
+                  {activeExercises.length} exercise{activeExercises.length === 1 ? "" : "s"}
+                  {estimatedMinutes !== null ? ` · ~${estimatedMinutes} min` : ""}
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="mt-4 text-4xl font-black uppercase tracking-tight sm:text-5xl">
+                  Build your
+                  <span className="block text-amber-400">
+                    training programme.
+                  </span>
+                </h1>
+
+                <p className="mt-5 max-w-3xl text-sm leading-7 text-zinc-400 sm:text-base">
+                  Choose a proven split,
+                  customise every training
+                  day, set muscle priorities,
+                  control intensity and
+                  volume, or start from an
+                  open-source community
+                  template.
+                </p>
+              </>
+            )}
           </div>
 
-          <Link
-            href={`/dashboard/workouts/plans/new?preset=${recommended}`}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-sm font-black text-black transition hover:bg-amber-300"
-          >
-            <WandSparkles className="h-4 w-4" />
+          {hasTodaySession ? (
+            <PrimaryButton size="lg" asChild>
+              <Link href={`/dashboard/workouts/session/${todaySession!.id}`}>
+                Start workout
+                <ArrowRight className="size-4" />
+              </Link>
+            </PrimaryButton>
+          ) : (
+            <Link
+              href={`/dashboard/workouts/plans/new?preset=${recommended}`}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-sm font-black text-black transition hover:bg-amber-300"
+            >
+              <WandSparkles className="h-4 w-4" />
 
-            Build recommended plan
-          </Link>
+              Build recommended plan
+            </Link>
+          )}
         </div>
       </header>
 
@@ -577,7 +642,7 @@ export default async function WorkoutsPage() {
                   split.id
                 }
                 href={`/dashboard/workouts/plans/new?preset=${split.id}`}
-                className="group rounded-2xl border border-white/10 bg-[#0d0d0d] p-5 transition hover:border-amber-400/30 hover:bg-white/4"
+                className="group rounded-2xl border border-white/10 bg-mf-surface p-5 transition hover:border-amber-400/30 hover:bg-white/4"
               >
                 <div className="flex items-center justify-between gap-3">
                   {split.id ===
@@ -744,7 +809,7 @@ export default async function WorkoutsPage() {
                     plan.id
                   }
                   href={`/dashboard/workouts/plans/${plan.id}`}
-                  className="rounded-2xl border border-white/10 bg-[#0d0d0d] p-5 transition hover:border-white/20"
+                  className="rounded-2xl border border-white/10 bg-mf-surface p-5 transition hover:border-white/20"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="font-bold">

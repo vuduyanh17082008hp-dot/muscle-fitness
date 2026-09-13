@@ -19,6 +19,7 @@ import {
   InspirationStory,
 } from "@/components/home/inspiration-story";
 import { DanteRobot } from "@/components/dante/dante-robot";
+import { DanteAvatar } from "@/components/dante-avatar/dante-avatar";
 import { Reveal, StaggerContainer, StaggerItem } from "@/components/animation/reveal";
 import { PageVisual } from "@/components/visual/page-visual";
 
@@ -138,7 +139,7 @@ const pillars = [
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#070707] text-white">
+    <main className="min-h-screen bg-mf-bg text-white">
       {/* ===================================================
           NAVBAR
       =================================================== */}
@@ -1113,10 +1114,8 @@ export default function HomePage() {
                   text-zinc-400
                 "
               >
-                Dante is designed to combine the client&apos;s real
-                profile, product context and external evidence when
-                available. The goal is not more text. The goal is a
-                better next decision.
+                Dante combines your real profile, live context and
+                trusted evidence into one next decision — not more text.
               </p>
 
               <Link
@@ -1161,8 +1160,14 @@ export default function HomePage() {
                 sm:p-7
               "
             >
+              <div className="mx-auto h-[220px] w-full max-w-xs sm:h-[260px]">
+                <DanteAvatar pose="explain_gesture" className="size-full" />
+              </div>
+
               <div
                 className="
+                  mt-6
+
                   grid
 
                   gap-3

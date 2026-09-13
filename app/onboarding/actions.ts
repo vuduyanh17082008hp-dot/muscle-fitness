@@ -6,6 +6,7 @@ import { calculateNutritionTargets } from "@/features/onboarding/calculations"
 
 import {
   onboardingSchema,
+  trainingStyleToDbOverride,
   type OnboardingData,
 } from "@/features/onboarding/schema"
 
@@ -331,6 +332,11 @@ export async function completeOnboardingAction(
         preferred_training_time:
           values.lifestyle
             .preferredTrainingTime,
+
+        training_mode_override:
+          trainingStyleToDbOverride(
+            values.training.trainingStyle,
+          ),
       },
       {
         onConflict: "user_id",

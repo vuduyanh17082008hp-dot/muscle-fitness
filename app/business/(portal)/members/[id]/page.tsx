@@ -203,15 +203,16 @@ function calculateRisk(
   };
 }
 
+/** Risk states per the design system: Low -> green, Medium -> amber, High -> coral (never red, to stay in the Ocean Sunset accent pool). */
 function getRiskBadgeClass(
   level: RiskLevel
 ): string {
   switch (level) {
     case "HIGH":
       return [
-        "border-red-400/30",
-        "bg-red-400/10",
-        "text-red-300",
+        "border-mf-coral/30",
+        "bg-mf-coral/10",
+        "text-mf-coral",
       ].join(" ");
 
     case "MODERATE":
@@ -223,9 +224,9 @@ function getRiskBadgeClass(
 
     default:
       return [
-        "border-lime-400/30",
-        "bg-lime-400/10",
-        "text-lime-300",
+        "border-emerald-400/30",
+        "bg-emerald-400/10",
+        "text-emerald-300",
       ].join(" ");
   }
 }
@@ -236,8 +237,8 @@ function getRiskPanelClass(
   switch (level) {
     case "HIGH":
       return [
-        "border-red-500/20",
-        "bg-red-500/5",
+        "border-mf-coral/20",
+        "bg-mf-coral/5",
       ].join(" ");
 
     case "MODERATE":
@@ -248,8 +249,8 @@ function getRiskPanelClass(
 
     default:
       return [
-        "border-lime-400/20",
-        "bg-lime-400/5",
+        "border-emerald-400/20",
+        "bg-emerald-400/5",
       ].join(" ");
   }
 }
@@ -306,11 +307,11 @@ export default async function MemberDetailPage({
 
   if (!data) {
     return (
-      <main className="min-h-screen bg-[#070908] px-6 py-20 text-white">
+      <main className="min-h-screen bg-mf-bg px-6 py-20 text-white">
         <div className="mx-auto max-w-3xl">
           <Link
             href="/business/members"
-            className="text-sm text-lime-300 transition hover:text-lime-200"
+            className="text-sm text-cyan-300 transition hover:text-cyan-200"
           >
             ← Member Intelligence
           </Link>
@@ -339,16 +340,16 @@ export default async function MemberDetailPage({
     calculateRisk(member);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#070908] text-white">
+    <main className="relative min-h-screen overflow-hidden bg-mf-bg text-white">
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(184,255,90,0.08),transparent_32%)]"
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(56,189,248,0.08),transparent_32%)]"
       />
 
       <div className="relative mx-auto max-w-7xl px-6 py-10">
         <Link
           href="/business/members"
-          className="text-sm text-white/50 transition hover:text-lime-300"
+          className="text-sm text-white/50 transition hover:text-cyan-300"
         >
           ← Member Intelligence
         </Link>
@@ -357,11 +358,11 @@ export default async function MemberDetailPage({
         <header className="mt-10 flex flex-col justify-between gap-8 md:flex-row md:items-end">
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-3">
-              <span className="text-xs uppercase tracking-[0.2em] text-lime-300">
+              <span className="text-xs uppercase tracking-[0.2em] text-cyan-300">
                 Member Intelligence
               </span>
 
-              <span className="rounded-full border border-lime-400/20 bg-lime-400/5 px-3 py-1 text-[10px] uppercase tracking-wider text-lime-300">
+              <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-[10px] uppercase tracking-wider text-cyan-300">
                 Synthetic Demo Data
               </span>
             </div>
@@ -459,7 +460,7 @@ export default async function MemberDetailPage({
           {/* TRANSPARENT RISK ENGINE */}
           <div className="rounded-3xl border border-white/10 bg-white/5 p-7">
             <div className="mb-6">
-              <p className="text-xs uppercase tracking-[0.18em] text-lime-300">
+              <p className="text-xs uppercase tracking-[0.18em] text-cyan-300">
                 Transparent Risk Engine
               </p>
 
@@ -491,7 +492,7 @@ export default async function MemberDetailPage({
 
                     <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
                       <div
-                        className="h-full rounded-full bg-lime-300"
+                        className="h-full rounded-full bg-cyan-300"
                         style={{
                           width: `${clamp(
                             factor.value
@@ -516,9 +517,9 @@ export default async function MemberDetailPage({
           </div>
 
           {/* AI DECISION SUPPORT */}
-          <div className="rounded-3xl border border-lime-400/10 bg-lime-400/5 p-7">
+          <div className="rounded-3xl border border-cyan-400/10 bg-cyan-400/5 p-7">
             <div className="flex items-center justify-between gap-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-lime-300">
+              <p className="text-xs uppercase tracking-[0.18em] text-cyan-300">
                 AI Decision Support
               </p>
 
@@ -560,7 +561,7 @@ export default async function MemberDetailPage({
 
             <Link
               href={`/business/campaigns/new?member=${member.id}`}
-              className="mt-8 flex h-12 w-full items-center justify-center rounded-xl bg-lime-300 px-5 text-sm font-semibold text-black transition hover:bg-lime-200"
+              className="mt-8 flex h-12 w-full items-center justify-center rounded-xl bg-cyan-300 px-5 text-sm font-semibold text-black transition hover:bg-cyan-200"
             >
               Generate Outreach
             </Link>
@@ -643,7 +644,7 @@ function ActionItem({
 }) {
   return (
     <div className="flex items-center gap-4 rounded-xl border border-white/10 bg-black/20 p-4">
-      <span className="text-xs font-semibold text-lime-300">
+      <span className="text-xs font-semibold text-cyan-300">
         {number}
       </span>
 

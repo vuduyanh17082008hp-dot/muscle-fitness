@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function CoachPage() {
   return (
-    <main className="min-h-screen bg-[#070707] px-4 py-10 text-white sm:px-6">
+    <main className="min-h-screen bg-mf-bg px-4 py-10 text-white sm:px-6">
       <Reveal>
         <section className="relative mx-auto max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-8">
           <PageVisual page="dante" />

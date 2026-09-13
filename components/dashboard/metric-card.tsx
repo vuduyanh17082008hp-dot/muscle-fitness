@@ -55,7 +55,7 @@ export function MetricCard({
       : 0
 
   return (
-    <article className="rounded-2xl border border-white/10 bg-[#101216] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.22)] sm:p-5">
+    <article className="rounded-2xl border border-white/10 bg-mf-surface p-4 shadow-[0_18px_60px_rgba(2,8,15,0.35)] sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <span className="grid size-10 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-zinc-300">
           <Icon className="size-4" />
@@ -91,7 +91,7 @@ export function MetricCard({
 
           <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-200 transition-[width]"
+              className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400 transition-[width]"
               style={{
                 width: `${percentage}%`,
               }}

@@ -141,7 +141,7 @@ export default function BusinessSidebar({
         </Link>
 
         <Link
-          href="/admin/logout"
+          href="/admin/login/logout"
           className="flex items-center justify-center rounded-xl px-4 py-3 text-sm font-medium text-zinc-500 transition hover:bg-white/10 hover:text-white"
         >
           Sign Out

@@ -20,7 +20,7 @@ const buttonVariants = cva(
     "gap-2",
     "whitespace-nowrap",
 
-    "rounded-lg",
+    "rounded-[14px]",
 
     "text-sm",
     "font-semibold",
@@ -114,6 +114,19 @@ const buttonVariants = cva(
           "hover:underline",
         ].join(" "),
 
+        /** The Ocean Sunset signature gradient — reserved for hero/state CTAs, never the default button look. */
+        gradient: [
+          "bg-gradient-ocean-sunset",
+          "text-white",
+
+          "shadow-md",
+          "shadow-black/20",
+
+          "hover:brightness-110",
+
+          "active:translate-y-px",
+        ].join(" "),
+
         destructive: [
           "bg-red-600",
           "text-white",
@@ -146,7 +159,7 @@ const buttonVariants = cva(
 
         sm: [
           "h-9",
-          "rounded-md",
+          "rounded-[12px]",
           "px-3",
 
           "text-xs",
@@ -154,7 +167,7 @@ const buttonVariants = cva(
 
         lg: [
           "h-12",
-          "rounded-xl",
+          "rounded-[16px]",
           "px-6",
 
           "text-sm",
@@ -326,6 +339,30 @@ Button.displayName =
   "Button";
 
 /* =========================================================
+   NAMED PRIMITIVES
+
+   Thin, explicitly-named wrappers over the same Button — not a
+   parallel button system. Use these when the design-system role
+   (primary/secondary/ghost) matters more at the call site than
+   remembering which `variant` string maps to it.
+========================================================= */
+
+const PrimaryButton = React.forwardRef<HTMLButtonElement, Omit<ButtonProps, "variant">>(
+  (props, ref) => <Button ref={ref} variant="primary" {...props} />,
+);
+PrimaryButton.displayName = "PrimaryButton";
+
+const SecondaryButton = React.forwardRef<HTMLButtonElement, Omit<ButtonProps, "variant">>(
+  (props, ref) => <Button ref={ref} variant="secondary" {...props} />,
+);
+SecondaryButton.displayName = "SecondaryButton";
+
+const GhostButton = React.forwardRef<HTMLButtonElement, Omit<ButtonProps, "variant">>(
+  (props, ref) => <Button ref={ref} variant="ghost" {...props} />,
+);
+GhostButton.displayName = "GhostButton";
+
+/* =========================================================
    EXPORTS
 ========================================================= */
 
@@ -333,4 +370,7 @@ export {
   Button,
   buttonVariants,
   buttonStyles,
+  PrimaryButton,
+  SecondaryButton,
+  GhostButton,
 };

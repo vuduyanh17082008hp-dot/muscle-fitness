@@ -18,7 +18,7 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="vi">
+    <html lang="en">
       <body>
         <main
           style={{
@@ -48,12 +48,12 @@ export default function GlobalError({
             </p>
 
             <h1>
-              Ứng dụng đang gặp sự cố
+              The application ran into a problem
             </h1>
 
             <p>
-              Vui lòng thử tải lại. Nếu lỗi tiếp tục xảy ra,
-              hãy kiểm tra log phía server.
+              Please try reloading. If the error keeps happening,
+              check the server-side logs.
             </p>
 
             <button
@@ -70,7 +70,7 @@ export default function GlobalError({
                 fontWeight: 600,
               }}
             >
-              Tải lại ứng dụng
+              Reload app
             </button>
           </div>
         </main>

@@ -43,16 +43,24 @@ const REGIONS: MuscleRegion[] = [
   { muscle: "calves", view: "both", shape: { cx: 40, cy: 176, rx: 6.5, ry: 16 }, mirror: true },
 ];
 
+/**
+ * Ocean Sunset anatomy convention (spec: "Primary muscle: strong
+ * sunset highlight. Secondary: lower-opacity accent. Inactive
+ * anatomy: ocean/slate."). Primary and secondary share the SAME
+ * sunset hue — the distinction is opacity/strength, not a second
+ * competing color — and stabilizers fall back to a quiet ocean-slate
+ * tone rather than an arbitrary blue.
+ */
 const INVOLVEMENT_FILL: Record<MuscleInvolvement, string> = {
   primary: "var(--color-domain-training)",
-  secondary: "#f59e0b",
-  stabilizer: "#60a5fa",
+  secondary: "var(--color-domain-training)",
+  stabilizer: "var(--mf-text-muted)",
 };
 
 const INVOLVEMENT_OPACITY: Record<MuscleInvolvement, number> = {
   primary: 0.85,
-  secondary: 0.55,
-  stabilizer: 0.4,
+  secondary: 0.4,
+  stabilizer: 0.3,
 };
 
 function BodyOutline() {

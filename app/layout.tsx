@@ -187,7 +187,7 @@ export const viewport: Viewport = {
         "(prefers-color-scheme: light)",
 
       color:
-        "#070707",
+        "#07111B",
     },
 
     {
@@ -195,7 +195,7 @@ export const viewport: Viewport = {
         "(prefers-color-scheme: dark)",
 
       color:
-        "#070707",
+        "#07111B",
     },
   ],
 
@@ -223,7 +223,7 @@ export default function RootLayout({
           min-h-screen
           overflow-x-hidden
 
-          bg-[#070707]
+          bg-mf-bg
           text-white
 
           antialiased

@@ -1,6 +1,6 @@
 export default function CoachLoading() {
   return (
-    <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-[#070707] px-4 text-white">
+    <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-mf-bg px-4 text-white">
       <div
         role="status"
         aria-live="polite"
@@ -27,11 +27,11 @@ export default function CoachLoading() {
           </p>
 
           <h1 className="mt-3 text-xl font-bold text-white">
-            Đang khởi tạo Dante...
+            Starting Dante…
           </h1>
 
           <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-zinc-500">
-            Đang tải hồ sơ, mục tiêu và dữ liệu tập luyện của bạn.
+            Loading your profile, goals, and training data.
           </p>
 
           <div className="mx-auto mt-7 flex max-w-xs gap-2">
@@ -41,7 +41,7 @@ export default function CoachLoading() {
           </div>
 
           <span className="sr-only">
-            Đang khởi tạo Dante
+            Starting Dante
           </span>
         </div>
       </div>

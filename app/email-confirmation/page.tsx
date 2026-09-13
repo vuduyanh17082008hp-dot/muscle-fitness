@@ -20,9 +20,9 @@ export default async function EmailConfirmationPage({
     <AuthShell
       eyebrow="Verification required"
       title="Check your inbox"
-      description="Một bước cuối cùng để kích hoạt tài khoản Muscle Fitness của bạn."
+      description="One final step to activate your Muscle Fitness account."
       sideTitle="Confirm. Return. Begin."
-      sideDescription="Xác nhận email giúp bảo vệ tài khoản và bảo đảm dữ liệu luyện tập của bạn luôn thuộc quyền kiểm soát của chính bạn."
+      sideDescription="Confirming your email protects your account and ensures your training data always stays under your control."
       step="02 / 04"
     >
       <div className="space-y-6">
@@ -38,7 +38,7 @@ export default async function EmailConfirmationPage({
               </p>
 
               <p className="mt-2 text-sm leading-6 text-zinc-400">
-                Chúng tôi đã gửi liên kết xác nhận đến:
+                We sent a confirmation link to:
               </p>
 
               <p className="mt-1 break-all font-black text-white">
@@ -50,15 +50,15 @@ export default async function EmailConfirmationPage({
 
         <div className="space-y-3 text-sm leading-6 text-zinc-500">
           <p>
-            1. Mở email từ Muscle Fitness hoặc Supabase.
+            1. Open the email from Muscle Fitness or Supabase.
           </p>
 
           <p>
-            2. Nhấn nút xác nhận tài khoản.
+            2. Click the account confirmation button.
           </p>
 
           <p>
-            3. Quay lại Login và đăng nhập.
+            3. Return to Login and sign in.
           </p>
         </div>
 

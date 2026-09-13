@@ -41,7 +41,7 @@ function ContentCardSkeleton() {
 
 export default function DashboardLoading() {
   return (
-    <main className="min-h-screen bg-[#070707] text-white">
+    <main className="min-h-screen bg-mf-bg text-white">
       <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-zinc-900 via-black to-zinc-950 p-6 sm:p-8">
           <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">

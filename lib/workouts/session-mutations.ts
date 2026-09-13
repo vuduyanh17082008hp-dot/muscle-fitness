@@ -383,6 +383,86 @@ export async function mutateReplaceExercise(
   }
 }
 
+/**
+ * Adjusts target_sets/rep_min/rep_max for one session exercise —
+ * used by Dante's `adjust_sets_reps` and `modify_volume` actions
+ * (lib/dante-core/actions/apply-action.ts). Same ownership check and
+ * error handling as every other mutation in this file; Dante never
+ * calls the database directly, only this function.
+ */
+export async function mutateAdjustSetsReps(
+  sessionId: string,
+  payload: UnknownRecord,
+): Promise<SessionMutationResult> {
+  try {
+    const { supabase, userId, errorMessage } =
+      await getLooseClient()
+
+    if (!userId) {
+      return {
+        success: false,
+        message: errorMessage ?? "Unauthorized",
+      }
+    }
+
+    await assertSessionOwned(supabase, sessionId, userId)
+
+    const sessionExerciseId =
+      asString(payload.sessionExerciseId) ??
+      asString(payload.session_exercise_id)
+
+    if (!sessionExerciseId) {
+      return {
+        success: false,
+        message: "Missing session exercise ID.",
+      }
+    }
+
+    const targetSets = asNumber(payload.targetSets ?? payload.target_sets)
+    const repMin = asNumber(payload.repMin ?? payload.rep_min)
+    const repMax = asNumber(payload.repMax ?? payload.rep_max)
+
+    if (targetSets === null && repMin === null && repMax === null) {
+      return {
+        success: false,
+        message: "Nothing to update — provide at least one of targetSets, repMin, repMax.",
+      }
+    }
+
+    const updates: UnknownRecord = { updated_at: new Date().toISOString() }
+    if (targetSets !== null) updates.target_sets = Math.max(1, Math.round(targetSets))
+    if (repMin !== null) updates.rep_min = Math.max(1, Math.round(repMin))
+    if (repMax !== null) updates.rep_max = Math.max(1, Math.round(repMax))
+
+    const { error } = await supabase
+      .from("workout_session_exercises")
+      .update(updates)
+      .eq("id", sessionExerciseId)
+      .eq("workout_session_id", sessionId)
+
+    if (error) {
+      return {
+        success: false,
+        message: error.message,
+      }
+    }
+
+    return {
+      success: true,
+      message: "Session exercise updated.",
+      data: { sessionExerciseId, ...updates },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to update session exercise.",
+    }
+  }
+}
+
 export async function mutateFinishWorkout(
   sessionId: string,
   payload: UnknownRecord,
@@ -485,6 +565,13 @@ export async function handleSessionAction(
     normalized === "replace"
   ) {
     return mutateReplaceExercise(sessionId, payload)
+  }
+
+  if (
+    normalized === "adjust_sets_reps" ||
+    normalized === "adjust_volume"
+  ) {
+    return mutateAdjustSetsReps(sessionId, payload)
   }
 
   if (

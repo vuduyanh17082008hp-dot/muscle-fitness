@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, UtensilsCrossed } from "lucide-react"
 
 import { TrackFoodModal } from "@/components/nutrition/track-food-modal"
+import { NextMealCard } from "@/components/nutrition/next-meal-card"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import type { ConfirmedFood } from "@/components/nutrition/types"
 import {
@@ -34,6 +35,7 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
 
   const [recentFoods, setRecentFoods] = useState<FoodHistoryItem[]>([])
   const [frequentFoods, setFrequentFoods] = useState<FoodHistoryItem[]>([])
+  const [nextActionRefreshKey, setNextActionRefreshKey] = useState(0)
 
   const isToday = selectedDate === todayIso()
 
@@ -113,6 +115,7 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
 
       setEntries((current) => [...current, data.entry as FoodLogEntry])
       loadRecentFoods()
+      setNextActionRefreshKey((key) => key + 1)
       return true
     } catch {
       setError("Network error — unable to save this food.")
@@ -206,6 +209,7 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
 
       setEntries((current) => current.filter((entry) => entry.id !== id))
       setConfirmingDeleteId(null)
+      setNextActionRefreshKey((key) => key + 1)
     } catch {
       setError("Network error — unable to delete this food.")
     } finally {
@@ -218,9 +222,9 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-500">
-            {formatDateLabel(selectedDate)}
+            {isToday ? "Today's Nutrition" : "Food Log"}
           </p>
-          <h2 className="mt-1 text-2xl font-black text-white">Track your food</h2>
+          <h2 className="mt-1 text-2xl font-black text-white">{formatDateLabel(selectedDate)}</h2>
         </div>
 
         {isToday ? <TrackFoodModal onAddFood={handleAddFood} onAddFoods={handleAddFoods} /> : null}
@@ -243,6 +247,8 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
         <MacroCard label="Carbs" consumed={comparison.carbs.consumed} target={comparison.carbs.target} remaining={comparison.carbs.remaining} unit="g" />
         <MacroCard label="Fat" consumed={comparison.fat.consumed} target={comparison.fat.target} remaining={comparison.fat.remaining} unit="g" />
       </div>
+
+      {isToday ? <NextMealCard refreshKey={nextActionRefreshKey} onLogged={handleAddFood} /> : null}
 
       {isToday && (recentFoods.length > 0 || frequentFoods.length > 0) ? (
         <div id="history" className="grid gap-4 sm:grid-cols-2 scroll-mt-24">
@@ -460,7 +466,9 @@ function FoodLogRow({
             {quantityLabel} · {FOOD_LOG_SOURCE_LABEL[entry.source]}
           </p>
           <p className="mt-1 text-xs text-zinc-400">
-            {entry.calories} kcal · {entry.proteinG} P / {entry.carbsG} C / {entry.fatG} F
+            <span className="font-semibold text-zinc-300">{entry.calories} kcal</span>
+            {" · "}
+            {entry.proteinG} P • {entry.carbsG} C • {entry.fatG} F
           </p>
         </div>
 

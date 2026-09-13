@@ -11,7 +11,7 @@ export default async function BusinessPortalLayout({
   const admin = await requireBusinessAdmin();
 
   return (
-    <div className="min-h-screen bg-[#07090d] text-white">
+    <div className="min-h-screen bg-mf-bg text-white">
       <div className="flex min-h-screen">
         <BusinessSidebar
           businessName={admin.businessName}

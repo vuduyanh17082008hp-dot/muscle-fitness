@@ -678,7 +678,7 @@ export default function ProgramBuilder({
           PROFILE SUMMARY
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-amber-500" />
 
@@ -1341,7 +1341,7 @@ export default function ProgramBuilder({
           CURRENT CONFIGURATION
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-600">
           Program configuration
         </p>
@@ -1633,7 +1633,7 @@ function ProgramView({
               key={
                 day.day
               }
-              className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d]"
+              className="overflow-hidden rounded-3xl border border-white/10 bg-mf-surface"
             >
               {/* DAY HEADER */}
 
@@ -1875,7 +1875,7 @@ function BuilderSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+    <section className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
       <p className="text-xs font-black uppercase tracking-[0.25em] text-amber-500">
         {number}
       </p>

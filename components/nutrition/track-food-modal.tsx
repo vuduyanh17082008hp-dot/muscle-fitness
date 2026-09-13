@@ -4,6 +4,7 @@ import { useState } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { Barcode, MapPin, Plus, Search, Sparkles, X } from "lucide-react"
 
+import { PrimaryButton } from "@/components/ui/button"
 import { suggestMealType } from "@/components/nutrition/meal-type"
 import { FoodQuantityConfirm } from "@/components/nutrition/food-quantity-confirm"
 import { FoodSearchPanel } from "@/components/nutrition/food-search-panel"
@@ -73,13 +74,10 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Trigger asChild>
-        <button
-          type="button"
-          className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-amber-500 px-6 text-sm font-black uppercase tracking-wider text-black transition hover:bg-amber-400"
-        >
+        <PrimaryButton className="min-h-14 rounded-2xl px-6 text-sm uppercase tracking-wider">
           <Plus className="size-5" />
           Track Food
-        </button>
+        </PrimaryButton>
       </Dialog.Trigger>
 
       <Dialog.Portal>

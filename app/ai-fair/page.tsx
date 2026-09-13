@@ -23,17 +23,23 @@ const deliverables = [
 ] as const;
 
 const standout = [
-  "Dante — profile-aware, evidence-aware AI coaching",
+  "Dante — a Human Performance Copilot: evidence-grounded recommendations with a typed, user-confirmed action system (never a silent LLM database write)",
 
-  "Adaptive workout split recommendation and custom split building",
+  "Athlete Digital Twin — one deterministic state combining training, nutrition, recovery, SetVision and wearable signals",
 
-  "Muscle-priority, RIR, intensity and volume controls",
+  "SetVision — camera-based rep counting, ROM, tempo and technique consistency, with an honest, documented benchmarking methodology",
 
-  "Nutrition and food-data integration",
+  "HawkerLens SG — Singapore hawker-dish photo estimation with component-level breakdowns, uncertainty ranges, and a clearly labeled demo mode when no vision model is configured",
 
-  "Recovery-aware coaching context",
+  "Performance/Recovery Radar — personal-baseline anomaly detection ('unusual recovery pattern'), never a diagnosis",
 
-  "Explicit responsible-AI guardrails",
+  "Personal Experiment Lab — lightweight N-of-1 self-experiments built entirely from data already logged, always distinguishing association from causation",
+
+  "A provider-neutral wearable architecture with a working demo provider and documented HealthKit/Health Connect boundaries",
+
+  "An internal AI Evaluation Lab that live-tests real system behavior and never fabricates a benchmark result",
+
+  "Explicit, reusable explainability on every intelligent output: Recommendation / Why / Data Used / Confidence / Limitations",
 ] as const;
 
 export default function AIFairPage() {
@@ -42,7 +48,7 @@ export default function AIFairPage() {
       className="
         min-h-screen
 
-        bg-[#070707]
+        bg-mf-bg
 
         px-5
         py-10
@@ -179,7 +185,7 @@ export default function AIFairPage() {
               border
               border-white/10
 
-              bg-[#0d0d0d]
+              bg-mf-surface
 
               p-7
             "
@@ -217,7 +223,7 @@ export default function AIFairPage() {
               border
               border-white/10
 
-              bg-[#0d0d0d]
+              bg-mf-surface
 
               p-7
             "
@@ -261,7 +267,7 @@ export default function AIFairPage() {
             border
             border-white/10
 
-            bg-[#0d0d0d]
+            bg-mf-surface
 
             p-7
           "

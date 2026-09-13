@@ -104,7 +104,7 @@ export default async function BusinessSetupPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#07090d] px-6 py-12 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-mf-bg px-6 py-12 text-white">
       <section className="w-full max-w-xl rounded-3xl border border-white/10 bg-white/5 p-8">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-black">
           <BriefcaseBusiness className="h-6 w-6" />

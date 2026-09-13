@@ -55,7 +55,37 @@ export const goalSchema = z.object({
   ]),
 })
 
+export const trainingStyleValues = [
+  "strength",
+  "bodybuilding",
+  "hybrid",
+  "running",
+  "general",
+] as const
+
+export type TrainingStyle = (typeof trainingStyleValues)[number]
+
+/** UI-facing training style → the training_mode/training_mode_override vocabulary already used by the nutrition engine (lib/nutrition/profile-mapping.ts). "bodybuilding" collapses into "strength" — both are resistance-training disciplines and the engine only distinguishes at this coarser grain. */
+export function trainingStyleToDbOverride(
+  style: TrainingStyle,
+): "general" | "strength" | "running" | "hybrid" {
+  if (style === "bodybuilding") return "strength"
+  return style
+}
+
+/** Reverse of trainingStyleToDbOverride, for pre-filling edit mode from a saved user_preferences.training_mode_override. Lossy for "strength" (could originally have been chosen as "Strength" or "Bodybuilding") — defaults to "strength" — and for db values the short onboarding flow never writes ("hiit", "team-sport"), which fall back to "general". */
+export function dbOverrideToTrainingStyle(
+  value: string | null | undefined,
+): TrainingStyle {
+  if (value === "strength" || value === "running" || value === "hybrid") {
+    return value
+  }
+  return "general"
+}
+
 export const trainingSchema = z.object({
+  trainingStyle: z.enum(trainingStyleValues),
+
   experience: z.enum([
     "beginner",
     "intermediate",
@@ -202,6 +232,7 @@ export const defaultOnboardingData: OnboardingData = {
   },
 
   training: {
+    trainingStyle: "general",
     experience: "beginner",
     trainingDays: 3,
     sessionDurationMinutes: 90,

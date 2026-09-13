@@ -9,6 +9,8 @@ import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import { buildBudgetPlan } from "@/lib/nutrition/budget";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
+import { buildDanteContext, type UserPreferencesRow } from "@/lib/athlete-state/build-dante-context";
+import { loadDanteMemory } from "@/lib/dante-core/memory";
 import { MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { compareToTargets } from "@/lib/nutrition/food-log/totals";
@@ -34,6 +36,8 @@ type UserContext = {
   recovery: unknown;
   trainingIntelligence: unknown;
   todayFoodLog: unknown;
+  /** Digital Twin additions (Personal Baseline Engine, Muscle Recovery Map, Dante Memory, data freshness) — never a raw database row, see lib/athlete-state/build-dante-context.ts. */
+  digitalTwin: unknown;
 };
 
 type Intent = {
@@ -837,39 +841,34 @@ async function loadUserContext(
 
   const [
     profileResponse,
-    fitnessResponse,
     preferenceResponse,
     nutritionContext,
     recoveryContext,
     athleteState,
     todayFoodLog,
+    memory,
   ] =
     await Promise.all([
+      // Only the one field actually used below — never a raw `select("*")`
+      // dump of the profiles row into the LLM prompt.
       supabase
         .from("profiles")
-        .select("*")
+        .select("full_name")
         .eq(
           "user_id",
           userId,
         )
         .maybeSingle(),
 
-      supabase
-        .from(
-          "fitness_profiles",
-        )
-        .select("*")
-        .eq(
-          "user_id",
-          userId,
-        )
-        .maybeSingle(),
-
+      // Goal/experience/height/weight/equipment/limitations all come
+      // from buildAthleteState (below) instead — this query is scoped
+      // to ONLY the dietary/lifestyle fields that live in
+      // user_preferences and nowhere else in the Digital Twin.
       supabase
         .from(
           "user_preferences",
         )
-        .select("*")
+        .select("food_preferences, excluded_foods, allergies, sleep_hours, stress_level, preferred_training_time")
         .eq(
           "user_id",
           userId,
@@ -899,6 +898,8 @@ async function loadUserContext(
       }),
 
       loadFoodLogForDate(supabase, userId),
+
+      loadDanteMemory(supabase, userId),
     ]);
 
   if (
@@ -911,15 +912,6 @@ async function loadUserContext(
   }
 
   if (
-    fitnessResponse.error
-  ) {
-    console.warn(
-      "[DANTE FITNESS PROFILE]",
-      fitnessResponse.error.message,
-    );
-  }
-
-  if (
     preferenceResponse.error
   ) {
     console.warn(
@@ -928,18 +920,44 @@ async function loadUserContext(
     );
   }
 
+  const preferencesRow = (preferenceResponse.data as UserPreferencesRow | null) ?? null;
+
+  const digitalTwin = athleteState
+    ? buildDanteContext(athleteState, memory, preferencesRow)
+    : null;
+
   return {
-    profile:
-      profileResponse.data ??
-      null,
+    profile: {
+      fullName: (profileResponse.data as { full_name: string | null } | null)?.full_name ?? null,
+    },
 
-    fitnessProfile:
-      fitnessResponse.data ??
-      null,
+    // Structured, derived from the SAME buildAthleteState() call used
+    // for trainingIntelligence below — never a second, independently
+    // fetched raw fitness_profiles row.
+    fitnessProfile: athleteState
+      ? {
+          goal: athleteState.profile.goal,
+          experience: athleteState.profile.experience,
+          trainingFrequency: athleteState.profile.trainingFrequency,
+          sessionDurationMinutes: athleteState.profile.sessionDurationMinutes,
+          heightCm: athleteState.profile.heightCm,
+          weightKg: athleteState.profile.weightKg,
+          priorityMuscles: athleteState.profile.priorityMuscles,
+          availableEquipment: athleteState.profile.availableEquipment,
+          physicalLimitations: athleteState.profile.physicalLimitations,
+        }
+      : null,
 
-    preferences:
-      preferenceResponse.data ??
-      null,
+    preferences: preferencesRow
+      ? {
+          foodPreferences: preferencesRow.food_preferences ?? [],
+          excludedFoods: preferencesRow.excluded_foods ?? [],
+          allergies: preferencesRow.allergies ?? [],
+          sleepHoursTypical: preferencesRow.sleep_hours,
+          stressLevel: preferencesRow.stress_level,
+          preferredTrainingTime: preferencesRow.preferred_training_time,
+        }
+      : null,
 
     currentNutritionPlan:
       summarizeNutritionPlan(
@@ -955,6 +973,18 @@ async function loadUserContext(
         : null,
 
     trainingIntelligence: summarizeTrainingIntelligence(athleteState),
+
+    digitalTwin: digitalTwin
+      ? {
+          memory: digitalTwin.memory,
+          baselineDeviations: digitalTwin.baselineDeviations,
+          notableMuscleRecovery: digitalTwin.notableMuscleRecovery,
+          setVision: digitalTwin.setVision,
+          dataFreshness: digitalTwin.dataFreshness,
+          confidence: digitalTwin.confidence,
+          missingData: digitalTwin.missingData,
+        }
+      : null,
 
     todayFoodLog: summarizeTodayFoodLog(
       todayFoodLog,
@@ -2336,6 +2366,9 @@ Relevant fields may include:
   calories, protein, carbs and fat, plus recent food names — already
   computed from the client's real food log by
   lib/nutrition/food-log/totals.ts; see TRACKED NUTRITION below)
+- digitalTwin (personal baseline deviations, muscle recovery
+  estimates, SetVision trends, user-set preferences and data
+  freshness — see ATHLETE DIGITAL TWIN below)
 
 Never invent missing client information.
 
@@ -2502,6 +2535,47 @@ foodsLoggedToday lists what was logged with its portion (e.g. "Whey
 Protein (1 scoop / 30 g)") — use it for context ("you've had oats and
 chicken today") but never restate per-item macros from memory; only
 todayFoodLog's calories/protein/carbs/fat totals are authoritative.
+
+============================================================
+ATHLETE DIGITAL TWIN
+============================================================
+
+digitalTwin is the client's Personal Baseline Engine and Muscle
+Recovery Map output — computed deterministically, exactly like
+trainingIntelligence and recovery above. You explain it; you never
+recompute a baseline, invent a deviation, or invent a recovery state.
+
+- baselineDeviations.sleep/recoveryScore/trainingLoad each compare
+  the client's CURRENT value against their OWN recent history
+  (never a population average). A deviation with sampleCount below
+  5 has confidence 0 and baseline/delta will be null — in that case
+  say there isn't enough history yet for a personal baseline, rather
+  than treating the raw current value as meaningfully "above/below
+  normal".
+- notableMuscleRecovery lists only muscles that are NOT simply
+  well-recovered (to keep this context small) — each entry has a
+  recoveryState ("recovering" / "needs_recovery" / "insufficient_data"),
+  an optional score (0-100), and drivers (the real reasons behind the
+  estimate). Always describe this as an "estimated training
+  readiness" or "recovery status estimate" — never as a measurement
+  of actual tissue/biological recovery.
+- setVision (when available) carries the client's own ROM/tempo
+  consistency compared to their own recent analyses of the same
+  exercise, plus their most recent analysis. If setVision.available
+  is false, say no recent SetVision analysis exists rather than
+  guessing at technique quality.
+- memory holds preferences the client explicitly set (preferred/
+  disliked exercises, weak-point priorities, coaching preference) —
+  respect it (e.g. do not suggest a disliked exercise as the primary
+  option), but note it out loud only when relevant, not on every reply.
+- dataFreshness tells you how recent each signal actually is (status:
+  "current" / "stale" / "missing", plus a human-readable age like
+  "Updated 11d ago"). Never present a "stale" or "missing" signal as
+  if it were today's real state — say plainly that it's out of date
+  or not available yet.
+- confidence (0-1) is the Digital Twin's own honest estimate of how
+  well-grounded this whole snapshot is. Low confidence means say so,
+  not "trust it anyway."
 
 ============================================================
 SUPPLEMENTS

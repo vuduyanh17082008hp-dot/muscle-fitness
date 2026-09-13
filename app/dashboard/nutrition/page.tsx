@@ -32,6 +32,7 @@ import { BudgetPlanner } from "@/components/nutrition/budget-planner"
 import { NutritionTracker } from "@/components/nutrition/nutrition-tracker"
 import { SectionTabs } from "@/components/dashboard/section-tabs"
 import { PerformanceCard } from "@/components/ui/performance-card"
+import { PrimaryButton, SecondaryButton } from "@/components/ui/button"
 
 export const dynamic = "force-dynamic"
 
@@ -102,7 +103,7 @@ export default async function NutritionPlanPage() {
   if (!plan) {
     return (
       <div className="mx-auto max-w-3xl space-y-6">
-        <header className="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-8">
+        <header className="rounded-3xl border border-white/10 bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg p-8">
           <span className="inline-grid size-14 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
             <Utensils className="size-6" />
           </span>
@@ -124,12 +125,9 @@ export default async function NutritionPlanPage() {
             .
           </p>
 
-          <Link
-            href="/onboarding?edit=1"
-            className="mt-6 inline-flex rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
-          >
-            Complete your profile
-          </Link>
+          <PrimaryButton asChild className="mt-6 w-fit">
+            <Link href="/onboarding?edit=1">Complete your profile</Link>
+          </PrimaryButton>
         </header>
       </div>
     )
@@ -164,7 +162,7 @@ export default async function NutritionPlanPage() {
           HEADER
       =================================================== */}
 
-      <header id="plan" className="scroll-mt-24 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
+      <header id="plan" className="scroll-mt-24 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg p-7 sm:p-9">
         <span className="inline-grid size-14 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
           <Utensils className="size-6" />
         </span>
@@ -277,7 +275,7 @@ export default async function NutritionPlanPage() {
           TRAINING-SPECIFIC NUTRITION
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
         <div className="mb-5 flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
             <Target className="size-5" />
@@ -329,20 +327,19 @@ export default async function NutritionPlanPage() {
             description="Portions are scaled toward your targets and rounded to realistic serving sizes, so totals will be close to — not exactly — your daily targets."
           />
 
-          <Link
-            href="/dashboard/nutrition/shopping-list"
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
-          >
-            <ShoppingCart className="size-4" />
-            Generate Shopping List
-          </Link>
+          <SecondaryButton asChild className="shrink-0">
+            <Link href="/dashboard/nutrition/shopping-list">
+              <ShoppingCart className="size-4" />
+              Generate Shopping List
+            </Link>
+          </SecondaryButton>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-2">
           {plan.meals.map((meal) => (
             <article
               key={meal.id}
-              className="rounded-2xl border border-white/10 bg-[#0d0d0d] p-5 sm:p-6"
+              className="rounded-2xl border border-white/10 bg-mf-surface p-5 sm:p-6"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -422,7 +419,7 @@ export default async function NutritionPlanPage() {
           CALIBRATION
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
         <div className="mb-5 flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
             <Activity className="size-5" />

@@ -1,10 +1,10 @@
 export default function RootLoading() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#070707] px-4 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-mf-bg px-4 text-white">
       <div
         role="status"
         aria-live="polite"
-        className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d0d0d] px-8 py-12 text-center shadow-2xl shadow-black"
+        className="w-full max-w-md rounded-[28px] border border-white/10 bg-mf-surface px-8 py-12 text-center shadow-2xl shadow-black"
       >
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-amber-500/20 bg-amber-500/[0.06]">
           <div className="relative h-10 w-10">
@@ -21,11 +21,11 @@ export default function RootLoading() {
         </p>
 
         <h1 className="mt-3 text-xl font-bold text-white">
-          Đang tải trang...
+          Loading…
         </h1>
 
         <p className="mt-3 text-sm leading-6 text-zinc-500">
-          Hệ thống đang chuẩn bị dữ liệu và giao diện cho bạn.
+          Preparing your data and interface.
         </p>
 
         <div className="mx-auto mt-7 flex max-w-xs gap-2">
@@ -35,7 +35,7 @@ export default function RootLoading() {
         </div>
 
         <span className="sr-only">
-          Đang tải trang
+          Loading page
         </span>
       </div>
     </main>

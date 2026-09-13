@@ -9,7 +9,7 @@ export default async function AdminHomePage() {
   const actor = await requireAdmin()
 
   return (
-    <main className="min-h-screen bg-[#070707] px-4 py-10 text-white sm:px-6">
+    <main className="min-h-screen bg-mf-bg px-4 py-10 text-white sm:px-6">
       <section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-500">
           Admin Control Center

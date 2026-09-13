@@ -2,9 +2,16 @@ import type { CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
 import type { WeeklyMuscleAnalytics } from "@/lib/training/weekly-analytics";
 import type { PersonalBaseline } from "@/lib/training/baseline";
 import type { TrainingRecommendationExplanation } from "@/lib/training/recommendations";
+import type { BaselineDeviation } from "@/lib/dante-core/personal-baseline";
+import type { MuscleRecoveryMapEntry } from "@/lib/dante-core/muscle-recovery-map";
+import type { DataFreshnessSignal } from "@/lib/athlete-state/data-freshness";
+import type { SetVisionExerciseId } from "@/lib/setvision/types";
+import type { RecoveryStatusInput } from "@/lib/training/recommendations";
+import type { WearableDailySnapshot } from "@/lib/wearables/types";
 
 /**
- * Unified Athlete State (spec §4).
+ * Unified Athlete State — the Athlete Digital Twin (spec §4, extended
+ * per the "Human Performance system" mission).
  *
  * Every field is explicitly nullable — missing information stays
  * `null`/`"insufficient_data"` rather than being silently zeroed, so
@@ -24,6 +31,11 @@ export type AthleteState = {
     experience: string | null;
     trainingFrequency: number | null;
     priorityMuscles: string[];
+    heightCm: number | null;
+    weightKg: number | null;
+    sessionDurationMinutes: number | null;
+    availableEquipment: string[];
+    physicalLimitations: string | null;
   };
 
   training: {
@@ -44,6 +56,14 @@ export type AthleteState = {
     status: string | null;
     trainingLoadState: "green" | "amber" | "red" | null;
     sevenDayAverageScore: number | null;
+    sleepHours: number | null;
+    stress: number | null;
+    soreness: number | null;
+    fatigue: number | null;
+    /** True when today's check-in flagged pain/illness — the same safety gate lib/training/progression-engine.ts already enforces. */
+    painFlag: boolean;
+    /** Raw status code (ready/good/moderate/priority) behind the human-readable `status` label above — needed by engines that gate on it directly, e.g. lib/training/progression-engine.ts. */
+    recoveryStatusCode: RecoveryStatusInput;
   };
 
   nutrition: {
@@ -52,6 +72,53 @@ export type AthleteState = {
     proteinTargetGrams: number | null;
     carbsTargetGrams: number | null;
     fatTargetGrams: number | null;
+  };
+
+  setVision: {
+    available: boolean;
+    latestExercise: SetVisionExerciseId | null;
+    analysesLast30Days: number;
+    romConsistencyDeviation: BaselineDeviation | null;
+    tempoConsistencyDeviation: BaselineDeviation | null;
+  };
+
+  /**
+   * WearableProvider -> normalize -> Athlete Digital Twin (spec Part
+   * "1. WEARABLE PROVIDER LAYER"). Deliberately just the latest day —
+   * a lean summary for the Twin, not the full historical series (the
+   * Health Radar loads its own richer window separately when it needs
+   * one). `available` is false for every real user today: no real
+   * provider is implemented yet, only the demo one a user can opt
+   * into (lib/demo/settings.ts) — see lib/wearables/registry.ts.
+   */
+  wearable: {
+    available: boolean;
+    isDemo: boolean;
+    providerLabel: string | null;
+    latestDay: WearableDailySnapshot | null;
+  };
+
+  /** Cross-domain signals computed FROM the sections above — never a second independent read of raw data. */
+  derived: {
+    baselineDeviations: {
+      sleep: BaselineDeviation;
+      recoveryScore: BaselineDeviation;
+      /** Whole-body training load: aggregated from the SAME per-muscle baselines in `training.muscles`. */
+      trainingLoad: BaselineDeviation;
+    };
+    muscleRecoveryMap: MuscleRecoveryMapEntry[];
+    /** 0-1. Simple average of every confidence figure that actually had a basis (baselines + muscle recovery map) — an honest "how much of this state is well-grounded", not a precision claim. */
+    overallConfidence: number;
+    /** Which top-level sections have no real data at all yet, e.g. ["recovery", "setVision"]. */
+    missingData: string[];
+  };
+
+  dataFreshness: {
+    recovery: DataFreshnessSignal;
+    nutrition: DataFreshnessSignal;
+    training: DataFreshnessSignal;
+    setVision: DataFreshnessSignal;
+    bodyweight: DataFreshnessSignal;
   };
 
   progress: {

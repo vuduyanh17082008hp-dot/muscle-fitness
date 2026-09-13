@@ -121,7 +121,7 @@ export function RecoveryCheckinForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-3xl border border-white/10 bg-[#0d0f12] p-6 sm:p-8"
+      className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8"
     >
       <div className="flex items-center justify-between gap-3">
         <div>

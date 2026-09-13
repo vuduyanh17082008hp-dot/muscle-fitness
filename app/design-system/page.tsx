@@ -116,7 +116,7 @@ export default function DesignSystemPage() {
                 "
               >
                 Built Through{" "}
-                <span className="text-gradient-bronze">
+                <span className="text-gradient-sunset">
                   Discipline
                 </span>
               </h1>
@@ -180,7 +180,7 @@ export default function DesignSystemPage() {
             eyebrow="Brand Foundation"
             title="One Identity."
             highlightedText="Every Page."
-            description="Every section follows the same visual language: steel surfaces, bronze accents, high-contrast typography and disciplined spacing."
+            description="Every section follows the same visual language: deep ocean surfaces, sunset accents, high-contrast typography and disciplined spacing."
           />
         </Reveal>
 
@@ -194,16 +194,16 @@ export default function DesignSystemPage() {
           <StaggerItem>
             <StatCard
               label="Primary Background"
-              value="#070707"
-              description="Deep black foundation."
+              value="#07111B"
+              description="Deep ocean foundation."
             />
           </StaggerItem>
 
           <StaggerItem>
             <StatCard
               label="Accent"
-              value="Bronze"
-              description="Premium visual emphasis."
+              value="Ocean Sunset"
+              description="Restrained, high-energy emphasis."
             />
           </StaggerItem>
 
@@ -512,7 +512,7 @@ export default function DesignSystemPage() {
                   "
                 >
                   Test From{" "}
-                  <span className="text-gradient-bronze">
+                  <span className="text-gradient-sunset">
                     320px
                   </span>{" "}
                   Upward

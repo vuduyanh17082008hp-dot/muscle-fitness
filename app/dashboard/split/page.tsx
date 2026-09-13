@@ -240,7 +240,7 @@ export default async function TrainingSplitPage() {
               className={`flex flex-col gap-3 rounded-2xl border p-5 sm:flex-row sm:items-center sm:justify-between ${
                 row.isRest
                   ? "border-white/5 bg-white/[0.015]"
-                  : "border-white/10 bg-[#0d0d0d]"
+                  : "border-white/10 bg-mf-surface"
               }`}
             >
               <div className="flex items-center gap-4">
@@ -285,7 +285,7 @@ export default async function TrainingSplitPage() {
           WEEKLY MUSCLE-GROUP FREQUENCY
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
         <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-500">
           Weekly Muscle-Group Frequency
         </p>

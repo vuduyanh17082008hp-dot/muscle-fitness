@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useInView } from "framer-motion";
 
 import type { DanteAppState, DantePoseName } from "@/components/dante-avatar/poses";
 import { APP_STATE_POSE } from "@/components/dante-avatar/poses";
@@ -32,6 +33,25 @@ const DanteAvatarScene = dynamic(
   },
 );
 
+/**
+ * Page Visibility (tab hidden/backgrounded) — separate from viewport
+ * intersection (below), since a tab can be fully scrolled to the
+ * right section while still being backgrounded.
+ */
+function useTabVisible(): boolean {
+  const [visible, setVisible] = useState(() => typeof document === "undefined" || !document.hidden);
+
+  useEffect(() => {
+    function onChange() {
+      setVisible(!document.hidden);
+    }
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  }, []);
+
+  return visible;
+}
+
 function useReducedMotion(): boolean {
   // Lazy initializer reads the real value on first render (client-
   // only component, so window exists) — the effect below only
@@ -56,15 +76,35 @@ export type DanteAvatarProps = {
   appState?: DanteAppState;
   pose?: DantePoseName;
   className?: string;
+  /**
+   * Fires once, the first time this avatar scrolls into view (never
+   * again after that, even if it leaves and re-enters). Intended for
+   * triggering a one-time greeting pose from the caller — this
+   * component only reports visibility, it doesn't decide what a
+   * "first view" should do.
+   */
+  onFirstView?: () => void;
 };
 
-export function DanteAvatar({ appState = "ready", pose, className }: DanteAvatarProps) {
+export function DanteAvatar({ appState = "ready", pose, className, onFirstView }: DanteAvatarProps) {
   const reducedMotion = useReducedMotion();
+  const tabVisible = useTabVisible();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(containerRef, { amount: 0.2 });
+  const hasFiredFirstView = useRef(false);
   const resolvedPose = pose ?? APP_STATE_POSE[appState];
+
+  useEffect(() => {
+    if (inView && !hasFiredFirstView.current) {
+      hasFiredFirstView.current = true;
+      onFirstView?.();
+    }
+  }, [inView, onFirstView]);
 
   if (reducedMotion) {
     return (
       <div
+        ref={containerRef}
         className={className}
         role="img"
         aria-label="Dante, the Muscle Fitness performance coach"
@@ -77,9 +117,9 @@ export function DanteAvatar({ appState = "ready", pose, className }: DanteAvatar
   }
 
   return (
-    <div className={className} aria-hidden="true">
+    <div ref={containerRef} className={className} aria-hidden="true">
       <Suspense fallback={null}>
-        <DanteAvatarScene pose={resolvedPose} className="size-full" />
+        <DanteAvatarScene pose={resolvedPose} paused={!inView || !tabVisible} className="size-full" />
       </Suspense>
     </div>
   );

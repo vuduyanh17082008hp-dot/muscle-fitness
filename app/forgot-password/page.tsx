@@ -17,9 +17,9 @@ export default async function ForgotPasswordPage({
     <AuthShell
       eyebrow="Account recovery"
       title="Recover access"
-      description="Nhập email tài khoản. Chúng tôi sẽ gửi một liên kết bảo mật để bạn tạo mật khẩu mới."
+      description="Enter your account email. We'll send you a secure link to create a new password."
       sideTitle="A setback is not the end."
-      sideDescription="Mất quyền truy cập không có nghĩa là mất toàn bộ tiến trình. Khôi phục tài khoản và tiếp tục nơi bạn đã dừng lại."
+      sideDescription="Losing access doesn't mean losing your progress. Recover your account and pick up where you left off."
       step="03 / 04"
     >
       <ForgotPasswordForm

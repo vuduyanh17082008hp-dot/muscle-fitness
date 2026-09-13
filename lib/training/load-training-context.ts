@@ -73,8 +73,16 @@ type SessionExerciseRow = {
   id: string;
   workout_session_id: string;
   exercise_id: string;
-  target_rep_min: number | null;
-  target_rep_max: number | null;
+  // NOTE: the live workout_session_exercises table names these
+  // `rep_min`/`rep_max` (NOT `target_rep_min`/`target_rep_max`) while
+  // `target_rir`/`target_sets` DO carry the `target_` prefix — an
+  // inconsistent but real schema. Selecting the wrong names here
+  // silently broke this whole query (Postgres errors on an unknown
+  // column, which was being caught and swallowed below), so
+  // loadTrainingContext had been returning an EMPTY context for every
+  // user regardless of how much they'd actually logged.
+  rep_min: number | null;
+  rep_max: number | null;
   target_rir: number | null;
 };
 
@@ -167,7 +175,7 @@ export async function loadTrainingContext(
 
   const { data: sessionExerciseRows, error: sessionExerciseError } = await supabase
     .from("workout_session_exercises")
-    .select("id, workout_session_id, exercise_id, target_rep_min, target_rep_max, target_rir")
+    .select("id, workout_session_id, exercise_id, rep_min, rep_max, target_rir")
     .in("workout_session_id", sessionIds);
 
   if (sessionExerciseError) {
@@ -379,8 +387,8 @@ export async function loadTrainingContext(
 
     lastSessionByExercise.set(exerciseId, {
       sessionExerciseId,
-      targetRepMin: sessionExercise.target_rep_min ?? 8,
-      targetRepMax: sessionExercise.target_rep_max ?? 12,
+      targetRepMin: sessionExercise.rep_min ?? 8,
+      targetRepMax: sessionExercise.rep_max ?? 12,
       targetRir: sessionExercise.target_rir,
       completedAt: lastSessionCompletedAtByExercise.get(exerciseId) ?? null,
       sets: exerciseSets,

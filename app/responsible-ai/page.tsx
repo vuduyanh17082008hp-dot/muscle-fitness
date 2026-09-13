@@ -42,6 +42,22 @@ const safeguards = [
     text:
       "When evidence is mixed, missing or low quality, the answer should say so instead of presenting certainty.",
   },
+
+  {
+    title:
+      "Sensor & vision limitations",
+
+    text:
+      "SetVision (camera-based form analysis), HawkerLens (photo nutrition estimation), and wearable data (heart rate, HRV, sleep, steps) are all estimates from imperfect sensors — never treated as exact measurements, and never used to imply the app can see technique, injury, or health status directly.",
+  },
+
+  {
+    title:
+      "Predictions are estimates, not facts",
+
+    text:
+      "Performance forecasts and the Recovery Radar compare you to your OWN recent history and describe an 'unusual recovery pattern' when something looks off — never a diagnosis, and never presented as certain.",
+  },
 ] as const;
 
 export default function ResponsibleAIPage() {
@@ -50,7 +66,7 @@ export default function ResponsibleAIPage() {
       className="
         min-h-screen
 
-        bg-[#070707]
+        bg-mf-bg
 
         px-5
         py-10
@@ -189,7 +205,7 @@ export default function ResponsibleAIPage() {
                   border
                   border-white/10
 
-                  bg-[#0d0d0d]
+                  bg-mf-surface
 
                   p-6
                 "
@@ -233,7 +249,7 @@ export default function ResponsibleAIPage() {
             border
             border-white/10
 
-            bg-[#0d0d0d]
+            bg-mf-surface
 
             p-7
           "

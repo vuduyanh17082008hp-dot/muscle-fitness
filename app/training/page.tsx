@@ -2337,7 +2337,7 @@ export default async function TrainingPage() {
   ======================================================= */
 
   return (
-    <main className="min-h-screen bg-[#070707] text-white">
+    <main className="min-h-screen bg-mf-bg text-white">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
 
         {/* =================================================
@@ -2500,7 +2500,7 @@ export default async function TrainingPage() {
             TRAINING PRINCIPLES
         ================================================= */}
 
-        <section className="mt-8 rounded-3xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+        <section className="mt-8 rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
           <div className="flex items-center gap-3">
             <Gauge className="h-5 w-5 text-amber-500" />
 
@@ -2560,7 +2560,7 @@ export default async function TrainingPage() {
                   key={
                     trainingDay.day
                   }
-                  className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d]"
+                  className="overflow-hidden rounded-3xl border border-white/10 bg-mf-surface"
                 >
                   {/* DAY HEADER */}
 
@@ -2631,7 +2631,7 @@ export default async function TrainingPage() {
         ================================================= */}
 
         <section className="mt-10 grid gap-6 lg:grid-cols-2">
-          <article className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-7">
+          <article className="rounded-3xl border border-white/10 bg-mf-surface p-7">
             <TrendingUp className="h-6 w-6 text-amber-500" />
 
             <h2 className="mt-4 text-2xl font-bold">
@@ -2666,7 +2666,7 @@ export default async function TrainingPage() {
             </div>
           </article>
 
-          <article className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-7">
+          <article className="rounded-3xl border border-white/10 bg-mf-surface p-7">
             <RotateCcw className="h-6 w-6 text-amber-500" />
 
             <h2 className="mt-4 text-2xl font-bold">
@@ -2760,7 +2760,7 @@ function InfoCard({
   value: string;
 }) {
   return (
-    <article className="rounded-2xl border border-white/10 bg-[#0d0d0d] p-5">
+    <article className="rounded-2xl border border-white/10 bg-mf-surface p-5">
       <div className="flex items-center gap-2 text-amber-500">
         {icon}
 

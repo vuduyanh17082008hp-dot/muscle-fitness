@@ -68,7 +68,7 @@ export function SectionHeading({
         {title}{" "}
 
         {highlightedText && (
-          <span className="text-gradient-bronze">
+          <span className="text-gradient-sunset">
             {highlightedText}
           </span>
         )}

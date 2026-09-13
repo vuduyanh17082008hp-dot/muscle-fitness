@@ -19,9 +19,8 @@ export default function UnauthorizedPage() {
         </h1>
 
         <p className="mx-auto mt-5 max-w-md text-sm leading-7 text-zinc-500">
-          Tài khoản của bạn không có quyền truy cập
-          khu vực này. Hãy quay lại dashboard hoặc
-          đăng nhập bằng tài khoản phù hợp.
+          Your account doesn&apos;t have permission to access this area.
+          Return to the dashboard or sign in with an account that has access.
         </p>
 
         <div className="mt-9 grid gap-3 sm:grid-cols-2">

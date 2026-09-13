@@ -37,7 +37,7 @@ export default function WorkoutsError({
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#070707] px-4 py-12 text-white">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-mf-bg px-4 py-12 text-white">
       {/* Background */}
       <div
         aria-hidden="true"
@@ -52,7 +52,7 @@ export default function WorkoutsError({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(7,7,7,0.88)_76%)]" />
       </div>
 
-      <section className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/10 bg-[#0d0d0d]/95 shadow-[0_30px_120px_rgba(0,0,0,0.65)] backdrop-blur-xl">
+      <section className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/10 bg-mf-surface/95 shadow-[0_30px_120px_rgba(0,0,0,0.65)] backdrop-blur-xl">
         {/* Top accent */}
         <div className="h-1 w-full bg-gradient-to-r from-red-600 via-orange-400 to-transparent" />
 

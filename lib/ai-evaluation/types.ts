@@ -38,6 +38,8 @@ export type HawkerLensEvaluation = {
 export type DanteEvaluation = {
   recommendationConsistency: Metric<boolean>;
   safetyLayerTestStatus: Metric<{ passed: number; total: number }>;
+  actionValidationTestStatus: Metric<{ passed: number; total: number }>;
+  missingDataTestStatus: Metric<{ passed: number; total: number }>;
   retrievalAccuracy: Metric<null>;
   citationAccuracy: Metric<null>;
   hallucinationTestStatus: Metric<null>;

@@ -16,7 +16,9 @@ import {
 import { createClient } from "@/lib/supabase/server"
 import { SectionTabs } from "@/components/dashboard/section-tabs"
 import { EmptyState } from "@/components/dashboard/empty-state"
+import { CalendarAgenda } from "@/components/dashboard/calendar-agenda"
 import { PerformanceCard } from "@/components/ui/performance-card"
+import { loadCalendarRange } from "@/lib/daily-plan/load-calendar-range"
 import DanteChat from "@/components/dante-chat"
 
 const PROGRESS_TABS = [
@@ -130,6 +132,7 @@ export default async function DashboardSectionPage({
   const [
     profileResponse,
     fitnessResponse,
+    calendarDays,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -143,6 +146,9 @@ export default async function DashboardSectionPage({
       )
       .eq("user_id", user.id)
       .maybeSingle(),
+    sectionKey === "calendar"
+      ? loadCalendarRange(supabase, user.id)
+      : Promise.resolve(null),
   ])
 
   const profile = profileResponse.data
@@ -161,7 +167,7 @@ export default async function DashboardSectionPage({
           too would be a redundant second focal point on the same
           screen, so it's skipped for ai-coach specifically. */}
       {sectionKey !== "ai-coach" ? (
-        <section id="overview" className="scroll-mt-24 rounded-[20px] border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-6 sm:p-8">
+        <section id="overview" className="scroll-mt-24 rounded-[20px] border border-white/10 bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg p-6 sm:p-8">
           <span className="inline-grid size-14 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
             <Icon className="size-6" />
           </span>
@@ -199,7 +205,7 @@ export default async function DashboardSectionPage({
 
       {(sectionKey === "progress" ||
         sectionKey === "today") && (
-        <section id="body" className="scroll-mt-24 rounded-[20px] border border-white/10 bg-[#101216] p-6">
+        <section id="body" className="scroll-mt-24 rounded-[20px] border border-white/10 bg-mf-surface p-6">
           <h2 className="text-lg font-bold text-white">
             Current metrics
           </h2>
@@ -230,7 +236,7 @@ export default async function DashboardSectionPage({
       {sectionKey === "ai-coach" && <DanteChat />}
 
       {sectionKey === "settings" && (
-        <section className="rounded-[20px] border border-white/10 bg-[#101216] p-6">
+        <section className="rounded-[20px] border border-white/10 bg-mf-surface p-6">
           <p className="text-sm leading-6 text-zinc-400">
             Update personal details, goals and preferences through
             onboarding. Onboarding completed:{" "}
@@ -269,13 +275,17 @@ export default async function DashboardSectionPage({
       )}
 
       {sectionKey === "calendar" && (
-        <EmptyState
-          icon={Icon}
-          title="Calendar is coming soon"
-          description="A unified view of training days and check-ins will live here. Your scheduled sessions are already visible in Train."
-          href="/dashboard/workouts"
-          action="Go to Train"
-        />
+        calendarDays && calendarDays.some((day) => day.actions.length > 0) ? (
+          <CalendarAgenda days={calendarDays} />
+        ) : (
+          <EmptyState
+            icon={Icon}
+            title="Nothing scheduled yet"
+            description="Planned workouts and daily check-ins will appear here once you build a training plan."
+            href="/dashboard/workouts/plans/new"
+            action="Build a plan"
+          />
+        )
       )}
     </div>
   )

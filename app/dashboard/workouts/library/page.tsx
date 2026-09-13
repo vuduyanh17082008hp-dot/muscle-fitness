@@ -200,7 +200,7 @@ export default async function ExerciseLibraryPage({
     muscleOptions.length;
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#070707] px-4 py-8 text-white sm:px-6 lg:px-10">
+    <main className="relative min-h-screen overflow-hidden bg-mf-bg px-4 py-8 text-white sm:px-6 lg:px-10">
       {/* Background */}
 
       <div
@@ -241,7 +241,7 @@ export default async function ExerciseLibraryPage({
 
         {/* Hero */}
 
-        <header className="mt-8 overflow-hidden rounded-[32px] border border-white/10 bg-[#0d0d0d]/90 p-6 shadow-[0_30px_100px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:p-8 lg:p-10">
+        <header className="mt-8 overflow-hidden rounded-[32px] border border-white/10 bg-mf-surface/90 p-6 shadow-[0_30px_100px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:p-8 lg:p-10">
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
             <div className="max-w-3xl">
               <div className="flex items-center gap-3">
@@ -497,7 +497,7 @@ function ExerciseCard({
   exercise,
 }: ExerciseCardProps) {
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d] transition hover:-translate-y-1 hover:border-orange-500/25 hover:shadow-[0_24px_80px_rgba(0,0,0,0.3)]">
+    <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-mf-surface transition hover:-translate-y-1 hover:border-orange-500/25 hover:shadow-[0_24px_80px_rgba(0,0,0,0.3)]">
       <div className="relative border-b border-white/10 p-5">
         <div className="pointer-events-none absolute right-[-70px] top-[-80px] h-40 w-40 rounded-full bg-orange-500/[0.07] blur-3xl" />
 

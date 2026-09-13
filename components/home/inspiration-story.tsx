@@ -1,419 +1,143 @@
-import {
-  ArrowRight,
-  Dumbbell,
-  Flame,
-  Footprints,
-  Gauge,
-} from "lucide-react";
+"use client";
 
-import { Reveal, StaggerContainer, StaggerItem } from "@/components/animation/reveal";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowRight, Dumbbell, Flame, Footprints } from "lucide-react";
 
-const moments = [
-  {
-    icon:
-      Footprints,
+import { Reveal } from "@/components/animation/reveal";
+import { DanteAvatar } from "@/components/dante-avatar/dante-avatar";
 
-    label:
-      "START",
+/**
+ * "The First Rep" — condensed per the homepage refinement brief:
+ * short headline (kept from the previous version — already strong
+ * and short), one supporting paragraph, one quote, three one-line
+ * milestones. The previous version carried 4 narrative paragraphs +
+ * 4 milestone cards with their own descriptive sentences; the fuller
+ * telling now lives at /story (see app/story/page.tsx) rather than
+ * being deleted outright, reachable via "Read the full story" below.
+ *
+ * This is also Dante's "significant visual space" appearance (spec
+ * Part D, appearance B): he gets roughly 40% of the section's width
+ * on desktop and greets the visitor with a one-time wave the first
+ * time this section scrolls into view (see handleFirstView below),
+ * then settles into idle breathing — never loops the wave.
+ */
 
-    title:
-      "One small decision",
-
-    text:
-      "You do not need the perfect plan. You need one reason to return tomorrow.",
-  },
-
-  {
-    icon:
-      Gauge,
-
-    label:
-      "RESISTANCE",
-
-    title:
-      "Progress slows",
-
-    text:
-      "Motivation fades. Progress stalls. Sometimes the answer is not quitting — the plan needs to change.",
-  },
-
-  {
-    icon:
-      Dumbbell,
-
-    label:
-      "DISCOVERY",
-
-    title:
-      "Strength changes the goal",
-
-    text:
-      "The question changes from “How much can I lose?” to “What can I become?”",
-  },
-
-  {
-    icon:
-      Flame,
-
-    label:
-      "FORWARD",
-
-    title:
-      "Keep moving",
-
-    text:
-      "A pawn can be anything if it pushes forward.",
-  },
+const milestones = [
+  { icon: Footprints, label: "Start", text: "One reason to return tomorrow." },
+  { icon: Dumbbell, label: "Discover", text: "Strength changed the goal." },
+  { icon: Flame, label: "Forward", text: "Keep moving." },
 ] as const;
 
+const WAVE_HOLD_MS = 2600;
+
 export function InspirationStory() {
+  const [dantePose, setDantePose] = useState<"idle_breathing" | "wave">("idle_breathing");
+  const waveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleFirstView = useCallback(() => {
+    setDantePose("wave");
+    waveTimeout.current = setTimeout(() => {
+      setDantePose("idle_breathing");
+    }, WAVE_HOLD_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (waveTimeout.current) clearTimeout(waveTimeout.current);
+    };
+  }, []);
+
   return (
     <section
       id="inspiration"
-      className="
-        relative
-
-        overflow-hidden
-
-        border-y
-        border-white/10
-
-        bg-[#090909]
-
-        px-5
-        py-24
-
-        sm:px-6
-
-        lg:px-8
-        lg:py-32
-      "
+      className="relative overflow-hidden border-y border-white/10 bg-[#090909] px-5 py-20 sm:px-6 lg:px-8 lg:py-28"
     >
       <div
         aria-hidden="true"
-        className="
-          pointer-events-none
-
-          absolute
-          inset-0
-
-          bg-[radial-gradient(circle_at_20%_10%,rgba(245,158,11,0.12),transparent_34%),radial-gradient(circle_at_85%_75%,rgba(255,255,255,0.05),transparent_26%)]
-        "
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(245,158,11,0.12),transparent_34%),radial-gradient(circle_at_85%_75%,rgba(255,255,255,0.05),transparent_26%)]"
       />
 
       <div className="relative mx-auto max-w-7xl">
-        <div
-          className="
-            grid
+        {/* Mobile stacks in DOM order (headline -> Dante -> quote/
+            milestones), matching the "headline, short message, Dante,
+            CTA" mobile guidance. Desktop places all three explicitly
+            into a 2-column grid instead — Dante spans the full height
+            of the right column beside both story blocks. */}
+        <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr] lg:grid-rows-[auto_auto] lg:gap-x-16 lg:gap-y-10">
+          {/* LEAD-IN */}
 
-            gap-14
-
-            lg:grid-cols-[0.9fr_1.1fr]
-            lg:gap-20
-          "
-        >
-          {/* STORY */}
-
-          <Reveal duration={0.8} y={16}>
-            <p
-              className="
-                text-xs
-                font-black
-
-                uppercase
-
-                tracking-[0.3em]
-
-                text-amber-400
-              "
-            >
+          <Reveal duration={0.8} y={16} className="lg:col-start-1 lg:row-start-1">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-400">
               The First Rep
             </p>
 
-            <h2
-              className="
-                mt-5
-
-                max-w-3xl
-
-                text-4xl
-                font-black
-
-                uppercase
-
-                leading-[0.95]
-
-                tracking-[-0.04em]
-
-                text-white
-
-                sm:text-5xl
-                lg:text-6xl
-              "
-            >
+            <h2 className="mt-5 max-w-2xl text-4xl font-black uppercase leading-[0.95] tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
               The mirror did not change first.
-
-              <span
-                className="
-                  mt-2
-
-                  block
-
-                  text-zinc-600
-                "
-              >
-                The person looking into it did.
-              </span>
+              <span className="mt-2 block text-zinc-600">The person looking into it did.</span>
             </h2>
 
-            <div
-              className="
-                mt-8
-
-                space-y-5
-
-                text-base
-                leading-8
-
-                text-zinc-400
-              "
-            >
-              <p>
-                At first, the gym felt built for someone else. Progress
-                looked distant, and confidence even further away.
-              </p>
-
-              <p>
-                So the beginning stayed small: one walk, one session, one
-                reason to return tomorrow.
-              </p>
-
-              <p>
-                Then progress slowed. Motivation disappeared. Instead of
-                quitting, the plan changed. Training became deliberate.
-                Nutrition became intentional. Recovery began to matter.
-              </p>
-
-              <p className="font-semibold text-zinc-200">
-                Eventually, the goal was no longer simply to look
-                different. It was to become stronger, more capable, more
-                disciplined — and more at peace with the person being
-                built.
-              </p>
-            </div>
-
-            <blockquote
-              className="
-                mt-9
-
-                border-l-2
-                border-amber-400
-
-                pl-5
-
-                text-xl
-                font-bold
-
-                leading-8
-
-                text-white
-              "
-            >
-              “A pawn can be anything if it pushes forward.”
-            </blockquote>
+            <p className="mt-6 max-w-xl text-base leading-8 text-zinc-400">
+              Progress did not begin with perfection. It began with one
+              decision to return tomorrow — then a plan willing to change
+              as the goal did.
+            </p>
           </Reveal>
 
-          {/* MOMENTS */}
+          {/* DANTE */}
 
-          <StaggerContainer
-            className="
-              grid
-
-              gap-3
-
-              sm:grid-cols-2
-            "
+          <Reveal
+            delay={0.15}
+            y={16}
+            className="mx-auto w-full max-w-sm lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:mx-0 lg:max-w-none lg:self-start"
           >
-            {moments.map(
-              (
-                moment,
-                index,
-              ) => {
-                const Icon =
-                  moment.icon;
+            <div className="h-[260px] sm:h-[320px] lg:h-[460px]">
+              <DanteAvatar pose={dantePose} onFirstView={handleFirstView} className="size-full" />
+            </div>
+          </Reveal>
 
-                return (
-                  <StaggerItem key={moment.label}>
-                  <article
-                    className="
-                      group
+          {/* QUOTE + MILESTONES */}
 
-                      rounded-3xl
+          <Reveal delay={0.1} y={16} className="lg:col-start-1 lg:row-start-2">
+            <blockquote className="border-l-2 border-amber-400 pl-5 text-xl font-bold leading-8 text-white">
+              &ldquo;A pawn can be anything if it pushes forward.&rdquo;
+            </blockquote>
 
-                      border
-                      border-white/10
+            <div className="mt-7 flex flex-wrap gap-x-8 gap-y-3">
+              {milestones.map((m) => (
+                <div key={m.label} className="flex items-center gap-2.5">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-amber-400/20 bg-amber-400/10 text-amber-400">
+                    <m.icon className="size-4" />
+                  </span>
+                  <span className="text-sm font-semibold text-zinc-300">
+                    <span className="mr-1.5 font-black uppercase tracking-[0.1em] text-amber-400">
+                      {m.label}
+                    </span>
+                    {m.text}
+                  </span>
+                </div>
+              ))}
+            </div>
 
-                      bg-white/3
-
-                      p-6
-
-                      transition
-
-                      hover:border-amber-400/30
-                      hover:bg-amber-400/4
-                    "
-                  >
-                    <div className="flex items-center justify-between">
-                      <div
-                        className="
-                          grid
-
-                          size-11
-
-                          place-items-center
-
-                          rounded-2xl
-
-                          border
-                          border-amber-400/20
-
-                          bg-amber-400/10
-
-                          text-amber-400
-                        "
-                      >
-                        <Icon className="size-5" />
-                      </div>
-
-                      <span
-                        className="
-                          text-xs
-                          font-black
-
-                          tracking-[0.22em]
-
-                          text-zinc-700
-                        "
-                      >
-                        0
-                        {
-                          index +
-                          1
-                        }
-                      </span>
-                    </div>
-
-                    <p
-                      className="
-                        mt-8
-
-                        text-[10px]
-                        font-black
-
-                        uppercase
-
-                        tracking-[0.22em]
-
-                        text-amber-400
-                      "
-                    >
-                      {moment.label}
-                    </p>
-
-                    <h3
-                      className="
-                        mt-2
-
-                        text-xl
-                        font-black
-
-                        text-white
-                      "
-                    >
-                      {moment.title}
-                    </h3>
-
-                    <p
-                      className="
-                        mt-3
-
-                        text-sm
-                        leading-6
-
-                        text-zinc-500
-                      "
-                    >
-                      {moment.text}
-                    </p>
-                  </article>
-                  </StaggerItem>
-                );
-              },
-            )}
-          </StaggerContainer>
+            <a
+              href="/story"
+              className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-zinc-500 transition hover:text-amber-400"
+            >
+              Read the full story
+              <ArrowRight className="size-4" />
+            </a>
+          </Reveal>
         </div>
 
-        <div
-          className="
-            mt-14
-
-            flex
-            flex-col
-            items-start
-
-            gap-6
-
-            border-t
-            border-white/10
-
-            pt-8
-
-            sm:flex-row
-            sm:items-center
-            sm:justify-between
-          "
-        >
-          <p
-            className="
-              text-sm
-              font-bold
-
-              uppercase
-
-              tracking-[0.2em]
-
-              text-zinc-500
-            "
-          >
-            You will always wish you started sooner. But{" "}
-            <span className="text-amber-400">
-              today is the youngest you will ever be.
-            </span>
+        <div className="mt-14 flex flex-col items-start gap-6 border-t border-white/10 pt-8 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-zinc-500">
+            Today is <span className="text-amber-400">the youngest you will ever be.</span>
           </p>
 
           <a
             href="#discipline"
-            className="
-              inline-flex
-
-              shrink-0
-
-              items-center
-
-              gap-2
-
-              text-sm
-              font-bold
-
-              text-zinc-400
-
-              transition
-
-              hover:text-amber-400
-            "
+            className="inline-flex shrink-0 items-center gap-2 text-sm font-bold text-zinc-400 transition hover:text-amber-400"
           >
             Keep moving
-
             <ArrowRight className="size-4" />
           </a>
         </div>

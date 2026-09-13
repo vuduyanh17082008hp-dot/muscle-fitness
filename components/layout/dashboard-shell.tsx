@@ -14,32 +14,27 @@ export function DashboardShell({
   return (
     <div
       className={[
-        "min-h-svh",
-        "bg-[var(--dashboard-background)]",
+        "min-h-svh bg-mf-bg text-white",
         "lg:grid",
         "lg:grid-cols-[260px_minmax(0,1fr)]",
       ].join(" ")}
     >
       <aside
         className={[
-          "hidden bg-[var(--dashboard-surface)]",
+          "hidden bg-mf-surface",
           "lg:sticky lg:top-0 lg:flex lg:h-svh",
-          "lg:flex-col lg:border-r lg:border-border",
+          "lg:flex-col lg:border-r lg:border-white/10",
         ].join(" ")}
       >
         <div
           className={[
             "flex h-20 shrink-0 items-center",
-            "border-b border-border px-7",
+            "border-b border-white/10 px-7",
           ].join(" ")}
         >
           <Link
             href="/dashboard"
-            className={[
-              "text-lg font-bold",
-              "tracking-[-0.025em]",
-              "text-foreground",
-            ].join(" ")}
+            className="text-lg font-bold tracking-[-0.025em] text-white"
           >
             {siteConfig.name}
           </Link>
@@ -49,19 +44,14 @@ export function DashboardShell({
           <DashboardNav />
         </div>
 
-        <div className="border-t border-border p-4">
-          <div
-            className={[
-              "rounded-2xl border border-border",
-              "bg-muted/60 px-4 py-4",
-            ].join(" ")}
-          >
-            <p className="text-xs font-semibold text-foreground">
+        <div className="border-t border-white/10 p-4">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
+            <p className="text-xs font-semibold text-white">
               MuscleFitness
             </p>
 
-            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-              Luyện tập thông minh và tiến bộ bền vững.
+            <p className="mt-1.5 text-xs leading-5 text-zinc-500">
+              Smart training, sustained progress.
             </p>
           </div>
         </div>
@@ -72,8 +62,8 @@ export function DashboardShell({
           className={[
             "sticky top-0 z-40",
             "flex h-20 items-center",
-            "border-b border-border",
-            "bg-[color:var(--dashboard-surface)]/95",
+            "border-b border-white/10",
+            "bg-mf-surface/95",
             "px-4 backdrop-blur",
             "sm:px-6 lg:px-8",
           ].join(" ")}
@@ -82,33 +72,17 @@ export function DashboardShell({
             <div>
               <Link
                 href="/dashboard"
-                className={[
-                  "text-base font-bold",
-                  "tracking-[-0.02em]",
-                  "text-foreground lg:hidden",
-                ].join(" ")}
+                className="text-base font-bold tracking-[-0.02em] text-white lg:hidden"
               >
                 {siteConfig.name}
               </Link>
 
-              <p
-                className={[
-                  "hidden text-base font-semibold",
-                  "tracking-[-0.015em]",
-                  "text-foreground lg:block",
-                ].join(" ")}
-              >
-                Khu vực thành viên
+              <p className="hidden text-base font-semibold tracking-[-0.015em] text-white lg:block">
+                Member area
               </p>
             </div>
 
-            <div
-              className={[
-                "rounded-full border border-border",
-                "bg-white px-3 py-1.5",
-                "text-xs font-medium text-muted-foreground",
-              ].join(" ")}
-            >
+            <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-zinc-400">
               Member
             </div>
           </div>
@@ -116,8 +90,8 @@ export function DashboardShell({
 
         <div
           className={[
-            "overflow-x-auto border-b border-border",
-            "bg-[var(--dashboard-surface)]",
+            "overflow-x-auto border-b border-white/10",
+            "bg-mf-surface",
             "px-4 py-3 lg:hidden",
           ].join(" ")}
         >

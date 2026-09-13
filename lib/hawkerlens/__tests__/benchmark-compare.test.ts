@@ -53,6 +53,7 @@ function result(overrides: Partial<HawkerLensResult> = {}): HawkerLensResult {
     uncertainty: { modelConfidence: 0.9, portionConfidence: 0.7, nutritionConfidence: 0.6 },
     overallConfidence: 0.75,
     message: null,
+    isDemo: false,
     ...overrides,
   };
 }

@@ -7,7 +7,7 @@ import {
 
 export function RecoveryKnowledgeHub() {
   return (
-    <article className="rounded-3xl border border-white/10 bg-[#0d0f12] p-6 sm:p-8">
+    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
       <div className="flex items-center gap-2">
         <BookOpen className="size-4 text-amber-400" aria-hidden="true" />
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">

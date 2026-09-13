@@ -89,7 +89,7 @@ export default function WorkoutSystemDocumentationPage() {
 
             <div className="mt-10 flex flex-col gap-4 sm:flex-row">
               <Link
-                href="/workouts"
+                href="/dashboard/workouts"
                 className="inline-flex min-h-12 items-center justify-center rounded-xl bg-amber-500 px-7 py-3 text-sm font-bold uppercase tracking-wider text-black transition hover:bg-amber-400"
               >
                 Open Workouts
@@ -205,7 +205,7 @@ export default function WorkoutSystemDocumentationPage() {
             </p>
 
             <Link
-              href="/workouts"
+              href="/dashboard/workouts"
               className="mt-9 inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-7 py-3 text-sm font-bold uppercase tracking-wider text-black transition hover:bg-neutral-200"
             >
               Start Training

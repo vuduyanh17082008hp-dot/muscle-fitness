@@ -423,7 +423,7 @@ function ReviewRow({
 
 function OnboardingLoadingSkeleton() {
   return (
-    <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d] shadow-2xl shadow-black">
+    <section className="overflow-hidden rounded-3xl border border-white/10 bg-mf-surface shadow-2xl shadow-black">
       <header className="border-b border-white/10 bg-linear-to-r from-black via-zinc-900 to-black px-6 py-8 sm:px-10">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="w-full">
@@ -1023,7 +1023,7 @@ function HydratedOnboardingWizard({
   ======================================================= */
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d] shadow-2xl shadow-black">
+    <section className="overflow-hidden rounded-3xl border border-white/10 bg-mf-surface shadow-2xl shadow-black">
       {/* ===================================================
           HEADER
       =================================================== */}

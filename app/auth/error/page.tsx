@@ -18,31 +18,31 @@ const messages: Record<
   "oauth-cancelled": {
     title: "Google Login cancelled",
     description:
-      "Quá trình đăng nhập Google đã bị hủy hoặc không thể hoàn thành.",
+      "The Google sign-in process was cancelled or could not be completed.",
   },
 
   "code-exchange-failed": {
     title: "Session creation failed",
     description:
-      "Hệ thống không thể tạo phiên đăng nhập từ Google. Hãy thử lại.",
+      "We couldn't create a login session from Google. Please try again.",
   },
 
   "invalid-confirmation-link": {
     title: "Invalid confirmation link",
     description:
-      "Liên kết xác nhận không đầy đủ hoặc không đúng định dạng.",
+      "The confirmation link is incomplete or improperly formatted.",
   },
 
   "expired-confirmation-link": {
     title: "Confirmation link expired",
     description:
-      "Liên kết xác nhận email đã hết hạn. Hãy yêu cầu gửi email mới.",
+      "Your email confirmation link has expired. Please request a new one.",
   },
 
   "expired-recovery-link": {
     title: "Recovery link expired",
     description:
-      "Liên kết đặt lại mật khẩu đã hết hạn. Hãy yêu cầu liên kết mới.",
+      "Your password reset link has expired. Please request a new one.",
   },
 }
 
@@ -55,7 +55,7 @@ export default async function AuthErrorPage({
     messages[params.reason ?? ""] ?? {
       title: "Authentication failed",
       description:
-        "Không thể hoàn tất quá trình xác thực. Vui lòng thử lại.",
+        "We couldn't complete the authentication process. Please try again.",
     }
 
   return (
@@ -64,7 +64,7 @@ export default async function AuthErrorPage({
       title={content.title}
       description={content.description}
       sideTitle="Stop. Reset. Continue."
-      sideDescription="Một lỗi kỹ thuật không quyết định kết quả của bạn. Kiểm tra lại thông tin và tiếp tục quá trình."
+      sideDescription="A technical error doesn't decide your outcome. Double-check your details and continue."
       step="SYSTEM"
     >
       <div className="space-y-3">

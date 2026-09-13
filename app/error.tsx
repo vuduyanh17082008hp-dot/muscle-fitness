@@ -28,12 +28,12 @@ export default function RootError({
       ].join(" ")}
     >
       <ErrorMessage
-        title="Trang chưa thể hiển thị"
-        message="Đã có lỗi không mong muốn xảy ra."
+        title="This page couldn't load"
+        message="Something went wrong. Please try again."
       />
 
       <Button onClick={reset}>
-        Thử tải lại
+        Try again
       </Button>
     </main>
   );

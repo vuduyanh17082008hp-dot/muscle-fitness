@@ -1,55 +1,153 @@
 @import "tailwindcss";
 
 /* =========================================================
-   MUSCLE FITNESS DESIGN SYSTEM
+   MF OCEAN SUNSET PERFORMANCE SYSTEM
+
+   OCEAN = intelligence / discipline / depth / calm (backgrounds,
+   surfaces, structure). SUNSET = performance / effort / energy
+   (accents, CTAs, highlights) — used sparingly, per the 60/30/10
+   split below, never as a full-page wash.
+
+   This is the ONE source of truth for color in the app. Every
+   consumer — existing `--color-*` custom properties (used directly
+   by dozens of components via `var(--color-surface)` etc.), the
+   Tailwind `amber-*` utility scale (used ~700 times across ~90 files
+   as the app's de-facto accent color), and new `mf-*` Tailwind
+   utilities for new work — all resolve to the SAME `--mf-*` values
+   defined here. Nothing is duplicated: retinting the app happens by
+   changing these values once, not by editing every call site.
    ========================================================= */
 
 :root {
-  /* Background */
-  --color-background: #070707;
-  --color-background-soft: #0d0d0d;
-  --color-surface: #131313;
-  --color-surface-light: #191919;
-  --color-surface-hover: #202020;
+  /* ---- Ocean Sunset canonical tokens — the ONE literal source of
+     truth. Everything else in this file (the legacy --color-*
+     aliases below, and the @theme Tailwind utilities further down)
+     references these rather than restating a hex value. ---- */
+  --mf-bg: #07111b;
+  --mf-surface: #0d1b2a;
+  --mf-surface-elevated: #142536;
+  --mf-text: #f7f8fa;
+  --mf-text-muted: #9caab7;
 
-  /* Steel */
-  --color-steel-dark: #242424;
-  --color-steel: #4a4a4a;
-  --color-steel-light: #8b8b8b;
+  --mf-sunset: #ff7a45;
+  --mf-gold: #ffb45c;
+  --mf-coral: #ff5f6d;
+  --mf-violet: #8b6cf6;
+  --mf-cyan: #38bdf8;
+  --mf-success: #4dd4ac;
+  --mf-warning: #f6c453;
+  --mf-danger: #f36a6a;
+}
+
+@theme {
+  /* ---- Same tokens, exposed as Tailwind utilities (bg-mf-bg,
+     text-mf-sunset, border-mf-violet/30, etc.) for new component
+     work. ---- */
+  --color-mf-bg: var(--mf-bg);
+  --color-mf-surface: var(--mf-surface);
+  --color-mf-surface-elevated: var(--mf-surface-elevated);
+  --color-mf-text: var(--mf-text);
+  --color-mf-text-muted: var(--mf-text-muted);
+
+  --color-mf-sunset: var(--mf-sunset);
+  --color-mf-gold: var(--mf-gold);
+  --color-mf-coral: var(--mf-coral);
+  --color-mf-violet: var(--mf-violet);
+  --color-mf-cyan: var(--mf-cyan);
+  --color-mf-success: var(--mf-success);
+  --color-mf-warning: var(--mf-warning);
+  --color-mf-danger: var(--mf-danger);
+
+  /* ---- Tailwind's built-in `amber` scale, remapped to Ocean Sunset
+     gold/sunset. This is what actually retints the ~700 existing
+     `amber-400`/`bg-amber-500/10`/etc. utility classes throughout the
+     app with zero per-file edits — the single highest-leverage change
+     in this system. 400 lands on gold, 500 on sunset, per the spec's
+     own anchor values; the rest of the ramp is interpolated to stay a
+     coherent warm orange-gold hue rather than jumping around. ---- */
+  --color-amber-50: #fff6ee;
+  --color-amber-100: #ffe9d6;
+  --color-amber-200: #ffcfa6;
+  --color-amber-300: #ffb177;
+  --color-amber-400: var(--mf-gold);
+  --color-amber-500: var(--mf-sunset);
+  --color-amber-600: #f2632e;
+  --color-amber-700: #cc4e22;
+  --color-amber-800: #a53e1c;
+  --color-amber-900: #7a2f16;
+  --color-amber-950: #451a0c;
+
+  /* ---- Tailwind's built-in `orange` scale, remapped the same way.
+     A second, separately-drifted accent (auth pages, the exercise
+     library, session/history pages) used `orange-*` literally instead
+     of `amber-*` — same brand color, two different Tailwind scales by
+     accident. Unifying both onto Ocean Sunset here means every
+     existing `orange-400`/`text-orange-500` call site now matches the
+     rest of the app instead of reading as a second, slightly-off
+     accent color. ---- */
+  --color-orange-50: #fff6ee;
+  --color-orange-100: #ffe9d6;
+  --color-orange-200: #ffcfa6;
+  --color-orange-300: #ffb177;
+  --color-orange-400: var(--mf-gold);
+  --color-orange-500: var(--mf-sunset);
+  --color-orange-600: #f2632e;
+  --color-orange-700: #cc4e22;
+  --color-orange-800: #a53e1c;
+  --color-orange-900: #7a2f16;
+  --color-orange-950: #451a0c;
+}
+
+:root {
+  /* Background — deep ocean (the 60% base) */
+  --color-background: var(--mf-bg);
+  --color-background-soft: #0a1622;
+  --color-surface: var(--mf-surface);
+  --color-surface-light: var(--mf-surface-elevated);
+  --color-surface-hover: #1a2f44;
+
+  /* Steel — kept as a neutral structural scale (dividers, disabled
+     chrome) distinct from the ocean surfaces above. */
+  --color-steel-dark: #1c2c3a;
+  --color-steel: #4a5c6c;
+  --color-steel-light: #8b9bab;
 
   /* Text */
-  --color-text-primary: #f7f7f7;
-  --color-text-secondary: #b5b5b5;
-  --color-text-muted: #7d7d7d;
-  --color-text-dark: #090909;
+  --color-text-primary: var(--mf-text);
+  --color-text-secondary: var(--mf-text-muted);
+  --color-text-muted: #6f8091;
+  --color-text-dark: #07111b;
 
-  /* Brand accent */
-  --color-accent: #b87333;
-  --color-accent-light: #d59659;
-  --color-accent-dark: #7c431e;
-  --color-accent-soft: rgba(184, 115, 51, 0.12);
+  /* Brand accent — sunset, the 10% accent color used for primary
+     actions and highlights (see the domain mapping below for where
+     the OTHER accent-pool colors apply instead of this default). */
+  --color-accent: var(--mf-sunset);
+  --color-accent-light: var(--mf-gold);
+  --color-accent-dark: #b8471f;
+  --color-accent-soft: rgba(255, 122, 69, 0.12);
 
   /* Status */
-  --color-success: #22c55e;
-  --color-danger: #dc2626;
-  --color-warning: #f59e0b;
+  --color-success: var(--mf-success);
+  --color-danger: var(--mf-danger);
+  --color-warning: var(--mf-warning);
 
-  /* Domain accents — one per product pillar (Train / Fuel / Recover /
-     Progress / Dante), kept muted/restrained rather than a rainbow
-     SaaS palette. Dante shares the warm gold/bronze primary since
-     Dante IS the training-intelligence voice; every other domain
-     gets its own quiet hue so a glance at a card border/icon tells
-     you which pillar you're in without shouting. */
-  --color-domain-training: #c2540c; /* Train — burnt orange */
-  --color-domain-nutrition: #7fa66d; /* Fuel — muted green */
-  --color-domain-recovery: #8f80c4; /* Recover — muted violet */
-  --color-domain-progress: #5fa3b3; /* Progress — restrained cyan */
-  --color-domain-dante: var(--color-accent-light); /* Dante — gold */
+  /* Domain accents — one per product pillar, per the Ocean Sunset
+     mapping: Training leans sunset/coral, Nutrition restrained
+     green (from the accent pool, not a generic SaaS green),
+     Recovery violet, Progress cyan, Dante violet (paired with
+     sunset in its own gradient moments — see .text-gradient-dante
+     below — so its accent border reads distinctly from the global
+     sunset default used everywhere else). */
+  --color-domain-training: var(--mf-sunset);
+  --color-domain-nutrition: var(--mf-success);
+  --color-domain-recovery: var(--mf-violet);
+  --color-domain-progress: var(--mf-cyan);
+  --color-domain-dante: var(--mf-violet);
 
   /* Border */
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-border-light: rgba(255, 255, 255, 0.17);
-  --color-border-accent: rgba(184, 115, 51, 0.5);
+  --color-border: rgba(255, 255, 255, 0.07);
+  --color-border-light: rgba(255, 255, 255, 0.14);
+  --color-border-accent: rgba(255, 122, 69, 0.5);
 
   /* Fonts — loaded via next/font in app/layout.tsx, which sets the
      --font-inter / --font-barlow-condensed / --font-bebas variables
@@ -61,12 +159,14 @@
   --font-heading: var(--font-barlow-condensed), Arial Narrow, sans-serif;
   --font-brand: var(--font-bebas), Impact, sans-serif;
 
-  /* Radius */
+  /* Radius — hero 24px, cards 18-20px, buttons 14-16px, chips pill. */
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-xl: 24px;
+  --radius-button: 14px;
+  --radius-pill: 999px;
 
   /* Spacing */
   --space-1: 0.25rem;
@@ -86,18 +186,19 @@
 
   /* Shadows */
   --shadow-card:
-    0 20px 50px rgba(0, 0, 0, 0.45);
+    0 20px 50px rgba(2, 8, 15, 0.45);
 
   --shadow-card-hover:
-    0 28px 70px rgba(0, 0, 0, 0.62);
+    0 28px 70px rgba(2, 8, 15, 0.6);
 
   --shadow-accent:
-    0 0 35px rgba(184, 115, 51, 0.24);
+    0 0 35px rgba(255, 122, 69, 0.22);
 
   --shadow-accent-strong:
-    0 0 55px rgba(184, 115, 51, 0.35);
+    0 0 55px rgba(255, 122, 69, 0.32);
 
-  /* Transitions */
+  /* Transitions — interaction ~180-300ms, reveal ~400-650ms (see the
+     motion primitives in components/animation/ for the reveal timings). */
   --transition-fast: 180ms ease;
   --transition-normal: 300ms ease;
   --transition-slow: 500ms ease;
@@ -138,18 +239,18 @@ body {
   background:
     radial-gradient(
       circle at 10% 0%,
-      rgba(184, 115, 51, 0.12),
+      rgba(255, 122, 69, 0.1),
       transparent 28rem
     ),
     radial-gradient(
-      circle at 90% 30%,
-      rgba(255, 255, 255, 0.035),
+      circle at 90% 15%,
+      rgba(139, 108, 246, 0.06),
       transparent 32rem
     ),
     linear-gradient(
       180deg,
-      #080808 0%,
-      #050505 100%
+      #09151f 0%,
+      var(--mf-bg) 100%
     );
 
   font-family: var(--font-body);
@@ -220,7 +321,7 @@ button:disabled {
 }
 
 ::selection {
-  color: #070707;
+  color: var(--mf-bg);
   background: var(--color-accent);
 }
 
@@ -299,16 +400,34 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
-.text-gradient-bronze {
+/* =========================================================
+   SIGNATURE GRADIENT — Ocean Sunset
+
+   One restrained, reusable gradient — reserved for hero/state cards,
+   a selected plan, the primary CTA accent, and progress/intelligence
+   highlights. NEVER used as a full-page background. Training gets
+   its own warm variant (still restrained — one accent moment, not a
+   competing system).
+   ========================================================= */
+
+.text-gradient-sunset {
   color: transparent;
-  background:
-    linear-gradient(
-      110deg,
-      #f0c28f 0%,
-      var(--color-accent-light) 35%,
-      var(--color-accent) 65%,
-      #7c431e 100%
-    );
+  background: linear-gradient(110deg, #2563eb 0%, #6d5dfb 35%, #ec4899 70%, #ff8a4c 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.bg-gradient-ocean-sunset {
+  background: linear-gradient(135deg, #2563eb 0%, #6d5dfb 35%, #ec4899 70%, #ff8a4c 100%);
+}
+
+.bg-gradient-training {
+  background: linear-gradient(135deg, #ff4d6d 0%, var(--mf-sunset) 55%, var(--mf-gold) 100%);
+}
+
+.text-gradient-dante {
+  color: transparent;
+  background: linear-gradient(110deg, var(--mf-violet) 0%, var(--mf-sunset) 100%);
   background-clip: text;
   -webkit-background-clip: text;
 }
@@ -466,7 +585,7 @@ input:-webkit-autofill:focus {
         180deg,
         rgba(0, 0, 0, 0.45) 0%,
         rgba(0, 0, 0, 0.95) 65%,
-        #070707 100%
+        var(--mf-bg) 100%
       );
   }
 }
@@ -517,7 +636,7 @@ input:-webkit-autofill:focus {
 }
 
 .story-page ::selection {
-  background: rgba(180, 83, 9, 0.55);
+  background: rgba(255, 122, 69, 0.55);
   color: #ffffff;
 }
 @keyframes loading-bar {
@@ -531,5 +650,22 @@ input:-webkit-autofill:focus {
 
   100% {
     transform: translateX(320%);
+  }
+}
+
+/* A calm, restrained "alive" pulse — used on the Recovery score ring
+   only (spec: "Allow subtle breathing/pulse animation"). Respects
+   prefers-reduced-motion via the motion-safe: variant at the call
+   site, not a separate override here. */
+@keyframes breathing-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.97);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
   }
 }

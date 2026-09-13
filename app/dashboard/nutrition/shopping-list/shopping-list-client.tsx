@@ -108,7 +108,7 @@ export function ShoppingListClient({ groups, days, itemCostsSgd }: ShoppingListC
         {groups.map((group) => (
           <section
             key={group.category}
-            className="rounded-2xl border border-white/10 bg-[#0d0d0d] p-5 sm:p-6"
+            className="rounded-2xl border border-white/10 bg-mf-surface p-5 sm:p-6"
           >
             <h2 className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-amber-500">
               {group.label}

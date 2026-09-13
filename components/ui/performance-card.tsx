@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { Card, CardGlow } from "@/components/ui/card";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { cn } from "@/lib/cn";
 
 /**
@@ -79,7 +80,7 @@ export type PerformanceCardVariant =
   | "dante"
   | "neutral";
 
-export type PerformanceCardStatusTone = "good" | "warning" | "critical" | "neutral";
+export type PerformanceCardStatusTone = StatusTone;
 
 export type PerformanceCardStatus = {
   label: string;
@@ -124,13 +125,6 @@ const VARIANT_ACCENT: Record<PerformanceCardVariant, string> = {
   progress: "var(--color-domain-progress)",
   dante: "var(--color-domain-dante)",
   neutral: "var(--color-accent-light)",
-};
-
-const STATUS_TONE_CLASS: Record<PerformanceCardStatusTone, string> = {
-  good: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
-  warning: "border-amber-400/25 bg-amber-400/10 text-amber-300",
-  critical: "border-rose-400/25 bg-rose-400/10 text-rose-300",
-  neutral: "border-white/10 bg-white/[0.04] text-zinc-400",
 };
 
 function TrendGlyph({ trend }: { trend: NonNullable<PerformanceCardMetric["trend"]> }) {
@@ -266,16 +260,7 @@ export function PerformanceCard({
               </div>
             ) : null}
 
-            {status ? (
-              <span
-                className={cn(
-                  "inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em]",
-                  STATUS_TONE_CLASS[status.tone ?? "neutral"],
-                )}
-              >
-                {status.label}
-              </span>
-            ) : null}
+            {status ? <StatusBadge label={status.label} tone={status.tone ?? "neutral"} /> : null}
 
             {visual ? <div className="pt-1">{visual}</div> : null}
 

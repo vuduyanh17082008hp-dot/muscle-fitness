@@ -177,7 +177,7 @@ export default async function WorkoutSessionPage({
 
   if (sessionError) {
     throw new Error(
-      `Không thể tải workout session: ${sessionError.message}`,
+      `Failed to load workout session: ${sessionError.message}`,
     );
   }
 
@@ -204,7 +204,7 @@ export default async function WorkoutSessionPage({
 
   if (sessionExercisesError) {
     throw new Error(
-      `Không thể tải session exercises: ${sessionExercisesError.message}`,
+      `Failed to load session exercises: ${sessionExercisesError.message}`,
     );
   }
 
@@ -231,7 +231,7 @@ export default async function WorkoutSessionPage({
 
     if (exerciseSetsError) {
       throw new Error(
-        `Không thể tải exercise sets: ${exerciseSetsError.message}`,
+        `Failed to load exercise sets: ${exerciseSetsError.message}`,
       );
     }
 
@@ -321,7 +321,7 @@ export default async function WorkoutSessionPage({
       : "/dashboard/workouts";
 
   return (
-    <main className="min-h-screen bg-[#070707] px-4 py-8 text-white sm:px-6 lg:px-10">
+    <main className="min-h-screen bg-mf-bg px-4 py-8 text-white sm:px-6 lg:px-10">
       <div className="mx-auto max-w-7xl">
         <Link
           href={backHref}
@@ -332,7 +332,7 @@ export default async function WorkoutSessionPage({
           Back to workout
         </Link>
 
-        <header className="relative mt-8 overflow-hidden rounded-[32px] border border-white/10 bg-[#0d0d0d] p-6 sm:p-8">
+        <header className="relative mt-8 overflow-hidden rounded-[32px] border border-white/10 bg-mf-surface p-6 sm:p-8">
           <div className="pointer-events-none absolute right-[-180px] top-[-220px] h-[520px] w-[520px] rounded-full bg-orange-500/[0.08] blur-[140px]" />
 
           <div className="relative">
@@ -552,7 +552,7 @@ function SessionExerciseCard({
       className={`overflow-hidden rounded-3xl border ${
         exercise.is_skipped
           ? "border-zinc-800 bg-zinc-950/60 opacity-70"
-          : "border-white/10 bg-[#0d0d0d]"
+          : "border-white/10 bg-mf-surface"
       }`}
     >
       <header className="border-b border-white/10 p-5 sm:p-6">

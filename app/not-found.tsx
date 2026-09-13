@@ -5,41 +5,40 @@ export default function NotFound() {
     <main
       className={[
         "mx-auto grid min-h-[70vh] max-w-2xl",
-        "place-content-center px-4 text-center",
+        "place-content-center px-4 text-center text-white",
       ].join(" ")}
     >
-      <p className="text-sm font-semibold text-primary">
+      <p className="text-sm font-semibold text-mf-sunset">
         404
       </p>
 
       <h1 className="mt-2 text-4xl font-bold tracking-tight">
-        Không tìm thấy trang
+        Page not found
       </h1>
 
-      <p className="mt-4 text-muted-foreground">
-        Đường dẫn có thể đã thay đổi hoặc nội dung không còn
-        tồn tại.
+      <p className="mt-4 text-zinc-400">
+        This link may have changed or the content no longer exists.
       </p>
 
       <div className="mt-8 flex flex-wrap justify-center gap-3">
         <Link
           href="/"
           className={[
-            "rounded-lg bg-primary px-4 py-2",
-            "text-sm font-medium text-primary-foreground",
+            "rounded-lg bg-mf-sunset px-4 py-2",
+            "text-sm font-medium text-black",
           ].join(" ")}
         >
-          Về trang chủ
+          Back home
         </Link>
 
         <Link
           href="/dashboard"
           className={[
-            "rounded-lg bg-secondary px-4 py-2",
-            "text-sm font-medium text-secondary-foreground",
+            "rounded-lg border border-white/10 bg-mf-surface px-4 py-2",
+            "text-sm font-medium text-white",
           ].join(" ")}
         >
-          Mở dashboard
+          Open dashboard
         </Link>
       </div>
     </main>

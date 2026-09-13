@@ -40,8 +40,8 @@ export type DanteRobotProps = {
    DESIGN TOKENS — Muscle Fitness / Dante identity
 ========================================================= */
 
-const AMBER = "#f4bd25";
-const AMBER_SOFT = "#ffd479";
+const ACCENT = "var(--mf-violet)";
+const ACCENT_SOFT = "#b3a0f9";
 const IVORY = "#fff4de";
 const SHELL = "#23262c";
 const SHELL_LIGHT = "#3c414a";
@@ -214,7 +214,7 @@ export function DanteRobot({
   }, [state, reduceMotion]);
 
   const eyeScale = getEyeScale(state, blinking);
-  const eyeColor = state === "error" ? METAL : AMBER_SOFT;
+  const eyeColor = state === "error" ? METAL : ACCENT_SOFT;
   const eyeGlow = state === "error" ? 0.25 : state === "listening" ? 1 : 0.75;
 
   const showOrbit = state === "thinking" && !reduceMotion;
@@ -284,8 +284,8 @@ export function DanteRobot({
               </linearGradient>
 
               <radialGradient id={`${uid}-glow`} cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor={AMBER} stopOpacity="0.9" />
-                <stop offset="100%" stopColor={AMBER} stopOpacity="0" />
+                <stop offset="0%" stopColor={ACCENT} stopOpacity="0.9" />
+                <stop offset="100%" stopColor={ACCENT} stopOpacity="0" />
               </radialGradient>
 
               <linearGradient id={`${uid}-metal`} x1="0" y1="0" x2="0" y2="1">
@@ -384,13 +384,13 @@ export function DanteRobot({
                 cy="162"
                 r="14"
                 fill="#0c0d10"
-                stroke={AMBER}
+                stroke={ACCENT}
                 strokeOpacity="0.55"
                 strokeWidth="1.5"
               />
               <path
                 d="M94 153 L94 171 L100 171 C 106.5 171 111 166.6 111 162 C 111 157.4 106.5 153 100 153 Z M99 157.4 L100 157.4 C 104 157.4 106.4 159.3 106.4 162 C 106.4 164.7 104 166.6 100 166.6 L99 166.6 Z"
-                fill={state === "error" ? METAL : AMBER}
+                fill={state === "error" ? METAL : ACCENT}
                 opacity={state === "error" ? 0.5 : 1}
               />
 
@@ -413,7 +413,7 @@ export function DanteRobot({
                 cx="100"
                 cy="14"
                 r="3"
-                fill={AMBER}
+                fill={ACCENT}
                 opacity={0.8}
                 animate={
                   reduceMotion
@@ -500,7 +500,7 @@ export function DanteRobot({
                   animate={{ rotate: 360 }}
                   transition={{ duration: 3.2, repeat: Infinity, ease: "linear" }}
                 >
-                  <circle cx="100" cy="140" r="2.4" fill={AMBER_SOFT} />
+                  <circle cx="100" cy="140" r="2.4" fill={ACCENT_SOFT} />
                 </motion.g>
               )}
             </motion.g>

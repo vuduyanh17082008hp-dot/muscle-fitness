@@ -1757,7 +1757,7 @@ export default function PlanBuilder({
           SPLIT
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
           Step 1
         </p>
@@ -1818,7 +1818,7 @@ export default function PlanBuilder({
           PROGRAM SETTINGS
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
           Step 2
         </p>
@@ -2096,7 +2096,7 @@ export default function PlanBuilder({
           PRIORITY
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
           Step 3
         </p>
@@ -2152,7 +2152,7 @@ export default function PlanBuilder({
           DAYS
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
@@ -2430,7 +2430,7 @@ export default function PlanBuilder({
           LIBRARY
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-400">
@@ -2522,7 +2522,7 @@ export default function PlanBuilder({
           DESCRIPTION
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-[#0d0d0d] p-6">
+      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
         <div className="grid gap-4 md:grid-cols-[160px_1fr]">
           <Field
             label="Weeks"

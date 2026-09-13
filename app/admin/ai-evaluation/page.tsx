@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { buildAiEvaluationSnapshot } from "@/lib/ai-evaluation";
 import type { Metric, MetricSource } from "@/lib/ai-evaluation/types";
+import { DemoModeControl } from "@/components/demo/demo-mode-control";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +78,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <article className="rounded-3xl border border-white/10 bg-[#0d0f12] p-6 sm:p-7">
+    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-7">
       <div className="flex items-center gap-2">
         <Icon className="size-4 text-amber-400" aria-hidden="true" />
         <p className="text-[11px] font-black uppercase tracking-[0.22em] text-zinc-500">{title}</p>
@@ -94,7 +95,7 @@ export default async function AiEvaluationPage() {
   const snapshot = await buildAiEvaluationSnapshot(supabase, actor.userId);
 
   return (
-    <main className="min-h-screen bg-[#070707] px-4 py-10 text-white sm:px-6">
+    <main className="min-h-screen bg-mf-bg px-4 py-10 text-white sm:px-6">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
@@ -133,9 +134,15 @@ export default async function AiEvaluationPage() {
         <SectionCard icon={Bot} title="Dante">
           <MetricRow label="Recommendation consistency (determinism)" metric={snapshot.dante.recommendationConsistency} />
           <MetricRow label="Safety layer test status" metric={snapshot.dante.safetyLayerTestStatus} />
+          <MetricRow label="Action validation test status" metric={snapshot.dante.actionValidationTestStatus} />
+          <MetricRow label="Missing-data behavior test status" metric={snapshot.dante.missingDataTestStatus} />
           <MetricRow label="Retrieval accuracy" metric={snapshot.dante.retrievalAccuracy} />
           <MetricRow label="Citation accuracy" metric={snapshot.dante.citationAccuracy} />
           <MetricRow label="Hallucination test status" metric={snapshot.dante.hallucinationTestStatus} />
+        </SectionCard>
+
+        <SectionCard icon={Beaker} title="Demo Data Control">
+          <DemoModeControl />
         </SectionCard>
 
         <SectionCard icon={ShieldCheck} title="System">

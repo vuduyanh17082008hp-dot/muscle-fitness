@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import OnboardingWizard from "@/features/onboarding/onboarding-wizard";
+import { ShortOnboardingWizard } from "@/features/onboarding/short-onboarding-wizard";
 
 import {
   defaultOnboardingData,
+  dbOverrideToTrainingStyle,
   type OnboardingData,
   type OnboardingDraftData,
 } from "@/features/onboarding/schema";
@@ -253,7 +255,8 @@ export default async function OnboardingPage({
           daily_steps,
           work_schedule,
           stress_level,
-          preferred_training_time
+          preferred_training_time,
+          training_mode_override
         `
       )
       .eq(
@@ -420,6 +423,12 @@ export default async function OnboardingPage({
       --------------------------------------------------- */
 
       training: {
+        trainingStyle:
+          dbOverrideToTrainingStyle(
+            preferences
+              ?.training_mode_override
+          ),
+
         experience:
           enumValue<
             OnboardingData["training"]["experience"]
@@ -620,7 +629,7 @@ export default async function OnboardingPage({
   ======================================================= */
 
   return (
-    <main className="min-h-screen bg-[#070707] px-4 py-10 text-white sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-mf-bg px-4 py-10 text-white sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
         {/* =================================================
             EDIT MODE HEADER
@@ -651,17 +660,44 @@ export default async function OnboardingPage({
 
         {/* =================================================
             WIZARD
+
+            First-time sign-up gets the short, mobile-first
+            flow (section A of the UX pass). Edit mode keeps
+            the full wizard so returning users can still tune
+            equipment, macros, and every other preference in
+            detail — both write to the exact same tables via
+            the same server actions, so neither is a duplicate
+            onboarding data model.
         ================================================= */}
 
-        <OnboardingWizard
-          userId={user.id}
-          initialStep={
-            initialStep
-          }
-          initialData={
-            initialData
-          }
-        />
+        {isEditMode ? (
+          <OnboardingWizard
+            userId={user.id}
+            initialStep={
+              initialStep
+            }
+            initialData={
+              initialData
+            }
+          />
+        ) : (
+          <ShortOnboardingWizard
+            userId={user.id}
+            userFullName={
+              user.user_metadata
+                ?.full_name ?? null
+            }
+            userEmail={
+              user.email ?? null
+            }
+            initialStep={
+              initialStep
+            }
+            initialData={
+              initialData
+            }
+          />
+        )}
       </div>
     </main>
   );

@@ -249,7 +249,7 @@ export default async function WorkoutHistoryPage() {
 
   if (sessionsError) {
     throw new Error(
-      `Không thể tải workout history: ${sessionsError.message}`,
+      `Failed to load workout history: ${sessionsError.message}`,
     );
   }
 
@@ -281,7 +281,7 @@ export default async function WorkoutHistoryPage() {
 
     if (error) {
       throw new Error(
-        `Không thể tải workout exercises: ${error.message}`,
+        `Failed to load workout exercises: ${error.message}`,
       );
     }
 
@@ -308,7 +308,7 @@ export default async function WorkoutHistoryPage() {
 
     if (error) {
       throw new Error(
-        `Không thể tải exercise sets: ${error.message}`,
+        `Failed to load exercise sets: ${error.message}`,
       );
     }
 
@@ -341,7 +341,7 @@ export default async function WorkoutHistoryPage() {
 
     if (error) {
       throw new Error(
-        `Không thể tải workout plans: ${error.message}`,
+        `Failed to load workout plans: ${error.message}`,
       );
     }
 
@@ -374,7 +374,7 @@ export default async function WorkoutHistoryPage() {
 
     if (error) {
       throw new Error(
-        `Không thể tải workout days: ${error.message}`,
+        `Failed to load workout days: ${error.message}`,
       );
     }
 
@@ -727,7 +727,7 @@ export default async function WorkoutHistoryPage() {
     ).length;
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#070707] px-4 py-8 text-white sm:px-6 lg:px-10">
+    <main className="relative min-h-screen overflow-hidden bg-mf-bg px-4 py-8 text-white sm:px-6 lg:px-10">
       {/* Background */}
 
       <div
@@ -757,7 +757,7 @@ export default async function WorkoutHistoryPage() {
 
         {/* Hero */}
 
-        <header className="mt-8 overflow-hidden rounded-[32px] border border-white/10 bg-[#0d0d0d]/90 p-6 shadow-[0_30px_100px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:p-8 lg:p-10">
+        <header className="mt-8 overflow-hidden rounded-[32px] border border-white/10 bg-mf-surface/90 p-6 shadow-[0_30px_100px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:p-8 lg:p-10">
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
             <div className="max-w-3xl">
               <div className="flex items-center gap-3">
@@ -1075,7 +1075,7 @@ function WorkoutHistoryCard({
     getSessionTimestamp(session);
 
   return (
-    <article className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d0d0d] shadow-[0_20px_70px_rgba(0,0,0,0.18)]">
+    <article className="overflow-hidden rounded-3xl border border-white/10 bg-mf-surface shadow-[0_20px_70px_rgba(0,0,0,0.18)]">
       <header className="border-b border-white/10 p-5 sm:p-7">
         <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-start">
           <div className="flex min-w-0 items-start gap-4">

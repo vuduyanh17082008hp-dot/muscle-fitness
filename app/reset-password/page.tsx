@@ -24,9 +24,9 @@ export default async function ResetPasswordPage() {
     <AuthShell
       eyebrow="Secure password update"
       title="Set new password"
-      description="Tạo mật khẩu mới mạnh hơn để bảo vệ dữ liệu luyện tập và thông tin cá nhân của bạn."
+      description="Create a stronger new password to protect your training data and personal information."
       sideTitle="Return with stronger protection."
-      sideDescription="Mật khẩu tốt là lớp bảo vệ đầu tiên cho toàn bộ kế hoạch, dữ liệu cơ thể và lịch sử tiến trình của bạn."
+      sideDescription="A strong password is the first layer of protection for your entire plan, body data, and progress history."
       step="04 / 04"
     >
       <ResetPasswordForm />

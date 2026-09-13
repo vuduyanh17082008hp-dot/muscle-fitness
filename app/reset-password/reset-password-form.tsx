@@ -39,12 +39,12 @@ export function ResetPasswordForm() {
     setError("")
 
     if (password.length < 8) {
-      setError("Mật khẩu phải có ít nhất 8 ký tự.")
+      setError("Password must be at least 8 characters.")
       return
     }
 
     if (password !== confirmPassword) {
-      setError("Hai mật khẩu không giống nhau.")
+      setError("Passwords do not match.")
       return
     }
 

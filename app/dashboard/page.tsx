@@ -7,9 +7,15 @@ import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { loadReadinessForUser } from "@/lib/dante-core/server/load-readiness-for-user";
 import { getOrBuildDailyIntelligence } from "@/lib/dante-core/daily-intelligence";
+import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
+import { loadTodaySession } from "@/lib/training/load-today-session";
+import { buildDailyDecision } from "@/lib/dante-core/daily-decision-engine";
+import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
 import { PerformanceCard } from "@/components/ui/performance-card";
 import { PerformanceHalo } from "@/components/dashboard/performance-halo";
+import { TodayPlanSection } from "@/components/dashboard/today-plan";
 import { DanteIntelligencePanel } from "@/components/dante/dante-intelligence-panel";
+import { DailyActionsRow } from "@/components/dante/daily-actions-row";
 
 export const dynamic =
   "force-dynamic";
@@ -70,10 +76,6 @@ function humanize(
       (character) =>
         character.toUpperCase()
     );
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 const LOAD_STATE_STATUS: Record<string, { label: string; tone: "good" | "warning" | "critical" }> = {
@@ -291,27 +293,26 @@ export default async function DashboardPage() {
   ======================================================= */
 
   const [
-    { readiness, recoveryContext },
+    { readiness, recoveryContext, trainingContext },
     dailyIntelligence,
     { plan: nutritionPlan },
     foodLog,
-    todaySessionResponse,
+    todaySession,
+    athleteState,
   ] = await Promise.all([
     loadReadinessForUser(supabase, user.id),
     getOrBuildDailyIntelligence(supabase, user.id),
     loadNutritionContext(supabase, user.id),
     loadFoodLogForDate(supabase, user.id),
-    supabase
-      .from("workout_sessions")
-      .select("id, name")
-      .eq("user_id", user.id)
-      .gte("scheduled_for", `${todayIso()}T00:00:00.000Z`)
-      .lte("scheduled_for", `${todayIso()}T23:59:59.999Z`)
-      .order("scheduled_for", { ascending: true })
-      .limit(1),
+    loadTodaySession(supabase, user.id),
+    buildAthleteState(supabase, user.id),
   ]);
 
-  const todaySession = todaySessionResponse.data?.[0] ?? null;
+  const { decision: dailyDecision, proposedActions } = buildDailyDecision(
+    athleteState,
+    trainingContext,
+    todaySession,
+  );
 
   /* =======================================================
      DISPLAY NAME
@@ -349,11 +350,24 @@ export default async function DashboardPage() {
   const ctaLabel = todaySession ? "Start workout" : "Build a plan";
 
   /* =======================================================
+     TODAY'S PLAN — one canonical daily-action list, derived
+     from the exact same real data already loaded above
+     (no extra queries, no fabricated items).
+  ======================================================= */
+
+  const todayPlanActions = buildTodayPlan({
+    todaySession,
+    hasCheckinToday: recoveryContext.today !== null,
+    proteinTargetG: nutritionPlan?.target.protein ?? null,
+    proteinLoggedG: foodLog.totals.protein,
+  });
+
+  /* =======================================================
      PAGE
   ======================================================= */
 
   return (
-    <main className="min-h-screen bg-[#070707] text-white">
+    <main className="min-h-screen bg-mf-bg text-white">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
 
         {/* =================================================
@@ -423,14 +437,6 @@ export default async function DashboardPage() {
 
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
                 <Link
-                  href={ctaHref}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 text-sm font-black uppercase tracking-wider text-black transition-colors duration-200 hover:bg-amber-300"
-                >
-                  {ctaLabel}
-                  <ArrowRight className="size-4" />
-                </Link>
-
-                <Link
                   href="/onboarding?edit=1"
                   className="inline-flex h-12 items-center justify-center rounded-xl border border-white/10 bg-white/4 px-5 text-sm font-semibold text-zinc-300 transition-colors duration-200 hover:border-white/20 hover:bg-white/8 hover:text-white"
                 >
@@ -440,6 +446,14 @@ export default async function DashboardPage() {
             </div>
           </div>
         </section>
+
+        {/* =================================================
+            TODAY'S PLAN — the single most important next
+            action, made visually obvious rather than buried
+            in a row of equal-weight cards.
+        ================================================= */}
+
+        <TodayPlanSection actions={todayPlanActions} />
 
         {/* =================================================
             THREE PERFORMANCE PILLARS
@@ -523,6 +537,14 @@ export default async function DashboardPage() {
             recommendation={dailyIntelligence.narrative}
             why={readiness.limitingFactors}
             confidence={readiness.confidence}
+            actions={
+              proposedActions.length > 0 ? (
+                <DailyActionsRow
+                  proposedActions={proposedActions}
+                  decisionConfidenceLevel={dailyDecision.confidence}
+                />
+              ) : undefined
+            }
           />
         </div>
 

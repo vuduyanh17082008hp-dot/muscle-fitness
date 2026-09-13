@@ -109,7 +109,7 @@ export type ComponentNutrition = {
 export type NutrientRange = { estimate: number; lower: number; upper: number };
 
 export type HawkerLensResult = {
-  status: "ok" | "unknown_dish" | "low_quality_image" | "unconfigured" | "error";
+  status: "ok" | "unknown_dish" | "low_quality_image" | "error";
   dish: HawkerDishId | null;
   dishClassification: DishClassification;
   imageQuality: ImageQualityCheck;
@@ -136,4 +136,6 @@ export type HawkerLensResult = {
   };
   overallConfidence: number;
   message: string | null;
+  /** True when this result came from the DEMO adapter (no live vision model configured) rather than real inference on the uploaded photo — see demo-vision.ts. UI must surface this unmistakably. */
+  isDemo: boolean;
 };
