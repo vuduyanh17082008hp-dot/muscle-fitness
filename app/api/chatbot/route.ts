@@ -25,6 +25,9 @@ import {
   buildTrainingInsight,
 } from "@/lib/dante-core/build-chat-insight";
 import type { DanteInsight } from "@/lib/dante-core/insight";
+import { retrieveDanteKnowledge } from "@/lib/dante-core/knowledge-brain/retrieve";
+import { classifyKnowledgeBrainRoute } from "@/lib/dante-core/knowledge-brain/route";
+import type { RetrievedKnowledgeChunk } from "@/lib/dante-core/knowledge-brain/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -2367,6 +2370,38 @@ async function getEvidence(
 }
 
 /* =========================================================
+   KNOWLEDGE BRAIN (Supabase pgvector)
+
+   Not every message needs a vector search — see
+   classifyKnowledgeBrainRoute() (query routing, spec §6). A
+   structured question about the user's own data (macros left,
+   today's plan) is answered entirely from userContext above and
+   never reaches this function. Failure here (embedding provider
+   down, RPC error) is swallowed inside retrieveDanteKnowledge()
+   itself and resolves to an empty array — normal Dante always
+   still works even if the Knowledge Brain is unavailable.
+========================================================= */
+
+async function getKnowledgeBrainResults(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  message: string,
+  intent: Intent,
+): Promise<RetrievedKnowledgeChunk[]> {
+  const route = classifyKnowledgeBrainRoute(message, intent);
+
+  if (!route.use) {
+    return [];
+  }
+
+  return retrieveDanteKnowledge(supabase, {
+    query: message,
+    userId,
+    categories: route.categories,
+  });
+}
+
+/* =========================================================
    DANTE SYSTEM INSTRUCTIONS
 ========================================================= */
 
@@ -2391,7 +2426,28 @@ You receive:
 
 1. CLIENT PROFILE from Muscle Fitness.
 2. EXTERNAL EVIDENCE retrieved from trusted data sources.
-3. The CLIENT QUESTION.
+3. RETRIEVED KNOWLEDGE from Dante's curated knowledge base (only present when relevant).
+4. The CLIENT QUESTION.
+
+============================================================
+CONTEXT PRIORITY
+============================================================
+
+When sources could conflict, follow this order:
+
+1. CLIENT PROFILE — the client's own live data (recovery, training,
+   nutrition, Today's Plan, adaptive recommendations) always wins.
+   Never let general knowledge override an actual number or
+   recommendation already computed for this specific client.
+2. EXTERNAL EVIDENCE (PubMed / Europe PMC / MedlinePlus / USDA / etc).
+3. RETRIEVED KNOWLEDGE (the curated knowledge base).
+4. Your own general reasoning, only when nothing above applies.
+
+RETRIEVED KNOWLEDGE, when present, is reusable reference knowledge
+(technique, general research summaries) — it is never a substitute
+for the client's own data, and it is never itself definitive: prefer
+EXTERNAL EVIDENCE over it when both address the same question. Only
+cite a title actually listed in RETRIEVED KNOWLEDGE; never invent one.
 
 ============================================================
 SOURCE PRIORITY
@@ -2877,12 +2933,14 @@ Do not mention hidden reasoning.
 
 Do not output chain-of-thought.
 
-When external sources materially support the answer,
-finish with a short section called:
+When external sources or retrieved knowledge materially support the
+answer, finish with a short section called:
 
 Sources checked
 
-Only list sources actually supplied in EXTERNAL EVIDENCE.
+Only list sources actually supplied in EXTERNAL EVIDENCE or RETRIEVED
+KNOWLEDGE. Never invent a title, author, or citation that isn't
+literally present in one of those two sections.
 `;
 
 /* =========================================================
@@ -2893,7 +2951,34 @@ function buildDantePrompt(
   userMessage: string,
   userContext: UserContext,
   evidence: EvidenceContext,
+  retrievedKnowledge: RetrievedKnowledgeChunk[],
 ): string {
+  // Kept out entirely (not an empty section) when there's nothing
+  // relevant — this is what "never dump large chunk sets" and "only
+  // when relevant" mean concretely: an irrelevant/empty result from
+  // the Knowledge Brain must be invisible to the LLM, not a visible
+  // "no knowledge found" section that invites commentary.
+  const retrievedKnowledgeSection =
+    retrievedKnowledge.length > 0
+      ? `
+============================================================
+RETRIEVED KNOWLEDGE
+============================================================
+
+${JSON.stringify(
+  retrievedKnowledge.map((chunk) => ({
+    title: chunk.title,
+    category: chunk.category,
+    source: chunk.source,
+    sourceUrl: chunk.sourceUrl,
+    content: chunk.content,
+  })),
+  null,
+  2,
+)}
+`
+      : "";
+
   return `
 ${DANTE_INSTRUCTIONS}
 
@@ -2916,7 +3001,7 @@ ${JSON.stringify(
   null,
   2,
 )}
-
+${retrievedKnowledgeSection}
 ============================================================
 CLIENT QUESTION
 ============================================================
@@ -3222,6 +3307,7 @@ async function generateDanteReply(
 
 function getSources(
   evidence: EvidenceContext,
+  retrievedKnowledge: RetrievedKnowledgeChunk[] = [],
 ): SourceItem[] {
   const sources:
     SourceItem[] =
@@ -3329,6 +3415,21 @@ function getSources(
 
       url:
         evidence.openFda.url,
+    });
+  }
+
+  for (
+    const chunk of retrievedKnowledge
+  ) {
+    sources.push({
+      type:
+        "Dante Knowledge Brain",
+
+      title:
+        chunk.title,
+
+      url:
+        chunk.sourceUrl ?? "",
     });
   }
 
@@ -3519,6 +3620,7 @@ export async function POST(
           mode: "production",
           intent,
           externalKnowledgeUsed: false,
+          knowledgeBrainUsed: false,
           sources: [],
           safetyTriggered: true,
           safetyCategory: safetyCheck.category,
@@ -3536,6 +3638,7 @@ export async function POST(
     const [
       { context: userContext, chatInsight },
       evidence,
+      retrievedKnowledge,
     ] =
       await Promise.all([
         loadUserContext(
@@ -3545,6 +3648,13 @@ export async function POST(
         ),
 
         getEvidence(
+          userMessage,
+          intent,
+        ),
+
+        getKnowledgeBrainResults(
+          supabase,
+          user.id,
           userMessage,
           intent,
         ),
@@ -3559,6 +3669,7 @@ export async function POST(
         userMessage,
         userContext,
         evidence,
+        retrievedKnowledge,
       );
 
     /* -----------------------------------------------------
@@ -3580,6 +3691,7 @@ export async function POST(
     const sources =
       getSources(
         evidence,
+        retrievedKnowledge,
       );
 
     /* -----------------------------------------------------
@@ -3607,6 +3719,10 @@ export async function POST(
 
         externalKnowledgeUsed:
           sources.length >
+          0,
+
+        knowledgeBrainUsed:
+          retrievedKnowledge.length >
           0,
 
         sources,
