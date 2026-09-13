@@ -31,12 +31,22 @@ import type { DanteInsight } from "@/lib/dante-core/insight";
    TYPES
 ========================================================= */
 
+type PendingConfirmation = {
+  actionId: string;
+  toolName: string;
+  summary: string;
+};
+
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   /** "Why This?" evidence, when this reply carried a real, deterministic recommendation. Never fabricated by the LLM. */
   insight?: DanteInsight | null;
+  /** Set only when Dante proposed a write tool call — nothing is saved until the user explicitly confirms (see PendingConfirmationPanel below). */
+  pendingConfirmation?: PendingConfirmation | null;
+  /** Once the user acts on pendingConfirmation, frozen here so the buttons don't re-render as active after a page state update. */
+  confirmationResolution?: "confirmed" | "cancelled" | "failed" | null;
 };
 
 type ChatbotResponse = {
@@ -44,6 +54,7 @@ type ChatbotResponse = {
   error?: string;
   model?: string;
   insight?: DanteInsight | null;
+  pendingConfirmation?: PendingConfirmation | null;
 };
 
 export type QuickPrompt = {
@@ -197,6 +208,74 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
 }
 
 /* =========================================================
+   PENDING CONFIRMATION — Dante Actions/Agentic Interface (Part 7).
+   Real CONFIRM/CANCEL buttons: nothing was saved when this message
+   arrived, and nothing is saved until CONFIRM actually succeeds.
+========================================================= */
+
+function PendingConfirmationPanel({
+  pendingConfirmation,
+  resolution,
+  isBusy,
+  onConfirm,
+  onCancel,
+}: {
+  pendingConfirmation: PendingConfirmation;
+  resolution: "confirmed" | "cancelled" | "failed" | null | undefined;
+  isBusy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (resolution === "confirmed") {
+    return (
+      <p className="mt-3 text-xs font-semibold text-emerald-400">
+        ✓ Done — {pendingConfirmation.summary.toLowerCase()}.
+      </p>
+    );
+  }
+
+  if (resolution === "cancelled") {
+    return (
+      <p className="mt-3 text-xs font-semibold text-zinc-500">
+        Cancelled — nothing was changed.
+      </p>
+    );
+  }
+
+  if (resolution === "failed") {
+    return (
+      <p className="mt-3 text-xs font-semibold text-rose-400">
+        That couldn&apos;t be saved. Nothing was changed.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-3">
+      <span className="mr-2 text-xs text-zinc-300">{pendingConfirmation.summary}</span>
+
+      <button
+        type="button"
+        disabled={isBusy}
+        onClick={onConfirm}
+        className="rounded-lg bg-amber-400 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-black transition hover:bg-amber-300 disabled:opacity-50"
+      >
+        Confirm
+      </button>
+
+      <button
+        type="button"
+        disabled={isBusy}
+        onClick={onCancel}
+        className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+/* =========================================================
    COMPONENT
 ========================================================= */
 
@@ -224,6 +303,9 @@ export default function DanteChat({
         content: welcomeMessage,
       },
     ]);
+
+  const [confirmingActionId, setConfirmingActionId] =
+    useState<string | null>(null);
 
   const [input, setInput] =
     useState("");
@@ -381,6 +463,8 @@ export default function DanteChat({
           role: "assistant",
           content: data.reply,
           insight: data.insight ?? null,
+          pendingConfirmation: data.pendingConfirmation ?? null,
+          confirmationResolution: null,
         };
 
       setMessages((previous) => [
@@ -419,6 +503,57 @@ export default function DanteChat({
       ]);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  /* =======================================================
+     CONFIRM / CANCEL a pending Dante action (Part 7). Real buttons,
+     real fetch — success is only ever reported after the server
+     confirms the write actually persisted.
+  ======================================================= */
+
+  async function handleConfirmAction(
+    messageId: string,
+    actionId: string,
+    intent: "confirm" | "cancel"
+  ) {
+    setConfirmingActionId(actionId);
+
+    try {
+      const response = await fetch("/api/dante/tools/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionId, intent }),
+      });
+
+      const data = (await response.json()) as { ok?: boolean };
+
+      const resolution: "confirmed" | "cancelled" | "failed" =
+        intent === "cancel"
+          ? "cancelled"
+          : data.ok
+          ? "confirmed"
+          : "failed";
+
+      setMessages((previous) =>
+        previous.map((message) =>
+          message.id === messageId
+            ? { ...message, confirmationResolution: resolution }
+            : message
+        )
+      );
+    } catch (error) {
+      console.error("[DANTE CONFIRM ACTION ERROR]", error);
+
+      setMessages((previous) =>
+        previous.map((message) =>
+          message.id === messageId
+            ? { ...message, confirmationResolution: "failed" }
+            : message
+        )
+      );
+    } finally {
+      setConfirmingActionId(null);
     }
   }
 
@@ -1013,6 +1148,20 @@ export default function DanteChat({
 
                         {message.insight ? (
                           <DanteInsightPanel insight={message.insight} />
+                        ) : null}
+
+                        {message.pendingConfirmation ? (
+                          <PendingConfirmationPanel
+                            pendingConfirmation={message.pendingConfirmation}
+                            resolution={message.confirmationResolution}
+                            isBusy={confirmingActionId === message.pendingConfirmation.actionId}
+                            onConfirm={() =>
+                              void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "confirm")
+                            }
+                            onCancel={() =>
+                              void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "cancel")
+                            }
+                          />
                         ) : null}
                       </div>
                     </div>

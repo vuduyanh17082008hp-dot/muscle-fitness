@@ -28,6 +28,8 @@ import type { DanteInsight } from "@/lib/dante-core/insight";
 import { retrieveDanteKnowledge } from "@/lib/dante-core/knowledge-brain/retrieve";
 import { classifyKnowledgeBrainRoute } from "@/lib/dante-core/knowledge-brain/route";
 import type { RetrievedKnowledgeChunk } from "@/lib/dante-core/knowledge-brain/types";
+import { isAgentToolIntent } from "@/lib/dante-core/tools/detect-intent";
+import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -3627,6 +3629,53 @@ export async function POST(
         },
         { status: 200 },
       );
+    }
+
+    /* -----------------------------------------------------
+       AGENTIC TOOL LOOP (Part 2/10) — Dante Actions/Interface upgrade.
+
+       Only for messages that are ACTION-shaped ("add X to lunch",
+       "start today's workout", "complete my check-in", "accept the
+       recommendation for bench"), decided by a narrow, conservative
+       detector (isAgentToolIntent). Everything else falls through to
+       the existing prompt-stuffed flow below UNCHANGED — this keeps
+       the extensively-tuned Q&A behavior (recovery/nutrition/training
+       explanations, evidence sourcing, safety copy) exactly as it was.
+       A write tool selected here never executes: it always stops at a
+       pending confirmation (Part 7), only ever applied by an explicit
+       user CONFIRM against POST /api/dante/tools/confirm.
+    ----------------------------------------------------- */
+
+    if (isAgentToolIntent(userMessage)) {
+      try {
+        const envelope = await runDanteAgentTurn({ supabase, userId: user.id, now: new Date() }, userMessage);
+
+        return Response.json(
+          {
+            ok: true,
+            reply: envelope.reply,
+            message: envelope.reply,
+            model: "dante-agent",
+            mode: "production",
+            intent,
+            externalKnowledgeUsed: false,
+            knowledgeBrainUsed: false,
+            sources: envelope.sources ?? [],
+            insight: null,
+            actions: envelope.actions ?? [],
+            pendingConfirmation: envelope.pendingConfirmation ?? null,
+            toolTraceSummary: envelope.toolTraceSummary ?? [],
+          },
+          { status: 200 },
+        );
+      } catch (error) {
+        console.error("[DANTE AGENT TOOL LOOP ERROR]", error);
+        // Fall through to the legacy prompt-stuffed flow rather than
+        // failing the whole request — a normal, informational answer
+        // is still better than no answer (Part 19: never a false
+        // success, but also never a hard failure when a safe fallback
+        // exists).
+      }
     }
 
     /* -----------------------------------------------------
