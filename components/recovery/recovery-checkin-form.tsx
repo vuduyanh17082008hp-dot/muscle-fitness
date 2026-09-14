@@ -121,14 +121,14 @@ export function RecoveryCheckinForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8"
+      className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8"
     >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
             Daily Recovery Check-in
           </p>
-          <h2 className="mt-1 text-xl font-black text-white">
+          <h2 className="mt-1 text-xl font-black text-mf-glass-text">
             Under 30 seconds
           </h2>
         </div>
@@ -142,7 +142,7 @@ export function RecoveryCheckinForm({
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-zinc-400">
+          <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
             Sleep hours
           </span>
           <input
@@ -153,12 +153,12 @@ export function RecoveryCheckinForm({
             value={form.sleepHours}
             onChange={(event) => update("sleepHours", event.target.value)}
             placeholder="e.g. 7.5"
-            className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+            className="w-full rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
           />
         </label>
 
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-zinc-400">
+          <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
             Resting heart rate (optional)
           </span>
           <input
@@ -168,7 +168,7 @@ export function RecoveryCheckinForm({
             value={form.restingHr}
             onChange={(event) => update("restingHr", event.target.value)}
             placeholder="bpm"
-            className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+            className="w-full rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
           />
         </label>
       </div>
@@ -177,10 +177,10 @@ export function RecoveryCheckinForm({
         {SLIDER_FIELDS.map((field) => (
           <div key={field.key}>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-300">
+              <span className="text-xs font-semibold text-mf-glass-text-secondary">
                 {field.label}
               </span>
-              <span className="text-xs font-bold text-amber-300">
+              <span className="text-xs font-bold text-mf-glass-brand">
                 {form[field.key]}
               </span>
             </div>
@@ -193,16 +193,16 @@ export function RecoveryCheckinForm({
               onChange={(event) =>
                 update(field.key, Number(event.target.value))
               }
-              className="mt-2 w-full accent-amber-400"
+              className="mt-2 w-full accent-mf-glass-brand"
             />
-            <p className="mt-1 text-[11px] text-zinc-600">{field.helper}</p>
+            <p className="mt-1 text-[11px] text-mf-glass-text-muted">{field.helper}</p>
           </div>
         ))}
       </div>
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-zinc-400">
+          <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
             Steps (optional)
           </span>
           <input
@@ -210,12 +210,12 @@ export function RecoveryCheckinForm({
             min={0}
             value={form.steps}
             onChange={(event) => update("steps", event.target.value)}
-            className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+            className="w-full rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
           />
         </label>
 
         <div>
-          <span className="mb-1.5 block text-xs font-semibold text-zinc-400">
+          <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
             Unusual pain or illness
           </span>
           <div className="flex gap-2">
@@ -227,8 +227,8 @@ export function RecoveryCheckinForm({
                 className={cn(
                   "flex-1 rounded-xl border px-3 py-3 text-xs font-bold uppercase tracking-wide transition",
                   form.painIllness === option
-                    ? "border-amber-400/40 bg-amber-400/15 text-amber-300"
-                    : "border-white/10 bg-black/20 text-zinc-500 hover:border-white/20",
+                    ? "border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand"
+                    : "border-mf-glass-border bg-mf-glass-bg-deep text-mf-glass-text-muted hover:border-mf-glass-border-strong",
                 )}
               >
                 {option}
@@ -239,7 +239,7 @@ export function RecoveryCheckinForm({
       </div>
 
       <label className="mt-5 block">
-        <span className="mb-1.5 block text-xs font-semibold text-zinc-400">
+        <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
           Notes (optional)
         </span>
         <textarea
@@ -248,7 +248,7 @@ export function RecoveryCheckinForm({
           maxLength={600}
           rows={2}
           placeholder="Anything else worth remembering about today?"
-          className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+          className="w-full resize-none rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
         />
       </label>
 
@@ -259,7 +259,7 @@ export function RecoveryCheckinForm({
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3.5 text-sm font-black uppercase tracking-wider text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+        className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-5 py-3.5 text-sm font-black uppercase tracking-wider text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
       >
         {isSubmitting ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />

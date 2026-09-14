@@ -104,8 +104,8 @@ export function ExperimentLab() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Beaker className="size-4 text-amber-400" aria-hidden="true" />
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-400">
+          <Beaker className="size-4 text-mf-glass-brand" aria-hidden="true" />
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-mf-glass-brand">
             Personal Experiment Lab
           </p>
         </div>
@@ -113,23 +113,23 @@ export function ExperimentLab() {
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-bold text-zinc-300 hover:bg-white/[0.08]"
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-mf-glass-border bg-white/[0.04] px-3 text-xs font-bold text-mf-glass-text-secondary hover:bg-white/[0.08]"
         >
           <Plus className="size-3.5" />
           New experiment
         </button>
       </div>
 
-      <p className="text-sm leading-6 text-zinc-500">
+      <p className="text-sm leading-6 text-mf-glass-text-muted">
         Run your own N-of-1 comparisons — e.g. &ldquo;does late caffeine affect my sleep?&rdquo;
         Every result is an association from your own logged days, never a proven cause, and
         always says so.
       </p>
 
       {showForm && catalog ? (
-        <div className="space-y-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+        <div className="space-y-4 rounded-2xl border border-mf-glass-border bg-mf-glass-elevated p-4">
           <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-zinc-500">
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-mf-glass-text-muted">
               Question
             </label>
             <input
@@ -137,19 +137,19 @@ export function ExperimentLab() {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="e.g. Does late caffeine affect my sleep?"
-              className="h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+              className="h-10 w-full rounded-lg border border-mf-glass-border bg-mf-glass-bg px-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
             />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-zinc-500">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-mf-glass-text-muted">
                 Exposure
               </label>
               <select
                 value={exposureType}
                 onChange={(e) => setExposureType(e.target.value)}
-                className="h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white"
+                className="h-10 w-full rounded-lg border border-mf-glass-border bg-mf-glass-bg px-3 text-sm text-mf-glass-text"
               >
                 <option value="">Select…</option>
                 {catalog.exposureTypes.map((e) => (
@@ -159,20 +159,20 @@ export function ExperimentLab() {
                 ))}
               </select>
               {exposureType ? (
-                <p className="mt-1.5 text-xs leading-5 text-zinc-600">
+                <p className="mt-1.5 text-xs leading-5 text-mf-glass-text-muted">
                   {catalog.exposureTypes.find((e) => e.id === exposureType)?.description}
                 </p>
               ) : null}
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-zinc-500">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.1em] text-mf-glass-text-muted">
                 Outcome
               </label>
               <select
                 value={outcomeType}
                 onChange={(e) => setOutcomeType(e.target.value)}
-                className="h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white"
+                className="h-10 w-full rounded-lg border border-mf-glass-border bg-mf-glass-bg px-3 text-sm text-mf-glass-text"
               >
                 <option value="">Select…</option>
                 {catalog.outcomeTypes.map((o) => (
@@ -182,20 +182,20 @@ export function ExperimentLab() {
                 ))}
               </select>
               {outcomeType ? (
-                <p className="mt-1.5 text-xs leading-5 text-zinc-600">
+                <p className="mt-1.5 text-xs leading-5 text-mf-glass-text-muted">
                   {catalog.outcomeTypes.find((o) => o.id === outcomeType)?.description}
                 </p>
               ) : null}
             </div>
           </div>
 
-          {error ? <p className="text-xs text-rose-400">{error}</p> : null}
+          {error ? <p className="text-xs text-mf-glass-danger">{error}</p> : null}
 
           <button
             type="button"
             onClick={() => void handleCreate()}
             disabled={creating || !question.trim() || !exposureType || !outcomeType}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-amber-400 px-4 text-xs font-black uppercase tracking-[0.06em] text-black hover:bg-amber-300 disabled:opacity-40"
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-mf-glass-brand px-4 text-xs font-black uppercase tracking-[0.06em] text-mf-glass-brand-ink hover:bg-mf-glass-brand-hover disabled:opacity-40"
           >
             {creating ? <Loader2 className="size-3.5 animate-spin" /> : null}
             Start tracking
@@ -204,11 +204,11 @@ export function ExperimentLab() {
       ) : null}
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-zinc-500">
+        <div className="flex items-center gap-2 text-sm text-mf-glass-text-muted">
           <Loader2 className="size-4 animate-spin" /> Loading…
         </div>
       ) : items.length === 0 ? (
-        <p className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-sm text-zinc-500">
+        <p className="rounded-2xl border border-mf-glass-border bg-white/[0.02] p-6 text-sm text-mf-glass-text-muted">
           No experiments yet — start one above to begin comparing your own days.
         </p>
       ) : (
@@ -220,14 +220,14 @@ export function ExperimentLab() {
                 onClick={() => void handleDelete(experiment.id)}
                 disabled={deletingId === experiment.id}
                 aria-label={`Delete experiment: ${experiment.question}`}
-                className="absolute right-4 top-4 z-10 grid size-8 place-items-center rounded-lg text-zinc-500 hover:bg-white/10 hover:text-rose-400 disabled:opacity-40"
+                className="absolute right-4 top-4 z-10 grid size-8 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-danger disabled:opacity-40"
               >
                 <Trash2 className="size-4" />
               </button>
               {result ? (
                 <DecisionCard decision={result} />
               ) : (
-                <div className="rounded-3xl border border-white/10 bg-mf-surface p-6 text-sm text-zinc-500">
+                <div className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 text-sm text-mf-glass-text-muted">
                   {experiment.question} — couldn&apos;t compute a result.
                 </div>
               )}

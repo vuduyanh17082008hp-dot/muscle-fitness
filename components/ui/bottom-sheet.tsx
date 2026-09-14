@@ -51,7 +51,7 @@ export function BottomSheet({
             <Dialog.Content asChild forceMount aria-describedby={undefined}>
               <motion.div
                 className={cn(
-                  "fixed inset-x-0 bottom-0 z-50 max-h-[90vh] overflow-y-auto rounded-t-[24px] border-t border-white/10 bg-mf-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/60",
+                  "fixed inset-x-0 bottom-0 z-50 max-h-[90vh] overflow-y-auto rounded-t-[24px] border-t border-mf-glass-border bg-mf-glass-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/60",
                   // Desktop: centered via margin:auto on all four insets — no
                   // `transform` needed here, so it never fights framer's own
                   // transform-based y-animation below.
@@ -65,7 +65,7 @@ export function BottomSheet({
               >
                 <div className="mb-4 flex items-center justify-between gap-3">
                   {title ? (
-                    <Dialog.Title className="text-base font-bold text-white">{title}</Dialog.Title>
+                    <Dialog.Title className="text-base font-bold text-mf-glass-text">{title}</Dialog.Title>
                   ) : (
                     <Dialog.Title className="sr-only">Dialog</Dialog.Title>
                   )}
@@ -74,7 +74,7 @@ export function BottomSheet({
                     <button
                       type="button"
                       aria-label="Close"
-                      className="grid size-8 shrink-0 place-items-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-white"
+                      className="grid size-8 shrink-0 place-items-center rounded-full text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text"
                     >
                       <X className="size-4" />
                     </button>

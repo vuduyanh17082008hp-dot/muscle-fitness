@@ -41,6 +41,7 @@ import {
 } from "@/app/dashboard/actions";
 
 import { Logo } from "@/components/brand/logo";
+import { FloatingDante } from "@/components/dashboard/floating-dante";
 
 /* =========================================================
    TYPES
@@ -215,63 +216,84 @@ function SidebarContent({
 }: SidebarContentProps) {
   return (
     <>
-      <div className="flex h-20 items-center border-b border-white/10 px-5">
+      <div className="flex h-20 items-center border-b border-mf-glass-border px-5">
         <Logo href="/dashboard" tagline="Client OS" showTextOnMobile onClick={onNavigate} />
       </div>
 
       <nav
         aria-label="Dashboard navigation"
-        className="flex-1 space-y-5 overflow-y-auto px-3 py-5"
+        className="flex-1 space-y-6 overflow-y-auto px-3 py-5"
       >
-        {navSections.map((section) => (
-          <div key={section.title}>
-            <p className="mb-1.5 px-3 text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
-              {section.title}
-            </p>
+        {navSections.map((section, sectionIndex) => {
+          const isPrimary = sectionIndex === 0;
 
-            <div className="space-y-1">
-              {section.items.map((item) => {
-                const active = isActive(pathname, hash, item);
-                const Icon = item.icon;
+          return (
+            <div key={section.title}>
+              {!isPrimary ? (
+                <p className="mb-1.5 px-3 text-[10px] font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">
+                  {section.title}
+                </p>
+              ) : null}
 
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={onNavigate}
-                    aria-current={active ? "page" : undefined}
-                    className={`group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
-                      active
-                        ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
-                        : "border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/4 hover:text-white"
-                    }`}
-                  >
-                    <Icon className="size-4 shrink-0" />
+              <div className={isPrimary ? "space-y-0.5" : "space-y-0.5"}>
+                {section.items.map((item) => {
+                  const active = isActive(pathname, hash, item);
+                  const Icon = item.icon;
 
-                    <span className="flex-1">{item.label}</span>
-
-                    <ChevronRight
-                      className={`size-4 transition ${
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onNavigate}
+                      aria-current={active ? "page" : undefined}
+                      className={`group relative flex items-center gap-3 rounded-xl px-3 transition ${
+                        isPrimary ? "py-2.5" : "py-2"
+                      } ${
                         active
-                          ? "translate-x-0 opacity-100"
-                          : "-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-60"
+                          ? "bg-mf-glass-hover text-mf-glass-text"
+                          : "text-mf-glass-text-muted hover:bg-mf-glass-hover/60 hover:text-mf-glass-text-secondary"
                       }`}
-                    />
-                  </Link>
-                );
-              })}
+                    >
+                      {active ? (
+                        <span
+                          aria-hidden="true"
+                          className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-mf-glass-brand"
+                        />
+                      ) : null}
+
+                      <Icon
+                        className={`size-4 shrink-0 ${
+                          active ? "text-mf-glass-brand" : "text-mf-glass-text-muted group-hover:text-mf-glass-text-secondary"
+                        }`}
+                      />
+
+                      <span className={`flex-1 ${isPrimary ? "text-sm font-semibold" : "text-[13px] font-medium"}`}>
+                        {item.label}
+                      </span>
+
+                      <ChevronRight
+                        className={`size-3.5 transition ${
+                          active
+                            ? "translate-x-0 text-mf-glass-brand opacity-60"
+                            : "-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-40"
+                        }`}
+                      />
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
-      <div className="border-t border-white/10 p-3">
+      <div className="border-t border-mf-glass-border p-3">
         <Link
           href="/"
           onClick={
             onNavigate
           }
-          className="mb-3 flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/4 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-amber-400/30 hover:bg-amber-400/10 hover:text-amber-200"
+          className="mb-3 flex w-full items-center gap-3 rounded-xl border border-mf-glass-border bg-white/[0.02] px-3 py-2.5 text-sm font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:bg-mf-glass-brand-soft hover:text-mf-glass-text"
         >
           <Home className="size-4 shrink-0" />
 
@@ -283,21 +305,11 @@ function SidebarContent({
           onClick={
             onNavigate
           }
-          className="mb-3 flex items-center gap-3 rounded-xl border border-violet-400/20 bg-violet-400/10 p-3 text-sm text-violet-100 transition hover:bg-violet-400/15"
+          className="mb-3 flex w-full items-center gap-3 rounded-xl border border-mf-glass-border bg-white/[0.02] px-3 py-2.5 text-sm font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:bg-mf-glass-brand-soft hover:text-mf-glass-text"
         >
-          <span className="grid size-9 place-items-center rounded-lg bg-violet-300/10">
-            <Sparkles className="size-4" />
-          </span>
+          <Sparkles className="size-4 shrink-0" />
 
-          <span className="min-w-0 flex-1">
-            <span className="block font-bold">
-              Ask Dante
-            </span>
-
-            <span className="block truncate text-xs text-violet-200/60">
-              Use your real profile data
-            </span>
-          </span>
+          Ask Dante
         </Link>
 
         <form
@@ -307,7 +319,7 @@ function SidebarContent({
         >
           <button
             type="submit"
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-500 transition hover:bg-red-500/10 hover:text-red-300"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-mf-glass-text-muted transition hover:bg-red-500/10 hover:text-red-300"
           >
             <LogOut className="size-4" />
 
@@ -327,7 +339,7 @@ function MobileBottomNav({ pathname, hash }: { pathname: string; hash: string })
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-white/10 bg-mf-bg/95 backdrop-blur-xl lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-mf-glass-border bg-mf-glass-bg/95 backdrop-blur-xl lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {mobilePrimaryNav.map((item) => {
@@ -340,7 +352,7 @@ function MobileBottomNav({ pathname, hash }: { pathname: string; hash: string })
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[9px] font-bold uppercase transition ${
-              active ? "text-amber-300" : "text-zinc-500"
+              active ? "text-mf-glass-brand" : "text-mf-glass-text-muted"
             }`}
           >
             <Icon className="size-[18px]" />
@@ -394,12 +406,12 @@ export function DashboardShell({
   }
 
   return (
-    <div className="min-h-screen bg-mf-bg text-zinc-100">
+    <div className="min-h-screen bg-mf-glass-bg text-mf-glass-text">
       {/* ===================================================
           DESKTOP SIDEBAR
       =================================================== */}
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-white/10 bg-mf-surface/95 backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-mf-glass-border bg-mf-glass-surface/95 backdrop-blur-xl lg:flex">
         <SidebarContent
           pathname={
             pathname
@@ -412,14 +424,14 @@ export function DashboardShell({
           MOBILE HEADER
       =================================================== */}
 
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/10 bg-mf-bg/90 px-4 backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-mf-glass-border bg-mf-glass-bg/90 px-4 backdrop-blur-xl lg:hidden">
         <Logo href="/dashboard" showTextOnMobile className="min-w-0" />
 
         <div className="flex shrink-0 items-center gap-2">
           <Link
             href="/"
             aria-label="Back to homepage"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/4 px-3 py-2 text-xs font-semibold text-zinc-300 transition hover:border-amber-400/30 hover:text-amber-200"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-mf-glass-border bg-white/[0.02] px-3 py-2 text-xs font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-brand"
           >
             <Home className="size-3.5" />
 
@@ -434,7 +446,7 @@ export function DashboardShell({
               )
             }
             aria-label="Open dashboard navigation"
-            className="grid size-10 place-items-center rounded-xl border border-white/10 bg-white/4 text-zinc-300"
+            className="grid size-10 place-items-center rounded-xl border border-mf-glass-border bg-white/[0.02] text-mf-glass-text-secondary"
           >
             <Menu className="size-5" />
           </button>
@@ -456,14 +468,14 @@ export function DashboardShell({
             className="absolute inset-0 bg-black/75 backdrop-blur-sm"
           />
 
-          <aside className="absolute inset-y-0 left-0 flex w-[88%] max-w-80 flex-col border-r border-white/10 bg-mf-surface shadow-2xl">
+          <aside className="absolute inset-y-0 left-0 flex w-[88%] max-w-80 flex-col border-r border-mf-glass-border bg-mf-glass-surface shadow-2xl">
             <button
               type="button"
               onClick={
                 closeMobileMenu
               }
               aria-label="Close dashboard navigation"
-              className="absolute right-3 top-5 z-10 grid size-9 place-items-center rounded-lg border border-white/10 bg-white/4 text-zinc-400"
+              className="absolute right-3 top-5 z-10 grid size-9 place-items-center rounded-lg border border-mf-glass-border bg-white/[0.02] text-mf-glass-text-muted"
             >
               <X className="size-4" />
             </button>
@@ -498,6 +510,14 @@ export function DashboardShell({
       =================================================== */}
 
       <MobileBottomNav pathname={pathname} hash={hash} />
+
+      {/* ===================================================
+          FLOATING DANTE — persistent, calm entry point across
+          every authenticated Client OS page (spec: "Global
+          Floating Dante"). See components/dashboard/floating-dante.tsx.
+      =================================================== */}
+
+      <FloatingDante />
     </div>
   );
 }

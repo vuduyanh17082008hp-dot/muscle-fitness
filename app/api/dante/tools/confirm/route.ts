@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       return NextResponse.json(result, { status: result.ok ? 200 : 404 });
     }
 
-    const result = await confirmPendingAction(supabase, { supabase, userId: user.id, now: new Date() }, parsed.data.actionId);
+    const result = await confirmPendingAction(supabase, { supabase, userId: user.id, now: new Date(), cache: new Map() }, parsed.data.actionId);
     return NextResponse.json(result, { status: result.ok ? 200 : 422 });
   } catch (error) {
     console.error("[DANTE TOOLS CONFIRM ERROR]", error);

@@ -17,6 +17,7 @@ import { SectionTabs } from "@/components/dashboard/section-tabs";
 import { loadTodaySession } from "@/lib/training/load-today-session";
 import { resolveCanonicalMuscle, MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
 import { PrimaryButton } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const TRAIN_TABS = [
   { label: "Today", href: "/dashboard/workouts" },
@@ -254,6 +255,79 @@ async function loadWgerTemplates():
   }
 }
 
+const BANNER_TONE = {
+  amber: {
+    badge: "border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand",
+    border: "hover:border-mf-glass-brand-border",
+    arrow: "group-hover:text-mf-glass-brand",
+  },
+  emerald: {
+    badge: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
+    border: "border-emerald-500/20 bg-emerald-500/[0.05] hover:border-emerald-500/40 hover:bg-emerald-500/[0.08]",
+    arrow: "text-emerald-400 group-hover:text-emerald-300",
+  },
+  neutral: {
+    badge: "border-mf-glass-border bg-white/5 text-mf-glass-text-secondary",
+    border: "hover:border-mf-glass-border-strong",
+    arrow: "group-hover:text-mf-glass-text",
+  },
+} as const;
+
+/**
+ * A single reusable horizontal promo/status pattern — replaces four
+ * near-identical hand-rolled card blocks (Form Coach, SetVision,
+ * Active plan, Recommended split) that previously duplicated the
+ * same badge/title/description/arrow CSS with slightly different
+ * colors each time. Beta feature links use the quiet neutral/amber-
+ * badge-only treatment (glow stays reserved for the hero's one
+ * primary CTA); an active plan is real current state, so it's
+ * allowed the stronger emerald surface accent.
+ */
+function PromoBanner({
+  href,
+  badge,
+  tone = "amber",
+  title,
+  description,
+  meta,
+  surfaceAccent = false,
+}: {
+  href: string;
+  badge: string;
+  tone?: keyof typeof BANNER_TONE;
+  title: string;
+  description: string;
+  meta?: string;
+  /** When true, tints the whole card surface with the tone (reserved for real current-state cards, e.g. an active plan) rather than just the badge. */
+  surfaceAccent?: boolean;
+}) {
+  const t = BANNER_TONE[tone];
+
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "group flex flex-col items-start justify-between gap-4 rounded-[20px] border p-6 transition hover:-translate-y-0.5 sm:flex-row sm:items-center sm:p-7",
+        surfaceAccent ? t.border : cn("border-mf-glass-border bg-mf-glass-surface", t.border),
+      )}
+    >
+      <div className="min-w-0">
+        <span className={cn("rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider", t.badge)}>
+          {badge}
+        </span>
+
+        <h2 className="mt-4 text-xl font-black text-mf-glass-text sm:text-2xl">{title}</h2>
+
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">{description}</p>
+
+        {meta ? <p className="mt-3 text-xs text-mf-glass-text-muted">{meta}</p> : null}
+      </div>
+
+      <ArrowRight className={cn("h-5 w-5 shrink-0 text-mf-glass-text-muted transition group-hover:translate-x-1", t.arrow)} />
+    </Link>
+  );
+}
+
 export default async function WorkoutsPage() {
   const supabase =
     await createClient();
@@ -383,10 +457,10 @@ export default async function WorkoutsPage() {
           equal-weight cards.
       =================================================== */}
 
-      <header className="overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg p-7 sm:p-9">
+      <header className="overflow-hidden rounded-[24px] border border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-7 sm:p-9">
         <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-amber-400">
+            <div className="flex items-center gap-2 text-mf-glass-brand">
               <Dumbbell className="h-4 w-4" />
 
               <p className="text-xs font-black uppercase tracking-[0.28em]">
@@ -396,31 +470,31 @@ export default async function WorkoutsPage() {
 
             {hasTodaySession ? (
               <>
-                <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
+                <h1 className="mt-4 text-4xl font-black tracking-tight text-mf-glass-text sm:text-5xl">
                   {todaySession!.name ?? "Today's session"}
                 </h1>
 
                 {muscleLabels.length > 0 ? (
-                  <p className="mt-3 text-sm font-bold uppercase tracking-[0.14em] text-amber-300">
+                  <p className="mt-3 text-sm font-bold uppercase tracking-[0.14em] text-mf-glass-brand">
                     {muscleLabels.join(" • ")}
                   </p>
                 ) : null}
 
-                <p className="mt-4 text-sm text-zinc-400 sm:text-base">
+                <p className="mt-4 text-sm text-mf-glass-text-muted sm:text-base">
                   {activeExercises.length} exercise{activeExercises.length === 1 ? "" : "s"}
                   {estimatedMinutes !== null ? ` · ~${estimatedMinutes} min` : ""}
                 </p>
               </>
             ) : (
               <>
-                <h1 className="mt-4 text-4xl font-black uppercase tracking-tight sm:text-5xl">
+                <h1 className="mt-4 text-4xl font-black uppercase tracking-tight text-mf-glass-text sm:text-5xl">
                   Build your
-                  <span className="block text-amber-400">
+                  <span className="block text-mf-glass-brand">
                     training programme.
                   </span>
                 </h1>
 
-                <p className="mt-5 max-w-3xl text-sm leading-7 text-zinc-400 sm:text-base">
+                <p className="mt-5 max-w-3xl text-sm leading-7 text-mf-glass-text-muted sm:text-base">
                   Choose a proven split,
                   customise every training
                   day, set muscle priorities,
@@ -441,69 +515,38 @@ export default async function WorkoutsPage() {
               </Link>
             </PrimaryButton>
           ) : (
-            <Link
-              href={`/dashboard/workouts/plans/new?preset=${recommended}`}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-sm font-black text-black transition hover:bg-amber-300"
-            >
-              <WandSparkles className="h-4 w-4" />
-
-              Build recommended plan
-            </Link>
+            <PrimaryButton size="lg" asChild>
+              <Link href={`/dashboard/workouts/plans/new?preset=${recommended}`}>
+                <WandSparkles className="size-4" />
+                Build recommended plan
+              </Link>
+            </PrimaryButton>
           )}
         </div>
       </header>
 
       {/* ===================================================
-          FORM COACH — BETA
+          BETA FEATURES — quieter secondary surface; the hero
+          above carries the page's one primary/glowing CTA.
       =================================================== */}
 
-      <Link
-        href="/dashboard/workouts/form-coach"
-        className="group flex flex-col items-start justify-between gap-4 rounded-3xl border border-amber-400/20 bg-amber-400/[0.05] p-6 transition hover:border-amber-400/40 hover:bg-amber-400/[0.08] sm:flex-row sm:items-center sm:p-7"
-      >
-        <div>
-          <span className="rounded-full bg-amber-400 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-black">
-            Beta
-          </span>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PromoBanner
+          href="/dashboard/workouts/form-coach"
+          badge="Beta"
+          tone="neutral"
+          title="Form Coach"
+          description="Camera-based squat, push-up and plank feedback — live rep counting and form cues, analysed locally in your browser."
+        />
 
-          <h2 className="mt-4 text-xl font-black text-white sm:text-2xl">
-            Form Coach — camera-based squat, push-up &amp; plank feedback
-          </h2>
-
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            Use your webcam for live rep counting and form cues, analysed
-            locally in your browser.
-          </p>
-        </div>
-
-        <ArrowRight className="h-6 w-6 shrink-0 text-amber-400 transition group-hover:translate-x-1" />
-      </Link>
-
-      {/* ===================================================
-          SETVISION — BETA
-      =================================================== */}
-
-      <Link
-        href="/dashboard/workouts/setvision"
-        className="group flex flex-col items-start justify-between gap-4 rounded-3xl border border-amber-400/20 bg-amber-400/[0.05] p-6 transition hover:border-amber-400/40 hover:bg-amber-400/[0.08] sm:flex-row sm:items-center sm:p-7"
-      >
-        <div>
-          <span className="rounded-full bg-amber-400 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-black">
-            Beta
-          </span>
-
-          <h2 className="mt-4 text-xl font-black text-white sm:text-2xl">
-            SetVision — video analysis for Bench, Squat &amp; Deadlift
-          </h2>
-
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            Upload a set to get rep count, ROM, tempo, bar-path consistency and
-            velocity loss, then ask Dante what it means for your next set.
-          </p>
-        </div>
-
-        <ArrowRight className="h-6 w-6 shrink-0 text-amber-400 transition group-hover:translate-x-1" />
-      </Link>
+        <PromoBanner
+          href="/dashboard/workouts/setvision"
+          badge="Beta"
+          tone="neutral"
+          title="SetVision"
+          description="Upload a set for rep count, ROM, tempo, bar-path consistency and velocity loss on Bench, Squat and Deadlift."
+        />
+      </div>
 
       {/* ===================================================
           YOUR CURRENT TRAINING PLAN
@@ -519,42 +562,23 @@ export default async function WorkoutsPage() {
             </p>
           </div>
 
-          <Link
+          <PromoBanner
             href={`/dashboard/workouts/plans/${activePlan.id}`}
-            className="group block rounded-3xl border border-emerald-500/20 bg-emerald-500/6 p-6 transition hover:border-emerald-500/40 hover:bg-emerald-500/10 sm:p-8"
-          >
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <span className="rounded-full bg-emerald-400 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-black">
-                  Active
-                </span>
-
-                <h2 className="mt-4 text-2xl font-black text-white">
-                  {activePlan.name}
-                </h2>
-
-                <p className="mt-2 text-sm leading-6 text-zinc-400">
-                  Goal: {activePlan.goal || "General fitness"} ·{" "}
-                  {activePlan.days_per_week} days/week · {activePlan.weeks} weeks
-                </p>
-
-                <p className="mt-3 text-xs text-zinc-600">
-                  Open the full programme for every workout day, exercise,
-                  sets, reps, RIR and rest periods.
-                </p>
-              </div>
-
-              <ArrowRight className="h-6 w-6 text-emerald-400 transition group-hover:translate-x-1" />
-            </div>
-          </Link>
+            badge="Active"
+            tone="emerald"
+            surfaceAccent
+            title={activePlan.name}
+            description={`Goal: ${activePlan.goal || "General fitness"} · ${activePlan.days_per_week} days/week · ${activePlan.weeks} weeks`}
+            meta="Open the full programme for every workout day, exercise, sets, reps, RIR and rest periods."
+          />
         </section>
       ) : (
-        <section className="rounded-3xl border border-dashed border-white/10 bg-white/[0.02] p-6 sm:p-8">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-600">
+        <section className="rounded-[20px] border border-dashed border-mf-glass-border bg-white/[0.02] p-6 sm:p-8">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
             Your current training plan
           </p>
 
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">
             You do not have an active training plan yet. Build the
             recommended plan below, or choose a split, to generate the
             full programme — every workout day, exercise, sets, reps and
@@ -569,7 +593,7 @@ export default async function WorkoutsPage() {
 
       <section>
         <div className="mb-5">
-          <div className="flex items-center gap-2 text-amber-400">
+          <div className="flex items-center gap-2 text-mf-glass-brand">
             <Sparkles className="h-4 w-4" />
 
             <p className="text-xs font-black uppercase tracking-[0.22em]">
@@ -577,46 +601,19 @@ export default async function WorkoutsPage() {
             </p>
           </div>
 
-          <h2 className="mt-2 text-2xl font-black">
+          <h2 className="mt-2 text-2xl font-black text-mf-glass-text">
             Start here
           </h2>
         </div>
 
-        <Link
+        <PromoBanner
           href={`/dashboard/workouts/plans/new?preset=${recommended}`}
-          className="group block rounded-3xl border border-amber-400/25 bg-amber-400/8 p-6 transition hover:border-amber-400/50 hover:bg-amber-400/12"
-        >
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <span className="rounded-full bg-amber-400 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-black">
-                Recommended
-              </span>
-
-              <h3 className="mt-4 text-2xl font-black">
-                {
-                  recommendedInfo
-                    ?.name
-                }
-              </h3>
-
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-                {
-                  recommendedInfo
-                    ?.description
-                }
-              </p>
-
-              <p className="mt-3 text-xs text-zinc-600">
-                Based on{" "}
-                {trainingDays} training
-                days and your current
-                experience level.
-              </p>
-            </div>
-
-            <ArrowRight className="h-6 w-6 text-amber-400 transition group-hover:translate-x-1" />
-          </div>
-        </Link>
+          badge="Recommended"
+          tone="amber"
+          title={recommendedInfo?.name ?? "Recommended split"}
+          description={recommendedInfo?.description ?? ""}
+          meta={`Based on ${trainingDays} training days and your current experience level.`}
+        />
       </section>
 
       {/* ===================================================
@@ -625,11 +622,11 @@ export default async function WorkoutsPage() {
 
       <section>
         <div className="mb-5">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-600">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
             Choose your structure
           </p>
 
-          <h2 className="mt-2 text-2xl font-black">
+          <h2 className="mt-2 text-2xl font-black text-mf-glass-text">
             Training splits
           </h2>
         </div>
@@ -642,32 +639,32 @@ export default async function WorkoutsPage() {
                   split.id
                 }
                 href={`/dashboard/workouts/plans/new?preset=${split.id}`}
-                className="group rounded-2xl border border-white/10 bg-mf-surface p-5 transition hover:border-amber-400/30 hover:bg-white/4"
+                className="group rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-5 transition hover:-translate-y-0.5 hover:border-mf-glass-brand-border hover:bg-white/4"
               >
                 <div className="flex items-center justify-between gap-3">
                   {split.id ===
                   "custom" ? (
-                    <Target className="h-5 w-5 text-amber-400" />
+                    <Target className="h-5 w-5 text-mf-glass-brand" />
                   ) : (
-                    <Layers3 className="h-5 w-5 text-zinc-600 transition group-hover:text-amber-400" />
+                    <Layers3 className="h-5 w-5 text-mf-glass-text-muted transition group-hover:text-mf-glass-brand" />
                   )}
 
-                  <ArrowRight className="h-4 w-4 text-zinc-700 transition group-hover:translate-x-1 group-hover:text-amber-400" />
+                  <ArrowRight className="h-4 w-4 text-mf-glass-text-muted transition group-hover:translate-x-1 group-hover:text-mf-glass-brand" />
                 </div>
 
-                <h3 className="mt-5 font-black text-white">
+                <h3 className="mt-5 font-black text-mf-glass-text">
                   {
                     split.name
                   }
                 </h3>
 
-                <p className="mt-2 text-sm leading-6 text-zinc-500">
+                <p className="mt-2 text-sm leading-6 text-mf-glass-text-muted">
                   {
                     split.description
                   }
                 </p>
 
-                <p className="mt-4 text-xs leading-5 text-zinc-700">
+                <p className="mt-4 text-xs leading-5 text-mf-glass-text-muted">
                   {
                     split.suitableFor
                   }
@@ -693,11 +690,11 @@ export default async function WorkoutsPage() {
               </p>
             </div>
 
-            <h2 className="mt-2 text-2xl font-black">
+            <h2 className="mt-2 text-2xl font-black text-mf-glass-text">
               wger public templates
             </h2>
 
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-mf-glass-text-muted">
               Community templates are
               used as starting points,
               then adapted to your Muscle
@@ -709,7 +706,7 @@ export default async function WorkoutsPage() {
             href="https://wger.de/"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-600 hover:text-emerald-400"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-mf-glass-text-muted hover:text-emerald-400"
           >
             wger
             <ExternalLink className="h-3.5 w-3.5" />
@@ -728,7 +725,7 @@ export default async function WorkoutsPage() {
                   href={`/dashboard/workouts/plans/new?preset=${template.preset}&source=wger&templateName=${encodeURIComponent(
                     template.name,
                   )}`}
-                  className="rounded-2xl border border-emerald-500/15 bg-emerald-500/5 p-5 transition hover:border-emerald-500/30 hover:bg-emerald-500/8"
+                  className="rounded-[20px] border border-emerald-500/15 bg-emerald-500/5 p-5 transition hover:-translate-y-0.5 hover:border-emerald-500/30 hover:bg-emerald-500/8"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-400">
@@ -745,14 +742,14 @@ export default async function WorkoutsPage() {
                   </h3>
 
                   {template.description ? (
-                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-500">
+                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-mf-glass-text-muted">
                       {
                         template.description
                       }
                     </p>
                   ) : null}
 
-                  <p className="mt-4 text-xs text-zinc-700">
+                  <p className="mt-4 text-xs text-mf-glass-text-muted">
                     Adapted to{" "}
                     {
                       SPLIT_OPTIONS.find(
@@ -769,7 +766,7 @@ export default async function WorkoutsPage() {
             )}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-white/10 p-6 text-sm text-zinc-600">
+          <div className="rounded-[20px] border border-dashed border-mf-glass-border p-6 text-sm text-mf-glass-text-muted">
             External templates are
             temporarily unavailable.
             Built-in Muscle Fitness
@@ -777,7 +774,7 @@ export default async function WorkoutsPage() {
           </div>
         )}
 
-        <p className="mt-4 text-xs leading-5 text-zinc-700">
+        <p className="mt-4 text-xs leading-5 text-mf-glass-text-muted">
           Community templates are not
           automatically treated as
           medically or professionally
@@ -793,11 +790,11 @@ export default async function WorkoutsPage() {
 
       {plans.length > 0 && (
         <section>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-600">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
             Saved plans
           </p>
 
-          <h2 className="mt-2 text-2xl font-black">
+          <h2 className="mt-2 text-2xl font-black text-mf-glass-text">
             Your programmes
           </h2>
 
@@ -809,23 +806,23 @@ export default async function WorkoutsPage() {
                     plan.id
                   }
                   href={`/dashboard/workouts/plans/${plan.id}`}
-                  className="rounded-2xl border border-white/10 bg-mf-surface p-5 transition hover:border-white/20"
+                  className="rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-5 transition hover:-translate-y-0.5 hover:border-mf-glass-border-strong"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-bold">
+                    <h3 className="font-bold text-mf-glass-text">
                       {
                         plan.name
                       }
                     </h3>
 
-                    <span className="text-[10px] font-black uppercase text-zinc-600">
+                    <span className="text-[10px] font-black uppercase text-mf-glass-text-muted">
                       {
                         plan.status
                       }
                     </span>
                   </div>
 
-                  <p className="mt-3 text-xs text-zinc-600">
+                  <p className="mt-3 text-xs text-mf-glass-text-muted">
                     {
                       plan.days_per_week
                     }{" "}

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
 import type { DanteTool } from "@/lib/dante-core/tools/types";
+import { cached } from "@/lib/dante-core/tools/request-cache";
 
 const inputSchema = z.object({}).strict();
 
@@ -31,7 +32,7 @@ export const getProgressSummaryTool: DanteTool<Record<string, never>, ProgressSu
   async execute(context) {
     const { supabase, userId } = context;
 
-    const athleteState = await buildAthleteState(supabase, userId).catch(() => null);
+    const athleteState = await cached(context, "athleteState", () => buildAthleteState(supabase, userId)).catch(() => null);
 
     if (!athleteState || !athleteState.training.hasAnyLoggedData) {
       return { ok: true, data: { hasLoggedTrainingData: false, dataWindow: null, biggestIncreases: [], biggestDecreases: [] } };

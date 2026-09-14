@@ -116,6 +116,8 @@ export type PerformanceCardProps = {
   loading?: boolean;
   className?: string;
   children?: ReactNode;
+  /** Render on the Performance Glass (near-black + lime) dashboard tokens instead of the legacy Ocean Sunset ones. Default false — the business portal keeps its current look. */
+  glass?: boolean;
 };
 
 const VARIANT_ACCENT: Record<PerformanceCardVariant, string> = {
@@ -125,6 +127,15 @@ const VARIANT_ACCENT: Record<PerformanceCardVariant, string> = {
   progress: "var(--color-domain-progress)",
   dante: "var(--color-domain-dante)",
   neutral: "var(--color-accent-light)",
+};
+
+const VARIANT_ACCENT_GLASS: Record<PerformanceCardVariant, string> = {
+  training: "var(--mf-glass-brand)",
+  nutrition: "var(--mf-success)",
+  recovery: "var(--mf-glass-dante)",
+  progress: "var(--mf-glass-analytics)",
+  dante: "var(--mf-glass-dante)",
+  neutral: "var(--mf-glass-text-muted)",
 };
 
 function TrendGlyph({ trend }: { trend: NonNullable<PerformanceCardMetric["trend"]> }) {
@@ -148,10 +159,14 @@ export function PerformanceCard({
   loading = false,
   className,
   children,
+  glass = false,
 }: PerformanceCardProps) {
   const reduceMotion = useReducedMotion();
-  const accent = VARIANT_ACCENT[variant];
+  const accent = (glass ? VARIANT_ACCENT_GLASS : VARIANT_ACCENT)[variant];
   const Icon = icon ? PERFORMANCE_CARD_ICONS[icon] : null;
+  const textSecondary = glass ? "var(--mf-glass-text-secondary)" : "var(--color-text-secondary)";
+  const textMuted = glass ? "var(--mf-glass-text-muted)" : "var(--color-text-muted)";
+  const titleClassName = glass ? "text-mf-glass-text" : "text-white";
 
   const progressPercent =
     progress != null
@@ -161,10 +176,11 @@ export function PerformanceCard({
   const content = (
     <Card
       interactive={Boolean(href)}
+      glass={glass}
       className={cn("h-full p-5 sm:p-6", className)}
       style={{ borderLeftColor: accent, borderLeftWidth: 3 }}
     >
-      <CardGlow />
+      <CardGlow glass={glass} />
 
       <div className="relative flex flex-col gap-4">
         <div className="flex items-start justify-between gap-3">
@@ -178,12 +194,12 @@ export function PerformanceCard({
               </p>
             ) : null}
 
-            <h3 className="mt-1 truncate text-base font-bold text-white sm:text-lg">
+            <h3 className={cn("mt-1 truncate text-base font-bold sm:text-lg", titleClassName)}>
               {title}
             </h3>
 
             {subtitle ? (
-              <p className="mt-0.5 text-xs leading-5 text-[var(--color-text-secondary)]">
+              <p className="mt-0.5 text-xs leading-5" style={{ color: textSecondary }}>
                 {subtitle}
               </p>
             ) : null}
@@ -217,12 +233,12 @@ export function PerformanceCard({
                   initial={reduceMotion ? false : { opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25 }}
-                  className="font-heading text-3xl tracking-[0.02em] text-white sm:text-4xl"
+                  className={cn("font-heading text-3xl tracking-[0.02em] sm:text-4xl", titleClassName)}
                 >
                   {metric.value}
                 </motion.span>
                 {metric.unit ? (
-                  <span className="pb-1 text-sm font-semibold text-[var(--color-text-muted)]">
+                  <span className="pb-1 text-sm font-semibold" style={{ color: textMuted }}>
                     {metric.unit}
                   </span>
                 ) : null}
@@ -253,7 +269,7 @@ export function PerformanceCard({
                   />
                 </div>
                 {progress?.label ? (
-                  <p className="mt-1.5 text-[11px] text-[var(--color-text-muted)]">
+                  <p className="mt-1.5 text-[11px]" style={{ color: textMuted }}>
                     {progress.label}
                   </p>
                 ) : null}

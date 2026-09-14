@@ -47,7 +47,7 @@ export function ExerciseTechniquePanel({ exercise }: { exercise: ExerciseLibrary
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-orange-500/25 bg-orange-500/10 text-xs font-black uppercase tracking-[0.1em] text-orange-300 transition hover:bg-orange-500/20"
+        className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-mf-glass-brand-border bg-mf-glass-brand-soft text-xs font-black uppercase tracking-[0.1em] text-mf-glass-brand transition hover:bg-mf-glass-brand-soft"
       >
         <Eye className="h-3.5 w-3.5" />
         View technique
@@ -58,29 +58,29 @@ export function ExerciseTechniquePanel({ exercise }: { exercise: ExerciseLibrary
           {motion ? (
             <ExerciseMotionPlayer data={motion} />
           ) : (
-            <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-6 text-center">
-              <Sparkles className="size-5 text-zinc-600" />
-              <p className="text-xs font-semibold text-zinc-400">
+            <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-mf-glass-border bg-mf-glass-bg-deep px-4 py-6 text-center">
+              <Sparkles className="size-5 text-mf-glass-text-muted" />
+              <p className="text-xs font-semibold text-mf-glass-text-secondary">
                 Technique animation coming soon
               </p>
-              <p className="text-[11px] leading-5 text-zinc-600">
+              <p className="text-[11px] leading-5 text-mf-glass-text-muted">
                 We only publish an animation once its motion data has been verified.
               </p>
             </div>
           )}
 
           {Object.keys(highlights).length > 0 ? (
-            <MuscleMap highlights={highlights} />
+            <MuscleMap highlights={highlights} accentColor="var(--mf-glass-brand)" />
           ) : null}
 
           {exercise.commonMistakes && exercise.commonMistakes.length > 0 ? (
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-rose-400">
+              <p className="text-[10px] font-black uppercase tracking-wider text-mf-glass-danger">
                 Common mistakes
               </p>
               <ul className="mt-2 space-y-1.5">
                 {exercise.commonMistakes.map((mistake) => (
-                  <li key={mistake} className="text-xs leading-6 text-zinc-500">
+                  <li key={mistake} className="text-xs leading-6 text-mf-glass-text-muted">
                     • {mistake}
                   </li>
                 ))}

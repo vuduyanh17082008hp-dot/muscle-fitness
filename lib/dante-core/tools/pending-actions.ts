@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getDanteTool } from "@/lib/dante-core/tools/registry";
 import type { ToolContext } from "@/lib/dante-core/tools/types";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
+import { safeExecuteTool } from "@/lib/dante-core/tools/safe-execute";
 
 /**
  * The pending-action model (Part 8/9) for a Dante WRITE tool call.
@@ -137,7 +138,7 @@ export async function confirmPendingAction(
     return { ok: false, status: "failed", error: "This action's saved details are no longer valid." };
   }
 
-  const executionResult = await tool.execute(context, parsedArgs.data);
+  const executionResult = await safeExecuteTool(tool, context, parsedArgs.data);
 
   if (!executionResult.ok) {
     await supabase

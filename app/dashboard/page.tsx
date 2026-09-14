@@ -1,391 +1,221 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
+import { computeDailyTotals } from "@/lib/nutrition/food-log/totals";
 import { loadReadinessForUser } from "@/lib/dante-core/server/load-readiness-for-user";
-import { getOrBuildDailyIntelligence } from "@/lib/dante-core/daily-intelligence";
+import { getOrBuildDailyIntelligence, type DailyIntelligence } from "@/lib/dante-core/daily-intelligence";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
-import { loadTodaySession } from "@/lib/training/load-today-session";
-import { buildDailyDecision } from "@/lib/dante-core/daily-decision-engine";
+import type { AthleteState } from "@/lib/athlete-state/types";
+import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-session";
+import { buildDailyDecision, type DailyDecision } from "@/lib/dante-core/daily-decision-engine";
 import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
-import { PerformanceCard } from "@/components/ui/performance-card";
-import { PerformanceHalo } from "@/components/dashboard/performance-halo";
-import { TodayPlanSection } from "@/components/dashboard/today-plan";
-import { DanteIntelligencePanel } from "@/components/dante/dante-intelligence-panel";
-import { DailyActionsRow } from "@/components/dante/daily-actions-row";
+import { loadRecentWorkoutSessions } from "@/lib/dashboard/load-recent-workout-sessions";
+import { loadWeeklyNutritionTotals } from "@/lib/dashboard/load-weekly-nutrition-totals";
+import { buildMuscleIntelligence } from "@/lib/dashboard/muscle-intelligence";
+import { buildRecentActivity } from "@/lib/dashboard/recent-activity";
+import { buildProgressSnapshot } from "@/lib/dashboard/progress-snapshot";
+import type { TraceableDecision } from "@/lib/dante-core/types";
 
-export const dynamic =
-  "force-dynamic";
+import { DashboardHeader } from "@/components/dashboard/glass/dashboard-header";
+import { TodaysPlanCard } from "@/components/dashboard/glass/todays-plan-card";
+import { ReadinessCard } from "@/components/dashboard/glass/readiness-card";
+import { NutritionCard } from "@/components/dashboard/glass/nutrition-card";
+import { DanteCard } from "@/components/dashboard/glass/dante-card";
+import { MuscleIntelligenceCard } from "@/components/dashboard/glass/muscle-intelligence-card";
+import { RecentActivityCard } from "@/components/dashboard/glass/recent-activity-card";
+import { ProgressSnapshotCard } from "@/components/dashboard/glass/progress-snapshot-card";
+
+export const dynamic = "force-dynamic";
 
 /* =========================================================
    HELPERS
 ========================================================= */
 
-function formatValue(
-  value:
-    | string
-    | number
-    | null
-    | undefined,
-  suffix = ""
-) {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return "Not available";
-  }
+function formatTodayLabel(now: Date, timeZone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }).formatToParts(now);
 
-  return `${value}${suffix}`;
+    const weekday = parts.find((part) => part.type === "weekday")?.value ?? "";
+    const day = parts.find((part) => part.type === "day")?.value ?? "";
+    const month = parts.find((part) => part.type === "month")?.value ?? "";
+
+    return [weekday, `${day} ${month}`].filter(Boolean).join(", ");
+  } catch {
+    return now.toDateString();
+  }
 }
 
-function formatList(
-  value:
-    | string[]
-    | null
-    | undefined
-) {
-  if (
-    !value ||
-    value.length === 0
-  ) {
-    return "Not provided";
+function unwrap<T>(result: PromiseSettledResult<T>, label: string): T | null {
+  if (result.status === "fulfilled") {
+    return result.value;
   }
 
-  return value.join(", ");
-}
-
-function humanize(
-  value:
-    | string
-    | null
-    | undefined
-) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return value
-    .replaceAll("_", " ")
-    .replace(
-      /\b\w/g,
-      (character) =>
-        character.toUpperCase()
-    );
-}
-
-const LOAD_STATE_STATUS: Record<string, { label: string; tone: "good" | "warning" | "critical" }> = {
-  green: { label: "On track", tone: "good" },
-  amber: { label: "Elevated load", tone: "warning" },
-  red: { label: "High load", tone: "critical" },
-};
-
-/* =========================================================
-   INFORMATION ROW
-========================================================= */
-
-function InformationRow({
-  label,
-  value,
-}: {
-  label: string;
-  value:
-    | string
-    | number;
-}) {
-  return (
-    <div className="flex flex-col gap-1 border-b border-white/5 py-4 first:pt-0 last:border-b-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-      <span className="text-sm text-zinc-500">
-        {label}
-      </span>
-
-      <span className="max-w-lg text-sm font-medium leading-6 text-zinc-200 sm:text-right">
-        {value}
-      </span>
-    </div>
-  );
+  console.warn(`[DASHBOARD] ${label} failed:`, result.reason);
+  return null;
 }
 
 /* =========================================================
-   DASHBOARD PAGE
+   DASHBOARD PAGE — Performance Glass
 ========================================================= */
 
 export default async function DashboardPage() {
-  const supabase =
-    await createClient();
-
-  /* =======================================================
-     AUTH
-  ======================================================= */
+  const supabase = await createClient();
 
   const {
     data: { user },
-  } =
-    await supabase.auth.getUser();
+  } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect(
-      "/login?next=/dashboard"
-    );
+    redirect("/login?next=/dashboard");
   }
 
-  /* =======================================================
-     LOAD USER DATA
-  ======================================================= */
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("user_id, full_name, avatar_url, timezone, onboarding_completed")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
-  const [
-    profileResponse,
-    fitnessResponse,
-    preferencesResponse,
-  ] = await Promise.all([
-    /* -----------------------------------------------------
-       PROFILE
-    ----------------------------------------------------- */
-
-    supabase
-      .from("profiles")
-      .select(
-        `
-          user_id,
-          full_name,
-          avatar_url,
-          date_of_birth,
-          gender,
-          timezone,
-          role,
-          onboarding_completed,
-          created_at,
-          updated_at
-        `
-      )
-      .eq(
-        "user_id",
-        user.id
-      )
-      .maybeSingle(),
-
-    /* -----------------------------------------------------
-       FITNESS
-    ----------------------------------------------------- */
-
-    supabase
-      .from(
-        "fitness_profiles"
-      )
-      .select(
-        `
-          user_id,
-          height_cm,
-          weight_kg,
-          goal,
-          experience,
-          training_days,
-          session_duration_minutes,
-          training_location,
-          available_equipment,
-          priority_muscles,
-          physical_limitations,
-          calories_target,
-          protein_target_g,
-          carbs_target_g,
-          fat_target_g
-        `
-      )
-      .eq(
-        "user_id",
-        user.id
-      )
-      .maybeSingle(),
-
-    /* -----------------------------------------------------
-       PREFERENCES
-    ----------------------------------------------------- */
-
-    supabase
-      .from(
-        "user_preferences"
-      )
-      .select(
-        `
-          user_id,
-          meals_per_day,
-          food_preferences,
-          excluded_foods,
-          allergies,
-          weekly_food_budget,
-          cooking_ability,
-          meal_prep_frequency,
-          sleep_hours,
-          daily_steps,
-          work_schedule,
-          stress_level,
-          preferred_training_time
-        `
-      )
-      .eq(
-        "user_id",
-        user.id
-      )
-      .maybeSingle(),
-  ]);
-
-  /* =======================================================
-     DATABASE ERRORS
-  ======================================================= */
-
-  if (
-    profileResponse.error
-  ) {
-    throw new Error(
-      `Unable to load profile: ${profileResponse.error.message}`
-    );
+  if (profileError) {
+    throw new Error(`Unable to load profile: ${profileError.message}`);
   }
 
-  if (
-    fitnessResponse.error
-  ) {
-    throw new Error(
-      `Unable to load fitness profile: ${fitnessResponse.error.message}`
-    );
-  }
-
-  if (
-    preferencesResponse.error
-  ) {
-    throw new Error(
-      `Unable to load preferences: ${preferencesResponse.error.message}`
-    );
-  }
-
-  const profile =
-    profileResponse.data;
-
-  const fitness =
-    fitnessResponse.data;
-
-  const preferences =
-    preferencesResponse.data;
-
-  /* =======================================================
-     ONBOARDING CHECK
-  ======================================================= */
-
-  if (
-    !profile ||
-    !profile.onboarding_completed
-  ) {
+  if (!profile || !profile.onboarding_completed) {
     redirect("/onboarding");
   }
 
-  /* =======================================================
-     TODAY — READINESS, DANTE, TRAIN/FUEL/RECOVER
+  const timeZone = profile.timezone || "UTC";
+  const now = new Date();
+  const { localDate } = localDateTimeParts(now, timeZone);
 
-     Real data only: Dante Core's readiness engine (deterministic —
-     see lib/dante-core/readiness-engine.ts) and the cached daily
-     narrative (lib/dante-core/daily-intelligence.ts) both already
-     exist and back /api/dante/readiness and the old DailyIntelligenceCard
-     respectively. Loaded here server-side so the Today Hero renders
-     with real data on first paint instead of a client-side fetch.
+  /* =======================================================
+     DOMAIN LOADS — Promise.allSettled so one domain failing
+     (e.g. Nutrition) never breaks the rest of the Dashboard
+     (spec: "Partial Failures" — domain isolation).
   ======================================================= */
 
   const [
-    { readiness, recoveryContext, trainingContext },
-    dailyIntelligence,
-    { plan: nutritionPlan },
-    foodLog,
-    todaySession,
-    athleteState,
-  ] = await Promise.all([
+    readinessForUserResult,
+    dailyIntelligenceResult,
+    nutritionContextResult,
+    foodLogResult,
+    todaySessionResult,
+    athleteStateResult,
+    recentWorkoutSessionsResult,
+    weeklyNutritionTotalsResult,
+  ] = await Promise.allSettled([
     loadReadinessForUser(supabase, user.id),
     getOrBuildDailyIntelligence(supabase, user.id),
     loadNutritionContext(supabase, user.id),
-    loadFoodLogForDate(supabase, user.id),
-    loadTodaySession(supabase, user.id),
-    buildAthleteState(supabase, user.id),
+    loadFoodLogForDate(supabase, user.id, localDate),
+    loadTodaySession(supabase, user.id, now, timeZone),
+    buildAthleteState(supabase, user.id, { now }),
+    loadRecentWorkoutSessions(supabase, user.id, 5),
+    loadWeeklyNutritionTotals(supabase, user.id, now, timeZone, 7),
   ]);
 
-  const { decision: dailyDecision, proposedActions } = buildDailyDecision(
-    athleteState,
-    trainingContext,
-    todaySession,
-  );
+  const readinessForUser = unwrap(readinessForUserResult, "loadReadinessForUser");
+  const dailyIntelligence: DailyIntelligence | null = unwrap(dailyIntelligenceResult, "getOrBuildDailyIntelligence");
+  const nutritionContext = unwrap(nutritionContextResult, "loadNutritionContext");
+  const foodLog = unwrap(foodLogResult, "loadFoodLogForDate") ?? {
+    date: localDate,
+    entries: [],
+    totals: computeDailyTotals([]),
+  };
+  const todaySession = unwrap(todaySessionResult, "loadTodaySession");
+  const athleteState: AthleteState | null = unwrap(athleteStateResult, "buildAthleteState");
+  const recentWorkoutSessions = unwrap(recentWorkoutSessionsResult, "loadRecentWorkoutSessions") ?? [];
+  const weeklyNutritionTotals = unwrap(weeklyNutritionTotalsResult, "loadWeeklyNutritionTotals") ?? [];
+
+  const recoveryContext = readinessForUser?.recoveryContext ?? null;
+  const trainingContext = readinessForUser?.trainingContext ?? null;
+  const nutritionPlan = nutritionContext?.plan ?? null;
 
   /* =======================================================
-     DISPLAY NAME
+     DISPLAY NAME / GREETING
   ======================================================= */
 
   const displayName =
-    profile.full_name ||
-    user.user_metadata
-      ?.full_name ||
-    user.email?.split("@")[0] ||
-    "Athlete";
+    profile.full_name || user.user_metadata?.full_name || user.email?.split("@")[0] || "Athlete";
 
   /* =======================================================
-     THREE PILLARS — real values only, each independently
-     nullable rather than fabricated when data is missing.
+     DANTE — Daily Decision Engine. Requires the Athlete State
+     + Training Context; degrades to "unavailable" rather than
+     guessing when either failed to load.
   ======================================================= */
 
-  const sessionsLast7Days = recoveryContext.trainingLoad.sessionsLast7Days;
-  const trainingDaysTarget = fitness?.training_days ?? null;
+  let dailyDecision: TraceableDecision<DailyDecision> | null = null;
+  let proposedActions: ReturnType<typeof buildDailyDecision>["proposedActions"] = [];
 
-  const trainValue =
-    trainingDaysTarget && trainingDaysTarget > 0
-      ? Math.round((sessionsLast7Days / trainingDaysTarget) * 100)
-      : null;
+  if (athleteState && trainingContext) {
+    const result = buildDailyDecision(athleteState, trainingContext, todaySession);
+    dailyDecision = result.decision;
+    proposedActions = result.proposedActions;
+  }
 
-  const fuelValue = dailyIntelligence.nutritionAdherencePercent;
-  const recoverValue = recoveryContext.todayScoreResult.score;
+  const programAdaptations =
+    athleteState && trainingContext ? buildAdaptiveProgram(athleteState, trainingContext) : [];
 
-  const loadStatus = LOAD_STATE_STATUS[recoveryContext.trainingLoad.state] ?? null;
-
-  const ctaHref = todaySession
-    ? `/dashboard/workouts/session/${todaySession.id}`
-    : "/dashboard/workouts/plans/new";
-
-  const ctaLabel = todaySession ? "Start workout" : "Build a plan";
-
-  /* =======================================================
-     ADAPTIVE PROGRAM — reuses the exact athleteState/trainingContext
-     already loaded above for the daily decision; zero extra queries.
-  ======================================================= */
-
-  const programAdaptations = buildAdaptiveProgram(athleteState, trainingContext);
-
-  const todaySessionExerciseIds = new Set(
-    todaySession?.exercises.map((exercise) => exercise.exerciseId) ?? [],
-  );
+  const todaySessionExerciseIds = new Set(todaySession?.exercises.map((exercise) => exercise.exerciseId) ?? []);
 
   const readyToProgressCount = programAdaptations.filter(
     (adaptation) =>
-      adaptation.decision.action === "INCREASE_LOAD" &&
-      todaySessionExerciseIds.has(adaptation.decision.exerciseId),
+      adaptation.decision.action === "INCREASE_LOAD" && todaySessionExerciseIds.has(adaptation.decision.exerciseId),
   ).length;
 
   /* =======================================================
-     TODAY'S PLAN — one canonical daily-action list, derived
-     from the exact same real data already loaded above
-     (no extra queries, no fabricated items).
+     TODAY'S PLAN
   ======================================================= */
 
   const todayPlanActions = buildTodayPlan({
     todaySession,
-    hasCheckinToday: recoveryContext.today !== null,
+    hasCheckinToday: Boolean(recoveryContext?.today),
     proteinTargetG: nutritionPlan?.target.protein ?? null,
     proteinLoggedG: foodLog.totals.protein,
-    adaptive: todaySession
-      ? {
-          dailyDecisionCode: dailyDecision.decision.decisionCode,
-          dailyDecisionRecommendation: dailyDecision.recommendation,
-          recoveryStatusLabel: athleteState.recovery.status,
-          readyToProgressCount,
-        }
-      : undefined,
+    adaptive:
+      todaySession && dailyDecision
+        ? {
+            dailyDecisionCode: dailyDecision.decision.decisionCode,
+            dailyDecisionRecommendation: dailyDecision.recommendation,
+            recoveryStatusLabel: athleteState?.recovery.status ?? null,
+            readyToProgressCount,
+          }
+        : undefined,
+  });
+
+  /* =======================================================
+     PROGRESS SNAPSHOT / MUSCLE INTELLIGENCE / RECENT ACTIVITY
+     — pure view-model builders over data already loaded above.
+  ======================================================= */
+
+  const sessionsLast7Days = recoveryContext?.trainingLoad.sessionsLast7Days ?? 0;
+  const trainingDaysTarget = athleteState?.profile.trainingFrequency ?? null;
+
+  const muscleIntelligenceEntries = athleteState ? buildMuscleIntelligence(athleteState) : [];
+
+  const recentActivityEntries = buildRecentActivity({
+    recentWorkoutSessions,
+    recoveryTrend: recoveryContext?.trend30Days ?? [],
+    weeklyNutritionTotals,
+    todayLocalDate: localDate,
+  });
+
+  const progressSnapshot = buildProgressSnapshot({
+    sessionsCompletedLast7Days: sessionsLast7Days,
+    trainingDaysTarget,
+    recoveryTrend30Days: recoveryContext?.trend30Days ?? [],
+    recoveryScoreToday: recoveryContext?.todayScoreResult.score ?? null,
+    recoverySevenDayAverage: recoveryContext?.averages7Days.score ?? null,
+    weeklyNutritionTotals,
+    proteinTargetG: nutritionPlan?.target.protein ?? null,
+    currentWeightKg: athleteState?.profile.weightKg ?? null,
   });
 
   /* =======================================================
@@ -393,422 +223,73 @@ export default async function DashboardPage() {
   ======================================================= */
 
   return (
-    <main className="min-h-screen bg-mf-bg text-white">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+    // DashboardShell already provides the page's <main> landmark plus a
+    // max-w-[1600px] mx-auto padded wrapper — this used to duplicate both
+    // (a second nested <main> and a second max-width+padding container),
+    // which doubled the horizontal inset and starved the grid below of
+    // width. This is a plain content fragment now, nothing more.
+    <>
+      <DashboardHeader
+          displayName={displayName}
+          todayLabel={formatTodayLabel(now, timeZone)}
+          avatarUrl={profile.avatar_url}
+        />
 
         {/* =================================================
-            GREETING
+            ONE canonical Bento grid — 12 columns at xl (>=1280px).
+            Top row: Today's Plan / Readiness / Nutrition / Dante,
+            each col-span-3 (sums to 12 — no wrap, no dead columns).
+            Lower row: Muscle Intelligence (7) + a Recent Activity /
+            Progress Snapshot stack (5). Mobile order puts Dante
+            ahead of Nutrition (spec); md/xl restore Nutrition-then-
+            Dante to match the approved reference composition.
         ================================================= */}
 
-        <p className="text-sm text-zinc-500">
-          Welcome back, <span className="text-zinc-300">{displayName}</span>
-        </p>
-
-        {/* =================================================
-            TODAY HERO — one dominant performance state, not
-            a row of equal-weight cards.
-        ================================================= */}
-
-        <section className="mt-4 overflow-hidden rounded-[24px] border border-white/10 bg-linear-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-10">
-          <p className="text-[11px] font-black uppercase tracking-[0.3em] text-amber-400">
-            Today
-          </p>
-
-          <div className="mt-6 flex flex-col items-center gap-8 lg:flex-row lg:items-center lg:justify-between lg:gap-12">
-            <PerformanceHalo
-              className="lg:order-2 lg:w-[280px] lg:shrink-0"
-              center={{
-                score: readiness.readinessScore,
-                status: dailyIntelligence.recoveryStatus,
-                confidence: readiness.confidence,
-              }}
-              train={{
-                label: "Train",
-                value: trainValue,
-                detail:
-                  trainingDaysTarget
-                    ? `${sessionsLast7Days} of ${trainingDaysTarget} sessions this week`
-                    : `${sessionsLast7Days} sessions in the last 7 days`,
-                color: "var(--color-domain-training)",
-              }}
-              fuel={{
-                label: "Fuel",
-                value: fuelValue,
-                detail:
-                  fuelValue !== null
-                    ? `${fuelValue}% of today's calorie target`
-                    : "No nutrition target set",
-                color: "var(--color-domain-nutrition)",
-              }}
-              recover={{
-                label: "Recover",
-                value: recoverValue,
-                detail: recoveryContext.today
-                  ? `${humanize(readiness.systemicFatigue)} systemic fatigue`
-                  : "No check-in yet today",
-                color: "var(--color-domain-recovery)",
-              }}
-            />
-
-            <div className="w-full text-center lg:order-1 lg:max-w-xl lg:text-left">
-              <h1 className="text-2xl font-bold text-white sm:text-3xl">
-                {todaySession
-                  ? todaySession.name ?? "Today's session"
-                  : "No session scheduled today"}
-              </h1>
-
-              <p className="mt-3 text-sm leading-6 text-zinc-400 sm:text-base">
-                {dailyIntelligence.narrative}
-              </p>
-
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
-                <Link
-                  href="/onboarding?edit=1"
-                  className="inline-flex h-12 items-center justify-center rounded-xl border border-white/10 bg-white/4 px-5 text-sm font-semibold text-zinc-300 transition-colors duration-200 hover:border-white/20 hover:bg-white/8 hover:text-white"
-                >
-                  Edit profile
-                </Link>
-              </div>
-            </div>
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:mt-6 sm:gap-4 md:grid-cols-2 xl:grid-cols-12">
+          <div className="order-1 xl:col-span-3">
+            <TodaysPlanCard todaySession={todaySession} actions={todayPlanActions} timeZone={timeZone} />
           </div>
-        </section>
 
-        {/* =================================================
-            TODAY'S PLAN — the single most important next
-            action, made visually obvious rather than buried
-            in a row of equal-weight cards.
-        ================================================= */}
+          <div className="order-2 xl:col-span-3">
+            <ReadinessCard
+              scoreResult={
+                recoveryContext?.todayScoreResult ?? {
+                  score: null,
+                  status: null,
+                  drivers: [],
+                  missingInputs: [],
+                  baseline: null,
+                }
+              }
+              todayCheckin={recoveryContext?.today ?? null}
+              error={readinessForUserResult.status === "rejected"}
+            />
+          </div>
 
-        <TodayPlanSection actions={todayPlanActions} />
+          <div className="order-3 md:order-4 xl:col-span-3">
+            <DanteCard decision={dailyDecision} narrative={dailyIntelligence?.narrative ?? null} />
+          </div>
 
-        {/* =================================================
-            THREE PERFORMANCE PILLARS
-        ================================================= */}
+          <div className="order-4 md:order-3 xl:col-span-3">
+            <NutritionCard
+              target={nutritionPlan?.target ?? null}
+              totals={foodLog.totals}
+              error={nutritionContextResult.status === "rejected" || foodLogResult.status === "rejected"}
+            />
+          </div>
 
-        <section className="mt-8 grid gap-4 lg:grid-cols-3">
-          <PerformanceCard
-            variant="training"
-            icon="dumbbell"
-            title={todaySession ? todaySession.name ?? "Today's session" : "Rest day"}
-            subtitle={todaySession ? "Today's planned session" : "No session scheduled today"}
-            status={loadStatus ?? undefined}
-            metric={{ value: sessionsLast7Days, unit: "sessions / 7d" }}
-            progress={
-              trainValue !== null
-                ? {
-                    value: trainValue,
-                    label:
-                      trainingDaysTarget
-                        ? `${sessionsLast7Days} of ${trainingDaysTarget} sessions this week`
-                        : undefined,
-                  }
-                : undefined
-            }
-            actions={
-              <Link
-                href={ctaHref}
-                className="inline-flex items-center gap-1.5 text-sm font-bold text-amber-300 transition-colors duration-200 hover:text-amber-200"
-              >
-                {ctaLabel}
-                <ArrowRight className="size-3.5" />
-              </Link>
-            }
-          />
+          <div className="order-5 md:col-span-2 xl:col-span-7">
+            <MuscleIntelligenceCard
+              entries={muscleIntelligenceEntries}
+              error={athleteStateResult.status === "rejected"}
+            />
+          </div>
 
-          <PerformanceCard
-            variant="nutrition"
-            icon="utensils"
-            title="Nutrition"
-            subtitle={`${foodLog.totals.calories} of ${formatValue(nutritionPlan?.target.calories)} kcal today`}
-            metric={{ value: fuelValue ?? "—", unit: fuelValue !== null ? "%" : undefined }}
-            progress={
-              fuelValue !== null
-                ? { value: fuelValue, label: `${foodLog.totals.protein}g protein logged` }
-                : undefined
-            }
-            href="/dashboard/nutrition"
-          />
-
-          <PerformanceCard
-            variant="recovery"
-            icon="heart-pulse"
-            title="Recovery"
-            subtitle={
-              recoveryContext.today
-                ? `${humanize(readiness.systemicFatigue)} systemic fatigue`
-                : "No check-in yet today"
-            }
-            metric={{ value: recoverValue ?? "—" }}
-            progress={
-              recoverValue !== null
-                ? {
-                    value: recoverValue,
-                    label:
-                      recoveryContext.today?.sleep_hours != null
-                        ? `${recoveryContext.today.sleep_hours}h sleep last night`
-                        : "Sleep not logged",
-                  }
-                : undefined
-            }
-            href="/dashboard/recovery"
-          />
-        </section>
-
-        {/* =================================================
-            DANTE — intelligence across all three pillars
-        ================================================= */}
-
-        <div className="mt-6">
-          <DanteIntelligencePanel
-            recommendation={dailyIntelligence.narrative}
-            why={readiness.limitingFactors}
-            confidence={readiness.confidence}
-            primaryAction={
-              todaySession &&
-              (dailyDecision.decision.decisionCode === "modify_session" ||
-                dailyDecision.decision.decisionCode === "prioritize_recovery")
-                ? { label: "View changes", href: ctaHref }
-                : todaySession && readyToProgressCount > 0
-                  ? { label: "View workout", href: ctaHref }
-                  : undefined
-            }
-            actions={
-              proposedActions.length > 0 ? (
-                <DailyActionsRow
-                  proposedActions={proposedActions}
-                  decisionConfidenceLevel={dailyDecision.confidence}
-                />
-              ) : undefined
-            }
-          />
+          <div className="order-6 flex flex-col gap-3 sm:gap-4 md:col-span-2 xl:col-span-5">
+            <RecentActivityCard entries={recentActivityEntries} now={now} />
+            <ProgressSnapshotCard snapshot={progressSnapshot} />
+          </div>
         </div>
-
-        {/* =================================================
-            DETAILS — profile reference, not a daily decision;
-            kept below the fold, one flat card each rather than
-            nested cards.
-        ================================================= */}
-
-        <section className="mt-10 grid gap-6 xl:grid-cols-2">
-
-          {/* ===============================================
-              TRAINING PROFILE
-          =============================================== */}
-
-          <article className="rounded-2xl border border-white/10 p-6 sm:p-8">
-            <div className="mb-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-500">
-                Training profile
-              </p>
-
-              <h2 className="mt-2 text-2xl font-bold text-white">
-                Your current setup
-              </h2>
-            </div>
-
-            <InformationRow
-              label="Primary goal"
-              value={humanize(
-                fitness?.goal
-              )}
-            />
-
-            <InformationRow
-              label="Experience"
-              value={humanize(
-                fitness?.experience
-              )}
-            />
-
-            <InformationRow
-              label="Height"
-              value={formatValue(
-                fitness?.height_cm,
-                " cm"
-              )}
-            />
-
-            <InformationRow
-              label="Weight"
-              value={formatValue(
-                fitness?.weight_kg,
-                " kg"
-              )}
-            />
-
-            <InformationRow
-              label="Training days"
-              value={formatValue(
-                fitness
-                  ?.training_days,
-                " days per week"
-              )}
-            />
-
-            <InformationRow
-              label="Session duration"
-              value={formatValue(
-                fitness
-                  ?.session_duration_minutes,
-                " minutes"
-              )}
-            />
-
-            <InformationRow
-              label="Training location"
-              value={humanize(
-                fitness
-                  ?.training_location
-              )}
-            />
-
-            <InformationRow
-              label="Priority muscles"
-              value={formatList(
-                fitness
-                  ?.priority_muscles
-              )}
-            />
-
-            <InformationRow
-              label="Available equipment"
-              value={formatList(
-                fitness
-                  ?.available_equipment
-              )}
-            />
-
-            <InformationRow
-              label="Physical limitations"
-              value={
-                fitness
-                  ?.physical_limitations ||
-                "No limitations reported"
-              }
-            />
-          </article>
-
-          {/* ===============================================
-              NUTRITION + LIFESTYLE
-          =============================================== */}
-
-          <article className="rounded-2xl border border-white/10 p-6 sm:p-8">
-            <div className="mb-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-500">
-                Nutrition and lifestyle
-              </p>
-
-              <h2 className="mt-2 text-2xl font-bold text-white">
-                Daily conditions
-              </h2>
-            </div>
-
-            <InformationRow
-              label="Meals per day"
-              value={formatValue(
-                preferences
-                  ?.meals_per_day
-              )}
-            />
-
-            <InformationRow
-              label="Food preferences"
-              value={formatList(
-                preferences
-                  ?.food_preferences
-              )}
-            />
-
-            <InformationRow
-              label="Excluded foods"
-              value={formatList(
-                preferences
-                  ?.excluded_foods
-              )}
-            />
-
-            <InformationRow
-              label="Allergies"
-              value={formatList(
-                preferences
-                  ?.allergies
-              )}
-            />
-
-            <InformationRow
-              label="Weekly food budget"
-              value={
-                preferences
-                  ?.weekly_food_budget !==
-                  null &&
-                preferences
-                  ?.weekly_food_budget !==
-                  undefined
-                  ? `${preferences.weekly_food_budget} SGD`
-                  : "Not provided"
-              }
-            />
-
-            <InformationRow
-              label="Cooking ability"
-              value={humanize(
-                preferences
-                  ?.cooking_ability
-              )}
-            />
-
-            <InformationRow
-              label="Meal-prep frequency"
-              value={humanize(
-                preferences
-                  ?.meal_prep_frequency
-              )}
-            />
-
-            <InformationRow
-              label="Sleep"
-              value={formatValue(
-                preferences
-                  ?.sleep_hours,
-                " hours"
-              )}
-            />
-
-            <InformationRow
-              label="Daily steps"
-              value={formatValue(
-                preferences
-                  ?.daily_steps
-              )}
-            />
-
-            <InformationRow
-              label="Stress level"
-              value={humanize(
-                preferences
-                  ?.stress_level
-              )}
-            />
-
-            <InformationRow
-              label="Preferred training time"
-              value={humanize(
-                preferences
-                  ?.preferred_training_time
-              )}
-            />
-
-            <InformationRow
-              label="School/work schedule"
-              value={
-                preferences
-                  ?.work_schedule ||
-                "Not provided"
-              }
-            />
-          </article>
-        </section>
-      </div>
-    </main>
+    </>
   );
 }

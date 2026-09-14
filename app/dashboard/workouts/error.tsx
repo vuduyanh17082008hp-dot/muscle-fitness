@@ -37,7 +37,7 @@ export default function WorkoutsError({
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-mf-bg px-4 py-12 text-white">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-mf-glass-bg px-4 py-12 text-mf-glass-text">
       {/* Background */}
       <div
         aria-hidden="true"
@@ -47,22 +47,22 @@ export default function WorkoutsError({
 
         <div className="absolute left-1/2 top-[-220px] h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-red-500/10 blur-[140px]" />
 
-        <div className="absolute bottom-[-280px] right-[-180px] h-[550px] w-[550px] rounded-full bg-orange-500/[0.08] blur-[150px]" />
+        <div className="absolute bottom-[-280px] right-[-180px] h-[550px] w-[550px] rounded-full bg-mf-glass-brand/[0.08] blur-[150px]" />
 
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(7,7,7,0.88)_76%)]" />
       </div>
 
-      <section className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/10 bg-mf-surface/95 shadow-[0_30px_120px_rgba(0,0,0,0.65)] backdrop-blur-xl">
+      <section className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-mf-glass-border bg-mf-glass-surface/95 shadow-[0_30px_120px_rgba(0,0,0,0.65)] backdrop-blur-xl">
         {/* Top accent */}
-        <div className="h-1 w-full bg-gradient-to-r from-red-600 via-orange-400 to-transparent" />
+        <div className="h-1 w-full bg-gradient-to-r from-red-600 via-mf-glass-brand to-transparent" />
 
         <div className="p-6 sm:p-10">
           {/* Brand */}
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-orange-500/20 bg-orange-500/10">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-mf-glass-brand-border bg-mf-glass-brand-soft">
               <Dumbbell
                 aria-hidden="true"
-                className="h-5 w-5 text-orange-400"
+                className="h-5 w-5 text-mf-glass-brand"
               />
             </span>
 
@@ -71,7 +71,7 @@ export default function WorkoutsError({
                 Muscle Fitness
               </p>
 
-              <p className="mt-1 text-xs text-zinc-600">
+              <p className="mt-1 text-xs text-mf-glass-text-muted">
                 Workout Management System
               </p>
             </div>
@@ -94,7 +94,7 @@ export default function WorkoutsError({
             Something went wrong
           </h1>
 
-          <p className="mt-4 max-w-xl text-sm leading-7 text-zinc-500 sm:text-base">
+          <p className="mt-4 max-w-xl text-sm leading-7 text-mf-glass-text-muted sm:text-base">
             The workout system could not complete your request.
             Your account and saved information have not been
             removed. Try loading this section again.
@@ -112,20 +112,20 @@ export default function WorkoutsError({
               </p>
 
               {error.digest ? (
-                <p className="mt-3 break-all font-mono text-xs text-zinc-600">
+                <p className="mt-3 break-all font-mono text-xs text-mf-glass-text-muted">
                   Error ID: {error.digest}
                 </p>
               ) : null}
             </div>
           ) : (
-            <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
-              <p className="text-sm leading-6 text-zinc-500">
+            <div className="mt-8 rounded-2xl border border-mf-glass-border bg-white/[0.025] p-5">
+              <p className="text-sm leading-6 text-mf-glass-text-muted">
                 An unexpected error occurred while loading your
                 workouts. Use the retry button below to recover.
               </p>
 
               {error.digest ? (
-                <p className="mt-3 break-all font-mono text-xs text-zinc-700">
+                <p className="mt-3 break-all font-mono text-xs text-mf-glass-text-muted">
                   Reference: {error.digest}
                 </p>
               ) : null}
@@ -137,7 +137,7 @@ export default function WorkoutsError({
             <button
               type="button"
               onClick={() => reset()}
-              className="group inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-orange-400 px-6 text-sm font-black uppercase tracking-[0.12em] text-black transition hover:bg-orange-300 focus:outline-none focus:ring-4 focus:ring-orange-500/20"
+              className="group inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-6 text-sm font-black uppercase tracking-[0.12em] text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover focus:outline-none focus:ring-4 focus:ring-mf-glass-brand/20"
             >
               <RefreshCw
                 aria-hidden="true"
@@ -150,7 +150,7 @@ export default function WorkoutsError({
             <button
               type="button"
               onClick={handleReturnToDashboard}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-6 text-sm font-bold text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-mf-glass-border bg-white/[0.04] px-6 text-sm font-bold text-mf-glass-text-secondary transition hover:border-mf-glass-border-strong hover:bg-white/[0.08] hover:text-mf-glass-text"
             >
               <ArrowLeft
                 aria-hidden="true"

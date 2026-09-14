@@ -37,6 +37,73 @@
   --mf-success: #4dd4ac;
   --mf-warning: #f6c453;
   --mf-danger: #f36a6a;
+
+  /* ---- New Muscle Fitness brand system — a distinct neon-lime
+     identity synced to the new logo, layered on top of Ocean Sunset
+     rather than replacing it. Deliberately separate from
+     --color-accent (Ocean Sunset's app-wide default, used by dozens
+     of authenticated-app components): this lets the public brand
+     mark and marketing surfaces adopt the new lime identity without
+     retinting the rest of the product. The public site is now fully
+     dark (no remaining light/cream sections), so there is no
+     light-surface variant of the brand color to carry here. ---- */
+  --mf-brand: #d8ff20;
+  --mf-brand-hover: #c8f018;
+  --mf-brand-ink: #06110a;
+  --mf-brand-soft: rgba(216, 255, 32, 0.1);
+  --mf-brand-border: rgba(216, 255, 32, 0.26);
+
+  /* Public marketing near-black surface scale — scoped to the public
+     homepage/nav/footer wrapper elements; the authenticated Product
+     OS keeps the Ocean Sunset --mf-bg/--mf-surface above unchanged.
+     --mf-pub-text is primary copy (headlines, metrics); -secondary is
+     body/supporting copy (must stay comfortably readable); -muted is
+     metadata/captions only (timestamps, disclosures, chrome labels). */
+  --mf-pub-bg: #050505;
+  --mf-pub-bg-deep: #09090a;
+  --mf-pub-surface: #101112;
+  --mf-pub-surface-elevated: #151719;
+  --mf-pub-surface-hover: #1a1c1e;
+  --mf-pub-text: #f7f8fa;
+  --mf-pub-text-secondary: #a1a6ae;
+  --mf-pub-text-muted: #777d86;
+  --mf-pub-border: rgba(255, 255, 255, 0.08);
+  --mf-pub-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* ---- Performance Glass — the authenticated Client Dashboard's own
+     scope (app/dashboard/page.tsx + components/dashboard/dashboard-shell.tsx).
+     Literal values match --mf-pub-* exactly (one canonical dark-graphite
+     system), aliased under a dashboard-specific name so components read
+     a token that describes THEIR surface rather than borrowing the
+     public-marketing name. Brand lime / Dante violet / analytics cyan
+     / warning / danger all reuse the SAME tokens the rest of the app
+     already defines above — nothing is redefined twice. ---- */
+  --mf-glass-bg: var(--mf-pub-bg);
+  --mf-glass-bg-deep: var(--mf-pub-bg-deep);
+  --mf-glass-surface: var(--mf-pub-surface);
+  --mf-glass-elevated: var(--mf-pub-surface-elevated);
+  --mf-glass-hover: var(--mf-pub-surface-hover);
+  --mf-glass-text: var(--mf-pub-text);
+  --mf-glass-text-secondary: var(--mf-pub-text-secondary);
+  /* Deliberately its own literal, not aliased to --mf-pub-text-muted:
+     that shared value (#777d86) measures ~4.5:1 on the dashboard's card
+     surfaces — right at the WCAG floor and visibly low-contrast for the
+     small (10-11px) metadata labels used throughout. Scoped to the
+     dashboard only so public marketing/privacy/terms are untouched. */
+  --mf-glass-text-muted: #868c96;
+  --mf-glass-border: var(--mf-pub-border);
+  --mf-glass-border-strong: var(--mf-pub-border-strong);
+
+  --mf-glass-brand: var(--mf-brand);
+  --mf-glass-brand-hover: var(--mf-brand-hover);
+  --mf-glass-brand-ink: var(--mf-brand-ink);
+  --mf-glass-brand-soft: var(--mf-brand-soft);
+  --mf-glass-brand-border: var(--mf-brand-border);
+
+  --mf-glass-dante: var(--mf-violet);
+  --mf-glass-analytics: var(--mf-cyan);
+  --mf-glass-warning: var(--mf-warning);
+  --mf-glass-danger: var(--mf-danger);
 }
 
 @theme {
@@ -57,6 +124,39 @@
   --color-mf-success: var(--mf-success);
   --color-mf-warning: var(--mf-warning);
   --color-mf-danger: var(--mf-danger);
+
+  --color-mf-brand: var(--mf-brand);
+  --color-mf-brand-hover: var(--mf-brand-hover);
+  --color-mf-brand-ink: var(--mf-brand-ink);
+
+  --color-mf-pub-bg: var(--mf-pub-bg);
+  --color-mf-pub-bg-deep: var(--mf-pub-bg-deep);
+  --color-mf-pub-surface: var(--mf-pub-surface);
+  --color-mf-pub-surface-elevated: var(--mf-pub-surface-elevated);
+  --color-mf-pub-surface-hover: var(--mf-pub-surface-hover);
+  --color-mf-pub-text: var(--mf-pub-text);
+  --color-mf-pub-text-secondary: var(--mf-pub-text-secondary);
+  --color-mf-pub-text-muted: var(--mf-pub-text-muted);
+
+  --color-mf-glass-bg: var(--mf-glass-bg);
+  --color-mf-glass-bg-deep: var(--mf-glass-bg-deep);
+  --color-mf-glass-surface: var(--mf-glass-surface);
+  --color-mf-glass-elevated: var(--mf-glass-elevated);
+  --color-mf-glass-hover: var(--mf-glass-hover);
+  --color-mf-glass-text: var(--mf-glass-text);
+  --color-mf-glass-text-secondary: var(--mf-glass-text-secondary);
+  --color-mf-glass-text-muted: var(--mf-glass-text-muted);
+  --color-mf-glass-border: var(--mf-glass-border);
+  --color-mf-glass-border-strong: var(--mf-glass-border-strong);
+  --color-mf-glass-brand: var(--mf-glass-brand);
+  --color-mf-glass-brand-hover: var(--mf-glass-brand-hover);
+  --color-mf-glass-brand-ink: var(--mf-glass-brand-ink);
+  --color-mf-glass-brand-soft: var(--mf-glass-brand-soft);
+  --color-mf-glass-brand-border: var(--mf-glass-brand-border);
+  --color-mf-glass-dante: var(--mf-glass-dante);
+  --color-mf-glass-analytics: var(--mf-glass-analytics);
+  --color-mf-glass-warning: var(--mf-glass-warning);
+  --color-mf-glass-danger: var(--mf-glass-danger);
 
   /* ---- Tailwind's built-in `amber` scale, remapped to Ocean Sunset
      gold/sunset. This is what actually retints the ~700 existing
@@ -196,6 +296,12 @@
 
   --shadow-accent-strong:
     0 0 55px rgba(255, 122, 69, 0.32);
+
+  /* Restrained lime brand glow — CTA hover, brand mark, small active
+     indicators only (spec: large blur, low opacity, never on every
+     card). */
+  --shadow-brand:
+    0 0 35px rgba(216, 255, 32, 0.18);
 
   /* Transitions — interaction ~180-300ms, reveal ~400-650ms (see the
      motion primitives in components/animation/ for the reveal timings). */

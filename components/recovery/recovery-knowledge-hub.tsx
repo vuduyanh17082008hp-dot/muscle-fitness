@@ -7,15 +7,15 @@ import {
 
 export function RecoveryKnowledgeHub() {
   return (
-    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
+    <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="flex items-center gap-2">
-        <BookOpen className="size-4 text-amber-400" aria-hidden="true" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+        <BookOpen className="size-4 text-mf-glass-dante" aria-hidden="true" />
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
           Recovery Knowledge Hub
         </p>
       </div>
 
-      <h2 className="mt-2 text-xl font-black text-white">
+      <h2 className="mt-2 text-xl font-black text-mf-glass-text">
         Practical, evidence-aware recovery topics
       </h2>
 
@@ -29,7 +29,7 @@ export function RecoveryKnowledgeHub() {
 
           return (
             <div key={category}>
-              <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-amber-400/80">
+              <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-brand/80">
                 {category}
               </p>
 
@@ -37,18 +37,18 @@ export function RecoveryKnowledgeHub() {
                 {topics.map((topic) => (
                   <details
                     key={topic.id}
-                    className="group rounded-2xl border border-white/[0.08] bg-black/20 p-4 open:border-amber-400/20"
+                    className="group rounded-2xl border border-mf-glass-border bg-mf-glass-bg-deep p-4 open:border-mf-glass-brand-border"
                   >
-                    <summary className="cursor-pointer list-none text-sm font-bold text-white marker:content-none">
+                    <summary className="cursor-pointer list-none text-sm font-bold text-mf-glass-text marker:content-none">
                       {topic.title}
                     </summary>
 
-                    <p className="mt-2 text-xs leading-5 text-zinc-500">
+                    <p className="mt-2 text-xs leading-5 text-mf-glass-text-muted">
                       {topic.whyItMatters}
                     </p>
 
-                    <p className="mt-2 text-xs leading-5 text-zinc-500">
-                      <span className="font-semibold text-zinc-400">
+                    <p className="mt-2 text-xs leading-5 text-mf-glass-text-muted">
+                      <span className="font-semibold text-mf-glass-text-secondary">
                         Training impact:{" "}
                       </span>
                       {topic.trainingImpact}
@@ -58,22 +58,22 @@ export function RecoveryKnowledgeHub() {
                       {topic.practicalActions.map((action) => (
                         <li
                           key={action}
-                          className="flex gap-2 text-xs leading-5 text-zinc-500"
+                          className="flex gap-2 text-xs leading-5 text-mf-glass-text-muted"
                         >
-                          <span className="text-amber-400">•</span>
+                          <span className="text-mf-glass-brand">•</span>
                           {action}
                         </li>
                       ))}
                     </ul>
 
-                    <p className="mt-3 text-[11px] leading-4 text-zinc-600">
+                    <p className="mt-3 text-[11px] leading-4 text-mf-glass-text-muted">
                       Evidence: ask Dante below for current PubMed / Europe
                       PMC / MedlinePlus sources on this topic.
                     </p>
 
                     <a
                       href="#dante-recovery-coach"
-                      className="mt-3 inline-flex text-xs font-bold text-amber-300 hover:text-amber-200"
+                      className="mt-3 inline-flex text-xs font-bold text-mf-glass-dante hover:text-mf-glass-brand"
                     >
                       Ask Dante →
                     </a>

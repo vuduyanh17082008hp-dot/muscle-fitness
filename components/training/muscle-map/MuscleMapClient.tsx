@@ -1,59 +1,51 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
+import { motion } from "framer-motion";
 
 import { MUSCLE_DISPLAY_NAME, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
-import { MUSCLE_REGIONS } from "@/lib/training/muscle-regions";
-import type { RecommendationCategory } from "@/lib/training/recommendations";
+import { MUSCLE_REGIONS, type MuscleRegion } from "@/lib/training/muscle-regions";
+import { MUSCLE_ATLAS_ENTRIES } from "@/lib/training/muscle-ontology";
+import { useReducedMotion } from "@/lib/useReducedMotion";
 import type { MuscleMapEntry, MuscleMapProps } from "@/components/training/muscle-map/types";
-import { WhatIfPanel } from "@/components/training/muscle-map/WhatIfPanel";
+import { MuscleSearchBar } from "@/components/training/muscle-map/MuscleSearchBar";
+import { MuscleDetailPanel } from "@/components/training/muscle-map/MuscleDetailPanel";
 
-type MapMode = "volume" | "change" | "performance";
+export type MapMode = "anatomy" | "volume" | "change" | "performance";
 
 const MODE_LABEL: Record<MapMode, string> = {
+  anatomy: "Anatomy",
   volume: "Volume",
   change: "Change",
   performance: "Performance",
 };
 
-const RECOMMENDATION_LABEL: Record<RecommendationCategory, string> = {
-  MAINTAIN: "Maintain",
-  INCREASE_GRADUALLY: "Increase gradually",
-  REDUCE_SLIGHTLY: "Reduce slightly",
-  REDISTRIBUTE: "Redistribute",
-  MONITOR: "Monitor",
-  INSUFFICIENT_DATA: "Insufficient data",
-};
-
 function volumeFill(value: number, max: number): string {
-  if (max <= 0) return "var(--muscle-map-empty, #2a2a2a)";
+  if (max <= 0) return "var(--mf-glass-elevated)";
   const ratio = Math.min(1, value / max);
-  // Neutral blue intensity scale — never red/green "injury vs optimal" semantics.
   const lightness = 78 - ratio * 46;
-  return `hsl(210 70% ${lightness}%)`;
+  return `hsl(83 80% ${lightness}%)`; // acid-lime hue, intensity by exposure
 }
 
 function changeFill(changePercent: number | null): string {
-  if (changePercent === null) return "var(--muscle-map-empty, #2a2a2a)";
+  if (changePercent === null) return "var(--mf-glass-elevated)";
   const magnitude = Math.min(1, Math.abs(changePercent) / 50);
   const lightness = 78 - magnitude * 46;
-  return `hsl(210 70% ${lightness}%)`;
+  return `hsl(190 80% ${lightness}%)`; // analytics cyan — chart differentiation only, per Client OS color rules
 }
 
 function performanceFill(trend: string): string {
   switch (trend) {
     case "improving":
-      return "hsl(210 70% 38%)";
+      return "var(--mf-glass-brand)";
     case "stable":
-      return "hsl(210 30% 58%)";
+      return "hsl(190 40% 58%)";
     case "declining":
-      return "hsl(210 20% 72%)";
+      return "var(--mf-glass-warning)";
     case "mixed":
       return "hsl(35 60% 60%)";
     default:
-      return "var(--muscle-map-empty, #2a2a2a)";
+      return "var(--mf-glass-elevated)";
   }
 }
 
@@ -62,10 +54,12 @@ export function MuscleMapClient({
   exerciseNames,
   hasAnyLoggedData,
   dataWindow,
+  availableEquipment,
 }: MuscleMapProps) {
   const [view, setView] = useState<"front" | "back">("front");
-  const [mode, setMode] = useState<MapMode>("volume");
+  const [mode, setMode] = useState<MapMode>("anatomy");
   const [selectedMuscle, setSelectedMuscle] = useState<CanonicalMuscle | null>(null);
+  const reduceMotion = useReducedMotion();
 
   const byMuscle = useMemo(() => {
     const map = new Map<CanonicalMuscle, MuscleMapEntry>();
@@ -84,19 +78,29 @@ export function MuscleMapClient({
   const selectedEntry = selectedMuscle ? byMuscle.get(selectedMuscle) ?? null : null;
 
   function fillFor(muscle: CanonicalMuscle): string {
+    if (mode === "anatomy") return "var(--mf-glass-elevated)";
+
     const entry = byMuscle.get(muscle);
-    if (!entry) return "var(--muscle-map-empty, #2a2a2a)";
+    if (!entry) return "var(--mf-glass-elevated)";
 
     if (mode === "volume") return volumeFill(entry.analytics.currentWeek.totalEffectiveSets, maxVolume);
     if (mode === "change") return changeFill(entry.analytics.changePercent);
     return performanceFill(entry.recommendation.inputs.performanceTrend);
   }
 
+  /** Cinematic dim/highlight: only opacity-shifts when something is selected — never on plain hover/idle. */
+  function opacityFor(muscle: CanonicalMuscle): number {
+    if (!selectedMuscle) return 1;
+    return muscle === selectedMuscle ? 1 : 0.32;
+  }
+
   function ariaLabelFor(muscle: CanonicalMuscle): string {
     const entry = byMuscle.get(muscle);
     const name = MUSCLE_DISPLAY_NAME[muscle];
 
-    if (!entry) return `${name} — no logged training data`;
+    if (mode === "anatomy" || !entry) {
+      return `${name}${entry ? "" : " — no logged training data"}`;
+    }
 
     if (mode === "volume") {
       return `${name} — ${entry.analytics.currentWeek.totalEffectiveSets} modeled effective sets this week`;
@@ -109,20 +113,22 @@ export function MuscleMapClient({
     return `${name} — performance trend: ${entry.recommendation.inputs.performanceTrend.replace("_", " ")}`;
   }
 
-  if (!hasAnyLoggedData) {
-    return (
-      <div className="rounded-3xl border border-white/10 bg-zinc-900/60 p-8 text-center">
-        <p className="text-sm text-zinc-400">
-          No logged workout sets were found in the last {dataWindow.weeksOfHistory} week(s). Log a
-          few workouts to unlock muscle-level Training Intelligence.
-        </p>
-      </div>
-    );
+  /** Selecting via the body map itself doesn't change view — the user is already looking at the right one. */
+  function handleSelectFromMap(muscle: CanonicalMuscle) {
+    setSelectedMuscle(muscle);
+  }
+
+  /** Selecting via search auto-switches to the muscle's preferred view (spec §9) — a deliberate one-shot action, not a persistent fight with a manual toggle. */
+  function handleSelectFromSearch(muscle: CanonicalMuscle) {
+    setSelectedMuscle(muscle);
+    setView(MUSCLE_ATLAS_ENTRIES[muscle].preferredView);
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
       <div className="flex flex-col gap-4">
+        <MuscleSearchBar onResolve={handleSelectFromSearch} />
+
         <div className="flex gap-2">
           {(["front", "back"] as const).map((v) => (
             <button
@@ -131,8 +137,8 @@ export function MuscleMapClient({
               onClick={() => setView(v)}
               className={`min-h-11 flex-1 rounded-xl border text-sm font-medium capitalize transition-colors ${
                 view === v
-                  ? "border-white/20 bg-white/10 text-white"
-                  : "border-white/10 text-zinc-400 hover:text-white"
+                  ? "border-mf-glass-border-strong bg-white/10 text-mf-glass-text"
+                  : "border-mf-glass-border text-mf-glass-text-muted hover:text-mf-glass-text"
               }`}
             >
               {v} view
@@ -148,8 +154,8 @@ export function MuscleMapClient({
               onClick={() => setMode(m)}
               className={`min-h-9 rounded-full border px-3 text-xs font-medium transition-colors ${
                 mode === m
-                  ? "border-white/20 bg-white/10 text-white"
-                  : "border-white/10 text-zinc-400 hover:text-white"
+                  ? "border-mf-glass-border-strong bg-white/10 text-mf-glass-text"
+                  : "border-mf-glass-border text-mf-glass-text-muted hover:text-mf-glass-text"
               }`}
             >
               {MODE_LABEL[m]}
@@ -163,52 +169,37 @@ export function MuscleMapClient({
           aria-label={`Muscle map, ${view} view, ${MODE_LABEL[mode].toLowerCase()} mode`}
           className="mx-auto w-full max-w-[280px]"
         >
-          <rect x="70" y="20" width="60" height="60" rx="28" fill="#1c1c1c" />
-          <rect x="72" y="76" width="56" height="130" rx="18" fill="#1c1c1c" />
+          <rect x="70" y="20" width="60" height="60" rx="28" fill="var(--mf-glass-bg-deep)" />
+          <rect x="72" y="76" width="56" height="130" rx="18" fill="var(--mf-glass-bg-deep)" />
 
           {regions.map((region, index) => {
             const fill = fillFor(region.muscle);
             const label = ariaLabelFor(region.muscle);
             const regionKey = `${region.muscle}-${index}`;
+            const isSelected = region.muscle === selectedMuscle;
+
             const commonProps = {
               tabIndex: 0,
               role: "button" as const,
               "aria-label": label,
-              onClick: () => setSelectedMuscle(region.muscle),
+              "aria-pressed": isSelected,
+              onClick: () => handleSelectFromMap(region.muscle),
               onKeyDown: (event: React.KeyboardEvent) => {
                 if (event.key === "Enter" || event.key === " ") {
-                  setSelectedMuscle(region.muscle);
+                  event.preventDefault();
+                  handleSelectFromMap(region.muscle);
                 }
               },
-              className: "cursor-pointer stroke-white/10 transition-opacity hover:opacity-80 focus:outline-none focus-visible:stroke-white",
-              style: { strokeWidth: 1.5 },
+              className: "cursor-pointer transition-colors hover:opacity-90 focus:outline-none focus-visible:stroke-mf-glass-brand",
+              stroke: isSelected ? "var(--mf-glass-brand)" : "rgba(255,255,255,0.1)",
+              style: { strokeWidth: isSelected ? 2.5 : 1.5, transformOrigin: "center" as const },
               fill,
+              initial: false as const,
+              animate: { opacity: opacityFor(region.muscle), scale: isSelected ? 1.03 : 1 },
+              transition: { duration: reduceMotion ? 0 : 0.35, ease: "easeOut" as const },
             };
 
-            if (region.shape === "ellipse") {
-              return (
-                <ellipse
-                  key={regionKey}
-                  {...commonProps}
-                  cx={region.x + region.width / 2}
-                  cy={region.y + region.height / 2}
-                  rx={region.width / 2}
-                  ry={region.height / 2}
-                />
-              );
-            }
-
-            return (
-              <rect
-                key={regionKey}
-                {...commonProps}
-                x={region.x}
-                y={region.y}
-                width={region.width}
-                height={region.height}
-                rx={region.rx ?? 6}
-              />
-            );
+            return renderRegionShape(region, regionKey, commonProps);
           })}
         </svg>
 
@@ -216,177 +207,100 @@ export function MuscleMapClient({
       </div>
 
       <MuscleDetailPanel
+        muscle={selectedMuscle}
         entry={selectedEntry}
         exerciseNames={exerciseNames}
+        hasAnyLoggedData={hasAnyLoggedData}
+        dataWindowWeeks={dataWindow.weeksOfHistory}
+        availableEquipment={availableEquipment}
         onClose={() => setSelectedMuscle(null)}
       />
     </div>
   );
 }
 
-function MuscleMapLegend({ mode }: { mode: MapMode }) {
-  const items: Array<{ label: string; className: string }> =
-    mode === "performance"
-      ? [
-          { label: "Improving", className: "bg-[hsl(210,70%,38%)]" },
-          { label: "Stable", className: "bg-[hsl(210,30%,58%)]" },
-          { label: "Declining", className: "bg-[hsl(210,20%,72%)]" },
-          { label: "Mixed / insufficient data", className: "bg-zinc-700" },
-        ]
-      : [
-          { label: "Lower exposure", className: "bg-[hsl(210,70%,72%)]" },
-          { label: "Moderate exposure", className: "bg-[hsl(210,70%,55%)]" },
-          { label: "Higher exposure", className: "bg-[hsl(210,70%,32%)]" },
-          { label: "No data", className: "bg-zinc-700" },
-        ];
+type RegionCommonProps = {
+  tabIndex: number;
+  role: "button";
+  "aria-label": string;
+  "aria-pressed": boolean;
+  onClick: () => void;
+  onKeyDown: (event: React.KeyboardEvent) => void;
+  className: string;
+  stroke: string;
+  style: { strokeWidth: number; transformOrigin: string };
+  fill: string;
+  initial: false;
+  animate: { opacity: number; scale: number };
+  transition: { duration: number; ease: "easeOut" };
+};
+
+function renderRegionShape(region: MuscleRegion, key: string, props: RegionCommonProps) {
+  if (region.shape === "path") {
+    return <motion.path key={key} {...props} d={region.d} />;
+  }
+
+  if (region.shape === "ellipse") {
+    return (
+      <motion.ellipse
+        key={key}
+        {...props}
+        cx={region.x + region.width / 2}
+        cy={region.y + region.height / 2}
+        rx={region.width / 2}
+        ry={region.height / 2}
+      />
+    );
+  }
 
   return (
-    <div className="rounded-2xl border border-white/10 p-3 text-xs text-zinc-400">
-      <p className="mb-2 font-medium text-zinc-300">Legend</p>
+    <motion.rect
+      key={key}
+      {...props}
+      x={region.x}
+      y={region.y}
+      width={region.width}
+      height={region.height}
+      rx={region.rx ?? 6}
+    />
+  );
+}
+
+function MuscleMapLegend({ mode }: { mode: MapMode }) {
+  // Dynamic hues (volume=lime, change=cyan) are set via inline `style`,
+  // not a Tailwind arbitrary-value class — a runtime-interpolated
+  // `bg-[...]` class string can't be picked up by Tailwind's static
+  // build-time scan, so it would silently render with no background.
+  const dataHue = mode === "change" ? "190 80%" : "83 80%";
+
+  const items: Array<{ label: string; color: string }> =
+    mode === "anatomy"
+      ? [{ label: "Select a muscle to explore", color: "var(--mf-glass-elevated)" }]
+      : mode === "performance"
+        ? [
+            { label: "Improving", color: "var(--mf-glass-brand)" },
+            { label: "Stable", color: "hsl(190 40% 58%)" },
+            { label: "Declining", color: "var(--mf-glass-warning)" },
+            { label: "Mixed / insufficient data", color: "var(--mf-glass-elevated)" },
+          ]
+        : [
+            { label: "Lower exposure", color: `hsl(${dataHue} 72%)` },
+            { label: "Moderate exposure", color: `hsl(${dataHue} 55%)` },
+            { label: "Higher exposure", color: `hsl(${dataHue} 32%)` },
+            { label: "No data", color: "var(--mf-glass-elevated)" },
+          ];
+
+  return (
+    <div className="rounded-2xl border border-mf-glass-border p-3 text-xs text-mf-glass-text-muted">
+      <p className="mb-2 font-medium text-mf-glass-text-secondary">Legend</p>
       <ul className="space-y-1.5">
         {items.map((item) => (
           <li key={item.label} className="flex items-center gap-2">
-            <span className={`h-3 w-3 rounded-full ${item.className}`} />
+            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
             {item.label}
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-function MuscleDetailPanel({
-  entry,
-  exerciseNames,
-  onClose,
-}: {
-  entry: MuscleMapEntry | null;
-  exerciseNames: Record<string, string>;
-  onClose: () => void;
-}) {
-  return (
-    <Dialog.Root open={entry !== null} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60" />
-        <Dialog.Content
-          className={[
-            "fixed z-50 flex flex-col gap-4 overflow-y-auto bg-zinc-950 p-6",
-            "inset-x-0 bottom-0 max-h-[85vh] rounded-t-3xl border-t border-white/10",
-            "sm:inset-x-auto sm:right-0 sm:top-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-l sm:border-t-0",
-          ].join(" ")}
-        >
-          {entry ? (
-            <>
-              <div className="flex items-start justify-between">
-                <div>
-                  <Dialog.Title className="text-lg font-bold text-white">
-                    {MUSCLE_DISPLAY_NAME[entry.muscle]}
-                  </Dialog.Title>
-                  <Dialog.Description className="text-xs text-zinc-500">
-                    Modeled effective weekly volume
-                  </Dialog.Description>
-                </div>
-                <Dialog.Close asChild>
-                  <button type="button" aria-label="Close" className="rounded-full p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white">
-                    <X className="h-4 w-4" />
-                  </button>
-                </Dialog.Close>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <Stat label="Effective volume" value={entry.analytics.currentWeek.totalEffectiveSets} />
-                <Stat label="Direct" value={entry.analytics.currentWeek.directSets} />
-                <Stat label="Indirect (effective)" value={entry.analytics.currentWeek.indirectEffectiveSets} />
-                <Stat label="Frequency" value={`${entry.analytics.frequency} session(s)`} />
-                <Stat
-                  label="Previous week"
-                  value={entry.analytics.previousWeek?.totalEffectiveSets ?? "—"}
-                />
-                <Stat
-                  label="Change"
-                  value={entry.analytics.changePercent !== null ? `${entry.analytics.changePercent > 0 ? "+" : ""}${entry.analytics.changePercent}%` : "—"}
-                />
-                <Stat
-                  label="Personal range"
-                  value={
-                    entry.baseline.recentRange
-                      ? `${entry.baseline.recentRange.min}–${entry.baseline.recentRange.max}`
-                      : "Insufficient data"
-                  }
-                />
-                <Stat
-                  label="Performance"
-                  value={entry.recommendation.inputs.performanceTrend.replace("_", " ")}
-                />
-              </div>
-
-              <section>
-                <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500">
-                  Where did this volume come from?
-                </h3>
-                <ul className="space-y-1.5 text-sm">
-                  {entry.analytics.currentWeek.contributingExercises.map((c, index) => (
-                    <li
-                      key={`${c.exerciseId}-${index}`}
-                      className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2"
-                    >
-                      <span className="text-zinc-300">
-                        {exerciseNames[c.exerciseId] ?? "Unknown exercise"}
-                        <span className="ml-2 text-xs text-zinc-500">
-                          {c.role} · {c.eligibleSets} × {c.contribution}
-                        </span>
-                      </span>
-                      <span className="font-semibold text-white">{c.effectiveSets}</span>
-                    </li>
-                  ))}
-                  {entry.analytics.currentWeek.contributingExercises.length === 0 ? (
-                    <li className="text-zinc-500">No contributing exercises logged this week.</li>
-                  ) : null}
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-zinc-500">
-                  <span>Recommendation</span>
-                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] normal-case text-zinc-300">
-                    Confidence: {entry.recommendation.confidence}
-                  </span>
-                </h3>
-                <p className="mb-2 text-sm font-semibold text-white">
-                  {RECOMMENDATION_LABEL[entry.recommendation.recommendation]}
-                </p>
-                <ul className="space-y-1 text-xs text-zinc-400">
-                  {entry.recommendation.signals.map((signal, index) => (
-                    <li key={index}>• {signal}</li>
-                  ))}
-                </ul>
-                {entry.recommendation.limitations.length > 0 ? (
-                  <ul className="mt-2 space-y-1 text-xs text-zinc-500">
-                    {entry.recommendation.limitations.map((limitation, index) => (
-                      <li key={index}>△ {limitation}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </section>
-
-              <WhatIfPanel
-                muscle={entry.muscle}
-                contributingExercises={entry.analytics.currentWeek.contributingExercises}
-                exerciseNames={exerciseNames}
-              />
-            </>
-          ) : null}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-xl bg-white/5 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className="text-base font-semibold text-white">{value}</p>
     </div>
   );
 }

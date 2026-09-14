@@ -19,6 +19,7 @@ import {
   SPLIT_OPTIONS,
   type SplitPreset,
 } from "@/lib/workouts/presets";
+import { parsePrefillExercise } from "@/lib/workouts/library-params";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,6 +37,11 @@ type NewWorkoutPlanPageProps = {
       | string[];
 
     templateName?:
+      | string
+      | string[];
+
+    /** Set by the Exercise Discovery detail panel's "Add to Program" action — pre-fills the manual exercise picker's search box. */
+    prefillExercise?:
       | string
       | string[];
   }>;
@@ -145,6 +151,11 @@ export default async function NewWorkoutPlanPage({
     ) ??
     null;
 
+  const initialExerciseQuery =
+    parsePrefillExercise(
+      params.prefillExercise,
+    );
+
   return (
     <main className="relative min-h-screen text-white">
       <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -218,6 +229,9 @@ export default async function NewWorkoutPlanPage({
         }
         externalTemplateName={
           externalTemplateName
+        }
+        initialExerciseQuery={
+          initialExerciseQuery
         }
         profile={{
           goal:

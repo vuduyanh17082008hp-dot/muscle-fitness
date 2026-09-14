@@ -26,6 +26,12 @@ import {
 import { cn } from "@/lib/utils";
 import { FORM_COACH_HANDOFF_KEY } from "@/lib/form-coach/handoff";
 import type { DanteInsight } from "@/lib/dante-core/insight";
+import {
+  parseChatStreamChunk,
+  resolveAbortedContent,
+  resolveStreamErrorContent,
+  type ChatStreamEvent,
+} from "@/lib/dante-core/chat-stream-protocol";
 
 /* =========================================================
    TYPES
@@ -43,18 +49,14 @@ type ChatMessage = {
   content: string;
   /** "Why This?" evidence, when this reply carried a real, deterministic recommendation. Never fabricated by the LLM. */
   insight?: DanteInsight | null;
-  /** Set only when Dante proposed a write tool call — nothing is saved until the user explicitly confirms (see PendingConfirmationPanel below). */
+  /** Set only when Dante proposed a write tool call — nothing is saved until the user explicitly confirms (see PendingConfirmationPanel below). Only ever populated from a server `done` event, never while streaming. */
   pendingConfirmation?: PendingConfirmation | null;
   /** Once the user acts on pendingConfirmation, frozen here so the buttons don't re-render as active after a page state update. */
   confirmationResolution?: "confirmed" | "cancelled" | "failed" | null;
-};
-
-type ChatbotResponse = {
-  reply?: string;
-  error?: string;
-  model?: string;
-  insight?: DanteInsight | null;
-  pendingConfirmation?: PendingConfirmation | null;
+  /** True once this message's stream has ended (completed, errored, or aborted) — while false, this is the live-updating placeholder sendMessage() is still appending text to. */
+  isComplete?: boolean;
+  /** True only when the stream ended because the user clicked Stop, not a real failure — used purely to render "stopped" copy rather than the generic unavailable message. */
+  wasAborted?: boolean;
 };
 
 export type QuickPrompt = {
@@ -110,6 +112,15 @@ export type DanteChatProps = {
   contextualSuggestions?: DanteInsight[];
   compact?: boolean;
   className?: string;
+  /**
+   * Small, structured, additive fields merged into the /api/chatbot
+   * request body — e.g. { selectedMuscle: "trapezius" } from the
+   * Muscle Intelligence Atlas's "Ask Dante" tab. Never a raw data
+   * dump; the server independently validates/re-resolves anything
+   * sent here (see getSelectedMuscle in app/api/chatbot/route.ts)
+   * rather than trusting it blindly.
+   */
+  contextPayload?: Record<string, unknown>;
 };
 
 const DEFAULT_WELCOME_MESSAGE =
@@ -287,6 +298,7 @@ export default function DanteChat({
   contextualSuggestions,
   compact = false,
   className,
+  contextPayload,
 }: DanteChatProps = {}) {
   const emptyStatePrompts: QuickPrompt[] =
     contextualSuggestions && contextualSuggestions.length > 0
@@ -325,15 +337,59 @@ export default function DanteChat({
       null
     );
 
+  const abortControllerRef =
+    useRef<AbortController | null>(null);
+
+  const chatWindowRef =
+    useRef<HTMLDivElement | null>(null);
+
+  // Whether the viewport was already near the bottom the last time we
+  // checked — true by default (a fresh conversation should follow
+  // along), flipped to false the moment the user scrolls up on their
+  // own, so a streaming reply never hijacks their scroll position.
+  const shouldAutoScrollRef = useRef(true);
+
+  const textareaRef =
+    useRef<HTMLTextAreaElement | null>(null);
+
   /* =======================================================
-     AUTO SCROLL
+     AUTO SCROLL — follows the stream only while the user is
+     already near the bottom; never hijacks manual scroll-up.
   ======================================================= */
 
+  const NEAR_BOTTOM_THRESHOLD_PX = 120;
+
+  function handleChatWindowScroll() {
+    const el = chatWindowRef.current;
+    if (!el) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom < NEAR_BOTTOM_THRESHOLD_PX;
+  }
+
   useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
+
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
     });
   }, [messages, isLoading]);
+
+  /* =======================================================
+     COMPOSER AUTO-GROW — grows with content up to a sensible
+     maximum, then scrolls internally rather than pushing the rest
+     of the layout around.
+  ======================================================= */
+
+  const COMPOSER_MAX_HEIGHT_PX = 160;
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
+  }, [input]);
 
   /* =======================================================
      FORM COACH HANDOFF — auto-send a session summary left by
@@ -365,6 +421,26 @@ export default function DanteChat({
      SEND MESSAGE
   ======================================================= */
 
+  // Deliberately does NOT claim training/nutrition/recovery data are
+  // "still available" — this fallback fires before this request knows
+  // whether any of that context loaded successfully, so asserting it
+  // did would be a false claim. What IS always true: a failed chat
+  // turn never mutates logged data (that only happens via explicit
+  // confirmed write tools), so this states that instead.
+  const UNAVAILABLE_MESSAGE =
+    "Dante couldn't complete that response.\n\nYour logged data has not been changed.";
+
+  function updateStreamingMessage(
+    messageId: string,
+    update: (message: ChatMessage) => ChatMessage
+  ) {
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId ? update(message) : message
+      )
+    );
+  }
+
   async function sendMessage(override?: string) {
     const trimmed =
       (override ?? input).trim();
@@ -382,104 +458,141 @@ export default function DanteChat({
       content: trimmed,
     };
 
+    const assistantId = crypto.randomUUID();
+
     setMessages((previous) => [
       ...previous,
       userMessage,
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        isComplete: false,
+      },
     ]);
+
+    shouldAutoScrollRef.current = true;
 
     setInput("");
     setIsLoading(true);
     setActivity("thinking");
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      const controller =
-        new AbortController();
-
-      const timeout =
-        window.setTimeout(
-          () => {
-            controller.abort();
-          },
-          60000
-        );
-
-      let response: Response;
-
-      try {
-        response =
-          await fetch(
-            "/api/chatbot",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  message:
-                    trimmed,
-                }),
-
-              signal:
-                controller.signal,
-            }
-          );
-      } finally {
-        window.clearTimeout(
-          timeout
-        );
-      }
-
-      let data: ChatbotResponse;
-
-      try {
-        data =
-          (await response.json()) as ChatbotResponse;
-      } catch {
-        throw new Error(
-          "The server returned an invalid response."
-        );
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ??
-            `Request failed with status ${response.status}.`
-        );
-      }
-
-      if (!data.reply) {
-        throw new Error(
-          "Dante returned an empty response."
-        );
-      }
-
-      const assistantMessage: ChatMessage =
+      const response = await fetch(
+        "/api/chatbot",
         {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: data.reply,
-          insight: data.insight ?? null,
-          pendingConfirmation: data.pendingConfirmation ?? null,
-          confirmationResolution: null,
-        };
+          method: "POST",
 
-      setMessages((previous) => [
-        ...previous,
-        assistantMessage,
-      ]);
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
 
-      setActivity("success");
+          body:
+            JSON.stringify({
+              message:
+                trimmed,
+              ...contextPayload,
+            }),
+
+          signal:
+            controller.signal,
+        }
+      );
+
+      if (!response.ok || !response.body) {
+        let serverError: string | undefined;
+
+        try {
+          const errorBody = (await response.json()) as { error?: string };
+          serverError = errorBody.error;
+        } catch {
+          // Body wasn't JSON (or the stream already started) — fall back to a generic message below.
+        }
+
+        throw new Error(
+          serverError ?? `Request failed with status ${response.status}.`
+        );
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let remainder = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const parsed = parseChatStreamChunk(remainder, chunk);
+        remainder = parsed.remainder;
+
+        // One setMessages call per network chunk (not per line, and
+        // never per character) — batches naturally with however Groq
+        // itself chunked the response, instead of one rerender per token.
+        let appendedText = "";
+        let doneEvent: Extract<ChatStreamEvent, { type: "done" }> | null = null;
+        let errorEvent: Extract<ChatStreamEvent, { type: "error" }> | null = null;
+
+        for (const event of parsed.events) {
+          if (event.type === "delta") {
+            appendedText += event.text;
+          } else if (event.type === "done") {
+            doneEvent = event;
+          } else if (event.type === "error") {
+            errorEvent = event;
+          }
+        }
+
+        if (appendedText) {
+          updateStreamingMessage(assistantId, (message) => ({
+            ...message,
+            content: message.content + appendedText,
+          }));
+        }
+
+        if (doneEvent) {
+          const finalEvent = doneEvent;
+
+          updateStreamingMessage(assistantId, (message) => ({
+            ...message,
+            insight: finalEvent.insight,
+            // A pending confirmation is only ever attached here, from
+            // the server's own completed `done` event — never
+            // rendered speculatively while text is still streaming.
+            pendingConfirmation: finalEvent.pendingConfirmation,
+            confirmationResolution: null,
+            isComplete: true,
+          }));
+
+          setActivity("success");
+        }
+
+        if (errorEvent) {
+          const finalError = errorEvent;
+
+          updateStreamingMessage(assistantId, (message) => ({
+            ...message,
+            content: resolveStreamErrorContent(message.content, finalError.partial, UNAVAILABLE_MESSAGE),
+            isComplete: true,
+          }));
+
+          setActivity("error");
+        }
+      }
     } catch (error: unknown) {
+      const wasAborted =
+        error instanceof DOMException && error.name === "AbortError";
+
       console.error(
         "[DANTE FRONTEND ERROR]",
         error
       );
 
-      setActivity("error");
+      setActivity(wasAborted ? "idle" : "error");
 
       /*
        * Reassuring, non-technical failure state (spec: "Failure
@@ -487,23 +600,25 @@ export default function DanteChat({
        * thinking their own data was affected — Groq failing has no
        * bearing on training/nutrition/recovery data, which all lives
        * in Supabase, not in this request. Technical detail still goes
-       * to the console above for debugging.
+       * to the console above for debugging. An abort keeps whatever
+       * text already streamed in rather than replacing it.
        */
-      const errorChatMessage: ChatMessage =
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content:
-            "Dante is temporarily unavailable.\n\nYour training, nutrition and recovery data are still available.",
-        };
-
-      setMessages((previous) => [
-        ...previous,
-        errorChatMessage,
-      ]);
+      updateStreamingMessage(assistantId, (message) => ({
+        ...message,
+        content: wasAborted
+          ? resolveAbortedContent(message.content)
+          : message.content || UNAVAILABLE_MESSAGE,
+        isComplete: true,
+        wasAborted,
+      }));
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
+  }
+
+  function stopStreaming() {
+    abortControllerRef.current?.abort();
   }
 
   /* =======================================================
@@ -570,7 +685,7 @@ export default function DanteChat({
   }
 
   function handleKeyDown(
-    event: KeyboardEvent<HTMLInputElement>
+    event: KeyboardEvent<HTMLTextAreaElement>
   ) {
     if (
       event.key === "Enter" &&
@@ -580,6 +695,9 @@ export default function DanteChat({
 
       void sendMessage();
     }
+
+    // Shift+Enter falls through to the textarea's own default
+    // behavior — a real newline — preserving the existing intended UX.
   }
 
   function handleInputFocus() {
@@ -605,8 +723,15 @@ export default function DanteChat({
   return (
     <div
       className={cn(
-        "flex w-full flex-col font-sans",
-        compact ? "h-[600px] min-h-[520px]" : "h-[72vh] min-h-170",
+        // Normal-flow flex column: every child below is a sibling in
+        // document flow (status bar → empty-state hero → conversation →
+        // composer). The conversation pane is the ONLY flex-1 child, and
+        // it carries min-h-0 so it actually shrinks to the container's
+        // fixed height instead of growing to fit its content and pushing
+        // the composer out of view — the root cause of the previous
+        // overlap between the chat window and whatever rendered below it.
+        "flex w-full min-h-0 flex-col font-sans",
+        compact ? "h-[600px] min-h-[520px]" : "h-[min(74vh,820px)] min-h-125",
         className,
       )}
     >
@@ -620,10 +745,11 @@ export default function DanteChat({
           className="
             mb-4
             flex
+            shrink-0
             items-center
             justify-between
             gap-3
-            rounded-2xl
+            rounded-[20px]
             border
             border-white/10
             bg-[#12151c]
@@ -682,38 +808,46 @@ export default function DanteChat({
           className="
             mb-4
             flex
+            shrink-0
             flex-col
             items-center
-            rounded-3xl
+            rounded-[24px]
             border
             border-white/10
             bg-gradient-to-b
             from-[#181c25]
             to-[#12151c]
             px-6
-            py-10
+            py-8
             text-center
+            sm:py-9
           "
         >
+          {/* DANTE HERO — mascot + identity. Kept compact so the
+              starters below read as clearly secondary, not a second
+              hero. */}
           <DanteRobot
             state={visualState}
-            size="lg"
+            size="md"
             interactive
           />
 
-          <p className="mt-6 text-xs font-bold uppercase tracking-[0.28em] text-[var(--mf-violet)]">
+          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--mf-violet)]">
             Dante
           </p>
 
-          <h2 className="mt-2 text-2xl font-bold text-white md:text-3xl">
+          <h2 className="mt-1.5 text-2xl font-bold text-white md:text-3xl">
             {heroTitle}
           </h2>
 
-          <p className="mt-3 max-w-md text-sm leading-6 text-white/50">
+          <p className="mt-2.5 line-clamp-2 max-w-md text-sm leading-6 text-white/50">
             {heroSubtitle}
           </p>
 
-          <div className="mt-7 grid w-full max-w-md gap-2 sm:grid-cols-2">
+          {/* CONTEXTUAL STARTERS — visually secondary to the hero
+              above: smaller type, quieter surface, no competing focal
+              weight. 2x2 on desktop, single column on narrow mobile. */}
+          <div className="mt-6 grid w-full max-w-lg grid-cols-1 gap-2.5 sm:grid-cols-2">
             {emptyStatePrompts.map((item) => (
               <button
                 key={item.label}
@@ -721,10 +855,10 @@ export default function DanteChat({
                 onClick={() => handleQuickPrompt(item.prompt)}
                 disabled={isLoading}
                 className="
-                  rounded-2xl
+                  rounded-[16px]
                   border
-                  border-[var(--mf-violet)]/25
-                  bg-[var(--mf-violet)]/8
+                  border-[var(--mf-violet)]/20
+                  bg-[var(--mf-violet)]/6
                   px-4
                   py-3
                   text-left
@@ -733,10 +867,12 @@ export default function DanteChat({
                   leading-5
                   text-[var(--mf-violet)]
                   transition
-                  hover:border-[var(--mf-violet)]/50
-                  hover:bg-[var(--mf-violet)]/14
+                  hover:-translate-y-0.5
+                  hover:border-[var(--mf-violet)]/45
+                  hover:bg-[var(--mf-violet)]/12
                   disabled:cursor-not-allowed
                   disabled:opacity-40
+                  disabled:hover:translate-y-0
                 "
               >
                 {item.label}
@@ -751,10 +887,13 @@ export default function DanteChat({
       =================================================== */}
 
       <div
+        ref={chatWindowRef}
+        onScroll={handleChatWindowScroll}
         className="
+          min-h-0
           flex-1
           overflow-y-auto
-          rounded-3xl
+          rounded-[24px]
           border
           border-white/10
           bg-[#151922]
@@ -879,9 +1018,23 @@ export default function DanteChat({
                         </div>
 
                         {/* =================================
-                            MARKDOWN
+                            MARKDOWN — while this specific message
+                            has no text yet (the very start of a
+                            stream), show a subtle "thinking" state
+                            in its place instead of an empty bubble.
+                            Once the first delta lands, the growing
+                            answer itself becomes the loading
+                            feedback (no separate indicator).
                         ================================= */}
 
+                        {message.content.length === 0 && !message.isComplete ? (
+                          <div
+                            aria-live="polite"
+                            className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--mf-violet)]"
+                          >
+                            Dante is thinking…
+                          </div>
+                        ) : (
                         <ReactMarkdown
                           remarkPlugins={[
                             remarkGfm,
@@ -1145,6 +1298,7 @@ export default function DanteChat({
                         >
                           {message.content}
                         </ReactMarkdown>
+                        )}
 
                         {message.insight ? (
                           <DanteInsightPanel insight={message.insight} />
@@ -1171,28 +1325,6 @@ export default function DanteChat({
             }
           )}
 
-          {/* ===============================================
-              DANTE THINKING
-          =============================================== */}
-
-          {isLoading && (
-            <div className="flex items-start gap-3">
-
-              <div className="mt-1 hidden shrink-0 sm:block">
-                <DanteRobot
-                  state="thinking"
-                  size="sm"
-                />
-              </div>
-
-              <div className="rounded-3xl rounded-tl-md bg-mf-surface-elevated px-5 py-4">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--mf-violet)]">
-                  Dante is thinking…
-                </div>
-              </div>
-            </div>
-          )}
-
           <div
             ref={
               messagesEndRef
@@ -1202,29 +1334,41 @@ export default function DanteChat({
       </div>
 
       {/* ===================================================
-          INPUT AREA
+          COMPOSER — a separate sibling section, always the LAST
+          element in this component's own flex column and never
+          absolutely positioned, so it can never overlap the
+          conversation above it or anything rendered below this
+          component by the page (e.g. the DANTE LEARNED module).
+          shrink-0 keeps it from ever being compressed by the
+          conversation pane's flex-1.
       =================================================== */}
 
       <form
         onSubmit={
           handleSubmit
         }
-        className="mt-4 flex items-center gap-3"
+        className="mt-4 flex shrink-0 items-end gap-3 pb-[env(safe-area-inset-bottom)]"
       >
         <div
           className="
             flex
-            min-h-17
+            min-h-14
             flex-1
-            items-center
-            rounded-full
+            items-end
+            rounded-[20px]
+            border
+            border-white/10
             bg-[#171c26]
             px-5
+            py-3.5
             transition
+            focus-within:border-[var(--mf-violet)]/40
             focus-within:bg-[#1c222e]
           "
         >
-          <input
+          <textarea
+            ref={textareaRef}
+            rows={1}
             value={
               input
             }
@@ -1249,8 +1393,11 @@ export default function DanteChat({
             }
             placeholder="Ask Dante about training, nutrition, recovery..."
             className="
-              min-h-17
+              max-h-40
+              w-full
               flex-1
+              resize-none
+              overflow-y-auto
               bg-transparent
               text-base
               font-normal
@@ -1265,60 +1412,90 @@ export default function DanteChat({
         </div>
 
         {/* =================================================
-            SEND BUTTON
+            SEND / STOP BUTTON — while a response is actively
+            streaming, this becomes Stop (AbortController-backed,
+            Part 10): clicking it cancels the in-flight request and
+            keeps whatever text has already arrived, rather than
+            allowing a second overlapping turn.
         ================================================= */}
 
-        <button
-          type="submit"
-          disabled={
-            isLoading ||
-            !input.trim()
-          }
-          aria-label="Send message to Dante"
-          className="
-            flex
-            h-14
-            w-14
-            shrink-0
-            items-center
-            justify-center
-            rounded-full
-            bg-amber-400
-            text-black
-            shadow-lg
-            shadow-amber-400/10
-            transition
-            hover:scale-105
-            hover:bg-amber-300
-            active:scale-95
-            disabled:cursor-not-allowed
-            disabled:opacity-30
-          "
-        >
-          <svg
-            width="25"
-            height="25"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
+        {isLoading ? (
+          <button
+            type="button"
+            onClick={stopStreaming}
+            aria-label="Stop Dante's response"
+            className="
+              flex
+              h-14
+              w-14
+              shrink-0
+              items-center
+              justify-center
+              rounded-full
+              border
+              border-white/15
+              bg-white/[0.06]
+              text-white
+              shadow-lg
+              transition
+              hover:bg-white/[0.1]
+              active:scale-95
+            "
           >
-            <path
-              d="M22 2L11 13"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <span className="h-3.5 w-3.5 rounded-[3px] bg-current" aria-hidden="true" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={
+              !input.trim()
+            }
+            aria-label="Send message to Dante"
+            className="
+              flex
+              h-14
+              w-14
+              shrink-0
+              items-center
+              justify-center
+              rounded-full
+              bg-amber-400
+              text-black
+              shadow-lg
+              shadow-amber-400/10
+              transition
+              hover:scale-105
+              hover:bg-amber-300
+              active:scale-95
+              disabled:cursor-not-allowed
+              disabled:opacity-30
+            "
+          >
+            <svg
+              width="25"
+              height="25"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M22 2L11 13"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
 
-            <path
-              d="M22 2L15 22L11 13L2 9L22 2Z"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
+              <path
+                d="M22 2L15 22L11 13L2 9L22 2Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
       </form>
     </div>
   );

@@ -101,6 +101,8 @@ const MUSCLE_ALIASES: Record<string, CanonicalMuscle> = {
   side_delts: "lateral_deltoid",
   side_deltoid: "lateral_deltoid",
   side_deltoids: "lateral_deltoid",
+  lateral_delt: "lateral_deltoid",
+  lateral_delts: "lateral_deltoid",
 
   rear_deltoid: "rear_deltoid",
   rear_deltoids: "rear_deltoid",
@@ -120,7 +122,9 @@ const MUSCLE_ALIASES: Record<string, CanonicalMuscle> = {
 
   trapezius: "trapezius",
   traps: "trapezius",
+  trap: "trapezius",
   upper_traps: "trapezius",
+  upper_trap: "trapezius",
 
   biceps: "biceps",
   bicep: "biceps",

@@ -84,17 +84,17 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/70" />
         <Dialog.Content
           className={[
-            "fixed z-50 flex flex-col gap-5 overflow-y-auto bg-zinc-950 p-6",
-            "inset-x-0 bottom-0 max-h-[90vh] rounded-t-3xl border-t border-white/10",
+            "fixed z-50 flex flex-col gap-5 overflow-y-auto bg-mf-glass-surface p-6",
+            "inset-x-0 bottom-0 max-h-[90vh] rounded-t-3xl border-t border-mf-glass-border",
             "sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:max-h-[85vh] sm:w-[440px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:border",
           ].join(" ")}
         >
           <div className="flex items-center justify-between">
-            <Dialog.Title className="text-lg font-black uppercase tracking-wide text-white">
+            <Dialog.Title className="text-lg font-black uppercase tracking-wide text-mf-glass-text">
               Track Food
             </Dialog.Title>
             <Dialog.Close asChild>
-              <button aria-label="Close" className="grid size-9 place-items-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-white">
+              <button aria-label="Close" className="grid size-9 place-items-center rounded-full text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text">
                 <X className="size-5" />
               </button>
             </Dialog.Close>
@@ -103,10 +103,10 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
           {savedFlash ? (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
               <div className="grid size-14 place-items-center rounded-full bg-emerald-500/15 text-emerald-400">✓</div>
-              <p className="text-sm font-bold text-white">Added to Today</p>
+              <p className="text-sm font-bold text-mf-glass-text">Added to Today</p>
             </div>
           ) : saving ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-sm text-zinc-400">
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-sm text-mf-glass-text-muted">
               Saving…
             </div>
           ) : mode === "menu" ? (
@@ -199,12 +199,12 @@ function MenuButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-16 items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] px-5 text-left transition hover:border-amber-400/30 hover:bg-amber-400/5"
+      className="flex min-h-16 items-center gap-4 rounded-2xl border border-mf-glass-border bg-white/[0.03] px-5 text-left transition hover:border-mf-glass-brand-border hover:bg-mf-glass-brand-soft"
     >
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand">
         <Icon className="size-5" />
       </span>
-      <span className="text-base font-bold text-white">{label}</span>
+      <span className="text-base font-bold text-mf-glass-text">{label}</span>
     </button>
   )
 }

@@ -22,14 +22,14 @@ import { cn } from "@/lib/utils";
 
 const FATIGUE_STYLES: Record<string, { label: string; className: string }> = {
   low: { label: "LOW", className: "text-emerald-300" },
-  moderate: { label: "MODERATE", className: "text-amber-300" },
+  moderate: { label: "MODERATE", className: "text-mf-glass-warning" },
   high: { label: "HIGH", className: "text-rose-300" },
-  unknown: { label: "UNKNOWN", className: "text-zinc-500" },
+  unknown: { label: "UNKNOWN", className: "text-mf-glass-text-muted" },
 };
 
 function barColor(percent: number): string {
   if (percent >= 75) return "bg-emerald-400";
-  if (percent >= 50) return "bg-amber-400";
+  if (percent >= 50) return "bg-mf-glass-warning";
   return "bg-rose-400";
 }
 
@@ -68,8 +68,8 @@ export function MuscleReadinessPanel() {
 
   if (status === "loading") {
     return (
-      <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
-        <p className="text-sm text-zinc-500">Loading readiness…</p>
+      <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
+        <p className="text-sm text-mf-glass-text-muted">Loading readiness…</p>
       </article>
     );
   }
@@ -84,24 +84,24 @@ export function MuscleReadinessPanel() {
   );
 
   return (
-    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
+    <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="flex items-center gap-2">
-        <Activity className="size-4 text-amber-400" aria-hidden="true" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+        <Activity className="size-4 text-mf-glass-dante" aria-hidden="true" />
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
           Dante Core — Readiness
         </p>
       </div>
 
       <div className="mt-4 flex items-end justify-between gap-4">
         <div className="flex items-baseline gap-2">
-          <span className="text-5xl font-black text-white">
+          <span className="text-5xl font-black text-mf-glass-text">
             {readiness.readinessScore ?? "—"}
           </span>
-          <span className="text-sm font-bold text-zinc-600">/100</span>
+          <span className="text-sm font-bold text-mf-glass-text-muted">/100</span>
         </div>
 
         <div className="text-right">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Systemic fatigue
           </p>
           <p className={cn("text-sm font-black", fatigue.className)}>
@@ -114,7 +114,7 @@ export function MuscleReadinessPanel() {
         <div className="mt-6 space-y-2.5">
           {musclesWithData.map((muscle) => (
             <div key={muscle.muscle} className="flex items-center gap-3">
-              <span className="w-28 shrink-0 text-xs font-semibold text-zinc-400">
+              <span className="w-28 shrink-0 text-xs font-semibold text-mf-glass-text-secondary">
                 {MUSCLE_DISPLAY_NAME[muscle.muscle]}
               </span>
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
@@ -126,14 +126,14 @@ export function MuscleReadinessPanel() {
                   style={{ width: `${muscle.recoveryPercent}%` }}
                 />
               </div>
-              <span className="w-10 shrink-0 text-right text-xs font-bold text-white">
+              <span className="w-10 shrink-0 text-right text-xs font-bold text-mf-glass-text">
                 {muscle.recoveryPercent}%
               </span>
             </div>
           ))}
         </div>
       ) : (
-        <p className="mt-6 text-sm text-zinc-500">
+        <p className="mt-6 text-sm text-mf-glass-text-muted">
           Not enough logged training history yet to estimate per-muscle recovery.
         </p>
       )}
@@ -143,7 +143,7 @@ export function MuscleReadinessPanel() {
           {readiness.limitingFactors.map((factor) => (
             <span
               key={factor}
-              className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400"
+              className="rounded-full border border-mf-glass-border bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-mf-glass-text-secondary"
             >
               {factor.replace(/_/g, " ")}
             </span>
@@ -151,9 +151,9 @@ export function MuscleReadinessPanel() {
         </div>
       ) : null}
 
-      <div className="mt-5 flex items-start gap-2 border-t border-white/[0.06] pt-4">
-        <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-zinc-600" aria-hidden="true" />
-        <p className="text-xs leading-5 text-zinc-600">
+      <div className="mt-5 flex items-start gap-2 border-t border-mf-glass-border pt-4">
+        <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-mf-glass-text-muted" aria-hidden="true" />
+        <p className="text-xs leading-5 text-mf-glass-text-muted">
           Estimate only, not a medical or clinically validated measurement.
           Confidence: {Math.round(readiness.confidence * 100)}%. {readiness.method}
         </p>

@@ -12,6 +12,7 @@ export default async function ExperimentsPage() {
     <div className="mx-auto max-w-4xl space-y-6 px-1 py-2">
       <Reveal>
         <PageHeader
+          glass
           eyebrow="Personal Experiment Lab"
           title="Test your own hypotheses."
           description="Lightweight N-of-1 comparisons built entirely from what you already log — no new daily diary to keep. Every result names its sample size, its uncertainty, and states plainly that association is not causation."

@@ -54,4 +54,13 @@ describe("classifyKnowledgeBrainRoute", () => {
 
     expect(route.use).toBe(false);
   });
+
+  it("never routes a direct current-time/date question to the Knowledge Brain (Test C)", () => {
+    // Current time is deterministic server-computed context (see
+    // lib/dante-core/temporal-context.ts), never something RAG should
+    // be asked to "retrieve".
+    expect(classifyKnowledgeBrainRoute("What time is it?", intent()).use).toBe(false);
+    expect(classifyKnowledgeBrainRoute("What day is it today?", intent()).use).toBe(false);
+    expect(classifyKnowledgeBrainRoute("Is my workout today?", intent({ training: true })).use).toBe(false);
+  });
 });

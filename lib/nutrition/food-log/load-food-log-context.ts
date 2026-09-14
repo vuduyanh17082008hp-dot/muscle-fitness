@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { FoodLogEntry, MealType, FoodLogSource, EstimationConfidence } from "./types"
 import { computeDailyTotals } from "./totals"
+import { localDateTimeParts, resolveUserTimeZone } from "@/lib/training/load-today-session"
 
 export type FoodLogRow = {
   id: string
@@ -55,8 +56,18 @@ export function mapFoodLogRow(row: FoodLogRow): FoodLogEntry {
   }
 }
 
-export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+/**
+ * Resolves "today" as the user's own LOCAL calendar date (from their
+ * persisted profile timezone) — never a UTC-truncated
+ * `new Date().toISOString().slice(0, 10)`, which silently shows
+ * yesterday's date for any timezone ahead of UTC in the early morning
+ * (see lib/training/load-today-session.ts::localDateTimeParts, the
+ * one canonical "what day is it locally" helper — reused here rather
+ * than a second, nutrition-specific implementation).
+ */
+export async function resolveLocalToday(supabase: SupabaseClient, userId: string): Promise<string> {
+  const timeZone = await resolveUserTimeZone(supabase, userId)
+  return localDateTimeParts(new Date(), timeZone).localDate
 }
 
 export type FoodLogContext = {
@@ -68,23 +79,25 @@ export type FoodLogContext = {
 export async function loadFoodLogForDate(
   supabase: SupabaseClient,
   userId: string,
-  date: string = todayIso(),
+  date?: string,
 ): Promise<FoodLogContext> {
+  const resolvedDate = date ?? (await resolveLocalToday(supabase, userId))
+
   const { data, error } = await supabase
     .from("food_logs")
     .select(
       "id, log_date, meal_type, food_name, brand, source, source_id, barcode, quantity_grams, serving_name, servings_consumed, calories, protein_g, carbs_g, fat_g, fiber_g, is_estimated, estimation_confidence, estimation_reason, estimated_from, created_at",
     )
     .eq("user_id", userId)
-    .eq("log_date", date)
+    .eq("log_date", resolvedDate)
     .order("created_at", { ascending: true })
 
   if (error) {
     console.warn("[FOOD LOG] Unable to load food_logs:", error.message)
-    return { date, entries: [], totals: computeDailyTotals([]) }
+    return { date: resolvedDate, entries: [], totals: computeDailyTotals([]) }
   }
 
   const entries = ((data as FoodLogRow[] | null) ?? []).map(mapFoodLogRow)
 
-  return { date, entries, totals: computeDailyTotals(entries) }
+  return { date: resolvedDate, entries, totals: computeDailyTotals(entries) }
 }

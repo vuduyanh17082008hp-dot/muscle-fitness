@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { scaleMacrosToGrams } from "@/lib/nutrition/food-log-calculator"
 import type { NormalizedFoodMacros } from "@/lib/nutrition/food-data/types"
 import type { EstimationConfidence, FoodLogSource, MealType } from "./types"
-import { mapFoodLogRow, todayIso, type FoodLogRow } from "./load-food-log-context"
+import { mapFoodLogRow, resolveLocalToday, type FoodLogRow } from "./load-food-log-context"
 import { emitEvent } from "@/lib/events/emit"
 
 export type CreateFoodLogInput = {
@@ -51,12 +51,13 @@ export async function createFoodLog(
   }
 
   const scaled = scaleMacrosToGrams(input.per100g, input.quantityGrams)
+  const logDate = input.logDate ?? (await resolveLocalToday(supabase, userId))
 
   const { data, error } = await supabase
     .from("food_logs")
     .insert({
       user_id: userId,
-      log_date: input.logDate ?? todayIso(),
+      log_date: logDate,
       meal_type: input.mealType,
       food_name: input.foodName.trim(),
       brand: input.brand ?? null,
@@ -82,7 +83,8 @@ export async function createFoodLog(
     .single()
 
   if (error || !data) {
-    return { success: false, error: error?.message ?? "Unable to save this food." }
+    if (error) console.error("[FOOD LOG] createFoodLog failed:", error.message)
+    return { success: false, error: "Nutrition data couldn't be saved. Please try again." }
   }
 
   const savedEntry = mapFoodLogRow(data as FoodLogRow)
@@ -133,7 +135,8 @@ export async function updateFoodLogQuantity(
     .single()
 
   if (fetchError || !existing) {
-    return { success: false, error: fetchError?.message ?? "Food log entry not found." }
+    if (fetchError) console.error("[FOOD LOG] updateFoodLogQuantity fetch failed:", fetchError.message)
+    return { success: false, error: "Food log entry not found." }
   }
 
   const originalGrams = Number(existing.quantity_grams)
@@ -170,7 +173,8 @@ export async function updateFoodLogQuantity(
     .single()
 
   if (error || !data) {
-    return { success: false, error: error?.message ?? "Unable to update this food." }
+    if (error) console.error("[FOOD LOG] updateFoodLogQuantity update failed:", error.message)
+    return { success: false, error: "Nutrition data couldn't be saved. Please try again." }
   }
 
   return { success: true, data: mapFoodLogRow(data as FoodLogRow) }
@@ -188,7 +192,8 @@ export async function deleteFoodLog(
     .eq("user_id", userId)
 
   if (error) {
-    return { success: false, error: error.message }
+    console.error("[FOOD LOG] deleteFoodLog failed:", error.message)
+    return { success: false, error: "Nutrition data couldn't be deleted. Please try again." }
   }
 
   return { success: true, data: { id } }

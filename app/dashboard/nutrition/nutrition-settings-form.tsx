@@ -77,7 +77,7 @@ export function NutritionSettingsForm({
       <div>
         <label
           htmlFor={trainingModeId}
-          className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500"
+          className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-mf-glass-text-muted"
         >
           Training style
         </label>
@@ -86,7 +86,7 @@ export function NutritionSettingsForm({
           id={trainingModeId}
           name="trainingModeOverride"
           defaultValue={trainingModeOverride}
-          className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-3 text-sm font-medium text-white outline-none transition focus:border-amber-400/40"
+          className="w-full rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-3.5 py-3 text-sm font-medium text-mf-glass-text outline-none transition focus:border-mf-glass-brand-border"
         >
           {TRAINING_MODES.map((mode) => (
             <option key={mode} value={mode}>
@@ -99,7 +99,7 @@ export function NutritionSettingsForm({
       <div>
         <label
           htmlFor={activityLevelId}
-          className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500"
+          className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-mf-glass-text-muted"
         >
           Activity level
         </label>
@@ -108,7 +108,7 @@ export function NutritionSettingsForm({
           id={activityLevelId}
           name="activityLevelOverride"
           defaultValue={activityLevelOverride}
-          className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-3 text-sm font-medium text-white outline-none transition focus:border-amber-400/40"
+          className="w-full rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-3.5 py-3 text-sm font-medium text-mf-glass-text outline-none transition focus:border-mf-glass-brand-border"
         >
           {ACTIVITY_LEVELS.map((level) => (
             <option key={level} value={level}>
@@ -121,7 +121,7 @@ export function NutritionSettingsForm({
       <div>
         <label
           htmlFor={goalOverrideId}
-          className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500"
+          className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-mf-glass-text-muted"
         >
           Goal
         </label>
@@ -130,7 +130,7 @@ export function NutritionSettingsForm({
           id={goalOverrideId}
           name="goalOverride"
           defaultValue={goalOverride}
-          className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-3 text-sm font-medium text-white outline-none transition focus:border-amber-400/40"
+          className="w-full rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-3.5 py-3 text-sm font-medium text-mf-glass-text outline-none transition focus:border-mf-glass-brand-border"
         >
           <option value="auto">Use onboarding goal</option>
           {GOAL_OVERRIDES.map((goal) => (
@@ -145,7 +145,7 @@ export function NutritionSettingsForm({
         <button
           type="submit"
           disabled={isPending}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-5 py-2.5 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           {saveState === "saving" ? (
             <Loader2 className="size-4 animate-spin" />

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { createClient } from "@/lib/supabase/server"
-import { loadFoodLogForDate, todayIso } from "@/lib/nutrition/food-log/load-food-log-context"
+import { loadFoodLogForDate, resolveLocalToday } from "@/lib/nutrition/food-log/load-food-log-context"
 import { createFoodLog } from "@/lib/nutrition/food-log/mutations"
 
 export const runtime = "nodejs"
@@ -60,7 +60,8 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const requestedDate = url.searchParams.get("date")
-  const date = requestedDate && DATE_PATTERN.test(requestedDate) ? requestedDate : todayIso()
+  const date =
+    requestedDate && DATE_PATTERN.test(requestedDate) ? requestedDate : await resolveLocalToday(supabase, user.id)
 
   const context = await loadFoodLogForDate(supabase, user.id, date)
 

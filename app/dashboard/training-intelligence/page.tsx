@@ -27,19 +27,19 @@ export default async function TrainingIntelligencePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-1 py-2">
-      <section className="relative overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg p-6 sm:p-8">
+      <section className="relative overflow-hidden rounded-[24px] border border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-6 sm:p-8">
         <PageVisual page="trainingIntelligence" />
 
         <div className="relative z-10">
-          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-mf-cyan">
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-mf-glass-analytics">
             Training Intelligence
           </p>
 
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+          <h1 className="mt-3 text-3xl font-black tracking-tight text-mf-glass-text sm:text-4xl">
             What your training actually means, muscle by muscle.
           </h1>
 
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">
             Working sets are matched against a versioned exercise→muscle
             contribution model to produce modeled effective weekly volume,
             personal-baseline comparisons and an explainable recommendation for
@@ -57,6 +57,7 @@ export default async function TrainingIntelligencePage() {
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <PerformanceCard
+          glass
           variant="progress"
           icon="target"
           eyebrow="Body Weight"
@@ -64,6 +65,7 @@ export default async function TrainingIntelligencePage() {
           subtitle="From your profile"
         />
         <PerformanceCard
+          glass
           variant="progress"
           icon="trending-up"
           eyebrow="Recovery vs. your normal"
@@ -75,6 +77,7 @@ export default async function TrainingIntelligencePage() {
           }
         />
         <PerformanceCard
+          glass
           variant="recovery"
           icon="layers"
           eyebrow="Training Load vs. your normal"
@@ -86,6 +89,7 @@ export default async function TrainingIntelligencePage() {
           }
         />
         <PerformanceCard
+          glass
           variant="progress"
           icon="shield-check"
           eyebrow="Data Confidence"
@@ -99,6 +103,7 @@ export default async function TrainingIntelligencePage() {
         exerciseNames={athleteState.training.exerciseNames}
         hasAnyLoggedData={athleteState.training.hasAnyLoggedData}
         dataWindow={athleteState.dataWindow}
+        availableEquipment={athleteState.profile.availableEquipment}
       />
 
       <DigitalTwinPanel athleteState={athleteState} memory={memory} />

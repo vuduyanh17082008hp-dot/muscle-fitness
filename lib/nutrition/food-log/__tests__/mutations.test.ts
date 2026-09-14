@@ -43,6 +43,21 @@ function createFakeSupabase() {
 
   const client = {
     from(table: string) {
+      if (table === "profiles") {
+        // createFoodLog resolves "today" from the user's persisted
+        // profile timezone when no explicit logDate is given (see
+        // lib/nutrition/food-log/load-food-log-context.ts::resolveLocalToday) —
+        // fixed at UTC here so test expectations don't depend on the
+        // machine's local clock.
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: { timezone: "UTC" }, error: null }),
+            }),
+          }),
+        }
+      }
+
       if (table !== "food_logs") throw new Error(`Unexpected table: ${table}`)
 
       return {
@@ -179,6 +194,44 @@ describe("createFoodLog", () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  it("never leaks a raw Supabase/schema error to the caller — logs it server-side and returns a clean message instead (Test: error sanitization)", async () => {
+    const { client } = createFakeSupabase()
+    const rawMessage = "Could not find the 'serving_name' column of 'food_logs' in the schema cache"
+
+    // Force the insert path to fail exactly like the original bug.
+    const originalFrom = client.from
+    client.from = ((table: string) => {
+      if (table !== "food_logs") return originalFrom(table)
+      return {
+        ...originalFrom(table),
+        insert: () => ({
+          select: () => ({
+            single: async () => ({ data: null, error: { message: rawMessage } }),
+          }),
+        }),
+      }
+    }) as typeof client.from
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    const result = await createFoodLog(client as never, USER_ID, {
+      mealType: "lunch",
+      foodName: "Test",
+      source: "local",
+      per100g: { calories: 100, protein: 1, carbs: 1, fat: 1 },
+      quantityGrams: 100,
+    })
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).not.toContain("schema cache")
+      expect(result.error).not.toContain("serving_name")
+    }
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("createFoodLog"), rawMessage)
+
+    consoleSpy.mockRestore()
   })
 })
 

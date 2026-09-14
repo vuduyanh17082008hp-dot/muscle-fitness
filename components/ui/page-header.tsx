@@ -16,27 +16,54 @@ export function PageHeader({
   description,
   actions,
   className,
+  glass = false,
 }: {
   eyebrow: string;
   title: string;
   description?: string;
   actions?: ReactNode;
   className?: string;
+  /** Render on the Performance Glass (near-black + lime) dashboard tokens instead of the legacy Ocean Sunset ones. Default false — /privacy and /terms keep their current look. */
+  glass?: boolean;
 }) {
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br from-mf-surface via-[#0a1622] to-mf-bg p-6 sm:p-8",
+        "relative overflow-hidden rounded-[24px] border p-6 sm:p-8",
+        glass
+          ? "border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg"
+          : "border-white/10 bg-gradient-to-br from-mf-surface via-[#0a1622] to-mf-bg",
         className,
       )}
     >
       <div className="relative z-10">
-        <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-amber-400">{eyebrow}</p>
+        <p
+          className={cn(
+            "text-[11px] font-bold uppercase tracking-[0.3em]",
+            glass ? "text-mf-glass-brand" : "text-amber-400",
+          )}
+        >
+          {eyebrow}
+        </p>
 
-        <h1 className="mt-3 text-page-title font-black tracking-tight text-white">{title}</h1>
+        <h1
+          className={cn(
+            "mt-3 text-page-title font-black tracking-tight",
+            glass ? "text-mf-glass-text" : "text-white",
+          )}
+        >
+          {title}
+        </h1>
 
         {description ? (
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-mf-text-muted">{description}</p>
+          <p
+            className={cn(
+              "mt-3 max-w-2xl text-sm leading-6",
+              glass ? "text-mf-glass-text-muted" : "text-mf-text-muted",
+            )}
+          >
+            {description}
+          </p>
         ) : null}
 
         {actions ? <div className="mt-5 flex flex-wrap items-center gap-3">{actions}</div> : null}

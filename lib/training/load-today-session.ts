@@ -86,18 +86,65 @@ export function localDayRangeUtc(now: Date, timeZone: string): { startIso: strin
   };
 }
 
-export async function loadTodaySession(
+/**
+ * The user's LOCAL calendar date ("2026-09-14") and wall-clock time
+ * ("00:37") — the same offset math as `localDayRangeUtc` above, so a
+ * caller reading "today" as a range and a caller reading "today" as a
+ * display string can never disagree with each other. This is the
+ * single source Dante's deterministic temporal context (see
+ * lib/dante-core/temporal-context.ts) and any tool needing "today" as
+ * a plain date string (e.g. today's food log) should use — never a
+ * second, independently-derived `new Date().toISOString().slice(0, 10)`.
+ */
+export function localDateTimeParts(now: Date, timeZone: string): { localDate: string; localTime: string } {
+  const offsetMinutes = getUtcOffsetMinutes(now, timeZone);
+  const shifted = new Date(now.getTime() + offsetMinutes * 60_000);
+
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  const hours = String(shifted.getUTCHours()).padStart(2, "0");
+  const minutes = String(shifted.getUTCMinutes()).padStart(2, "0");
+
+  return {
+    localDate: `${year}-${month}-${day}`,
+    localTime: `${hours}:${minutes}`,
+  };
+}
+
+/**
+ * Resolves the user's IANA timezone from their persisted profile row
+ * — the canonical source of truth for "what day is it for this user"
+ * (spec: "persisted authenticated profile timezone if available").
+ * Skips the query entirely when the caller already knows the
+ * timezone (e.g. a page that already loaded the profile row for
+ * other reasons) — never a redundant second fetch.
+ */
+export async function resolveUserTimeZone(
   supabase: SupabaseClient,
   userId: string,
-  now: Date = new Date(),
-): Promise<TodaySession | null> {
+  timeZoneOverride?: string | null,
+): Promise<string> {
+  if (timeZoneOverride) {
+    return timeZoneOverride;
+  }
+
   const { data: profileRow } = await supabase
     .from("profiles")
     .select("timezone")
     .eq("user_id", userId)
     .maybeSingle();
 
-  const timeZone = (profileRow as { timezone: string | null } | null)?.timezone || "UTC";
+  return (profileRow as { timezone: string | null } | null)?.timezone || "UTC";
+}
+
+export async function loadTodaySession(
+  supabase: SupabaseClient,
+  userId: string,
+  now: Date = new Date(),
+  timeZoneOverride?: string | null,
+): Promise<TodaySession | null> {
+  const timeZone = await resolveUserTimeZone(supabase, userId, timeZoneOverride);
 
   const { startIso, endIso } = localDayRangeUtc(now, timeZone);
 

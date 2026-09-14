@@ -65,11 +65,11 @@ export function WhatIfPanel({ muscle, contributingExercises, exerciseNames }: Wh
   }
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-zinc-500">
+    <section className="rounded-2xl border border-mf-glass-border bg-white/5 p-4">
+      <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-mf-glass-text-muted">
         What if I change my training?
       </h3>
-      <p className="mb-3 text-xs text-zinc-500">
+      <p className="mb-3 text-xs text-mf-glass-text-muted">
         Preview only — this never changes your logged workouts or plan.
       </p>
 
@@ -77,7 +77,7 @@ export function WhatIfPanel({ muscle, contributingExercises, exerciseNames }: Wh
         <select
           value={exerciseId}
           onChange={(event) => setExerciseId(event.target.value)}
-          className="min-h-10 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 text-sm text-white"
+          className="min-h-10 flex-1 rounded-lg border border-mf-glass-border bg-mf-glass-bg-deep px-3 text-sm text-mf-glass-text"
         >
           {contributingExercises.map((c) => (
             <option key={c.exerciseId} value={c.exerciseId}>
@@ -91,18 +91,18 @@ export function WhatIfPanel({ muscle, contributingExercises, exerciseNames }: Wh
             type="button"
             aria-label="Decrease sets"
             onClick={() => setSetDelta((v) => Math.max(-10, v - 1))}
-            className="h-9 w-9 rounded-lg border border-white/10 text-white hover:bg-white/10"
+            className="h-9 w-9 rounded-lg border border-mf-glass-border text-mf-glass-text hover:bg-white/10"
           >
             −
           </button>
-          <span className="w-10 text-center text-sm font-semibold text-white">
+          <span className="w-10 text-center text-sm font-semibold text-mf-glass-text">
             {setDelta > 0 ? `+${setDelta}` : setDelta}
           </span>
           <button
             type="button"
             aria-label="Increase sets"
             onClick={() => setSetDelta((v) => Math.min(10, v + 1))}
-            className="h-9 w-9 rounded-lg border border-white/10 text-white hover:bg-white/10"
+            className="h-9 w-9 rounded-lg border border-mf-glass-border text-mf-glass-text hover:bg-white/10"
           >
             +
           </button>
@@ -112,29 +112,29 @@ export function WhatIfPanel({ muscle, contributingExercises, exerciseNames }: Wh
           type="button"
           onClick={runSimulation}
           disabled={loading}
-          className="min-h-10 rounded-lg bg-white px-4 text-sm font-semibold text-black hover:bg-zinc-200 disabled:opacity-50"
+          className="min-h-10 rounded-lg bg-mf-glass-brand px-4 text-sm font-semibold text-mf-glass-brand-ink hover:bg-mf-glass-brand-hover disabled:opacity-50"
         >
           {loading ? "Simulating…" : "Simulate"}
         </button>
       </div>
 
-      {error ? <p className="mt-3 text-xs text-red-400">{error}</p> : null}
+      {error ? <p className="mt-3 text-xs text-mf-glass-danger">{error}</p> : null}
 
       {result ? (
         <div className="mt-3 space-y-1.5 text-sm">
           {result.changedMuscles.length === 0 ? (
-            <p className="text-zinc-500">No muscle-level change from this simulation.</p>
+            <p className="text-mf-glass-text-muted">No muscle-level change from this simulation.</p>
           ) : (
             result.changedMuscles.map((affectedMuscle) => (
               <div
                 key={affectedMuscle}
-                className="flex items-center justify-between rounded-lg bg-black/30 px-3 py-2"
+                className="flex items-center justify-between rounded-lg bg-mf-glass-bg-deep px-3 py-2"
               >
-                <span className="text-zinc-300">
+                <span className="text-mf-glass-text-secondary">
                   {MUSCLE_DISPLAY_NAME[affectedMuscle]}
                   {affectedMuscle === muscle ? " (this muscle)" : ""}
                 </span>
-                <span className="font-semibold text-white">
+                <span className="font-semibold text-mf-glass-text">
                   {result.current[affectedMuscle]?.totalEffectiveSets ?? 0} →{" "}
                   {result.simulated[affectedMuscle]?.totalEffectiveSets ?? 0}
                 </span>

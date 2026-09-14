@@ -42,7 +42,7 @@ export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
   return (
     <nav
       aria-label="Section"
-      className="-mx-1 flex gap-1 overflow-x-auto border-b border-white/10 px-1 pb-px"
+      className="-mx-1 flex gap-1 overflow-x-auto border-b border-mf-glass-border px-1 pb-px"
     >
       {tabs.map((tab) => {
         const active = isTabActive(pathname, tab.href);
@@ -55,8 +55,8 @@ export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
             className={cn(
               "shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors duration-200",
               active
-                ? "border-amber-400 text-white"
-                : "border-transparent text-zinc-500 hover:text-zinc-300",
+                ? "border-mf-glass-brand text-mf-glass-text"
+                : "border-transparent text-mf-glass-text-muted hover:text-mf-glass-text-secondary",
             )}
           >
             {tab.label}

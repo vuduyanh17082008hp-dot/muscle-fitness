@@ -5,6 +5,7 @@ import { z } from "zod";
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import type { DanteTool } from "@/lib/dante-core/tools/types";
+import { cached } from "@/lib/dante-core/tools/request-cache";
 
 const inputSchema = z.object({}).strict();
 
@@ -38,7 +39,7 @@ export const getRecoveryStateTool: DanteTool<Record<string, never>, RecoveryStat
   async execute(context) {
     const { supabase, userId } = context;
 
-    const recovery = await loadRecoveryContext(supabase, userId).catch(() => null);
+    const recovery = await cached(context, "recoveryContext", () => loadRecoveryContext(supabase, userId)).catch(() => null);
 
     if (!recovery) {
       return {

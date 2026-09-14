@@ -3,6 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ZodType, ZodTypeDef } from "zod";
 
+import type { DanteTemporalContext } from "@/lib/dante-core/temporal-context";
+
 /** Loosens ZodType's Def/Input generics — a schema with `.default()`/`.transform()` fields legitimately has a narrower raw-input type than its parsed output type, and only the output (TInput here, i.e. what `execute` receives) matters to a DanteTool. */
 type ToolInputSchema<TInput> = ZodType<TInput, ZodTypeDef, unknown>;
 
@@ -32,6 +34,22 @@ export type ToolContext = {
   /** Always the authenticated server-derived user id — never a client- or model-supplied one (Part 17). */
   userId: string;
   now: Date;
+  /**
+   * The user's persisted `profiles.timezone`, resolved ONCE per turn
+   * by the route handler and threaded through here — never
+   * re-fetched per tool call. Null when the profile has no timezone
+   * set (tools must not fabricate one; see lib/dante-core/temporal-context.ts).
+   */
+  timezone?: string | null;
+  /** The same deterministic time context injected into Dante's prompt (see lib/dante-core/temporal-context.ts) — computed once per turn from `now` + `timezone` above. */
+  temporalContext?: DanteTemporalContext | null;
+  /**
+   * Request-local memoization for shared loaders (see
+   * lib/dante-core/tools/request-cache.ts::cached) — one Map per
+   * Dante turn/confirmation, never persisted or shared across
+   * requests. Optional: omitting it just disables memoization.
+   */
+  cache?: Map<string, Promise<unknown>>;
 };
 
 export type ToolExecuteResult<TOutput> =

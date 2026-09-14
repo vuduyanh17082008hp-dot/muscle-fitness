@@ -24,7 +24,7 @@ export type DanteRobotState =
   | "success"
   | "error";
 
-export type DanteRobotSize = "sm" | "md" | "lg" | "hero";
+export type DanteRobotSize = "xs" | "sm" | "md" | "lg" | "hero";
 
 export type DanteRobotProps = {
   state?: DanteRobotState;
@@ -51,6 +51,7 @@ const METAL = "#7b818a";
 const METAL_DARK = "#4d525a";
 
 const SIZE_PX: Record<DanteRobotSize, number> = {
+  xs: 40,
   sm: 116,
   md: 168,
   lg: 216,

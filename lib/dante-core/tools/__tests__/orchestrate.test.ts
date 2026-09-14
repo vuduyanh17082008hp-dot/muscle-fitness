@@ -170,6 +170,43 @@ describe("runDanteAgentTurn", () => {
     expect(envelope.reply).toBe("Done.");
   });
 
+  it("includes the caller-supplied temporal context verbatim in its system prompt, never recomputing it (Test H)", async () => {
+    const temporalContext = {
+      timezone: "Asia/Singapore",
+      localDate: "2026-09-14",
+      localTime: "00:37",
+      localDateTime: "2026-09-14 00:37",
+      utcDateTime: "2026-09-13T16:37:00.000Z",
+    };
+
+    const callModel = vi.fn().mockResolvedValueOnce(finalTurn("It's 00:37."));
+
+    await runDanteAgentTurn(
+      { ...context, timezone: "Asia/Singapore", temporalContext },
+      "what time is it?",
+      { callModel },
+    );
+
+    const [messages] = callModel.mock.calls[0] as [GroqChatMessage[], GroqToolSpec[]];
+    const systemMessage = messages.find((message) => message.role === "system");
+
+    expect(systemMessage?.content).toContain("Timezone: Asia/Singapore");
+    expect(systemMessage?.content).toContain("Local date: 2026-09-14");
+    expect(systemMessage?.content).toContain("Local time: 00:37");
+  });
+
+  it("tells the model the local time zone is unavailable rather than fabricating one (Test E)", async () => {
+    const callModel = vi.fn().mockResolvedValueOnce(finalTurn("I'm not sure of your local time."));
+
+    await runDanteAgentTurn(context, "what time is it?", { callModel });
+
+    const [messages] = callModel.mock.calls[0] as [GroqChatMessage[], GroqToolSpec[]];
+    const systemMessage = messages.find((message) => message.role === "system");
+
+    expect(systemMessage?.content).toContain("not available");
+    expect(systemMessage?.content).not.toContain("Timezone:");
+  });
+
   it("stops after MAX_TOOL_ROUNDS and never loops forever (Test P)", async () => {
     const callModel = vi.fn((_messages: GroqChatMessage[], _tools: GroqToolSpec[]) => {
       const round = callModel.mock.calls.length; // 1-indexed after this call is recorded

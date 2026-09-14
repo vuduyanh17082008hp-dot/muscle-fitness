@@ -1,6 +1,6 @@
 import type { AthleteState } from "@/lib/athlete-state/types";
 import type { DanteMemory } from "@/lib/dante-core/memory";
-import { MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
+import { MUSCLE_DISPLAY_NAME, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
 
 /**
  * Context Engine (spec Part "6. CONTEXT ENGINE").
@@ -73,6 +73,33 @@ export type DanteContext = {
   confidence: number;
 
   missingData: string[];
+
+  /**
+   * Set only when the caller (e.g. the Muscle Intelligence Atlas's
+   * "Ask Dante" tab) has a specific muscle selected — the SAME
+   * analytics/recommendation entry already in
+   * athleteState.training.muscles, never recomputed. Lets Dante answer
+   * "tell me about my traps" already knowing which muscle "my traps"
+   * means, without receiving every muscle's full history.
+   */
+  selectedMuscleFocus: {
+    muscle: CanonicalMuscle;
+    displayName: string;
+    entry: AthleteState["training"]["muscles"][number];
+  } | null;
+
+  /**
+   * Set only when the caller (e.g. the Exercise Discovery detail
+   * panel's "Ask Dante" action) has a specific exercise selected.
+   * Pre-resolved by the caller (which has LOCAL_EXERCISE_LIBRARY
+   * available) rather than looked up here, since exercises aren't
+   * part of AthleteState — this stays a pure transform of what it's
+   * given, same as everything else in this function.
+   */
+  selectedExerciseFocus: {
+    name: string;
+    primaryMuscle: CanonicalMuscle | null;
+  } | null;
 };
 
 function nonEmpty(values: string[] | null | undefined): string[] {
@@ -84,6 +111,8 @@ export function buildDanteContext(
   memory: DanteMemory,
   preferences: UserPreferencesRow | null,
   focus: DanteContextFocus = "general",
+  selectedMuscle?: CanonicalMuscle | null,
+  selectedExercise?: { name: string; primaryMuscle: CanonicalMuscle | null } | null,
 ): DanteContext {
   const includeRecoveryDetail = focus === "recovery" || focus === "general";
   const includeTrainingDetail = focus === "training" || focus === "general";
@@ -92,6 +121,10 @@ export function buildDanteContext(
     ? athleteState.derived.muscleRecoveryMap.filter(
         (entry) => entry.recoveryState !== "well_recovered",
       )
+    : null;
+
+  const selectedMuscleEntry = selectedMuscle
+    ? athleteState.training.muscles.find((entry) => entry.muscle === selectedMuscle) ?? null
     : null;
 
   return {
@@ -139,5 +172,16 @@ export function buildDanteContext(
     confidence: athleteState.derived.overallConfidence,
 
     missingData: athleteState.derived.missingData,
+
+    selectedMuscleFocus:
+      selectedMuscle && selectedMuscleEntry
+        ? {
+            muscle: selectedMuscle,
+            displayName: MUSCLE_DISPLAY_NAME[selectedMuscle],
+            entry: selectedMuscleEntry,
+          }
+        : null,
+
+    selectedExerciseFocus: selectedExercise ?? null,
   };
 }

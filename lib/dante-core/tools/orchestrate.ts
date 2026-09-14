@@ -4,7 +4,9 @@ import { DANTE_TOOLS, getDanteTool } from "@/lib/dante-core/tools/registry";
 import { zodToJsonSchema } from "@/lib/dante-core/tools/json-schema";
 import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
+import { safeExecuteTool } from "@/lib/dante-core/tools/safe-execute";
 import { callGroqAgentTurn, type GroqAgentTurnResult, type GroqChatMessage, type GroqToolCall, type GroqToolSpec } from "@/lib/dante-core/llm-client";
+import { formatDanteTemporalContext } from "@/lib/dante-core/temporal-context";
 import type { ToolContext } from "@/lib/dante-core/tools/types";
 import type { DanteResponseEnvelope } from "@/lib/dante-core/tools/response-envelope";
 
@@ -21,7 +23,8 @@ export const MAX_TOOL_ROUNDS = 4;
 
 export type ModelCaller = (messages: GroqChatMessage[], tools: GroqToolSpec[]) => Promise<GroqAgentTurnResult>;
 
-const SYSTEM_PROMPT = `You are Dante's tool-selection layer inside Muscle Fitness.
+function buildSystemPrompt(context: ToolContext): string {
+  return `You are Dante's tool-selection layer inside Muscle Fitness.
 
 Select at most ONE tool per turn from the tools you were given. Use the
 fewest tools needed to answer (Part 11) — a structured question about
@@ -41,8 +44,16 @@ requires the user's explicit confirmation before anything is saved —
 calling it here only proposes it, it does not execute it. Read tools
 execute immediately and their result is given back to you.
 
+A direct question about the current time/date ("what time is it?",
+"what day is it?", "is my workout today?") needs no tool at all — the
+CURRENT TEMPORAL CONTEXT below is already authoritative; never
+retrieve_knowledge for it.
+
+${formatDanteTemporalContext(context.temporalContext ?? null)}
+
 Once you have enough information, respond with your final natural-
 language answer instead of another tool call.`;
+}
 
 const TRACE_LABEL: Record<string, string> = {
   get_today_plan: "Checked today's plan",
@@ -85,7 +96,7 @@ export async function runDanteAgentTurn(
   const callModel = options?.callModel ?? callGroqAgentTurn;
 
   const messages: GroqChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: buildSystemPrompt(context) },
     { role: "user", content: userMessage },
   ];
 
@@ -143,7 +154,7 @@ export async function runDanteAgentTurn(
       };
     }
 
-    const result = await tool.execute(context, parsed.data);
+    const result = await safeExecuteTool(tool, context, parsed.data);
 
     if (!result.ok) {
       logToolEvent("DANTE_TOOL_FAILED", { tool: tool.name });

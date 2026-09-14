@@ -14,8 +14,8 @@ const STATE_STYLES: Record<
   },
   amber: {
     label: "AMBER — Maintain quality, trim volume",
-    chip: "border-amber-400/25 bg-amber-400/10 text-amber-300",
-    dot: "bg-amber-400",
+    chip: "border-mf-glass-warning/25 bg-mf-glass-warning/10 text-mf-glass-warning",
+    dot: "bg-mf-glass-warning",
   },
   red: {
     label: "RED — Prioritise recovery",
@@ -32,10 +32,10 @@ export function TrainingRecoveryCard({
   const style = STATE_STYLES[summary.state];
 
   return (
-    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
+    <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="flex items-center gap-2">
-        <Dumbbell className="size-4 text-amber-400" aria-hidden="true" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+        <Dumbbell className="size-4 text-mf-glass-brand" aria-hidden="true" />
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
           Training × Recovery
         </p>
       </div>
@@ -50,41 +50,41 @@ export function TrainingRecoveryCard({
         {style.label}
       </div>
 
-      <p className="mt-4 text-sm leading-6 text-zinc-400">{summary.reason}</p>
+      <p className="mt-4 text-sm leading-6 text-mf-glass-text-muted">{summary.reason}</p>
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-white/[0.07] bg-black/20 p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">
+        <div className="rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Sessions / 7d
           </p>
-          <p className="mt-1 text-lg font-black text-white">
+          <p className="mt-1 text-lg font-black text-mf-glass-text">
             {summary.sessionsLast7Days}
           </p>
         </div>
 
-        <div className="rounded-xl border border-white/[0.07] bg-black/20 p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">
+        <div className="rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Rest days / 7d
           </p>
-          <p className="mt-1 text-lg font-black text-white">
+          <p className="mt-1 text-lg font-black text-mf-glass-text">
             {summary.restDaysLast7Days}
           </p>
         </div>
 
-        <div className="rounded-xl border border-white/[0.07] bg-black/20 p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">
+        <div className="rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Avg RPE
           </p>
-          <p className="mt-1 text-lg font-black text-white">
+          <p className="mt-1 text-lg font-black text-mf-glass-text">
             {summary.averageSessionRpe ?? "—"}
           </p>
         </div>
 
-        <div className="rounded-xl border border-white/[0.07] bg-black/20 p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">
+        <div className="rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Last session
           </p>
-          <p className="mt-1 text-lg font-black text-white">
+          <p className="mt-1 text-lg font-black text-mf-glass-text">
             {summary.lastSessionDaysAgo === null
               ? "—"
               : summary.lastSessionDaysAgo === 0

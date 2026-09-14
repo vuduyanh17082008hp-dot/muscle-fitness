@@ -14,19 +14,19 @@ const STATUS_STYLES: Record<
     chip: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
   },
   good: {
-    ring: "stroke-amber-300",
-    text: "text-amber-300",
-    chip: "border-amber-400/25 bg-amber-400/10 text-amber-300",
+    ring: "stroke-mf-glass-warning",
+    text: "text-mf-glass-warning",
+    chip: "border-mf-glass-warning/25 bg-mf-glass-warning/10 text-mf-glass-warning",
   },
   moderate: {
-    ring: "stroke-orange-400",
-    text: "text-orange-300",
-    chip: "border-orange-400/25 bg-orange-400/10 text-orange-300",
+    ring: "stroke-mf-glass-warning",
+    text: "text-mf-glass-warning",
+    chip: "border-mf-glass-warning/25 bg-mf-glass-warning/10 text-mf-glass-warning",
   },
   priority: {
-    ring: "stroke-rose-400",
-    text: "text-rose-300",
-    chip: "border-rose-400/25 bg-rose-400/10 text-rose-300",
+    ring: "stroke-mf-glass-danger",
+    text: "text-mf-glass-danger",
+    chip: "border-mf-glass-danger/25 bg-mf-glass-danger/10 text-mf-glass-danger",
   },
 };
 
@@ -71,10 +71,10 @@ function ScoreRing({ score }: { score: number }) {
       </svg>
 
       <div className="absolute flex flex-col items-center">
-        <span className="text-4xl font-black tracking-[-0.04em] text-white">
+        <span className="text-4xl font-black tracking-[-0.04em] text-mf-glass-text">
           {score}
         </span>
-        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-mf-glass-text-muted">
           / 100 · {status}
         </span>
       </div>
@@ -94,11 +94,11 @@ export function RecoveryScoreCard({
     .sort((a, b) => a.score - b.score);
 
   return (
-    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
+    <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Gauge className="size-4 text-mf-violet" aria-hidden="true" />
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+          <Gauge className="size-4 text-mf-glass-dante" aria-hidden="true" />
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
             Today&apos;s Recovery Score
           </p>
         </div>
@@ -111,7 +111,7 @@ export function RecoveryScoreCard({
                 ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
                 : result.baseline.trend === "below"
                   ? "border-rose-400/25 bg-rose-400/10 text-rose-300"
-                  : "border-white/10 bg-white/5 text-zinc-400",
+                  : "border-mf-glass-border bg-white/5 text-mf-glass-text-secondary",
             )}
           >
             {result.baseline.trend === "above"
@@ -124,7 +124,7 @@ export function RecoveryScoreCard({
       </div>
 
       {result.score === null ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-sm leading-6 text-zinc-400">
+        <div className="mt-6 rounded-2xl border border-dashed border-mf-glass-border bg-white/[0.02] p-6 text-sm leading-6 text-mf-glass-text-muted">
           No check-in yet today. Complete the daily recovery check-in below to
           calculate a practical readiness estimate based on the information
           you provide.
@@ -134,18 +134,18 @@ export function RecoveryScoreCard({
           <ScoreRing score={result.score} />
 
           <div className="flex-1 space-y-4">
-            <p className="text-sm leading-6 text-zinc-300">{recommendation}</p>
+            <p className="text-sm leading-6 text-mf-glass-text-secondary">{recommendation}</p>
 
             {availableDrivers.length > 0 && (
               <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-600">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-text-muted">
                   Why this score
                 </p>
 
                 <div className="space-y-2">
                   {availableDrivers.map((driver) => (
                     <div key={driver.key} className="flex items-center gap-3">
-                      <span className="w-28 shrink-0 text-xs text-zinc-500">
+                      <span className="w-28 shrink-0 text-xs text-mf-glass-text-muted">
                         {driver.label}
                       </span>
                       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
@@ -155,13 +155,13 @@ export function RecoveryScoreCard({
                             driver.score >= 70
                               ? "bg-emerald-400"
                               : driver.score >= 50
-                                ? "bg-amber-400"
-                                : "bg-rose-400",
+                                ? "bg-mf-glass-warning"
+                                : "bg-mf-glass-danger",
                           )}
                           style={{ width: `${driver.score}%` }}
                         />
                       </div>
-                      <span className="w-9 shrink-0 text-right text-xs font-semibold text-zinc-400">
+                      <span className="w-9 shrink-0 text-right text-xs font-semibold text-mf-glass-text-secondary">
                         {driver.score}
                       </span>
                     </div>
@@ -173,7 +173,7 @@ export function RecoveryScoreCard({
         </div>
       )}
 
-      <p className="mt-6 border-t border-white/5 pt-4 text-xs leading-5 text-zinc-600">
+      <p className="mt-6 border-t border-mf-glass-border pt-4 text-xs leading-5 text-mf-glass-text-muted">
         A practical readiness estimate based on the recovery information you
         provide — not a validated medical biomarker.
       </p>

@@ -11,11 +11,17 @@ import { buildBudgetPlan } from "@/lib/nutrition/budget";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { buildDanteContext, type UserPreferencesRow } from "@/lib/athlete-state/build-dante-context";
 import { loadDanteMemory } from "@/lib/dante-core/memory";
-import { MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
+import {
+  CANONICAL_MUSCLES,
+  MUSCLE_DISPLAY_NAME,
+  resolveCanonicalMuscle,
+  type CanonicalMuscle,
+} from "@/lib/training/muscle-taxonomy";
+import { LOCAL_EXERCISE_LIBRARY } from "@/lib/workouts/exercise-library";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { compareToTargets } from "@/lib/nutrition/food-log/totals";
 import { checkSafety } from "@/lib/dante-core/safety-layer";
-import { loadTodaySession } from "@/lib/training/load-today-session";
+import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-session";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
@@ -30,6 +36,9 @@ import { classifyKnowledgeBrainRoute } from "@/lib/dante-core/knowledge-brain/ro
 import type { RetrievedKnowledgeChunk } from "@/lib/dante-core/knowledge-brain/types";
 import { isAgentToolIntent } from "@/lib/dante-core/tools/detect-intent";
 import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
+import { logToolEvent } from "@/lib/dante-core/tools/observability";
+import { createChatStreamResponse, createSingleShotChatStream } from "@/lib/dante-core/chat-stream-protocol";
+import { buildDanteTemporalContext, formatDanteTemporalContext, type DanteTemporalContext } from "@/lib/dante-core/temporal-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +50,10 @@ export const dynamic = "force-dynamic";
 type ChatRequestBody = {
   message?: unknown;
   messages?: unknown;
+  /** Set only by the Muscle Intelligence Atlas's "Ask Dante" tab — a CanonicalMuscle string, validated before use, never trusted blindly. */
+  selectedMuscle?: unknown;
+  /** Set only by the Exercise Discovery detail panel's "Ask Dante" action — an exercise name, validated against the real library before use. */
+  selectedExercise?: unknown;
 };
 
 type UserContext = {
@@ -159,35 +172,6 @@ type EvidenceContext = {
   openFoodFacts: OpenFoodFactsProduct[];
   pubchem: PubChemResult | null;
   openFda: OpenFdaResult | null;
-};
-
-type GroqApiResponse = {
-  choices?: Array<{
-    finish_reason?: string | null;
-
-    message?: {
-      role?: string;
-      content?: string | null;
-      reasoning?: unknown;
-    };
-  }>;
-
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
-
-  error?: {
-    message?: string;
-    type?: string;
-    code?: string;
-  };
-};
-
-type DanteResult = {
-  reply: string;
-  model: string;
 };
 
 type SourceItem = {
@@ -353,6 +337,47 @@ function getUserMessage(
   }
 
   return "";
+}
+
+/** Validates the Atlas's selected-muscle hint against the real taxonomy — never trusts the raw client string. */
+function getSelectedMuscle(body: unknown): CanonicalMuscle | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+
+  const requestBody = body as ChatRequestBody;
+
+  if (
+    typeof requestBody.selectedMuscle === "string" &&
+    (CANONICAL_MUSCLES as string[]).includes(requestBody.selectedMuscle)
+  ) {
+    return requestBody.selectedMuscle as CanonicalMuscle;
+  }
+
+  return null;
+}
+
+/** Validates the Exercise Discovery panel's selected-exercise hint against the real library — never trusts the raw client string. */
+function getSelectedExercise(body: unknown): { name: string; primaryMuscle: CanonicalMuscle | null } | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+
+  const requestBody = body as ChatRequestBody;
+
+  if (typeof requestBody.selectedExercise !== "string") {
+    return null;
+  }
+
+  const match = LOCAL_EXERCISE_LIBRARY.find(
+    (item) => item.name.toLowerCase() === (requestBody.selectedExercise as string).trim().toLowerCase(),
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return { name: match.name, primaryMuscle: resolveCanonicalMuscle(match.primaryMuscle) };
 }
 
 /* =========================================================
@@ -873,9 +898,17 @@ async function loadUserContext(
   userId: string,
   intent: Intent,
   userMessage: string,
+  now: Date,
+  timezone: string | null,
+  selectedMuscle: CanonicalMuscle | null = null,
+  selectedExercise: { name: string; primaryMuscle: CanonicalMuscle | null } | null = null,
 ): Promise<{ context: UserContext; chatInsight: DanteInsight | null }> {
   const supabase =
     await createClient();
+
+  // Same user-local calendar day as get_today_plan/get_current_workout
+  // (lib/training/load-today-session.ts) — never a raw UTC slice.
+  const { localDate } = localDateTimeParts(now, timezone || "UTC");
 
   const [
     profileResponse,
@@ -937,11 +970,14 @@ async function loadUserContext(
         return null;
       }),
 
-      loadFoodLogForDate(supabase, userId),
+      loadFoodLogForDate(supabase, userId, localDate).catch((error: unknown) => {
+        console.warn("[DANTE FOOD LOG]", error);
+        return { date: localDate, entries: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 } };
+      }),
 
       loadDanteMemory(supabase, userId),
 
-      loadTodaySession(supabase, userId).catch((error: unknown) => {
+      loadTodaySession(supabase, userId, now, timezone).catch((error: unknown) => {
         console.warn("[DANTE TODAY SESSION]", error);
         return null;
       }),
@@ -973,7 +1009,7 @@ async function loadUserContext(
   const preferencesRow = (preferenceResponse.data as UserPreferencesRow | null) ?? null;
 
   const digitalTwin = athleteState
-    ? buildDanteContext(athleteState, memory, preferencesRow)
+    ? buildDanteContext(athleteState, memory, preferencesRow, undefined, selectedMuscle, selectedExercise)
     : null;
 
   /* -----------------------------------------------------
@@ -2954,6 +2990,7 @@ function buildDantePrompt(
   userContext: UserContext,
   evidence: EvidenceContext,
   retrievedKnowledge: RetrievedKnowledgeChunk[],
+  temporalContext: DanteTemporalContext | null,
 ): string {
   // Kept out entirely (not an empty section) when there's nothing
   // relevant — this is what "never dump large chunk sets" and "only
@@ -2983,6 +3020,8 @@ ${JSON.stringify(
 
   return `
 ${DANTE_INSTRUCTIONS}
+
+${formatDanteTemporalContext(temporalContext)}
 
 ============================================================
 CLIENT PROFILE
@@ -3069,238 +3108,160 @@ function getGroqModels(): string[] {
 }
 
 /* =========================================================
-   SINGLE GROQ REQUEST
+   SINGLE GROQ REQUEST — STREAMING
+
+   Real incremental streaming (mission "TRUE RESPONSE STREAMING"):
+   requests `stream: true` from Groq's OpenAI-compatible endpoint and
+   yields each `delta.content` piece as it arrives over the response
+   body, instead of waiting for the full completion. Provider-specific
+   SSE framing (`data: {...}` lines, the terminal `data: [DONE]`) stays
+   entirely inside this function — callers only ever see plain text
+   chunks.
 ========================================================= */
 
-async function callGroqModel(
+type GroqStreamChunk = {
+  choices?: Array<{
+    delta?: { content?: string | null };
+    finish_reason?: string | null;
+  }>;
+  error?: { message?: string };
+};
+
+async function* streamGroqModel(
   model: string,
   prompt: string,
-): Promise<DanteResult | null> {
-  const apiKey =
-    getGroqKey();
+  signal: AbortSignal,
+): AsyncGenerator<string, void, unknown> {
+  const apiKey = getGroqKey();
+  const gptOss = model.startsWith("openai/gpt-oss");
 
-  const gptOss =
-    model.startsWith(
-      "openai/gpt-oss",
-    );
+  const requestBody: Record<string, unknown> = {
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: gptOss ? 0.55 : 0.4,
+    top_p: 0.95,
+    max_completion_tokens: gptOss ? 4096 : 2048,
+    stream: true,
+  };
 
-  const requestBody:
-    Record<string, unknown> =
-    {
-      model,
-
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-
-      temperature:
-        gptOss
-          ? 0.55
-          : 0.4,
-
-      top_p:
-        0.95,
-
-      max_completion_tokens:
-        gptOss
-          ? 4096
-          : 2048,
-    };
-
-  /*
-   * GPT-OSS reasoning configuration.
-   *
-   * reasoning_format=hidden means only the
-   * final answer should reach message.content.
-   */
+  // GPT-OSS reasoning configuration — reasoning_format=hidden means
+  // only the final answer's tokens ever reach delta.content.
   if (gptOss) {
-    requestBody.reasoning_effort =
-      "low";
-
-    requestBody.reasoning_format =
-      "hidden";
+    requestBody.reasoning_effort = "low";
+    requestBody.reasoning_format = "hidden";
   }
 
-  const response =
-    await fetchWithTimeout(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestBody),
+    signal,
+  });
 
-        headers: {
-          Authorization:
-            `Bearer ${apiKey}`,
+  if (!response.ok || !response.body) {
+    let message = `Groq returned HTTP ${response.status}.`;
 
-          "Content-Type":
-            "application/json",
-        },
-
-        body:
-          JSON.stringify(
-            requestBody,
-          ),
-      },
-      30000,
-    );
-
-  const data =
-    (await response.json()) as GroqApiResponse;
-
-  if (!response.ok) {
-    const message =
-      data.error?.message ??
-      `Groq returned HTTP ${response.status}.`;
-
-    /*
-     * 401 means the key itself is bad.
-     * A model fallback cannot fix that.
-     */
-    if (
-      response.status ===
-      401
-    ) {
-      throw new Error(
-        "Groq rejected GROQ_API_KEY. Create a new Groq key and update .env.local.",
-      );
+    try {
+      const errorBody = (await response.json()) as GroqStreamChunk;
+      message = errorBody.error?.message ?? message;
+    } catch {
+      // Response body wasn't JSON (or already consumed) — keep the generic HTTP message.
     }
 
-    throw new Error(
-      `${model}: ${message}`,
-    );
+    if (response.status === 401) {
+      throw new Error("Groq rejected GROQ_API_KEY. Create a new Groq key and update .env.local.");
+    }
+
+    throw new Error(`${model}: ${message}`);
   }
 
-  const choice =
-    data.choices?.[0];
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
 
-  const rawContent =
-    choice
-      ?.message
-      ?.content;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-  const reply =
-    typeof rawContent ===
-      "string"
-      ? rawContent.trim()
-      : "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
 
-  console.log(
-    "[DANTE MODEL RESULT]",
-    {
-      model,
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
 
-      finishReason:
-        choice
-          ?.finish_reason ??
-        null,
+        const payload = trimmed.slice(5).trim();
+        if (payload === "[DONE]") return;
 
-      hasContent:
-        reply.length >
-        0,
-
-      contentLength:
-        reply.length,
-
-      promptTokens:
-        data.usage
-          ?.prompt_tokens ??
-        null,
-
-      completionTokens:
-        data.usage
-          ?.completion_tokens ??
-        null,
-    },
-  );
-
-  if (!reply) {
-    return null;
+        try {
+          const chunk = JSON.parse(payload) as GroqStreamChunk;
+          const delta = chunk.choices?.[0]?.delta?.content;
+          if (delta) yield delta;
+        } catch {
+          // A malformed/partial SSE line — skip it rather than aborting the whole stream.
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
-
-  return {
-    reply,
-    model,
-  };
 }
 
 /* =========================================================
-   GROQ WITH FALLBACK
+   GROQ WITH FALLBACK — STREAMING
+
+   Same model-fallback list as before, but fallback is only safe
+   BEFORE the first real text chunk of a given model — once a model
+   has started streaming real content, switching models mid-answer
+   would duplicate/corrupt what the user already sees, so a failure
+   past that point is surfaced as an interrupted response instead of
+   silently retried.
 ========================================================= */
 
-async function generateDanteReply(
-  prompt: string,
-): Promise<DanteResult> {
-  const models =
-    getGroqModels();
+type DanteStreamEvent = { kind: "delta"; text: string } | { kind: "model"; model: string };
 
-  let lastError:
-    Error | null =
-    null;
+async function* streamDanteReply(prompt: string, signal: AbortSignal): AsyncGenerator<DanteStreamEvent, void, unknown> {
+  const models = getGroqModels();
+  let lastError: Error | null = null;
 
-  for (
-    const model of models
-  ) {
+  for (const model of models) {
+    let emittedAny = false;
+
     try {
-      console.log(
-        `[DANTE] Trying ${model}`,
-      );
+      console.log(`[DANTE] Trying ${model}`);
 
-      const result =
-        await callGroqModel(
-          model,
-          prompt,
-        );
-
-      if (result) {
-        return result;
+      for await (const delta of streamGroqModel(model, prompt, signal)) {
+        emittedAny = true;
+        yield { kind: "delta", text: delta };
       }
 
-      lastError =
-        new Error(
-          `${model} returned empty assistant content.`,
-        );
+      yield { kind: "model", model };
+      return;
+    } catch (error: unknown) {
+      const resolvedError = error instanceof Error ? error : new Error(String(error));
 
-      console.warn(
-        `[DANTE] ${model} returned empty content. Trying fallback.`,
-      );
-    } catch (
-      error: unknown
-    ) {
-      const resolvedError =
-        error instanceof Error
-          ? error
-          : new Error(
-              String(error),
-            );
-
-      lastError =
-        resolvedError;
-
-      console.error(
-        `[DANTE] ${model} failed:`,
-        resolvedError.message,
-      );
-
-      /*
-       * Invalid API key:
-       * no reason to call the next model.
-       */
-      if (
-        resolvedError.message.includes(
-          "GROQ_API_KEY",
-        )
-      ) {
+      if (resolvedError.name === "AbortError") {
         throw resolvedError;
       }
+
+      console.error(`[DANTE] ${model} failed:`, resolvedError.message);
+
+      if (emittedAny || resolvedError.message.includes("GROQ_API_KEY")) {
+        // Already streamed real content on this model, or the key itself is bad —
+        // neither case is recoverable by trying a different model.
+        throw resolvedError;
+      }
+
+      lastError = resolvedError;
     }
   }
 
-  throw new Error(
-    lastError?.message ??
-      "All Dante models failed to produce a final answer.",
-  );
+  throw new Error(lastError?.message ?? "All Dante models failed to produce a final answer.");
 }
 
 /* =========================================================
@@ -3533,6 +3494,9 @@ export async function POST(
         body,
       );
 
+    const selectedMuscle = getSelectedMuscle(body);
+    const selectedExercise = getSelectedExercise(body);
+
     if (!userMessage) {
       return Response.json(
         {
@@ -3581,6 +3545,35 @@ export async function POST(
     }
 
     /* -----------------------------------------------------
+       TEMPORAL CONTEXT (bug fix: Dante was previously given no real
+       clock at all, so a direct "what time is it?" was answered from
+       a guess). Resolved ONCE per turn here — from the authenticated
+       user's own `profiles.timezone`, the same convention
+       lib/training/load-today-session.ts uses for "today" — and
+       threaded through to both the agentic tool loop and the legacy
+       prompt-stuffed path below rather than re-fetched by either.
+       Never fabricated: a missing/invalid timezone yields `null`,
+       which formatDanteTemporalContext() turns into an honest
+       "unavailable" instruction instead of presenting UTC as local.
+    ----------------------------------------------------- */
+
+    const now = new Date();
+
+    const { data: timezoneRow } = await supabase
+      .from("profiles")
+      .select("timezone")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const timezone = (timezoneRow as { timezone: string | null } | null)?.timezone ?? null;
+    const temporalContext = buildDanteTemporalContext(now, timezone);
+
+    logToolEvent("DANTE_TIME_CONTEXT_READY", {
+      timezone: temporalContext?.timezone ?? "unavailable",
+      stage: "request-start",
+    });
+
+    /* -----------------------------------------------------
        INTENT
     ----------------------------------------------------- */
 
@@ -3613,22 +3606,16 @@ export async function POST(
         { category: safetyCheck.category },
       );
 
-      return Response.json(
-        {
-          ok: true,
-          reply: safetyCheck.responseOverride,
-          message: safetyCheck.responseOverride,
-          model: "dante-core-safety-layer",
-          mode: "production",
-          intent,
-          externalKnowledgeUsed: false,
-          knowledgeBrainUsed: false,
-          sources: [],
-          safetyTriggered: true,
-          safetyCategory: safetyCheck.category,
-        },
-        { status: 200 },
-      );
+      return createSingleShotChatStream(safetyCheck.responseOverride, {
+        model: "dante-core-safety-layer",
+        insight: null,
+        sources: [],
+        actions: [],
+        pendingConfirmation: null,
+        toolTraceSummary: [],
+        safetyTriggered: true,
+        safetyCategory: safetyCheck.category,
+      });
     }
 
     /* -----------------------------------------------------
@@ -3647,27 +3634,25 @@ export async function POST(
     ----------------------------------------------------- */
 
     if (isAgentToolIntent(userMessage)) {
-      try {
-        const envelope = await runDanteAgentTurn({ supabase, userId: user.id, now: new Date() }, userMessage);
+      logToolEvent("DANTE_ROUTE_SELECTED", { tool: "agent-loop" });
 
-        return Response.json(
-          {
-            ok: true,
-            reply: envelope.reply,
-            message: envelope.reply,
-            model: "dante-agent",
-            mode: "production",
-            intent,
-            externalKnowledgeUsed: false,
-            knowledgeBrainUsed: false,
-            sources: envelope.sources ?? [],
-            insight: null,
-            actions: envelope.actions ?? [],
-            pendingConfirmation: envelope.pendingConfirmation ?? null,
-            toolTraceSummary: envelope.toolTraceSummary ?? [],
-          },
-          { status: 200 },
+      try {
+        const envelope = await runDanteAgentTurn(
+          { supabase, userId: user.id, now, timezone, temporalContext, cache: new Map() },
+          userMessage,
         );
+
+        return createSingleShotChatStream(envelope.reply, {
+          model: "dante-agent",
+          insight: null,
+          sources: envelope.sources ?? [],
+          actions: envelope.actions ?? [],
+          // Only ever set from the orchestrator's own already-created,
+          // server-validated pending action row (Part 11) — never
+          // rendered before this point exists.
+          pendingConfirmation: envelope.pendingConfirmation ?? null,
+          toolTraceSummary: envelope.toolTraceSummary ?? [],
+        });
       } catch (error) {
         console.error("[DANTE AGENT TOOL LOOP ERROR]", error);
         // Fall through to the legacy prompt-stuffed flow rather than
@@ -3684,16 +3669,25 @@ export async function POST(
        Run both in parallel.
     ----------------------------------------------------- */
 
-    const [
-      { context: userContext, chatInsight },
-      evidence,
-      retrievedKnowledge,
-    ] =
-      await Promise.all([
+    let userContext: UserContext;
+    let chatInsight: DanteInsight | null;
+    let evidence: EvidenceContext;
+    let retrievedKnowledge: RetrievedKnowledgeChunk[];
+
+    try {
+      [
+        { context: userContext, chatInsight },
+        evidence,
+        retrievedKnowledge,
+      ] = await Promise.all([
         loadUserContext(
           user.id,
           intent,
           userMessage,
+          now,
+          timezone,
+          selectedMuscle,
+          selectedExercise,
         ),
 
         getEvidence(
@@ -3708,6 +3702,14 @@ export async function POST(
           intent,
         ),
       ]);
+    } catch (error: unknown) {
+      logToolEvent("DANTE_CONTEXT_FAILED", {
+        stage: "context-build",
+        errorCategory: error instanceof Error ? error.name : "unknown",
+      });
+
+      throw error;
+    }
 
     /* -----------------------------------------------------
        PROMPT
@@ -3719,22 +3721,13 @@ export async function POST(
         userContext,
         evidence,
         retrievedKnowledge,
+        temporalContext,
       );
 
     /* -----------------------------------------------------
-       GROQ
-    ----------------------------------------------------- */
-
-    const {
-      reply,
-      model,
-    } =
-      await generateDanteReply(
-        prompt,
-      );
-
-    /* -----------------------------------------------------
-       SOURCES
+       SOURCES — computed once, up front, reused by both the
+       eventual `done` event and (if generation fails before any
+       text) the error event below. Never recomputed per chunk.
     ----------------------------------------------------- */
 
     const sources =
@@ -3744,49 +3737,73 @@ export async function POST(
       );
 
     /* -----------------------------------------------------
-       SUCCESS
+       GROQ — STREAMING
+
+       Real incremental streaming: each Groq delta is forwarded to the
+       client as soon as it arrives (see streamDanteReply above).
+       Structured metadata (sources/insight) — never fabricated,
+       always the same deterministic values computed above — is only
+       sent once generation completes, in the final `done` event
+       (mission Part 11/12: never a fake citation, never a Confirm/
+       Cancel control before a real value exists).
     ----------------------------------------------------- */
 
-    return Response.json(
-      {
-        ok: true,
+    return createChatStreamResponse(async (emit) => {
+      let accumulated = "";
+      let usedModel = "dante";
 
-        /*
-         * Keep both for frontend compatibility.
-         */
-        reply,
+      try {
+        for await (const event of streamDanteReply(prompt, request.signal)) {
+          if (event.kind === "delta") {
+            accumulated += event.text;
+            emit({ type: "delta", text: event.text });
+          } else {
+            usedModel = event.model;
+          }
+        }
 
-        message:
-          reply,
+        if (!accumulated.trim()) {
+          emit({ type: "error", error: "Dante returned an empty response.", partial: false });
+          return;
+        }
 
-        model,
+        emit({
+          type: "done",
+          model: usedModel,
+          insight: chatInsight,
+          sources,
+          actions: [],
+          pendingConfirmation: null,
+          toolTraceSummary: [],
+        });
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === "AbortError") {
+          // Client cancelled (Stop button / navigation) — nothing more to send.
+          return;
+        }
 
-        mode:
-          "production",
+        const message = error instanceof Error ? error.message : "Unknown Dante error.";
+        console.error("[DANTE API STREAM ERROR]", error);
 
-        intent,
+        const partial = accumulated.length > 0;
 
-        externalKnowledgeUsed:
-          sources.length >
-          0,
+        logToolEvent(partial ? "DANTE_STREAM_FAILED" : "DANTE_PROVIDER_FAILED", {
+          stage: partial ? "stream" : "groq",
+          errorCategory: error instanceof Error ? error.name : "unknown",
+        });
 
-        knowledgeBrainUsed:
-          retrievedKnowledge.length >
-          0,
-
-        sources,
-
-        /*
-         * "Why This?" structured insight (see lib/dante-core/insight.ts)
-         * — null whenever no deterministic engine had real evidence
-         * worth surfacing for this message. Never fabricated.
-         */
-        insight: chatInsight,
-      },
-      {
-        status: 200,
-      },
-    );
+        emit({
+          type: "error",
+          error:
+            partial
+              ? "The response was interrupted."
+              : process.env.NODE_ENV === "development"
+                ? message
+                : "Dante could not generate a response.",
+          partial,
+        });
+      }
+    });
   } catch (
     error: unknown
   ) {

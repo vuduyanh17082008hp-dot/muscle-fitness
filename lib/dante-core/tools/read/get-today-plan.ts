@@ -2,12 +2,13 @@ import "server-only";
 
 import { z } from "zod";
 
-import { loadTodaySession } from "@/lib/training/load-today-session";
+import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-session";
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
 import type { DanteTool } from "@/lib/dante-core/tools/types";
+import { cached } from "@/lib/dante-core/tools/request-cache";
 
 const inputSchema = z.object({}).strict();
 
@@ -30,13 +31,17 @@ export const getTodayPlanTool: DanteTool<Record<string, never>, TodayPlanToolOut
   requiresConfirmation: false,
 
   async execute(context) {
-    const { supabase, userId, now } = context;
+    const { supabase, userId, now, timezone } = context;
+
+    // Same user-local calendar day everywhere in this turn (spec: reuse
+    // the one local-day convention, never a second UTC-slice version).
+    const { localDate } = localDateTimeParts(now, timezone || "UTC");
 
     const [todaySession, recoveryContext, nutritionContext, todayFoodLog] = await Promise.all([
-      loadTodaySession(supabase, userId, now).catch(() => null),
-      loadRecoveryContext(supabase, userId).catch(() => null),
-      loadNutritionContext(supabase, userId),
-      loadFoodLogForDate(supabase, userId),
+      cached(context, "todaySession", () => loadTodaySession(supabase, userId, now, timezone)).catch(() => null),
+      cached(context, "recoveryContext", () => loadRecoveryContext(supabase, userId)).catch(() => null),
+      cached(context, "nutritionContext", () => loadNutritionContext(supabase, userId)),
+      cached(context, "foodLog", () => loadFoodLogForDate(supabase, userId, localDate)),
     ]);
 
     const items = buildTodayPlan({

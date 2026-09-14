@@ -28,6 +28,19 @@ function createFakeSupabase() {
       getUser: async () => ({ data: { user: { id: USER_ID } }, error: null }),
     },
     from(table: string) {
+      if (table === "profiles") {
+        // createFoodLog resolves "today" from the user's persisted
+        // profile timezone when no explicit logDate is given (see
+        // lib/nutrition/food-log/load-food-log-context.ts::resolveLocalToday).
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: { timezone: "UTC" }, error: null }),
+            }),
+          }),
+        }
+      }
+
       if (table === "food_logs") {
         return {
           insert: (values: Record<string, unknown>) => ({

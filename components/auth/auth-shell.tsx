@@ -23,7 +23,7 @@ export function AuthShell({
 }: AuthShellProps) {
   return (
     <main className="relative min-h-screen overflow-hidden bg-black text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(249,115,22,0.14),transparent_30%),radial-gradient(circle_at_90%_90%,rgba(239,68,68,0.08),transparent_28%),linear-gradient(135deg,#050505,#090909_55%,#030303)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(216,255,32,0.1),transparent_30%),radial-gradient(circle_at_90%_90%,rgba(239,68,68,0.08),transparent_28%),linear-gradient(135deg,#050505,#090909_55%,#030303)]" />
 
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.035]"
@@ -34,7 +34,7 @@ export function AuthShell({
         }}
       />
 
-      <div className="pointer-events-none absolute -left-40 top-1/3 h-96 w-96 rounded-full bg-orange-500/10 blur-[130px]" />
+      <div className="pointer-events-none absolute -left-40 top-1/3 h-96 w-96 rounded-full bg-[var(--mf-brand)]/8 blur-[130px]" />
       <div className="pointer-events-none absolute -right-40 bottom-0 h-96 w-96 rounded-full bg-red-500/10 blur-[130px]" />
 
       <div className="relative z-10 grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(440px,560px)]">
@@ -43,11 +43,11 @@ export function AuthShell({
 
           <div className="max-w-2xl">
             <div className="mb-7 flex items-center gap-4">
-              <span className="text-xs font-black tracking-[0.3em] text-orange-400">
+              <span className="text-xs font-black tracking-[0.3em] text-[var(--mf-brand)]">
                 {step}
               </span>
 
-              <span className="h-px w-20 bg-gradient-to-r from-orange-400 to-transparent" />
+              <span className="h-px w-20 bg-gradient-to-r from-[var(--mf-brand)] to-transparent" />
 
               <span className="text-xs font-bold uppercase tracking-[0.28em] text-zinc-600">
                 Secure access
@@ -82,9 +82,9 @@ export function AuthShell({
             <div className="rounded-[32px] border border-white/10 bg-zinc-950/75 p-6 shadow-[0_32px_100px_rgba(0,0,0,0.65)] backdrop-blur-2xl sm:p-8">
               <div className="mb-8">
                 <div className="mb-4 flex items-center gap-3">
-                  <span className="h-px w-8 bg-orange-400" />
+                  <span className="h-px w-8 bg-[var(--mf-brand)]" />
 
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-orange-400">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--mf-brand)]">
                     {eyebrow}
                   </p>
                 </div>

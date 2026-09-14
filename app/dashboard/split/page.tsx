@@ -166,28 +166,28 @@ export default async function TrainingSplitPage() {
           HEADER
       =================================================== */}
 
-      <header className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
+      <header className="relative overflow-hidden rounded-3xl border border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-7 sm:p-9">
         <PageVisual page="trainingSplit" />
 
         <div className="relative z-10">
-        <span className="inline-grid size-14 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+        <span className="inline-grid size-14 place-items-center rounded-2xl border border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand">
           <Layers3 className="size-6" />
         </span>
 
-        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand">
           Weekly Structure
         </p>
 
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-mf-glass-text sm:text-4xl">
           Training Split
         </h1>
 
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">
           How your training week is structured across muscle groups —
           separate from the exercise-by-exercise detail in your{" "}
           <Link
             href="/dashboard/workouts"
-            className="text-amber-300 underline decoration-amber-300/40 underline-offset-4 hover:text-amber-200"
+            className="text-mf-glass-brand underline decoration-mf-glass-brand/40 underline-offset-4 hover:text-mf-glass-brand-hover"
           >
             Training Plan
           </Link>
@@ -195,14 +195,14 @@ export default async function TrainingSplitPage() {
         </p>
 
         {!isSaved ? (
-          <p className="mt-5 flex items-start gap-2 text-xs leading-5 text-zinc-500">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+          <p className="mt-5 flex items-start gap-2 text-xs leading-5 text-mf-glass-text-muted">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-mf-glass-warning" />
             No saved split configuration was found, so this structure is
             generated from your onboarding training days ({fallbackTrainingDays}
             /week) using the default auto split. Configure a split in{" "}
             <Link
               href="/training"
-              className="text-amber-300 underline decoration-amber-300/40 underline-offset-4 hover:text-amber-200"
+              className="text-mf-glass-brand underline decoration-mf-glass-brand/40 underline-offset-4 hover:text-mf-glass-brand-hover"
             >
               Training Preferences
             </Link>{" "}
@@ -218,15 +218,15 @@ export default async function TrainingSplitPage() {
 
       <section>
         <div className="mb-5 flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+          <span className="grid size-10 place-items-center rounded-xl border border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand">
             <CalendarDays className="size-5" />
           </span>
 
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-500">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand">
               Weekly Structure
             </p>
-            <h2 className="text-xl font-bold text-white">
+            <h2 className="text-xl font-bold text-mf-glass-text">
               {dayTargets.length} training {dayTargets.length === 1 ? "day" : "days"} · {restDaysCount}{" "}
               recovery {restDaysCount === 1 ? "day" : "days"}
             </h2>
@@ -240,25 +240,25 @@ export default async function TrainingSplitPage() {
               className={`flex flex-col gap-3 rounded-2xl border p-5 sm:flex-row sm:items-center sm:justify-between ${
                 row.isRest
                   ? "border-white/5 bg-white/[0.015]"
-                  : "border-white/10 bg-mf-surface"
+                  : "border-mf-glass-border bg-mf-glass-surface"
               }`}
             >
               <div className="flex items-center gap-4">
                 <span
                   className={`grid size-10 shrink-0 place-items-center rounded-xl border text-xs font-black uppercase ${
                     row.isRest
-                      ? "border-white/10 bg-white/5 text-zinc-500"
-                      : "border-amber-400/20 bg-amber-400/10 text-amber-300"
+                      ? "border-mf-glass-border bg-white/5 text-mf-glass-text-muted"
+                      : "border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand"
                   }`}
                 >
                   {row.isRest ? <Moon className="size-4" /> : <Dumbbell className="size-4" />}
                 </span>
 
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-mf-glass-text-muted">
                     {row.label}
                   </p>
-                  <p className="text-base font-bold text-white">{row.title}</p>
+                  <p className="text-base font-bold text-mf-glass-text">{row.title}</p>
                 </div>
               </div>
 
@@ -267,14 +267,14 @@ export default async function TrainingSplitPage() {
                   {row.muscles.map((muscle) => (
                     <span
                       key={muscle}
-                      className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-zinc-300"
+                      className="rounded-full border border-mf-glass-border bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-mf-glass-text-secondary"
                     >
                       {muscle}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-zinc-600">Rest day — no scheduled training.</p>
+                <p className="text-xs text-mf-glass-text-muted">Rest day — no scheduled training.</p>
               )}
             </div>
           ))}
@@ -285,12 +285,12 @@ export default async function TrainingSplitPage() {
           WEEKLY MUSCLE-GROUP FREQUENCY
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
-        <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-500">
+      <section className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand">
           Weekly Muscle-Group Frequency
         </p>
 
-        <h2 className="mt-2 text-xl font-bold text-white">
+        <h2 className="mt-2 text-xl font-bold text-mf-glass-text">
           {dayTargets.length} total weekly sessions
         </h2>
 
@@ -299,26 +299,26 @@ export default async function TrainingSplitPage() {
             {sortedFrequency.map(([muscle, count]) => (
               <div
                 key={muscle}
-                className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2.5"
+                className="flex items-center justify-between rounded-xl border border-mf-glass-border bg-white/[0.02] px-4 py-2.5"
               >
-                <span className="text-sm font-medium text-zinc-300">
+                <span className="text-sm font-medium text-mf-glass-text-secondary">
                   {muscle}
                 </span>
-                <span className="text-sm font-black text-amber-300">
+                <span className="text-sm font-black text-mf-glass-brand">
                   {count}×/week
                 </span>
               </div>
             ))}
           </div>
         ) : (
-          <p className="mt-4 text-sm text-zinc-500">
+          <p className="mt-4 text-sm text-mf-glass-text-muted">
             No muscle groups scheduled yet.
           </p>
         )}
 
         <Link
           href="/dashboard/workouts"
-          className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-amber-400 transition hover:text-amber-300"
+          className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-mf-glass-brand transition hover:text-mf-glass-brand-hover"
         >
           View exercise-by-exercise Training Plan
           <ArrowRight className="h-4 w-4" />

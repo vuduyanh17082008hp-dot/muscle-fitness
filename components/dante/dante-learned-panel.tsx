@@ -52,16 +52,16 @@ function PatternCard({
   }
 
   return (
-    <article className="rounded-2xl border border-white/10 bg-mf-surface p-5">
+    <article className="rounded-[18px] border border-mf-glass-border bg-mf-glass-surface p-5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm leading-6 text-zinc-200">{pattern.summary}</p>
+        <p className="text-sm leading-6 text-mf-glass-text-secondary">{pattern.summary}</p>
 
         <span
           className={cn(
             "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em]",
             pattern.tier === "policy"
-              ? "border-[var(--mf-violet)]/30 bg-[var(--mf-violet)]/10 text-[var(--mf-violet)]"
-              : "border-white/10 bg-white/[0.04] text-zinc-500",
+              ? "border-mf-glass-dante/30 bg-mf-glass-dante/10 text-mf-glass-dante"
+              : "border-mf-glass-border bg-white/[0.04] text-mf-glass-text-muted",
           )}
         >
           {pattern.tier}
@@ -71,29 +71,29 @@ function PatternCard({
       <button
         type="button"
         onClick={() => setExpanded((current) => !current)}
-        className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-300"
+        className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-mf-glass-text-muted transition-colors hover:text-mf-glass-text-secondary"
       >
         Evidence
         <ChevronDown className={cn("size-3.5 transition-transform", expanded && "rotate-180")} />
       </button>
 
       {expanded ? (
-        <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-white/[0.07] bg-black/20 p-3 sm:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3 sm:grid-cols-4">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-600">Comparable situations</p>
-            <p className="mt-0.5 text-sm font-bold text-white">{pattern.sampleCount}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Comparable situations</p>
+            <p className="mt-0.5 text-sm font-bold text-mf-glass-text">{pattern.sampleCount}</p>
           </div>
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-600">Positive outcomes</p>
-            <p className="mt-0.5 text-sm font-bold text-white">{pattern.positiveCount}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Positive outcomes</p>
+            <p className="mt-0.5 text-sm font-bold text-mf-glass-text">{pattern.positiveCount}</p>
           </div>
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-600">Confidence</p>
-            <p className="mt-0.5 text-sm font-bold text-white">{confidenceLabel(pattern.confidence)}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Confidence</p>
+            <p className="mt-0.5 text-sm font-bold text-mf-glass-text">{confidenceLabel(pattern.confidence)}</p>
           </div>
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-600">Last seen</p>
-            <p className="mt-0.5 text-sm font-bold text-white">
+            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Last seen</p>
+            <p className="mt-0.5 text-sm font-bold text-mf-glass-text">
               {new Date(pattern.lastReinforcedAt).toLocaleDateString()}
             </p>
           </div>
@@ -108,8 +108,8 @@ function PatternCard({
           className={cn(
             "inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-xs font-black uppercase tracking-[0.06em] transition disabled:opacity-50",
             !pattern.requiresConfirmation
-              ? "bg-amber-400 text-black hover:bg-amber-300"
-              : "border border-white/10 text-zinc-400 hover:bg-white/[0.06]",
+              ? "bg-mf-glass-brand text-mf-glass-brand-ink hover:bg-mf-glass-brand-hover"
+              : "border border-mf-glass-border text-mf-glass-text-muted hover:bg-white/[0.06]",
           )}
         >
           {pending === "keep" ? <Loader2 className="size-3.5 animate-spin" /> : null}
@@ -123,8 +123,8 @@ function PatternCard({
           className={cn(
             "inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-xs font-black uppercase tracking-[0.06em] transition disabled:opacity-50",
             pattern.requiresConfirmation
-              ? "bg-amber-400 text-black hover:bg-amber-300"
-              : "border border-white/10 text-zinc-400 hover:bg-white/[0.06]",
+              ? "bg-mf-glass-brand text-mf-glass-brand-ink hover:bg-mf-glass-brand-hover"
+              : "border border-mf-glass-border text-mf-glass-text-muted hover:bg-white/[0.06]",
           )}
         >
           {pending === "ask_first" ? <Loader2 className="size-3.5 animate-spin" /> : null}
@@ -204,27 +204,60 @@ export function DanteLearnedPanel() {
   }
 
   return (
-    <section className="rounded-[20px] border border-white/10 bg-mf-surface p-6 sm:p-7">
-      <div className="flex items-center gap-2">
-        <Brain className="size-4 text-[var(--mf-violet)]" aria-hidden="true" />
-        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[var(--mf-violet)]">Dante learned</p>
+    <section className="flex flex-col gap-6 rounded-[24px] border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
+      {/* ===================================================
+          HEADER — title + a small supporting description that's
+          ALWAYS present (not just in the empty state), so the
+          section reads clearly on its own before its body loads.
+          Natural document flow, no absolute positioning, no fixed
+          height: the card's height is driven entirely by content.
+      =================================================== */}
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-mf-glass-dante/25 bg-mf-glass-dante/10">
+              <Brain className="size-3.5 text-mf-glass-dante" aria-hidden="true" />
+            </span>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-dante">Dante learned</p>
+          </div>
+
+          {patterns && patterns.length > 0 ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-mf-glass-text-muted">
+              <span className="size-1.5 rounded-full bg-mf-glass-dante" aria-hidden="true" />
+              {patterns.length} active
+            </span>
+          ) : null}
+        </div>
+
+        <p className="max-w-xl text-sm leading-6 text-mf-glass-text-muted">
+          Patterns Dante has confirmed from your real training, nutrition and recovery data —
+          visible, editable, and always traceable to real evidence.
+        </p>
       </div>
 
-      {error ? <p className="mt-4 text-sm text-rose-400">{error}</p> : null}
+      {/* ===================================================
+          BODY
+      =================================================== */}
+
+      {error ? <p className="text-sm leading-6 text-rose-400">{error}</p> : null}
 
       {!error && patterns === null ? (
-        <p className="mt-4 text-sm text-zinc-500">Loading…</p>
+        <p className="text-sm text-mf-glass-text-muted">Loading…</p>
       ) : null}
 
       {!error && patterns !== null && patterns.length === 0 ? (
-        <p className="mt-4 text-sm leading-6 text-zinc-500">
-          Nothing learned yet. As you log training, nutrition and recovery, Dante will surface real,
-          evidenced patterns here — never a guess from a single data point.
-        </p>
+        <div className="flex flex-col gap-1.5">
+          <p className="text-sm font-bold text-mf-glass-text-secondary">Nothing learned yet.</p>
+          <p className="max-w-md text-sm leading-6 text-mf-glass-text-muted">
+            As you log training, nutrition and recovery, Dante will surface evidence-backed patterns
+            here — never a guess from a single data point.
+          </p>
+        </div>
       ) : null}
 
       {patterns && patterns.length > 0 ? (
-        <div className="mt-4 flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
           {patterns.map((pattern) => (
             <PatternCard key={pattern.id} pattern={pattern} onAction={handleAction} />
           ))}

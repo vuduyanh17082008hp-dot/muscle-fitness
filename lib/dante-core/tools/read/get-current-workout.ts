@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { loadTodaySession } from "@/lib/training/load-today-session";
 import type { DanteTool } from "@/lib/dante-core/tools/types";
+import { cached } from "@/lib/dante-core/tools/request-cache";
 
 const inputSchema = z.object({}).strict();
 
@@ -33,9 +34,9 @@ export const getCurrentWorkoutTool: DanteTool<Record<string, never>, CurrentWork
   requiresConfirmation: false,
 
   async execute(context) {
-    const { supabase, userId, now } = context;
+    const { supabase, userId, now, timezone } = context;
 
-    const session = await loadTodaySession(supabase, userId, now);
+    const session = await cached(context, "todaySession", () => loadTodaySession(supabase, userId, now, timezone));
 
     if (!session) {
       return { ok: true, data: { hasSession: false, session: null } };

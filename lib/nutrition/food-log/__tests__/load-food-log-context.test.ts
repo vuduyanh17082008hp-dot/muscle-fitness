@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
-import { loadFoodLogForDate, mapFoodLogRow, type FoodLogRow } from "@/lib/nutrition/food-log/load-food-log-context";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  loadFoodLogForDate,
+  mapFoodLogRow,
+  resolveLocalToday,
+  type FoodLogRow,
+} from "@/lib/nutrition/food-log/load-food-log-context";
 
 /**
  * Test 9 (schema-drift repair): the nutrition repository must query
@@ -103,6 +108,79 @@ describe("loadFoodLogForDate — graceful degradation (never crashes the caller)
     const supabase = fakeSupabase("nutrition_logs", { data: [], error: null }); // wrong table configured -> simulates drift
 
     await expect(loadFoodLogForDate(supabase, "user-1", "2026-01-01")).resolves.not.toThrow();
+  });
+});
+
+function fakeSupabaseWithProfile(timezone: string | null) {
+  const fromSpy = vi.fn((table: string) => {
+    if (table === "profiles") {
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: timezone === null ? null : { timezone }, error: null }),
+          }),
+        }),
+      };
+    }
+
+    if (table === "food_logs") {
+      return {
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: [], error: null }),
+            }),
+          }),
+        }),
+      };
+    }
+
+    throw new Error(`Unexpected table: ${table}`);
+  });
+
+  return { from: fromSpy } as unknown as Parameters<typeof loadFoodLogForDate>[0];
+}
+
+describe("resolveLocalToday — local-day resolution via the persisted profile timezone", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("resolves Sep 14 local for Asia/Singapore even though UTC is still Sep 13 (Test G)", async () => {
+    vi.setSystemTime(new Date("2026-09-13T17:00:00.000Z"));
+    const supabase = fakeSupabaseWithProfile("Asia/Singapore");
+
+    await expect(resolveLocalToday(supabase, "user-1")).resolves.toBe("2026-09-14");
+  });
+
+  it("falls back to UTC when the profile has no timezone set", async () => {
+    vi.setSystemTime(new Date("2026-09-13T17:00:00.000Z"));
+    const supabase = fakeSupabaseWithProfile(null);
+
+    await expect(resolveLocalToday(supabase, "user-1")).resolves.toBe("2026-09-13");
+  });
+});
+
+describe("loadFoodLogForDate — auto-resolves the local day when no date is given", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("queries the user's LOCAL today, not UTC today, when the caller omits the date (Test H)", async () => {
+    vi.setSystemTime(new Date("2026-09-13T17:00:00.000Z"));
+    const supabase = fakeSupabaseWithProfile("Asia/Singapore");
+
+    const context = await loadFoodLogForDate(supabase, "user-1");
+
+    expect(context.date).toBe("2026-09-14");
   });
 });
 

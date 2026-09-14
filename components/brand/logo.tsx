@@ -34,11 +34,11 @@ export function Logo({
         className="
           relative grid size-10 shrink-0 place-items-center
           overflow-hidden rounded-[10px]
-          border border-[var(--color-border-accent)]
-          bg-[var(--color-accent-soft)]
+          border border-[var(--mf-brand-border)]
+          bg-[var(--mf-brand-soft)]
           transition duration-300
-          group-hover:border-[var(--color-accent)]
-          group-hover:shadow-[var(--shadow-accent)]
+          group-hover:border-[var(--mf-brand)]
+          group-hover:shadow-[var(--shadow-brand)]
         "
       >
         <span
@@ -52,7 +52,7 @@ export function Logo({
         <BrandMark
           className="
             relative size-5
-            text-[var(--color-accent-light)]
+            text-[var(--mf-brand)]
             transition duration-300
             group-hover:scale-110
           "
@@ -83,7 +83,7 @@ export function Logo({
             mt-1 block
             text-[0.62rem] font-bold
             tracking-[0.42em]
-            text-[var(--color-accent)]
+            text-[var(--mf-brand)]
           "
         >
           Fitness

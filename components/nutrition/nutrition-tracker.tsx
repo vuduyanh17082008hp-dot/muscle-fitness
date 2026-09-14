@@ -22,10 +22,12 @@ import type { FoodHistoryItem } from "@/lib/nutrition/food-log/history"
 type NutritionTrackerProps = {
   initialEntries: FoodLogEntry[]
   target: DailyMacroTotals
+  /** The server's own resolved local-today date (profile timezone, not UTC) — the entries above were fetched for THIS date, so the initial view must open on it too, not a possibly-different client-computed "today". */
+  initialDate: string
 }
 
-export function NutritionTracker({ initialEntries, target }: NutritionTrackerProps) {
-  const [selectedDate, setSelectedDate] = useState(todayIso())
+export function NutritionTracker({ initialEntries, target, initialDate }: NutritionTrackerProps) {
+  const [selectedDate, setSelectedDate] = useState(initialDate)
   const [entries, setEntries] = useState<FoodLogEntry[]>(initialEntries)
   const [loadingDate, setLoadingDate] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -221,10 +223,10 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
     <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-500">
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-mf-glass-brand">
             {isToday ? "Today's Nutrition" : "Food Log"}
           </p>
-          <h2 className="mt-1 text-2xl font-black text-white">{formatDateLabel(selectedDate)}</h2>
+          <h2 className="mt-1 text-2xl font-black text-mf-glass-text">{formatDateLabel(selectedDate)}</h2>
         </div>
 
         {isToday ? <TrackFoodModal onAddFood={handleAddFood} onAddFoods={handleAddFoods} /> : null}
@@ -262,15 +264,16 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
       ) : null}
 
       <div>
-        <p className="mb-4 text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Today&apos;s Food</p>
+        <p className="mb-4 text-xs font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">Today&apos;s Food</p>
 
         {loadingDate ? (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-sm text-zinc-500">
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-mf-glass-border bg-white/[0.02] p-6 text-sm text-mf-glass-text-muted">
             <Loader2 className="size-4 animate-spin" />
             Loading…
           </div>
         ) : entries.length === 0 ? (
           <EmptyState
+            glass
             icon={UtensilsCrossed}
             title="Nothing logged yet"
             description={
@@ -283,7 +286,7 @@ export function NutritionTracker({ initialEntries, target }: NutritionTrackerPro
           <div className="space-y-6">
             {MEAL_TYPES.filter((meal) => grouped[meal].length > 0).map((meal) => (
               <div key={meal}>
-                <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-text-muted">
                   {MEAL_TYPE_LABEL[meal]}
                 </p>
                 <ul className="space-y-2">
@@ -327,8 +330,8 @@ function DateNav({
   const isToday = selectedDate === todayIso()
 
   return (
-    <div className="flex items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2.5">
-      <button type="button" aria-label="Previous day" onClick={onPrev} className="grid size-9 place-items-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white">
+    <div className="flex items-center justify-center gap-3 rounded-xl border border-mf-glass-border bg-white/[0.02] px-4 py-2.5">
+      <button type="button" aria-label="Previous day" onClick={onPrev} className="grid size-9 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text">
         <ChevronLeft className="size-4" />
       </button>
 
@@ -337,7 +340,7 @@ function DateNav({
         value={selectedDate}
         max={todayIso()}
         onChange={(event) => event.target.value && onChange(event.target.value)}
-        className="border-none bg-transparent text-center text-sm font-semibold text-white [color-scheme:dark]"
+        className="border-none bg-transparent text-center text-sm font-semibold text-mf-glass-text [color-scheme:dark]"
         aria-label="Select date"
       />
 
@@ -346,7 +349,7 @@ function DateNav({
         aria-label="Next day"
         onClick={onNext}
         disabled={isToday}
-        className="grid size-9 place-items-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white disabled:opacity-30"
+        className="grid size-9 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text disabled:opacity-30"
       >
         <ChevronRight className="size-4" />
       </button>
@@ -364,14 +367,14 @@ function FoodShortcutList({
   onAddAgain: (item: FoodHistoryItem) => void
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-      <p className="mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-zinc-500">{title}</p>
+    <div className="rounded-2xl border border-mf-glass-border bg-white/[0.02] p-4">
+      <p className="mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-text-muted">{title}</p>
       <ul className="space-y-2">
         {items.map((item, index) => (
-          <li key={`${item.foodIdentity ?? item.foodName}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-black/20 px-3 py-2">
+          <li key={`${item.foodIdentity ?? item.foodName}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-mf-glass-bg-deep px-3 py-2">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">{item.foodName}</p>
-              <p className="text-xs text-zinc-500">
+              <p className="truncate text-sm font-semibold text-mf-glass-text">{item.foodName}</p>
+              <p className="text-xs text-mf-glass-text-muted">
                 {item.lastServingName && item.lastServingsConsumed
                   ? `${item.lastServingsConsumed} ${item.lastServingName}${item.lastServingsConsumed === 1 ? "" : "s"}`
                   : `${item.lastQuantityGrams} g`}
@@ -380,7 +383,7 @@ function FoodShortcutList({
             <button
               type="button"
               onClick={() => onAddAgain(item)}
-              className="shrink-0 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-400/20"
+              className="shrink-0 rounded-lg border border-mf-glass-brand-border bg-mf-glass-brand-soft px-3 py-1.5 text-xs font-bold text-mf-glass-brand hover:bg-mf-glass-brand-soft"
             >
               Add Again
             </button>
@@ -407,13 +410,13 @@ function MacroCard({
   accent?: boolean
 }) {
   return (
-    <div className={`rounded-2xl border p-5 ${accent ? "border-amber-400/25 bg-amber-400/8" : "border-white/10 bg-white/[0.035]"}`}>
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">{label}</p>
-      <p className={`mt-3 text-2xl font-black ${accent ? "text-amber-300" : "text-white"}`}>
+    <div className={`rounded-2xl border p-5 ${accent ? "border-mf-glass-brand-border bg-mf-glass-brand-soft" : "border-mf-glass-border bg-white/[0.035]"}`}>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-mf-glass-text-muted">{label}</p>
+      <p className={`mt-3 text-2xl font-black ${accent ? "text-mf-glass-brand" : "text-mf-glass-text"}`}>
         {consumed}
-        <span className="text-base font-semibold text-zinc-500"> / {target} {unit}</span>
+        <span className="text-base font-semibold text-mf-glass-text-muted"> / {target} {unit}</span>
       </p>
-      <p className="mt-2 text-xs text-zinc-500">
+      <p className="mt-2 text-xs text-mf-glass-text-muted">
         {remaining >= 0 ? `${remaining} ${unit} remaining` : `${Math.abs(remaining)} ${unit} over target`}
       </p>
     </div>
@@ -451,22 +454,22 @@ function FoodLogRow({
       : `${entry.quantityGrams} g`
 
   return (
-    <li className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+    <li className="rounded-xl border border-mf-glass-border bg-white/[0.03] p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-white">
+          <p className="truncate font-semibold text-mf-glass-text">
             {entry.foodName}
             {entry.isEstimated ? (
-              <span className="ml-2 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-400">
+              <span className="ml-2 rounded-full bg-mf-glass-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-mf-glass-brand">
                 Estimated
               </span>
             ) : null}
           </p>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-mf-glass-text-muted">
             {quantityLabel} · {FOOD_LOG_SOURCE_LABEL[entry.source]}
           </p>
-          <p className="mt-1 text-xs text-zinc-400">
-            <span className="font-semibold text-zinc-300">{entry.calories} kcal</span>
+          <p className="mt-1 text-xs text-mf-glass-text-muted">
+            <span className="font-semibold text-mf-glass-text-secondary">{entry.calories} kcal</span>
             {" · "}
             {entry.proteinG} P • {entry.carbsG} C • {entry.fatG} F
           </p>
@@ -479,7 +482,7 @@ function FoodLogRow({
               aria-label={`Edit ${entry.foodName}`}
               onClick={onStartEdit}
               disabled={isPending}
-              className="grid size-9 place-items-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white disabled:opacity-40"
+              className="grid size-9 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text disabled:opacity-40"
             >
               <Pencil className="size-4" />
             </button>
@@ -488,7 +491,7 @@ function FoodLogRow({
               aria-label={`Delete ${entry.foodName}`}
               onClick={onRequestDelete}
               disabled={isPending}
-              className="grid size-9 place-items-center rounded-lg text-zinc-400 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+              className="grid size-9 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
             >
               <Trash2 className="size-4" />
             </button>
@@ -501,10 +504,10 @@ function FoodLogRow({
       ) : null}
 
       {isConfirmingDelete ? (
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-3">
-          <p className="text-xs text-zinc-400">Remove {entry.foodName} from today&apos;s food?</p>
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-mf-glass-border pt-3">
+          <p className="text-xs text-mf-glass-text-muted">Remove {entry.foodName} from today&apos;s food?</p>
           <div className="flex shrink-0 gap-2">
-            <button type="button" onClick={onCancelDelete} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:bg-white/10">
+            <button type="button" onClick={onCancelDelete} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-mf-glass-text-muted hover:bg-white/10">
               Cancel
             </button>
             <button
@@ -537,24 +540,24 @@ function EditQuantityRow({
   const [grams, setGrams] = useState(initialGrams)
 
   return (
-    <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
+    <div className="mt-3 flex items-center gap-2 border-t border-mf-glass-border pt-3">
       <input
         type="number"
         value={grams}
         onChange={(event) => setGrams(Number(event.target.value) || 0)}
-        className="h-10 w-24 rounded-lg border border-white/10 bg-black/30 px-3 text-center text-sm text-white"
+        className="h-10 w-24 rounded-lg border border-mf-glass-border bg-mf-glass-bg-deep px-3 text-center text-sm text-mf-glass-text"
         aria-label="Edit quantity in grams"
       />
-      <span className="text-xs text-zinc-500">g</span>
+      <span className="text-xs text-mf-glass-text-muted">g</span>
       <div className="ml-auto flex gap-2">
-        <button type="button" onClick={onCancel} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:bg-white/10">
+        <button type="button" onClick={onCancel} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-mf-glass-text-muted hover:bg-white/10">
           Cancel
         </button>
         <button
           type="button"
           disabled={isPending || !(grams > 0)}
           onClick={() => onSave(grams)}
-          className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-black disabled:opacity-40"
+          className="rounded-lg bg-mf-glass-brand px-3 py-1.5 text-xs font-bold text-mf-glass-brand-ink disabled:opacity-40"
         >
           {isPending ? "Saving…" : "Save"}
         </button>

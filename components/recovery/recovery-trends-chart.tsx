@@ -54,13 +54,13 @@ export function RecoveryTrendsChart({
   const hasData = points.some((point) => point[metric] !== null);
 
   return (
-    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
+    <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
             Recovery Trends
           </p>
-          <h2 className="mt-1 text-xl font-black text-white">
+          <h2 className="mt-1 text-xl font-black text-mf-glass-text">
             Last {range} days
           </h2>
         </div>
@@ -74,8 +74,8 @@ export function RecoveryTrendsChart({
               className={cn(
                 "rounded-lg border px-3 py-1.5 text-xs font-bold transition",
                 range === option
-                  ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
-                  : "border-white/10 text-zinc-500 hover:border-white/20",
+                  ? "border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand"
+                  : "border-mf-glass-border text-mf-glass-text-muted hover:border-mf-glass-border-strong",
               )}
             >
               {option}D
@@ -93,8 +93,8 @@ export function RecoveryTrendsChart({
             className={cn(
               "rounded-full border px-3 py-1.5 text-[11px] font-bold transition",
               metric === item.key
-                ? "border-white/20 bg-white/10 text-white"
-                : "border-white/10 text-zinc-500 hover:border-white/20",
+                ? "border-mf-glass-border-strong bg-white/10 text-mf-glass-text"
+                : "border-mf-glass-border text-mf-glass-text-muted hover:border-mf-glass-border-strong",
             )}
           >
             {item.label}
@@ -103,7 +103,7 @@ export function RecoveryTrendsChart({
       </div>
 
       {!hasData ? (
-        <p className="mt-8 text-sm leading-6 text-zinc-500">
+        <p className="mt-8 text-sm leading-6 text-mf-glass-text-muted">
           Not enough check-ins yet to show a {activeMetric.label.toLowerCase()}{" "}
           trend. Log a daily check-in to start building this history.
         </p>

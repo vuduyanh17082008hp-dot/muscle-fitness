@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { loadTodaySession, localDayRangeUtc } from "@/lib/training/load-today-session";
+import { loadTodaySession, localDateTimeParts, localDayRangeUtc } from "@/lib/training/load-today-session";
 
 /**
  * Covers the "No session scheduled today" persistence bug: the reader
@@ -25,6 +25,7 @@ type FakeSessionRow = {
 function createFakeSupabase(options: {
   timezoneByUser?: Map<string, string>;
   sessions: FakeSessionRow[];
+  onProfilesQuery?: () => void;
 }) {
   const timezoneByUser = options.timezoneByUser ?? new Map<string, string>();
   const sessions = options.sessions;
@@ -32,6 +33,8 @@ function createFakeSupabase(options: {
   return {
     from(table: string) {
       if (table === "profiles") {
+        options.onProfilesQuery?.();
+
         return {
           select: () => ({
             eq: (_col: string, userId: string) => ({
@@ -235,5 +238,47 @@ describe("loadTodaySession", () => {
     const result = await loadTodaySession(supabase as never, USER_A, now);
 
     expect(result?.id).toBe("session-today");
+  });
+
+  it("does not re-fetch profiles.timezone when the caller already knows it (Test H)", async () => {
+    const now = new Date("2026-09-13T20:00:00.000Z"); // 2026-09-14 04:00 SGT
+    let profilesQueries = 0;
+
+    const supabase = createFakeSupabase({
+      sessions: [
+        {
+          user_id: USER_A,
+          id: "session-today",
+          name: "Push Day",
+          scheduled_for: "2026-09-13T17:00:00.000Z", // 2026-09-14 01:00 SGT
+          duration_minutes: 60,
+          session_state: "not_started",
+        },
+      ],
+      onProfilesQuery: () => {
+        profilesQueries += 1;
+      },
+    });
+
+    const result = await loadTodaySession(supabase as never, USER_A, now, "Asia/Singapore");
+
+    expect(result?.id).toBe("session-today");
+    expect(profilesQueries).toBe(0);
+  });
+});
+
+describe("localDateTimeParts", () => {
+  it("agrees with localDayRangeUtc on which calendar day is 'today' (Test D)", () => {
+    // 2026-09-13T20:00:00Z is 2026-09-14T04:00 in Singapore (UTC+8) — the
+    // same instant used by the localDayRangeUtc test above.
+    const now = new Date("2026-09-13T20:00:00.000Z");
+
+    const { localDate, localTime } = localDateTimeParts(now, "Asia/Singapore");
+    const { startIso } = localDayRangeUtc(now, "Asia/Singapore");
+
+    expect(localDate).toBe("2026-09-14");
+    expect(localTime).toBe("04:00");
+    // The local day's UTC start boundary must fall on the same local date.
+    expect(new Date(startIso).getTime()).toBeLessThanOrEqual(now.getTime());
   });
 });

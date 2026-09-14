@@ -9,12 +9,12 @@ function StatusIcon({ status }: { status: DailyAction["status"] }) {
     return <CheckCircle2 className="size-4 text-emerald-400" aria-hidden="true" />;
   }
   if (status === "active") {
-    return <CircleDot className="size-4 text-amber-400" aria-hidden="true" />;
+    return <CircleDot className="size-4 text-mf-glass-brand" aria-hidden="true" />;
   }
   if (status === "skipped") {
-    return <XCircle className="size-4 text-zinc-600" aria-hidden="true" />;
+    return <XCircle className="size-4 text-mf-glass-text-muted" aria-hidden="true" />;
   }
-  return <Circle className="size-4 text-zinc-600" aria-hidden="true" />;
+  return <Circle className="size-4 text-mf-glass-text-muted" aria-hidden="true" />;
 }
 
 function formatDayLabel(dateKey: string, isToday: boolean): string {
@@ -45,20 +45,20 @@ export function CalendarAgenda({ days }: { days: CalendarDay[] }) {
           key={day.date}
           className={`rounded-2xl border p-5 ${
             day.isToday
-              ? "border-amber-400/30 bg-amber-400/[0.04]"
-              : "border-white/10 bg-mf-surface"
+              ? "border-mf-glass-brand-border bg-mf-glass-brand-soft"
+              : "border-mf-glass-border bg-mf-glass-surface"
           }`}
         >
           <h3
             className={`text-xs font-black uppercase tracking-[0.2em] ${
-              day.isToday ? "text-amber-300" : "text-zinc-500"
+              day.isToday ? "text-mf-glass-brand" : "text-mf-glass-text-muted"
             }`}
           >
             {formatDayLabel(day.date, day.isToday)}
           </h3>
 
           {day.actions.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-600">Nothing scheduled.</p>
+            <p className="mt-3 text-sm text-mf-glass-text-muted">Nothing scheduled.</p>
           ) : (
             <div className="mt-3 flex flex-col gap-2">
               {day.actions.map((action) => {
@@ -68,16 +68,16 @@ export function CalendarAgenda({ days }: { days: CalendarDay[] }) {
                   <Link
                     key={action.id}
                     href={action.actionUrl}
-                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 transition-colors duration-200 hover:border-white/20 hover:bg-white/[0.05]"
+                    className="flex items-center gap-3 rounded-xl border border-mf-glass-border bg-white/[0.02] px-4 py-3 transition-colors duration-200 hover:border-mf-glass-border-strong hover:bg-white/[0.05]"
                   >
                     <StatusIcon status={action.status} />
 
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-white">
+                      <span className="block truncate text-sm font-semibold text-mf-glass-text">
                         {action.title}
                       </span>
                       {(time || action.subtitle) && (
-                        <span className="mt-0.5 block truncate text-xs text-zinc-500">
+                        <span className="mt-0.5 block truncate text-xs text-mf-glass-text-muted">
                           {[time, action.subtitle].filter(Boolean).join(" • ")}
                         </span>
                       )}

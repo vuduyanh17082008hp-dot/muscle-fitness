@@ -6,6 +6,7 @@ import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import type { DanteTool } from "@/lib/dante-core/tools/types";
+import { cached } from "@/lib/dante-core/tools/request-cache";
 
 const inputSchema = z
   .object({
@@ -48,8 +49,8 @@ export const acceptAdaptiveAdjustmentTool: DanteTool<AcceptAdaptiveAdjustmentInp
     const { supabase, userId } = context;
 
     const [athleteState, trainingContext] = await Promise.all([
-      buildAthleteState(supabase, userId).catch(() => null),
-      loadTrainingContext(supabase, userId).catch(() => null),
+      cached(context, "athleteState", () => buildAthleteState(supabase, userId)).catch(() => null),
+      cached(context, "trainingContext", () => loadTrainingContext(supabase, userId)).catch(() => null),
     ]);
 
     if (!athleteState || !trainingContext) {

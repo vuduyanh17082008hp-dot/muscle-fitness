@@ -65,19 +65,19 @@ export default async function RecoveryPage() {
           HEADER
       ================================================= */}
 
-      <section className="relative overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg p-6 sm:p-8">
+      <section className="relative overflow-hidden rounded-[24px] border border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-6 sm:p-8">
         <PageVisual page="recovery" />
 
         <div className="relative z-10">
-          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-mf-violet">
+          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-mf-glass-dante">
             Recovery Intelligence
           </p>
 
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+          <h1 className="mt-3 text-3xl font-black tracking-tight text-mf-glass-text sm:text-4xl">
             Train hard. Recover intelligently.
           </h1>
 
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">
             A practical readiness estimate built from your sleep, stress,
             fatigue, soreness, mood and training data — connected to Dante for
             evidence-aware recovery coaching.
@@ -130,10 +130,10 @@ export default async function RecoveryPage() {
 
       <div id="dante-recovery-coach" className="scroll-mt-24">
         <div className="mb-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
             Dante
           </p>
-          <h2 className="mt-1 text-xl font-black text-white">
+          <h2 className="mt-1 text-xl font-black text-mf-glass-text">
             Recovery Coach
           </h2>
         </div>
@@ -157,26 +157,26 @@ export default async function RecoveryPage() {
           HEALTH SAFETY
       ================================================= */}
 
-      <section className="rounded-3xl border border-amber-400/15 bg-amber-400/[0.04] p-6 sm:p-8">
+      <section className="rounded-3xl border border-mf-glass-warning/15 bg-mf-glass-warning/[0.04] p-6 sm:p-8">
         <div className="flex items-center gap-2">
-          <ShieldAlert className="size-4 text-amber-400" aria-hidden="true" />
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400">
+          <ShieldAlert className="size-4 text-mf-glass-warning" aria-hidden="true" />
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-mf-glass-warning">
             Recovery Guidance, Not Medical Diagnosis
           </p>
         </div>
 
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-mf-glass-text-muted">
           Recovery scores and Dante insights are educational tools based on
           the information available to Muscle Fitness. They are not medical
           diagnoses and should not replace qualified medical care.
         </p>
 
-        <div className="mt-4 flex items-start gap-2 rounded-2xl border border-rose-400/15 bg-rose-400/[0.04] p-4">
+        <div className="mt-4 flex items-start gap-2 rounded-2xl border border-mf-glass-danger/15 bg-mf-glass-danger/[0.04] p-4">
           <AlertTriangle
-            className="mt-0.5 size-4 shrink-0 text-rose-400"
+            className="mt-0.5 size-4 shrink-0 text-mf-glass-danger"
             aria-hidden="true"
           />
-          <p className="text-xs leading-5 text-zinc-400">
+          <p className="text-xs leading-5 text-mf-glass-text-muted">
             For chest pain, severe shortness of breath, fainting,
             neurological symptoms, rapidly worsening or severe pain, severe
             illness, or a mental-health crisis, stop and seek urgent
@@ -187,7 +187,7 @@ export default async function RecoveryPage() {
 
         <Link
           href="/responsible-ai"
-          className="mt-4 inline-flex text-xs font-bold text-amber-300 hover:text-amber-200"
+          className="mt-4 inline-flex text-xs font-bold text-mf-glass-warning hover:text-mf-glass-brand"
         >
           Read our Responsible AI approach →
         </Link>

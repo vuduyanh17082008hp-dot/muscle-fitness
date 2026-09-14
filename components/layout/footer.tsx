@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { Logo } from "@/components/brand/logo";
+
 const productLinks = [
   { label: "Training Course", href: "/training-course" },
   { label: "Meal Plan", href: "/meal-plan" },
@@ -14,23 +16,10 @@ const accountLinks = [
 
 export default function Footer() {
   return (
-    <footer className="border-t border-[#382e27] bg-[#090807] text-[#a99b8c]">
+    <footer className="border-t border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)] text-[var(--mf-pub-text-muted)]">
       <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
         <div>
-          <Link href="/" className="inline-flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-md border border-[#b59160] bg-gradient-to-br from-[#a5aaad] to-[#a77b48] font-black text-[#16110d]">
-              MF
-            </div>
-
-            <div>
-              <div className="font-black tracking-[0.12em] text-[#f2e9dd]">
-                MUSCLE FITNESS
-              </div>
-              <div className="mt-1 text-[10px] tracking-[0.18em]">
-                OLD-SCHOOL WORK. MODERN SYSTEM.
-              </div>
-            </div>
-          </Link>
+          <Logo />
 
           <p className="mt-6 max-w-md leading-7">
             Built from a real transformation and created to turn confusion
@@ -39,7 +28,7 @@ export default function Footer() {
         </div>
 
         <div>
-          <h2 className="text-xs font-black tracking-[0.2em] text-[#dcc5a5]">
+          <h2 className="text-xs font-black tracking-[0.2em] text-[var(--mf-brand)]">
             THE SYSTEM
           </h2>
 
@@ -57,7 +46,7 @@ export default function Footer() {
         </div>
 
         <div>
-          <h2 className="text-xs font-black tracking-[0.2em] text-[#dcc5a5]">
+          <h2 className="text-xs font-black tracking-[0.2em] text-[var(--mf-brand)]">
             ACCOUNT
           </h2>
 
@@ -75,7 +64,7 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-[#2c2520]">
+      <div className="border-t border-[var(--mf-pub-border)]">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-6 text-xs tracking-wider md:flex-row md:items-center md:justify-between lg:px-8">
           <p>© 2026 MUSCLE FITNESS. ALL RIGHTS RESERVED.</p>
 

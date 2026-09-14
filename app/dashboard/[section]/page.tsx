@@ -211,26 +211,26 @@ export default async function DashboardSectionPage({
           too would be a redundant second focal point on the same
           screen, so it's skipped for ai-coach specifically. */}
       {sectionKey !== "ai-coach" ? (
-        <section id="overview" className="scroll-mt-24 rounded-[20px] border border-white/10 bg-gradient-to-br from-mf-surface-elevated via-mf-surface to-mf-bg p-6 sm:p-8">
-          <span className="inline-grid size-14 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+        <section id="overview" className="scroll-mt-24 rounded-[20px] border border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-6 sm:p-8">
+          <span className="inline-grid size-14 place-items-center rounded-xl border border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand">
             <Icon className="size-6" />
           </span>
 
-          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand">
             {section.project}
           </p>
 
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-mf-glass-text sm:text-4xl">
             {section.title}
           </h1>
 
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">
             {section.description}
           </p>
 
-          <p className="mt-4 text-sm text-zinc-500">
+          <p className="mt-4 text-sm text-mf-glass-text-muted">
             Signed in as{" "}
-            <span className="text-zinc-300">
+            <span className="text-mf-glass-text-secondary">
               {displayName}
             </span>
           </p>
@@ -240,36 +240,36 @@ export default async function DashboardSectionPage({
       {(sectionKey === "today" ||
         sectionKey === "progress") && (
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <PerformanceCard variant="nutrition" title="Calories" metric={{ value: formatValue(fitness?.calories_target) }} />
-          <PerformanceCard variant="nutrition" title="Protein" metric={{ value: formatValue(fitness?.protein_target_g, " g") }} />
-          <PerformanceCard variant="nutrition" title="Carbs" metric={{ value: formatValue(fitness?.carbs_target_g, " g") }} />
-          <PerformanceCard variant="nutrition" title="Fat" metric={{ value: formatValue(fitness?.fat_target_g, " g") }} />
+          <PerformanceCard glass variant="nutrition" title="Calories" metric={{ value: formatValue(fitness?.calories_target) }} />
+          <PerformanceCard glass variant="nutrition" title="Protein" metric={{ value: formatValue(fitness?.protein_target_g, " g") }} />
+          <PerformanceCard glass variant="nutrition" title="Carbs" metric={{ value: formatValue(fitness?.carbs_target_g, " g") }} />
+          <PerformanceCard glass variant="nutrition" title="Fat" metric={{ value: formatValue(fitness?.fat_target_g, " g") }} />
         </section>
       )}
 
       {(sectionKey === "progress" ||
         sectionKey === "today") && (
-        <section id="body" className="scroll-mt-24 rounded-[20px] border border-white/10 bg-mf-surface p-6">
-          <h2 className="text-lg font-bold text-white">
+        <section id="body" className="scroll-mt-24 rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-6">
+          <h2 className="text-lg font-bold text-mf-glass-text">
             Current metrics
           </h2>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-mf-glass-text-muted">
               Weight:{" "}
-              <span className="text-white">
+              <span className="text-mf-glass-text">
                 {formatValue(fitness?.weight_kg, " kg")}
               </span>
             </p>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-mf-glass-text-muted">
               Height:{" "}
-              <span className="text-white">
+              <span className="text-mf-glass-text">
                 {formatValue(fitness?.height_cm, " cm")}
               </span>
             </p>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-mf-glass-text-muted">
               Goal:{" "}
-              <span className="text-white">
+              <span className="text-mf-glass-text">
                 {formatValue(fitness?.goal)}
               </span>
             </p>
@@ -278,25 +278,25 @@ export default async function DashboardSectionPage({
       )}
 
       {sectionKey === "ai-coach" && (
-        <>
+        <div className="flex flex-col gap-8">
           <DanteChat contextualSuggestions={aiCoachSuggestions ?? undefined} />
           <DanteLearnedPanel />
-        </>
+        </div>
       )}
 
       {sectionKey === "settings" && (
-        <section className="rounded-[20px] border border-white/10 bg-mf-surface p-6">
-          <p className="text-sm leading-6 text-zinc-400">
+        <section className="rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-6">
+          <p className="text-sm leading-6 text-mf-glass-text-muted">
             Update personal details, goals and preferences through
             onboarding. Onboarding completed:{" "}
-            <span className="text-white">
+            <span className="text-mf-glass-text">
               {profile?.onboarding_completed ? "Yes" : "No"}
             </span>
           </p>
 
           <Link
             href="/onboarding"
-            className="mt-5 inline-flex rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
+            className="mt-5 inline-flex rounded-xl bg-mf-glass-brand px-5 py-3 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
           >
             Edit profile
           </Link>
@@ -305,6 +305,7 @@ export default async function DashboardSectionPage({
 
       {sectionKey === "check-in" && (
         <EmptyState
+          glass
           icon={Icon}
           title="Weekly check-in is coming soon"
           description="A weekly adherence and coach review will live here. In the meantime, your daily recovery check-in already feeds Dante's readiness score."
@@ -315,6 +316,7 @@ export default async function DashboardSectionPage({
 
       {sectionKey === "messages" && (
         <EmptyState
+          glass
           icon={Icon}
           title="Messages are coming soon"
           description="Direct conversations with your coach will live here. Ask Dante in the meantime for training and nutrition guidance."
@@ -328,6 +330,7 @@ export default async function DashboardSectionPage({
           <CalendarAgenda days={calendarDays} />
         ) : (
           <EmptyState
+            glass
             icon={Icon}
             title="Nothing scheduled yet"
             description="Planned workouts and daily check-ins will appear here once you build a training plan."

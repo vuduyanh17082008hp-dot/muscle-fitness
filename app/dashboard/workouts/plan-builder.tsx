@@ -84,6 +84,11 @@ type PlanBuilderProps = {
   externalTemplateName:
     | string
     | null;
+
+  /** Set by the Exercise Discovery detail panel's "Add to Program" action — pre-fills the manual exercise picker's search box below; no other behavior changes. */
+  initialExerciseQuery?:
+    | string
+    | null;
 };
 
 type IntensityStyle =
@@ -633,6 +638,7 @@ export default function PlanBuilder({
   profile,
   initialPreset,
   externalTemplateName,
+  initialExerciseQuery,
 }: PlanBuilderProps) {
   const router =
     useRouter();
@@ -797,7 +803,7 @@ export default function PlanBuilder({
     search,
     setSearch,
   ] =
-    useState("");
+    useState(initialExerciseQuery ?? "");
 
   const [
     feedback,

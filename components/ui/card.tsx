@@ -8,11 +8,14 @@ import { cn } from "@/lib/cn";
 export interface CardProps
   extends HTMLAttributes<HTMLDivElement> {
   interactive?: boolean;
+  /** Render on the Performance Glass (near-black + lime) dashboard tokens instead of the legacy Ocean Sunset ones. Default false — every other consumer of this primitive (business portal, design-system catalog) keeps its current look. */
+  glass?: boolean;
 }
 
 export function Card({
   className,
   interactive = false,
+  glass = false,
   ...props
 }: CardProps) {
   return (
@@ -23,19 +26,22 @@ export function Card({
           "overflow-hidden",
           "rounded-[var(--radius-md)]",
           "border",
-          "border-[var(--color-border)]",
-          "bg-[var(--color-surface)]",
           "shadow-[var(--shadow-card)]",
         ].join(" "),
+        glass
+          ? "border-mf-glass-border bg-mf-glass-surface"
+          : "border-[var(--color-border)] bg-[var(--color-surface)]",
         interactive &&
           [
             "transition",
             "duration-300",
             "hover:-translate-y-1",
-            "hover:border-[var(--color-border-accent)]",
-            "hover:bg-[var(--color-surface-hover)]",
             "hover:shadow-[var(--shadow-card-hover)]",
           ].join(" "),
+        interactive &&
+          (glass
+            ? "hover:border-mf-glass-border-strong hover:bg-mf-glass-elevated"
+            : "hover:border-[var(--color-border-accent)] hover:bg-[var(--color-surface-hover)]"),
         className,
       )}
       {...props}
@@ -43,21 +49,14 @@ export function Card({
   );
 }
 
-export function CardGlow() {
+export function CardGlow({ glass = false }: { glass?: boolean }) {
   return (
     <div
       aria-hidden="true"
-      className="
-        pointer-events-none
-        absolute
-        -right-20
-        -top-20
-        size-48
-        rounded-full
-        bg-[var(--color-accent)]
-        opacity-[0.07]
-        blur-3xl
-      "
+      className={cn(
+        "pointer-events-none absolute -right-20 -top-20 size-48 rounded-full opacity-[0.07] blur-3xl",
+        glass ? "bg-mf-glass-brand" : "bg-[var(--color-accent)]",
+      )}
     />
   );
 }

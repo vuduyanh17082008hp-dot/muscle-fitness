@@ -28,7 +28,7 @@ const STATUS_COPY: Record<
 > = {
   no_budget: {
     label: "No budget set",
-    chip: "border-white/10 bg-white/5 text-zinc-400",
+    chip: "border-mf-glass-border bg-white/5 text-mf-glass-text-muted",
   },
   within_budget: {
     label: "Within budget",
@@ -117,18 +117,18 @@ export function BudgetPlanner({
   const status = STATUS_COPY[result.status]
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
+    <section className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+          <span className="grid size-10 place-items-center rounded-xl border border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand">
             <Wallet className="size-5" />
           </span>
 
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-500">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand">
               Budget-Aware Planner
             </p>
-            <h2 className="text-xl font-bold text-white">
+            <h2 className="text-xl font-bold text-mf-glass-text">
               Your plan within a real weekly budget
             </h2>
           </div>
@@ -148,7 +148,7 @@ export function BudgetPlanner({
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-zinc-400">
+          <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
             Weekly food budget (SGD)
           </span>
           <input
@@ -158,7 +158,7 @@ export function BudgetPlanner({
             value={budgetInput}
             onChange={(event) => setBudgetInput(event.target.value)}
             placeholder="e.g. 80"
-            className="w-40 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+            className="w-40 rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
           />
         </label>
 
@@ -166,7 +166,7 @@ export function BudgetPlanner({
           type="button"
           onClick={handleUpdatePlan}
           disabled={isLoading}
-          className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-xl bg-mf-glass-brand px-5 py-3 text-sm font-black uppercase tracking-wide text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -236,7 +236,7 @@ export function BudgetPlanner({
 
       {result.appliedSubstitutions.length > 0 ? (
         <div className="mt-6">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-text-muted">
             Substitutions applied to fit your budget
           </p>
           <div className="space-y-2">
@@ -251,7 +251,7 @@ export function BudgetPlanner({
 
       {result.suggestedSubstitutions.length > 0 ? (
         <div className="mt-6">
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-text-muted">
             <ArrowRightLeft className="size-3.5" />
             Swap an expensive food to save more
           </p>
@@ -270,15 +270,15 @@ export function BudgetPlanner({
 
       {/* SHOPPING LIST LINK */}
 
-      <div className="mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-        <p className="text-xs leading-5 text-zinc-500">
+      <div className="mt-6 flex items-center justify-between rounded-2xl border border-mf-glass-border bg-white/[0.02] p-4">
+        <p className="text-xs leading-5 text-mf-glass-text-muted">
           Estimated weekly cost is based on your current 7-day shopping
-          list — <span className="text-amber-300">ESTIMATED MARKET PRICE</span>, not a live feed.
+          list — <span className="text-mf-glass-brand">ESTIMATED MARKET PRICE</span>, not a live feed.
         </p>
 
         <Link
           href="/dashboard/nutrition/shopping-list?days=7"
-          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-xs font-bold text-zinc-200 transition hover:border-amber-400/30 hover:text-amber-200"
+          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-mf-glass-border px-4 py-2.5 text-xs font-bold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-brand"
         >
           <ShoppingCart className="size-3.5" />
           View Shopping List
@@ -303,15 +303,15 @@ function SummaryTile({
     <div
       className={cn(
         "rounded-2xl border p-4",
-        accent ? "border-rose-400/25 bg-rose-400/8" : "border-white/10 bg-white/[0.035]",
+        accent ? "border-rose-400/25 bg-rose-400/8" : "border-mf-glass-border bg-white/[0.035]",
       )}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-mf-glass-text-muted">
         {label}
       </p>
-      <p className={cn("mt-2 text-2xl font-black", accent ? "text-rose-300" : "text-white")}>
+      <p className={cn("mt-2 text-2xl font-black", accent ? "text-rose-300" : "text-mf-glass-text")}>
         {value}
-        <span className="ml-1 text-sm font-semibold text-zinc-500">{suffix}</span>
+        <span className="ml-1 text-sm font-semibold text-mf-glass-text-muted">{suffix}</span>
       </p>
     </div>
   )
@@ -329,12 +329,12 @@ function SubstitutionRow({
   disabled?: boolean
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-black/20 p-4">
-      <div className="text-sm text-zinc-300">
-        <span className="font-semibold text-white">{sub.fromName}</span>
-        <span className="mx-2 text-zinc-600">→</span>
-        <span className="font-semibold text-amber-300">{sub.toName}</span>
-        <p className="mt-1 text-xs text-zinc-500">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-mf-glass-border bg-mf-glass-bg-deep p-4">
+      <div className="text-sm text-mf-glass-text-secondary">
+        <span className="font-semibold text-mf-glass-text">{sub.fromName}</span>
+        <span className="mx-2 text-mf-glass-text-muted">→</span>
+        <span className="font-semibold text-mf-glass-brand">{sub.toName}</span>
+        <p className="mt-1 text-xs text-mf-glass-text-muted">
           Same functional role ({sub.category}) · estimated saving{" "}
           {sub.estimatedSavingSgd.toFixed(2)} SGD / week
         </p>
@@ -350,7 +350,7 @@ function SubstitutionRow({
           type="button"
           onClick={onAccept}
           disabled={disabled}
-          className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-bold text-amber-200 transition hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-lg border border-mf-glass-brand-border bg-mf-glass-brand-soft px-3 py-2 text-xs font-bold text-mf-glass-brand transition hover:bg-mf-glass-brand-soft disabled:cursor-not-allowed disabled:opacity-60"
         >
           Accept swap
         </button>
