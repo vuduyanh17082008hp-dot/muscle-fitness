@@ -36,6 +36,11 @@ function mapPayloadToInterventionType(payload: DanteActionPayload): Intervention
       return "macro_adjustment";
     case "meal_suggestion":
       return "meal_timing_adjustment";
+    case "undo_action":
+      // Undo is always user-initiated, never something the response-
+      // learning classifier should treat as a new intervention worth
+      // building evidence about.
+      return "no_change";
   }
 }
 

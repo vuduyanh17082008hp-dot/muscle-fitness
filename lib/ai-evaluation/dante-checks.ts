@@ -95,6 +95,7 @@ const ALL_ACTION_TYPES: DanteActionType[] = [
   "recovery_action",
   "macro_adjustment",
   "meal_suggestion",
+  "undo_action",
 ];
 
 function samplePayloadFor(type: DanteActionType): DanteActionPayload {
@@ -118,6 +119,8 @@ function samplePayloadFor(type: DanteActionType): DanteActionPayload {
       return { type, macro: "protein", direction: "increase", suggestedChangePercent: 10 };
     case "meal_suggestion":
       return { type, mealDescription: "Chicken and rice", estimatedCalories: 600, estimatedProteinG: 45 };
+    case "undo_action":
+      return { type, targetActionLogId: "11111111-1111-1111-1111-111111111111", exerciseName: "Bench Press" };
   }
 }
 

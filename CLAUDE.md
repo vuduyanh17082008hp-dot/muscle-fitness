@@ -48,8 +48,17 @@ silently ignore it.
   `lib/supabase/config.ts` (publishable key preferred, falls back to legacy
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`). Don't add a third env-reading helper —
   extend `env.ts` instead.
-- No service-role/admin Supabase client exists in this codebase by design.
-  If one is added later, it must never be imported into client-bundled code.
+- No general-purpose service-role/admin Supabase client exists in this
+  codebase by design. The one narrow exception is
+  `lib/dante-core/knowledge-brain/supabase-admin.ts::createKnowledgeBrainAdminClient()`,
+  used only by `scripts/ingest-dante-knowledge.ts` (a CLI/build-time script,
+  never imported by app code) to write `global`-visibility knowledge rows
+  that no per-user RLS policy allows. It is `server-only`-guarded, reads
+  `SUPABASE_SECRET_KEY` (never `NEXT_PUBLIC_`-prefixed), and every other
+  Knowledge Brain path (retrieval, private-knowledge writes) uses the normal
+  request-scoped, cookie-authenticated client instead. Do not add a second
+  service-role client — extend this one's narrow ingestion use if needed, and
+  never import it from client-bundled code.
 - Domain services live under `lib/{training,nutrition,recovery,auth,workouts,
   athlete-state,repositories}/`. Several pages still query Supabase directly
   instead of going through these — known duplication (see

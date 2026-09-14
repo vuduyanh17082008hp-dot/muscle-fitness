@@ -186,14 +186,17 @@ export async function mutateSaveSet(
     const completed = asBoolean(payload.completed)
     const notes = asString(payload.notes)
 
+    const expectedReps = reps === null ? null : Math.round(reps)
+    const expectedCompleted = completed ?? false
+
     const { error } = await supabase
       .from("exercise_sets")
       .update({
         weight_kg: weightKg,
-        reps: reps === null ? null : Math.round(reps),
+        reps: expectedReps,
         rir,
         rpe,
-        completed: completed ?? false,
+        completed: expectedCompleted,
         completed_at:
           completed === true
             ? new Date().toISOString()
@@ -207,6 +210,25 @@ export async function mutateSaveSet(
       return {
         success: false,
         message: error.message,
+      }
+    }
+
+    const { data: verifyRow, error: verifyError } = await supabase
+      .from("exercise_sets")
+      .select("id, reps, completed")
+      .eq("id", setId)
+      .maybeSingle()
+
+    if (
+      verifyError ||
+      !verifyRow ||
+      asNumber(verifyRow.reps) !== expectedReps ||
+      asBoolean(verifyRow.completed) !== expectedCompleted
+    ) {
+      return {
+        success: false,
+        message:
+          "Set update could not be verified — it may belong to a different session or no longer exist.",
       }
     }
 
@@ -274,6 +296,21 @@ export async function mutateSkipExercise(
       return {
         success: false,
         message: error.message,
+      }
+    }
+
+    const { data: verifyRow, error: verifyError } = await supabase
+      .from("workout_session_exercises")
+      .select("id, is_skipped")
+      .eq("id", sessionExerciseId)
+      .eq("workout_session_id", sessionId)
+      .maybeSingle()
+
+    if (verifyError || !verifyRow || asBoolean(verifyRow.is_skipped) !== skipped) {
+      return {
+        success: false,
+        message:
+          "Exercise update could not be verified — it may no longer exist in this session.",
       }
     }
 
@@ -364,6 +401,21 @@ export async function mutateReplaceExercise(
       }
     }
 
+    const { data: verifyRow, error: verifyError } = await supabase
+      .from("workout_session_exercises")
+      .select("id, exercise_id")
+      .eq("id", sessionExerciseId)
+      .eq("workout_session_id", sessionId)
+      .maybeSingle()
+
+    if (verifyError || !verifyRow || asString(verifyRow.exercise_id) !== replacementExerciseId) {
+      return {
+        success: false,
+        message:
+          "Exercise replacement could not be verified — it may no longer exist in this session.",
+      }
+    }
+
     return {
       success: true,
       message: `Replaced with ${exerciseName}.`,
@@ -444,6 +496,31 @@ export async function mutateAdjustSetsReps(
       return {
         success: false,
         message: error.message,
+      }
+    }
+
+    const { data: verifyRow, error: verifyError } = await supabase
+      .from("workout_session_exercises")
+      .select("id, target_sets, rep_min, rep_max")
+      .eq("id", sessionExerciseId)
+      .eq("workout_session_id", sessionId)
+      .maybeSingle()
+
+    const expectedTargetSets = updates.target_sets as number | undefined
+    const expectedRepMin = updates.rep_min as number | undefined
+    const expectedRepMax = updates.rep_max as number | undefined
+
+    const verified =
+      !!verifyRow &&
+      (expectedTargetSets === undefined || asNumber(verifyRow.target_sets) === expectedTargetSets) &&
+      (expectedRepMin === undefined || asNumber(verifyRow.rep_min) === expectedRepMin) &&
+      (expectedRepMax === undefined || asNumber(verifyRow.rep_max) === expectedRepMax)
+
+    if (verifyError || !verified) {
+      return {
+        success: false,
+        message:
+          "Session exercise update could not be verified — it may no longer exist in this session.",
       }
     }
 

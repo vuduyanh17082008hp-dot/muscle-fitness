@@ -167,6 +167,53 @@ fresh external search. Dante Core's registry exists specifically so an
 *autoregulation explanation* never depends on a live network call
 succeeding.
 
+This registry's keyword retrieval remains in place only as the offline
+fallback specifically for autoregulation explanations (see above) — see
+"Knowledge Brain" below for the current general-purpose retrieval path.
+
+## Knowledge Brain (`lib/dante-core/knowledge-brain/`)
+
+A third, separate knowledge system from the two above: a pgvector-backed
+hybrid (semantic + lexical) retrieval store for ingested reference documents
+(technique guides, evidence summaries), added after this document was first
+written. It exists alongside — not instead of — the keyword registry
+(`knowledge/`, used for autoregulation explanations) and the live external
+search in `getEvidence` (used for open-ended questions).
+
+- **Storage**: `dante_knowledge_chunks` (migration
+  `20260926090000_dante_knowledge_brain.sql`), `vector(1536)` embeddings
+  (`text-embedding-3-small`), `global`/`private` visibility, category
+  (`training`/`nutrition`/`recovery`/`exercise_technique`/`supplements`/
+  `safety`/`general`), plus a `content_hash` per chunk.
+- **Retrieval** (`retrieve.ts`): hybrid vector (cosine, HNSW index) + lexical
+  (Postgres full-text, GIN index) scoring, 0.7/0.3 weighted, deterministic
+  per-document dedupe (max 2 chunks/doc), capped at 6 results, behind a
+  `SECURITY INVOKER` RPC (`match_dante_knowledge_chunks`) so RLS is enforced
+  even inside the function — a user's `private` rows can never surface for
+  another user.
+- **Routing** (`route.ts`): deterministic regex-based domain/intent
+  classification, and explicitly routes personal-data questions ("what did I
+  eat yesterday", etc.) away from RAG entirely rather than pulling irrelevant
+  scientific chunks for a question the app's own data already answers.
+- **Ingestion** (`scripts/ingest-dante-knowledge.ts`, see
+  `docs/dante-knowledge/README.md`): idempotent by content hash — unchanged
+  chunks are never re-embedded; changed chunks are upserted
+  (`onConflict: document_id,chunk_index`); removed chunks are pruned. Uses
+  the one sanctioned service-role exception in this codebase,
+  `knowledge-brain/supabase-admin.ts` (see `CLAUDE.md`'s Supabase-access
+  section) — CLI/build-time only, never imported by app code.
+- **Failure mode**: `embedText`/`embedBatch` return `null` (never throw) on
+  provider failure; `retrieveDanteKnowledge` catches everything and returns
+  `[]` — the chatbot degrades to no-RAG rather than erroring.
+- **Never stores personal athlete data** — workouts, macros, recovery scores
+  stay in `AthleteState`/`dante_memory`/relational tables; this store is
+  scientific/reference content only.
+- **Known gap**: no per-row `embeddingModel`/`embeddingDimension` metadata
+  yet, so a future embedding-model change would need a manual migration
+  rather than being self-describing. Not a live issue with the current
+  single-provider setup, but flag it before ever changing the embedding
+  model.
+
 ## Safety layer (spec §8)
 
 `lib/dante-core/safety-layer.ts::checkSafety` runs on every chatbot message

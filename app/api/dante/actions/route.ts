@@ -62,6 +62,11 @@ const payloadSchema = z.discriminatedUnion("type", [
     estimatedCalories: z.number().min(0).max(5000).nullable(),
     estimatedProteinG: z.number().min(0).max(500).nullable(),
   }),
+  z.object({
+    type: z.literal("undo_action"),
+    targetActionLogId: z.string().uuid(),
+    exerciseName: z.string().min(1).max(120),
+  }),
 ]);
 
 const requestSchema = z.object({

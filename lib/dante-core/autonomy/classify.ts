@@ -56,6 +56,13 @@ export function classifyActionRisk(payload: DanteActionPayload): ActionRiskClass
     // without a confirm click (nothing is mutated either way).
     case "meal_suggestion":
       return "auto";
+
+    // Undo is always user-initiated (a click on an explicit "Undo"
+    // control, never proposed by the decision engine itself) — still
+    // classified "confirm" rather than exempted from the gate, so the
+    // same conservative default applies uniformly.
+    case "undo_action":
+      return "confirm";
   }
 }
 

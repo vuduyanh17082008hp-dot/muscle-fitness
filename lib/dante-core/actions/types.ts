@@ -61,13 +61,29 @@ export type MealSuggestionPayload = {
   estimatedProteinG: number | null;
 };
 
+/**
+ * Undo (mission Part 17): "Undo is itself a typed action" — never a
+ * destructive blanket rollback. Reverses exactly one prior applied,
+ * direct-effect action, identified by its `dante_action_log` row.
+ * apply-action.ts loads that row's own `before`/`after` state (already
+ * captured at the time the original action was applied) and replays
+ * the inverse through the SAME write + read-back-verify path as any
+ * other direct-effect action — no separate "rollback" code path exists.
+ */
+export type UndoActionPayload = {
+  type: "undo_action";
+  targetActionLogId: string;
+  exerciseName: string;
+};
+
 export type DanteActionPayload =
   | AdjustSetsRepsPayload
   | PostponeExercisePayload
   | ModifyVolumePayload
   | RecoveryActionPayload
   | MacroAdjustmentPayload
-  | MealSuggestionPayload;
+  | MealSuggestionPayload
+  | UndoActionPayload;
 
 export type DanteActionType = DanteActionPayload["type"];
 
@@ -76,6 +92,7 @@ export const DIRECT_EFFECT_ACTION_TYPES: DanteActionType[] = [
   "adjust_sets_reps",
   "postpone_exercise",
   "modify_volume",
+  "undo_action",
 ];
 
 /** One real-valued piece of evidence behind an action — reused from lib/dante-core/insight.ts's chat-facing shape so an action and its "Why This?" panel never disagree about what the evidence was. */
@@ -126,5 +143,30 @@ export function buildProposedActionId(payload: DanteActionPayload): string {
       return `macro_adjustment:${payload.macro}:${payload.direction}:${payload.suggestedChangePercent}`;
     case "meal_suggestion":
       return `meal_suggestion:${payload.mealDescription}`;
+    case "undo_action":
+      return `undo_action:${payload.targetActionLogId}`;
+  }
+}
+
+/**
+ * Builds the inverse of a direct-effect action's payload for
+ * undo — swaps before/after for the two payload shapes that carry
+ * both. `postpone_exercise` has no before/after (it's a one-way
+ * boolean flip) and is handled as a special case by the caller
+ * instead. Every other (advisory) action type has no direct database
+ * effect to reverse.
+ */
+export function buildInverseActionPayload(payload: DanteActionPayload): DanteActionPayload | null {
+  switch (payload.type) {
+    case "adjust_sets_reps":
+      return { ...payload, before: payload.after, after: payload.before };
+    case "modify_volume":
+      return { ...payload, before: payload.after, after: payload.before };
+    case "postpone_exercise":
+    case "recovery_action":
+    case "macro_adjustment":
+    case "meal_suggestion":
+    case "undo_action":
+      return null;
   }
 }

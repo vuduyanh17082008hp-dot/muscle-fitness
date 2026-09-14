@@ -4,10 +4,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   DIRECT_EFFECT_ACTION_TYPES,
+  buildInverseActionPayload,
   type ActionEvidenceItem,
   type ActionRiskClass,
   type DanteActionPayload,
   type DanteActionStatus,
+  type PostponeExercisePayload,
 } from "@/lib/dante-core/actions/types";
 import { handleSessionAction } from "@/lib/workouts/session-mutations";
 
@@ -46,7 +48,34 @@ export type ApplyActionResult =
   | { ok: true; status: DanteActionStatus; message: string }
   | { ok: false; status: DanteActionStatus; error: string };
 
+/**
+ * Loads the ORIGINAL action being undone — scoped to this user AND
+ * `status = 'applied'` only, so a proposed/rejected/failed/already-
+ * undone action can never be "undone" (there is nothing real to
+ * reverse), and RLS-plus-explicit-user-scoping means undoing someone
+ * else's action id is indistinguishable from a missing one.
+ */
+async function loadOriginalAppliedAction(
+  supabase: SupabaseClient,
+  userId: string,
+  targetActionLogId: string,
+): Promise<{ actionType: string; payload: DanteActionPayload } | null> {
+  const { data, error } = await supabase
+    .from("dante_action_log")
+    .select("action_type, payload")
+    .eq("id", targetActionLogId)
+    .eq("user_id", userId)
+    .eq("status", "applied")
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  return { actionType: data.action_type as string, payload: data.payload as DanteActionPayload };
+}
+
 async function performDirectEffectMutation(
+  supabase: SupabaseClient,
+  userId: string,
   payload: DanteActionPayload,
 ): Promise<{ success: boolean; message: string; data?: unknown }> {
   switch (payload.type) {
@@ -69,6 +98,32 @@ async function performDirectEffectMutation(
         sessionExerciseId: payload.sessionExerciseId,
         isSkipped: true,
       });
+
+    case "undo_action": {
+      const original = await loadOriginalAppliedAction(supabase, userId, payload.targetActionLogId);
+
+      if (!original) {
+        return { success: false, message: "The original action was not found or was already undone." };
+      }
+
+      // postpone_exercise has no before/after to swap — its inverse is
+      // simply un-skipping the exercise it skipped.
+      if (original.actionType === "postpone_exercise") {
+        const originalPayload = original.payload as PostponeExercisePayload;
+        return handleSessionAction(originalPayload.sessionId, "skip_exercise", {
+          sessionExerciseId: originalPayload.sessionExerciseId,
+          isSkipped: false,
+        });
+      }
+
+      const inverse = buildInverseActionPayload(original.payload);
+
+      if (!inverse) {
+        return { success: false, message: "This action type cannot be undone." };
+      }
+
+      return performDirectEffectMutation(supabase, userId, inverse);
+    }
 
     default:
       // Advisory action types never reach here — callers only invoke
@@ -127,7 +182,7 @@ export async function applyDanteAction(
     return { ok: true, status: "applied", message: "Noted." };
   }
 
-  const result = await performDirectEffectMutation(input.payload);
+  const result = await performDirectEffectMutation(supabase, userId, input.payload);
 
   await supabase.from("dante_action_log").insert({
     user_id: userId,

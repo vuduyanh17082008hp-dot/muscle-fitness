@@ -21,6 +21,7 @@ const SESSION_EXERCISE_ID = "22222222-2222-2222-2222-222222222222";
 function createFakeSupabase() {
   const updateCalls: unknown[] = [];
   const insertCalls: Record<string, unknown>[] = [];
+  const sessionExerciseState: Record<string, unknown> = { id: SESSION_EXERCISE_ID };
 
   const client = {
     auth: {
@@ -45,8 +46,16 @@ function createFakeSupabase() {
             eq: () => ({
               eq: async () => {
                 updateCalls.push(values);
+                Object.assign(sessionExerciseState, values);
                 return { error: null };
               },
+            }),
+          }),
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({ data: { ...sessionExerciseState }, error: null }),
+              }),
             }),
           }),
         };
