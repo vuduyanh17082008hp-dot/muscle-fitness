@@ -52,6 +52,15 @@ type NavItem = {
   href: string;
   icon: LucideIcon;
   exact?: boolean;
+  /**
+   * Additional route prefixes that should also mark this nav item
+   * active. Used for Muscle Intelligence (/dashboard/training-intelligence),
+   * which conceptually belongs under Train but lives at a sibling
+   * route rather than nested under /dashboard/workouts — without
+   * this, "Train" would stop reading as the active parent domain
+   * while the user is on that page.
+   */
+  activePrefixes?: string[];
 };
 
 type NavSection = {
@@ -98,6 +107,7 @@ const navSections: NavSection[] = [
         label: "Train",
         href: "/dashboard/workouts",
         icon: Dumbbell,
+        activePrefixes: ["/dashboard/training-intelligence"],
       },
       {
         label: "Nutrition",
@@ -168,7 +178,7 @@ const navSections: NavSection[] = [
 
 const mobilePrimaryNav: NavItem[] = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Train", href: "/dashboard/workouts", icon: Dumbbell },
+  { label: "Train", href: "/dashboard/workouts", icon: Dumbbell, activePrefixes: ["/dashboard/training-intelligence"] },
   { label: "Nutrition", href: "/dashboard/nutrition", icon: Utensils },
   { label: "Recovery", href: "/dashboard/recovery", icon: HeartPulse },
   { label: "Progress", href: "/dashboard/progress", icon: ChartNoAxesCombined },
@@ -199,9 +209,14 @@ function isActive(
     return pathname === path;
   }
 
+  if (pathname === path || pathname.startsWith(`${path}/`)) {
+    return true;
+  }
+
   return (
-    pathname === path ||
-    pathname.startsWith(`${path}/`)
+    item.activePrefixes?.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    ) ?? false
   );
 }
 

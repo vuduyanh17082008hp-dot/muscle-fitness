@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { MUSCLE_DISPLAY_NAME, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
@@ -65,19 +64,16 @@ export function MuscleDetailPanel(props: MuscleDetailPanelProps) {
 
   const content = muscle ? <PanelContent {...props} muscle={muscle} tab={tab} onTabChange={setTab} /> : null;
 
+  // Desktop: an always-mounted inline panel beside the body map (spec:
+  // "Panel content changes when selectedMuscle changes" — a persistent
+  // 40%-width column, not a modal covering the map). Mobile keeps the
+  // transient BottomSheet, since there's no spare vertical real estate
+  // for a permanently-visible panel there.
   if (isDesktop) {
     return (
-      <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60" />
-          <Dialog.Content
-            aria-describedby={undefined}
-            className="fixed right-0 top-0 z-50 flex h-full w-[420px] flex-col gap-4 overflow-y-auto border-l border-mf-glass-border bg-mf-glass-bg p-6"
-          >
-            {content}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <div className="flex h-full min-h-[420px] flex-col gap-4 overflow-y-auto rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-6">
+        {content ?? <IdlePanel />}
+      </div>
     );
   }
 
@@ -85,6 +81,17 @@ export function MuscleDetailPanel(props: MuscleDetailPanelProps) {
     <BottomSheet open={open} onOpenChange={handleOpenChange} title={muscle ? MUSCLE_DISPLAY_NAME[muscle] : undefined}>
       {content}
     </BottomSheet>
+  );
+}
+
+function IdlePanel() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+      <p className="text-sm font-bold uppercase tracking-wide text-mf-glass-text">Select a Muscle</p>
+      <p className="max-w-xs text-sm text-mf-glass-text-muted">
+        Explore anatomy, exercises and training emphasis.
+      </p>
+    </div>
   );
 }
 
@@ -106,9 +113,9 @@ function PanelContent({
     <>
       <div className="flex items-start justify-between">
         <div>
-          <Dialog.Title className="text-lg font-bold text-mf-glass-text">
+          <h2 className="text-lg font-bold uppercase tracking-wide text-mf-glass-text">
             {MUSCLE_DISPLAY_NAME[muscle]}
-          </Dialog.Title>
+          </h2>
           <p className="text-xs text-mf-glass-text-muted">{atlasEntry.scientificName}</p>
         </div>
         <button
@@ -192,7 +199,18 @@ function PanelContent({
           <DanteChat
             compact
             heroSubtitle={`Ask about your ${MUSCLE_DISPLAY_NAME[muscle]}…`}
-            contextPayload={{ selectedMuscle: muscle }}
+            contextPayload={{
+              selectedMuscle: muscle,
+              weeklyEffectiveSets: entry?.analytics.currentWeek.totalEffectiveSets ?? null,
+              changePercent: entry?.analytics.changePercent ?? null,
+              recentRange: entry?.baseline.recentRange ?? null,
+              recommendation: entry?.recommendation.recommendation ?? null,
+              recentExercises: entry
+                ? entry.analytics.currentWeek.contributingExercises
+                    .slice(0, 3)
+                    .map((c) => exerciseNames[c.exerciseId] ?? "Unknown exercise")
+                : [],
+            }}
           />
         </div>
       ) : null}

@@ -95,7 +95,7 @@ export const siteConfig: SiteConfig = {
 
       {
         title:
-          "Training Intelligence",
+          "Muscle Intelligence",
 
         href:
           "/dashboard/training-intelligence",

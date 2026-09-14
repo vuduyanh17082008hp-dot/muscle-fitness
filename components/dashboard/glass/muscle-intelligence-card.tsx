@@ -188,7 +188,7 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
                 href="/dashboard/training-intelligence"
                 className="inline-flex h-9 flex-1 items-center justify-center rounded-xl border border-mf-glass-border bg-white/[0.02] px-4 text-xs font-bold uppercase tracking-[0.06em] text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-text"
               >
-                Open Muscle Atlas
+                Open Muscle Intelligence
               </Link>
 
               <Link

@@ -14,17 +14,11 @@ import {
 
 import { createClient } from "@/lib/supabase/server";
 import { SectionTabs } from "@/components/dashboard/section-tabs";
+import { TRAIN_TABS } from "@/components/dashboard/train-tabs";
 import { loadTodaySession } from "@/lib/training/load-today-session";
 import { resolveCanonicalMuscle, MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
 import { PrimaryButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-const TRAIN_TABS = [
-  { label: "Today", href: "/dashboard/workouts" },
-  { label: "Plan", href: "/dashboard/split" },
-  { label: "Exercises", href: "/dashboard/workouts/library" },
-  { label: "History", href: "/dashboard/workouts/history" },
-];
 
 /** A rough, honestly-labeled ("~") estimate from each exercise's own target sets and rest time — never a fabricated fixed number. 45s is an assumed average set-execution time, not measured. */
 const ASSUMED_SET_EXECUTION_SECONDS = 45;
@@ -291,6 +285,7 @@ function PromoBanner({
   description,
   meta,
   surfaceAccent = false,
+  ctaLabel,
 }: {
   href: string;
   badge: string;
@@ -300,6 +295,8 @@ function PromoBanner({
   meta?: string;
   /** When true, tints the whole card surface with the tone (reserved for real current-state cards, e.g. an active plan) rather than just the badge. */
   surfaceAccent?: boolean;
+  /** Optional explicit lime CTA pill instead of a bare arrow — reserved for the one banner per page that should read as a primary action rather than a quiet secondary link (e.g. Muscle Intelligence, not the Beta feature banners). */
+  ctaLabel?: string;
 }) {
   const t = BANNER_TONE[tone];
 
@@ -323,7 +320,14 @@ function PromoBanner({
         {meta ? <p className="mt-3 text-xs text-mf-glass-text-muted">{meta}</p> : null}
       </div>
 
-      <ArrowRight className={cn("h-5 w-5 shrink-0 text-mf-glass-text-muted transition group-hover:translate-x-1", t.arrow)} />
+      {ctaLabel ? (
+        <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-mf-glass-brand px-4 py-2.5 text-xs font-black uppercase tracking-wider text-mf-glass-brand-ink transition group-hover:bg-mf-glass-brand-hover">
+          {ctaLabel}
+          <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
+        </span>
+      ) : (
+        <ArrowRight className={cn("h-5 w-5 shrink-0 text-mf-glass-text-muted transition group-hover:translate-x-1", t.arrow)} />
+      )}
     </Link>
   );
 }
@@ -524,6 +528,23 @@ export default async function WorkoutsPage() {
           )}
         </div>
       </header>
+
+      {/* ===================================================
+          MUSCLE INTELLIGENCE — the Train domain's entry point
+          into the existing /dashboard/training-intelligence
+          Atlas. A core capability, not a beta feature, so it
+          gets the lime CTA pill and sits above the Beta
+          banners rather than inside that grid.
+      =================================================== */}
+
+      <PromoBanner
+        href="/dashboard/training-intelligence"
+        badge="Insights"
+        tone="amber"
+        title="Muscle Intelligence"
+        description="Explore muscle anatomy, training exposure, exercises and personal insights."
+        ctaLabel="Explore Muscles"
+      />
 
       {/* ===================================================
           BETA FEATURES — quieter secondary surface; the hero

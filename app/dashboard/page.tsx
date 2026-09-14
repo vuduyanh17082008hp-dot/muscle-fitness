@@ -152,12 +152,9 @@ export default async function DashboardPage() {
   ======================================================= */
 
   let dailyDecision: TraceableDecision<DailyDecision> | null = null;
-  let proposedActions: ReturnType<typeof buildDailyDecision>["proposedActions"] = [];
 
   if (athleteState && trainingContext) {
-    const result = buildDailyDecision(athleteState, trainingContext, todaySession);
-    dailyDecision = result.decision;
-    proposedActions = result.proposedActions;
+    dailyDecision = buildDailyDecision(athleteState, trainingContext, todaySession).decision;
   }
 
   const programAdaptations =
@@ -285,7 +282,15 @@ export default async function DashboardPage() {
             />
           </div>
 
-          <div className="order-6 flex flex-col gap-3 sm:gap-4 md:col-span-2 xl:col-span-5">
+          {/* self-start: this stack shares a grid row with Muscle Intelligence
+              (xl:col-span-7 vs xl:col-span-5). Without it, the grid's default
+              align-items:stretch forces this flex column to the taller
+              sibling's height, giving both stacked GlassCards (h-full) a
+              definite height to split via flex-shrink — squeezing Progress
+              Snapshot below its content and clipping it against GlassCard's
+              overflow-hidden. self-start keeps this wrapper's height
+              intrinsic to its own content instead. */}
+          <div className="order-6 flex flex-col self-start gap-3 sm:gap-4 md:col-span-2 xl:col-span-5">
             <RecentActivityCard entries={recentActivityEntries} now={now} />
             <ProgressSnapshotCard snapshot={progressSnapshot} />
           </div>

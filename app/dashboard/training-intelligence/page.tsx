@@ -5,6 +5,8 @@ import { PageVisual } from "@/components/visual/page-visual";
 import { DigitalTwinPanel } from "@/components/dante/digital-twin-panel";
 import { loadDanteMemory } from "@/lib/dante-core/memory";
 import { PerformanceCard } from "@/components/ui/performance-card";
+import { SectionTabs } from "@/components/dashboard/section-tabs";
+import { TRAIN_TABS } from "@/components/dashboard/train-tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +29,19 @@ export default async function TrainingIntelligencePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-1 py-2">
+      {/* Train's contextual tab strip — this page lives at the sibling
+          route /dashboard/training-intelligence rather than nested
+          under /dashboard/workouts, so without this it wouldn't read
+          as part of the Train domain. Shared TRAIN_TABS keeps this in
+          sync with the workouts landing page (components/dashboard/train-tabs.ts). */}
+      <SectionTabs tabs={TRAIN_TABS} />
+
       <section className="relative overflow-hidden rounded-[24px] border border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-6 sm:p-8">
         <PageVisual page="trainingIntelligence" />
 
         <div className="relative z-10">
           <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-mf-glass-analytics">
-            Training Intelligence
+            Muscle Intelligence
           </p>
 
           <h1 className="mt-3 text-3xl font-black tracking-tight text-mf-glass-text sm:text-4xl">

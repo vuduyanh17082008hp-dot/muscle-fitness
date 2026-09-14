@@ -125,9 +125,12 @@ const MUSCLE_ALIASES: Record<string, CanonicalMuscle> = {
   trap: "trapezius",
   upper_traps: "trapezius",
   upper_trap: "trapezius",
+  upper_trapezius: "trapezius",
+  middle_trapezius: "trapezius",
 
   biceps: "biceps",
   bicep: "biceps",
+  brachialis: "biceps",
 
   triceps: "triceps",
   tricep: "triceps",
@@ -139,6 +142,7 @@ const MUSCLE_ALIASES: Record<string, CanonicalMuscle> = {
   quads: "quadriceps",
   quad: "quadriceps",
   adductors: "quadriceps",
+  hip_flexors: "quadriceps",
 
   hamstrings: "hamstrings",
   hamstring: "hamstrings",
@@ -148,14 +152,17 @@ const MUSCLE_ALIASES: Record<string, CanonicalMuscle> = {
 
   calves: "calves",
   calf: "calves",
+  gastrocnemius: "calves",
 
   abdominals: "abdominals",
   abs: "abdominals",
   core: "abdominals",
+  obliques: "abdominals",
 
   lower_back: "lower_back",
   erectors: "lower_back",
   spinal_erectors: "lower_back",
+  erector_spinae: "lower_back",
 };
 
 function normalizeAliasKey(value: string): string {
