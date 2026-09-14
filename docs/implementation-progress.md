@@ -146,6 +146,103 @@ Documentation + final commit.
       unlike the spec's literal field list. Cosmetic; the underlying math is
       correct and tested.
 
+## Completed milestones (continued — proactive cycle + wiring audits)
+
+6. **Two additional parallel audits** (SetVision/Muscle Intelligence/
+   proactive-cycle wiring; this doc's own memory/autonomy/actions audit
+   above) surfaced real, confirmed gaps beyond the write-verification bug:
+   - `lib/dante-core/memory-hierarchy/record-observation.ts::recordObservationAndLearn`
+     (the REFLECTION LOOP's write path) has **zero production callers** —
+     confirmed via repo-wide grep. It is correctly implemented (tested,
+     safe thresholds) but dead code today; nothing in the live app ever
+     reaches L1/L2/L3 through it.
+   - SetVision analyses (`app/api/setvision/results/route.ts`) are recorded
+     to `setvision_analyses` and emit an `app_events` row, but never call
+     `recordObservationAndLearn` — SetVision is fully disconnected from the
+     memory hierarchy, not just "correctly never promoted to policy."
+   - The tested, gated orchestrator cycle (`GET /api/dante/cycle`,
+     autonomy/sandbox/budget-checked, auto-applies within budget) has
+     **zero UI callers**. The route the live workout-session UI actually
+     calls, `GET /api/dante/daily-decision`, computes `proposedActions`
+     directly from `buildDailyDecision` with no autonomy gate, sandbox
+     comparison, or budget check attached. **Verified this is not a live
+     safety bug**: executing any proposed action still requires a separate
+     `POST /api/dante/actions` call with `intent: "confirm"`
+     (`payloadSchema`/`requestSchema` in that route, zod-validated) — so
+     nothing auto-applies without a human clicking confirm, regardless of
+     which route proposed it. The real consequence is that today, in
+     production, the AUTONOMY system (GUIDE/ASSIST/AUTOPILOT, budgets, the
+     decision sandbox's alternative-scenario comparison) has **no effect on
+     live user-facing behavior** — the live route's output doesn't carry
+     `autonomyDecision`/`scenariosConsidered`/`budgetAllowed` for the user
+     to see, and nothing auto-applies from it even for AUTOPILOT-level
+     users. This is a real, load-bearing gap, but fixing it means changing
+     what a live, session-state-heavy dashboard page calls, which this
+     repo's own established precedent (`docs/architecture.md`'s "Not
+     touched, and why") says shouldn't be done blind, without a real
+     browser to verify against. **Deliberately not fixed this pass** —
+     flagged here with exact file names so it isn't lost.
+   - Chat-initiated tool writes (`lib/dante-core/tools/write/*.ts`, via
+     `pending-actions.ts`'s `confirmPendingAction`) use their own
+     mutation/audit path (`dante_tool_actions`), separate from
+     `lib/dante-core/actions/apply-action.ts` (`dante_action_log`), used by
+     `/api/dante/actions` and the orchestrator's auto-apply. Both paths
+     independently have real auth, ownership checks, and audit logging —
+     this is duplication, not a security hole — but the spec's "one typed
+     action pipeline" goal isn't literally met. **Accepted as-is this
+     pass**: converging two live, independently-tested confirm/write flows
+     carries real regression risk for a structural-cleanliness win, the
+     same tradeoff this repo has already made explicitly for
+     `fitness_profiles`/`workout_sessions` duplication
+     (`docs/architecture.md`).
+7. **User decision requested and received** on the proactive/heartbeat
+   cycle's auth model (a genuine architecture fork — a second service-role
+   client vs. a new schema vs. deferring): user chose "extend the service-
+   role client, full cycle" (autonomy/budget/auto-apply included, for every
+   eligible user, not just a read-only cache warm).
+8. **Built the proactive cycle trigger surface** (previously confirmed
+   missing by both audits):
+   - `lib/supabase/admin.ts::createAdminClient()` — the codebase's service-
+     role client constructor, generalized from its previous
+     knowledge-brain-only name/location (`lib/dante-core/knowledge-brain/
+     supabase-admin.ts` now re-exports it under the old name for backward
+     compatibility with `scripts/ingest-dante-knowledge.ts`). Still exactly
+     **one** service-role client constructor in the codebase, per CLAUDE.md
+     — extended, not duplicated.
+   - `lib/dante-core/proactive/types.ts` — `ProactiveCycleTrigger` enum
+     (morning/pre_workout/post_workout/outcome_due/evening/manual).
+   - `lib/dante-core/proactive/run-scheduled-cycles.ts` —
+     `runScheduledDanteCycles()`: loads onboarded, client-role-only user
+     ids via the admin client, runs `runDanteCycleForUser` (the SAME
+     fresh-context loop the session-scoped route uses — no second decision
+     pipeline) for each with bounded concurrency (10 at a time, capped at
+     500 users/run), never lets one user's failure abort the batch.
+     Per-user autonomy level, budgets, and the decision sandbox are
+     unchanged — a GUIDE-level user still gets nothing auto-applied by this
+     path.
+   - `app/api/dante/cron/route.ts` — `POST /api/dante/cron`, fails closed
+     if `DANTE_CRON_SECRET` isn't set (rejects every request rather than
+     running unauthenticated), bearer-token gated, returns aggregate counts
+     only (never per-user decision content, so a leaked secret can't be
+     used to enumerate user data through this endpoint's response).
+     **Not wired into any deployment scheduler this pass** — no
+     `vercel.json` cron entry added, nothing calls this URL today. See
+     "Manual action required" below.
+
+## Manual action required (proactive cycle)
+
+To actually activate scheduled cycles in production, a human needs to:
+1. Set `DANTE_CRON_SECRET` (a long random string) in the deployment
+   environment's env vars.
+2. Configure an external scheduler to `POST` to `/api/dante/cron` with
+   header `Authorization: Bearer <DANTE_CRON_SECRET>` and JSON body
+   `{"trigger": "morning"}` (or `pre_workout`/`post_workout`/`outcome_due`/
+   `evening`) on whatever cadence is desired — e.g. a `vercel.json` `crons`
+   entry, or an external scheduler if not deploying on Vercel.
+Until both are done, this endpoint exists but is inert (every request gets
+401). This pass deliberately did not add a `vercel.json` cron entry or
+deploy anything, per the "do not deploy" constraint.
+
 ## Files modified
 
 - `lib/workouts/session-mutations.ts` — read-back write verification added
@@ -170,10 +267,21 @@ Documentation + final commit.
   Supabase mocks to model the new read-back verification and undo lookup
   (both previously would have broken against the real code's new behavior).
 
+Also added: `app/api/dante/cron/route.ts`, `lib/dante-core/proactive/types.ts`,
+`lib/dante-core/proactive/run-scheduled-cycles.ts`, `lib/supabase/admin.ts`
+(new — service-role client, generalized from knowledge-brain-only location).
+`lib/dante-core/knowledge-brain/supabase-admin.ts` changed to a thin
+re-export of the new shared constructor. `CLAUDE.md` / `docs/dante-core.md`
+updated to reflect the knowledge-brain system and the (still singular,
+now-generalized) service-role client.
+
 ## Migrations created
 
-None. Everything implemented this pass reused existing tables/columns
-(`before`/`after` state was already captured in `dante_action_log.payload`).
+None. The proactive cycle reads existing `profiles`/`user_roles` tables and
+writes through the existing `dante_action_log`/domain tables via
+`runDanteCycleForUser` — no new schema needed. Everything else this pass
+reused existing tables/columns (`before`/`after` state was already captured
+in `dante_action_log.payload`).
 
 ## Tests added
 
@@ -184,6 +292,14 @@ None. Everything implemented this pass reused existing tables/columns
   (undo reverses to recorded before-state; undo of an unknown/never-applied
   action fails honestly) + 1 new regression test (silent no-op update ->
   `failed`, not `applied`).
+- `lib/dante-core/proactive/__tests__/run-scheduled-cycles.test.ts` (new, 4
+  tests) — runs one cycle per eligible user, excludes non-client roles,
+  survives one user's failure without aborting the batch, returns an empty
+  (not throwing) summary with zero onboarded profiles.
+- `app/api/dante/cron/__tests__/route.test.ts` (new, 5 tests) — fails closed
+  with no secret configured, rejects wrong/missing bearer token, runs and
+  returns aggregate-only counts on a correct secret, defaults an invalid
+  `trigger` value to `"manual"` rather than erroring.
 
 ## Tests failing
 
@@ -191,20 +307,45 @@ None.
 
 ## Blockers
 
-None requiring credentials or remote access. The two largest remaining gaps
-(proactive/heartbeat scheduler, undo UI) are deliberately deferred
-architecture/product decisions, not blocked-on-missing-credential items —
-see "Remaining tasks" above for the exact reasoning and what a human should
-decide before either is built.
+None requiring credentials or remote access for anything actually built.
+The proactive-cycle endpoint itself needs a human to set `DANTE_CRON_SECRET`
+and configure an external scheduler before it does anything in production
+(see "Manual action required" above) — that's a deployment-environment step
+outside this pass's scope, not a code blocker.
+
+Two gaps remain genuinely open, deliberately not built this pass because
+building them wrong would inject bad evidence into a system that then acts
+on it autonomously, or would touch a live, state-heavy UI page blind:
+1. **Reflection loop activation** — `recordObservationAndLearn` exists,
+   tested, safe, but still has no real caller. Wiring it properly means
+   picking a call site that (a) has a genuine after-state to compare
+   against a genuine before-state, and (b) waits for a real outcome window
+   rather than evaluating immediately. The natural site is a daily-cycle
+   step that looks back at the last applied training/recovery adjustment
+   and compares it to today's readiness/performance signals — not
+   attempted this pass given the size of getting that comparison right the
+   first time.
+2. **SetVision -> memory hierarchy wiring** — a single SetVision analysis
+   has no "before/after intervention" shape; `dante_observations`'
+   schema (`contextKey`/`interventionType`/`beforeState`/`afterState`/
+   `outcome`) is built for the adaptive-adjustment learning loop, not a raw
+   technique measurement. Forcing a SetVision result into that shape would
+   require inventing an `interventionType` that doesn't correspond to an
+   actual intervention — exactly the kind of fabrication CLAUDE.md warns
+   against. The honest options are (a) a new, separate technique-trend
+   table/module that reads `setvision_analyses` history directly (this
+   repo's own `docs/dante-core.md` already lists this as a stated future
+   improvement), or (b) extending `dante_observations`' schema to support a
+   non-intervention observation kind. Both are real schema/design
+   decisions, not typing exercises — left open rather than guessed.
 
 ## Next exact action
 
-If continuing: get an explicit decision on the proactive-cycle scheduler's
-auth model (new narrowly-scoped service-role client vs. per-user
-notification-preference schema vs. defer), then build whichever surface is
-chosen the same way the undo backend was built this pass — reusing
-`runDanteCycleForUser` and the existing budget/notification-discipline
-checks rather than a new pipeline.
+If continuing: pick one of the two gaps above and get sign-off on its
+schema/design question before building (same pattern as this pass's
+proactive-cycle question) — SetVision -> memory is likely higher product
+value (spec explicitly requires it, P3.7) and more contained in scope than
+picking the right reflection-loop call site.
 
 ## Quality gate history
 
@@ -213,3 +354,4 @@ checks rather than a new pipeline.
 | Baseline (start) | pass | pass (0 err, 9 warn) | 653 pass / 94 files | pass |
 | After session-mutations write-verification fix | pass | pass (0 err) | 659 pass / 95 files | pass |
 | After undo typed action | pass | pass (0 err, 12 warn — 3 new unused-arg warnings in test mocks, same pre-existing pattern as other test files) | 661 pass / 95 files | pass |
+| After proactive cycle trigger surface (final) | pass | pass (0 err, 12 warn) | 670 pass / 97 files | pass |

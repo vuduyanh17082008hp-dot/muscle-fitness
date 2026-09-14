@@ -99,18 +99,38 @@ note), `[ ]` confirmed missing/not done this pass.
 - [x] Failure degradation patterns present across multiple modules
       (`explain.ts` LLM fallback, `load-setvision-context.ts`,
       `retrieveDanteKnowledge`)
-- [ ] Proactive/heartbeat cycle trigger surface (MORNING/PRE_WORKOUT/
-      POST_WORKOUT/OUTCOME_DUE/EVENING) — confirmed missing; deliberately
-      not built this pass (needs an explicit auth-model decision — see
-      implementation-progress.md)
+- [x] Proactive/heartbeat cycle trigger surface (MORNING/PRE_WORKOUT/
+      POST_WORKOUT/OUTCOME_DUE/EVENING) — **built this pass**:
+      `app/api/dante/cron/route.ts` (secret-gated, fails closed),
+      `lib/dante-core/proactive/run-scheduled-cycles.ts` (batches
+      `runDanteCycleForUser` over onboarded client users, bounded
+      concurrency, per-user autonomy/budgets unchanged). Not wired into a
+      live scheduler this pass — needs `DANTE_CRON_SECRET` set + an
+      external cron configured (deployment step, not a code gap)
 - [ ] Undo UI surface (history panel + button) — backend exists and is
       tested; no dashboard panel to trigger it from yet, deliberately not
       built blind without live-browser verification
-- [~] Muscle Intelligence -> Dante structured context,
-      SetVision -> Adaptive Memory (observation-only, no 1-result policy) —
-      not independently re-audited this pass beyond confirming (via grep)
-      that no code path promotes a single SetVision result directly to
-      `dante_learned_patterns`
+- [x] Muscle Intelligence -> Dante structured context — confirmed real:
+      `selectedMuscle`/`selectedExercise` flow as structured fields (not
+      SVG) from `components/dante-chat.tsx` through
+      `app/api/chatbot/route.ts` into `buildDanteContext`
+      (`lib/athlete-state/build-dante-context.ts`)
+- [ ] SetVision -> Adaptive Memory — confirmed **fully disconnected**, not
+      just "correctly never promoted to policy": `setvision_analyses`
+      inserts + a `SET_ANALYZED` app_event, but `recordObservationAndLearn`
+      is never called from the SetVision results route. Real gap, left
+      open — see implementation-progress.md's "genuinely open gaps" for
+      why (schema mismatch between a raw measurement and the
+      intervention/outcome shape `dante_observations` expects)
+- [ ] Reflection loop activation — `recordObservationAndLearn` is real,
+      tested, and safe, but confirmed to have **zero production callers**
+      anywhere in the app. Left open — see implementation-progress.md
+- [~] Two write pathways (chat tool writes via `pending-actions.ts` /
+      `dante_tool_actions` vs. `apply-action.ts` / `dante_action_log`) —
+      both real, independently authed/audited, not literally converged
+      into one pipeline. Accepted as-is (documented rationale in
+      implementation-progress.md), matching this repo's existing precedent
+      for other live-flow duplication
 - [~] Observability/structured tracing — `tools/observability.ts` /
       `logToolEvent` exist and are exercised by tests; not cross-checked
       against the full field list in the spec (cycleId/stateVersion/etc.)
@@ -133,4 +153,5 @@ note), `[ ]` confirmed missing/not done this pass.
 |---|---|---|---|---|
 | Baseline (start) | pass | pass (0 err) | 653 pass | pass |
 | After write-verification fix | pass | pass (0 err) | 659 pass | pass |
-| After undo typed action (final) | pass | pass (0 err) | 661 pass | pass |
+| After undo typed action | pass | pass (0 err) | 661 pass | pass |
+| After proactive cycle trigger surface (final) | pass | pass (0 err, 12 warn) | 670 pass / 97 files | pass |
