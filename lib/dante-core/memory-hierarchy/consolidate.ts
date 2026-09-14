@@ -21,10 +21,15 @@ import {
 /** Confidence reaches its ceiling once a pattern has this many samples — below it, confidence is capped even at a 100% positive rate, so ONE event can never reach policy-promotion confidence. */
 const IDEAL_SAMPLE_SIZE = 8;
 
-/** A policy-tier pattern with no reinforcement for this many days starts decaying. */
-const DECAY_START_DAYS = 30;
+/**
+ * A policy-tier pattern with no reinforcement for this many days starts
+ * decaying. Exported so other evidence-accumulation write paths (e.g.
+ * `record-technique-evidence.ts`) can decay on the same schedule instead
+ * of defining a second, possibly-drifting set of decay constants.
+ */
+export const DECAY_START_DAYS = 30;
 /** Confidence reaches its fully-decayed floor after this many days with no reinforcement. */
-const DECAY_FULL_DAYS = 90;
+export const DECAY_FULL_DAYS = 90;
 
 function round(value: number, decimals = 3): number {
   const factor = 10 ** decimals;

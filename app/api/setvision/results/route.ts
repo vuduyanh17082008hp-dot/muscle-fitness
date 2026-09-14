@@ -3,8 +3,10 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { SETVISION_EXERCISES } from "@/lib/setvision/types";
-import type { SetVisionAnalysis } from "@/lib/setvision/types";
+import type { SetVisionAnalysis, SetVisionExerciseId } from "@/lib/setvision/types";
 import { emitEvent } from "@/lib/events/emit";
+import { loadSetVisionContext } from "@/lib/setvision/load-setvision-context";
+import { recordTechniqueEvidenceFromDeviations } from "@/lib/dante-core/memory-hierarchy/record-technique-evidence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -141,6 +143,32 @@ export async function POST(request: Request) {
       confidence: analysis.confidence,
     },
   });
+
+  // Fold this analysis's baseline deviations into longitudinal
+  // technique memory (mission: connect SetVision to Dante's memory
+  // without corrupting the intervention/outcome observation model —
+  // see technique-pattern-types.ts). Best-effort: SetVision's own save
+  // has already succeeded above, and this is optional derived context,
+  // never a hard dependency — a failure here must not surface as a
+  // failure to save the analysis itself.
+  try {
+    const context = await loadSetVisionContext(supabase, user.id);
+
+    if (context.latest?.id === data.id) {
+      await recordTechniqueEvidenceFromDeviations(
+        supabase,
+        user.id,
+        data.id as string,
+        analysis.exercise as SetVisionExerciseId,
+        {
+          rom_consistency: context.romConsistencyDeviation,
+          tempo_consistency: context.tempoConsistencyDeviation,
+        },
+      );
+    }
+  } catch (techniqueMemoryError) {
+    console.warn("[SETVISION RESULTS API] Unable to record technique evidence:", techniqueMemoryError);
+  }
 
   return NextResponse.json({ ok: true, id: data.id, analyzedAt: data.analyzed_at });
 }

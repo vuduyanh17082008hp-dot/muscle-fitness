@@ -202,7 +202,7 @@ function dataStarvedAthleteState(): AthleteState {
       recoveryStatusCode: null,
     },
     nutrition: { available: false, calorieTarget: null, proteinTargetGrams: null, carbsTargetGrams: null, fatTargetGrams: null },
-    setVision: { available: false, latestExercise: null, analysesLast30Days: 0, romConsistencyDeviation: null, tempoConsistencyDeviation: null },
+    setVision: { available: false, latestExercise: null, analysesLast30Days: 0, romConsistencyDeviation: null, tempoConsistencyDeviation: null, learnedPatterns: [] },
     wearable: { available: false, isDemo: false, providerLabel: null, latestDay: null },
     derived: {
       baselineDeviations: {

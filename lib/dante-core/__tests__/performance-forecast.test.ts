@@ -45,6 +45,7 @@ function baseAthleteState(overrides: Partial<AthleteState> = {}): AthleteState {
       analysesLast30Days: 0,
       romConsistencyDeviation: null,
       tempoConsistencyDeviation: null,
+      learnedPatterns: [],
     },
     wearable: {
       available: false,

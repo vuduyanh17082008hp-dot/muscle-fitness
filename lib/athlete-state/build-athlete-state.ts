@@ -16,6 +16,7 @@ import type { CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
 import type { TrainingContext } from "@/lib/training/load-training-context";
 import type { AthleteState } from "@/lib/athlete-state/types";
 import { loadSetVisionContext } from "@/lib/setvision/load-setvision-context";
+import { loadSurfaceableTechniquePatterns } from "@/lib/dante-core/memory-hierarchy/load-technique-patterns";
 import { computeBaselineDeviation, deviationFromSummary } from "@/lib/dante-core/personal-baseline";
 import { buildMuscleRecoveryMap } from "@/lib/dante-core/muscle-recovery-map";
 import { computeFreshness, FRESHNESS_THRESHOLDS } from "@/lib/athlete-state/data-freshness";
@@ -94,6 +95,7 @@ export async function buildAthleteState(
     recoveryContext,
     fitnessProfileResponse,
     setVisionContext,
+    learnedTechniquePatterns,
     latestFoodLogResponse,
     demoSettings,
   ] = await Promise.all([
@@ -114,6 +116,10 @@ export async function buildAthleteState(
         .eq("user_id", userId)
         .maybeSingle(),
       loadSetVisionContext(supabase, userId, { now }),
+      loadSurfaceableTechniquePatterns(supabase, userId, now).catch((error: unknown) => {
+        console.warn("[ATHLETE STATE] technique patterns failed:", error);
+        return [];
+      }),
       supabase
         .from("food_logs")
         .select("created_at")
@@ -393,6 +399,7 @@ export async function buildAthleteState(
       analysesLast30Days: setVisionContext.analysesLast30Days,
       romConsistencyDeviation: setVisionContext.romConsistencyDeviation,
       tempoConsistencyDeviation: setVisionContext.tempoConsistencyDeviation,
+      learnedPatterns: learnedTechniquePatterns,
     },
 
     wearable: {

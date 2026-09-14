@@ -47,6 +47,7 @@ function baseAthleteState(overrides: Partial<AthleteState["recovery"]> = {}): At
       analysesLast30Days: 0,
       romConsistencyDeviation: null,
       tempoConsistencyDeviation: null,
+      learnedPatterns: [],
     },
     wearable: {
       available: false,

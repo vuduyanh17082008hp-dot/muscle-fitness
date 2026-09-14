@@ -6,6 +6,7 @@ import type { BaselineDeviation } from "@/lib/dante-core/personal-baseline";
 import type { MuscleRecoveryMapEntry } from "@/lib/dante-core/muscle-recovery-map";
 import type { DataFreshnessSignal } from "@/lib/athlete-state/data-freshness";
 import type { SetVisionExerciseId } from "@/lib/setvision/types";
+import type { DanteTechniquePattern } from "@/lib/dante-core/memory-hierarchy/technique-pattern-types";
 import type { RecoveryStatusInput } from "@/lib/training/recommendations";
 import type { WearableDailySnapshot } from "@/lib/wearables/types";
 
@@ -80,6 +81,14 @@ export type AthleteState = {
     analysesLast30Days: number;
     romConsistencyDeviation: BaselineDeviation | null;
     tempoConsistencyDeviation: BaselineDeviation | null;
+    /**
+     * Cross-session technique patterns confident enough to mention
+     * (lib/dante-core/memory-hierarchy/load-technique-patterns.ts —
+     * already confidence/sample-count filtered and decay-applied,
+     * bounded to a handful). Empty, not omitted, when nothing has
+     * cleared the evidence bar yet — never fabricated.
+     */
+    learnedPatterns: DanteTechniquePattern[];
   };
 
   /**
