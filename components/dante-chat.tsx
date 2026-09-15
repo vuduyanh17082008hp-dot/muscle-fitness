@@ -730,22 +730,20 @@ export default function DanteChat({
         // fixed height instead of growing to fit its content and pushing
         // the composer out of view.
         //
-        // The fixed height only applies once there's a real scrollable
-        // conversation to bound (isEmpty === false). In the empty state
-        // (hero + composer, no message history yet) the same fixed
-        // height was shorter than its own content at common viewport
-        // widths, so the excess silently overflowed the box's bottom
-        // edge and visually collided with whatever the page renders
-        // next (e.g. Recovery Knowledge Hub below it on
-        // /dashboard/recovery). min-h lets it grow to fit instead.
+        // The fixed height (and its min-h floor) only applies once
+        // there's a real scrollable conversation to bound (isEmpty
+        // === false). The empty state (hero + composer, no message
+        // history yet) carries no height/min-height at all — it's a
+        // compact intro card, not a conversation pane, so it sizes to
+        // its own (intentionally small) content instead of being
+        // forced up to the conversation view's floor, which used to
+        // leave the card taller than its content needed and made it
+        // dominate the page above Recovery Knowledge Hub.
         "flex w-full min-h-0 flex-col font-sans",
-        compact
-          ? isEmpty
-            ? "min-h-[520px]"
-            : "h-[600px] min-h-[520px]"
-          : isEmpty
-            ? "min-h-125"
-            : "h-[min(74vh,820px)] min-h-125",
+        !isEmpty &&
+          (compact
+            ? "h-[600px] min-h-[520px]"
+            : "h-[min(74vh,820px)] min-h-125"),
         className,
       )}
     >
@@ -832,36 +830,37 @@ export default function DanteChat({
             from-[#181c25]
             to-[#12151c]
             px-6
-            py-8
+            py-5
             text-center
-            sm:py-9
+            sm:py-6
           "
         >
-          {/* DANTE HERO — mascot + identity. Kept compact so the
-              starters below read as clearly secondary, not a second
-              hero. */}
+          {/* DANTE HERO — mascot + identity. Kept compact (sm robot,
+              tight spacing) so this intro card reads as a lightweight
+              conversation starter, not a full-height section of its
+              own. */}
           <DanteRobot
             state={visualState}
-            size="md"
+            size="sm"
             interactive
           />
 
-          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--mf-violet)]">
+          <p className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--mf-violet)]">
             Dante
           </p>
 
-          <h2 className="mt-1.5 text-2xl font-bold text-white md:text-3xl">
+          <h2 className="mt-1 text-xl font-bold text-white md:text-2xl">
             {heroTitle}
           </h2>
 
-          <p className="mt-2.5 line-clamp-2 max-w-md text-sm leading-6 text-white/50">
+          <p className="mt-2 line-clamp-2 max-w-md text-sm leading-6 text-white/50">
             {heroSubtitle}
           </p>
 
           {/* CONTEXTUAL STARTERS — visually secondary to the hero
               above: smaller type, quieter surface, no competing focal
               weight. 2x2 on desktop, single column on narrow mobile. */}
-          <div className="mt-6 grid w-full max-w-lg grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <div className="mt-4 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
             {emptyStatePrompts.map((item) => (
               <button
                 key={item.label}
@@ -874,7 +873,7 @@ export default function DanteChat({
                   border-[var(--mf-violet)]/20
                   bg-[var(--mf-violet)]/6
                   px-4
-                  py-3
+                  py-2.5
                   text-left
                   text-xs
                   font-semibold
@@ -1373,7 +1372,7 @@ export default function DanteChat({
         <div
           className="
             flex
-            min-h-14
+            min-h-12
             flex-1
             items-end
             rounded-[20px]
@@ -1381,7 +1380,7 @@ export default function DanteChat({
             border-white/10
             bg-[#171c26]
             px-5
-            py-3.5
+            py-2.5
             transition
             focus-within:border-[var(--mf-violet)]/40
             focus-within:bg-[#1c222e]
@@ -1448,8 +1447,8 @@ export default function DanteChat({
             aria-label="Stop Dante's response"
             className="
               flex
-              h-14
-              w-14
+              h-12
+              w-12
               shrink-0
               items-center
               justify-center
@@ -1475,8 +1474,8 @@ export default function DanteChat({
             aria-label="Send message to Dante"
             className="
               flex
-              h-14
-              w-14
+              h-12
+              w-12
               shrink-0
               items-center
               justify-center
