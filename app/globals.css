@@ -775,3 +775,26 @@ input:-webkit-autofill:focus {
     transform: scale(1.03);
   }
 }
+
+/* Restrained reveal for a newly-mounted Dante chat bubble (user
+   message, or the assistant container right before it starts
+   streaming). Plays once on mount only — React reuses the same DOM
+   node across the re-renders that stream text into it, so this never
+   replays mid-stream. Capped to 0.01ms by the prefers-reduced-motion
+   override above (source order doesn't matter there — that rule uses
+   !important). */
+@keyframes dante-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dante-message-in {
+  animation: dante-message-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}

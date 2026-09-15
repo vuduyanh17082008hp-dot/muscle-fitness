@@ -728,10 +728,24 @@ export default function DanteChat({
         // composer). The conversation pane is the ONLY flex-1 child, and
         // it carries min-h-0 so it actually shrinks to the container's
         // fixed height instead of growing to fit its content and pushing
-        // the composer out of view — the root cause of the previous
-        // overlap between the chat window and whatever rendered below it.
+        // the composer out of view.
+        //
+        // The fixed height only applies once there's a real scrollable
+        // conversation to bound (isEmpty === false). In the empty state
+        // (hero + composer, no message history yet) the same fixed
+        // height was shorter than its own content at common viewport
+        // widths, so the excess silently overflowed the box's bottom
+        // edge and visually collided with whatever the page renders
+        // next (e.g. Recovery Knowledge Hub below it on
+        // /dashboard/recovery). min-h lets it grow to fit instead.
         "flex w-full min-h-0 flex-col font-sans",
-        compact ? "h-[600px] min-h-[520px]" : "h-[min(74vh,820px)] min-h-125",
+        compact
+          ? isEmpty
+            ? "min-h-[520px]"
+            : "h-[600px] min-h-[520px]"
+          : isEmpty
+            ? "min-h-125"
+            : "h-[min(74vh,820px)] min-h-125",
         className,
       )}
     >
@@ -883,9 +897,16 @@ export default function DanteChat({
       )}
 
       {/* ===================================================
-          CHAT WINDOW
+          CHAT WINDOW — only once there's a real conversation beyond
+          the seeded welcome message. In the empty state the hero
+          block above already covers this space (same welcome copy,
+          via heroTitle/heroSubtitle); rendering this too produced a
+          second, near-empty rounded surface directly under it, since
+          a flex-1 min-h-0 pane squeezed toward zero height still paints
+          its own border/padding.
       =================================================== */}
 
+      {!isEmpty && (
       <div
         ref={chatWindowRef}
         onScroll={handleChatWindowScroll}
@@ -915,11 +936,10 @@ export default function DanteChat({
               return (
                 <div
                   key={message.id}
-                  className={
-                    isUser
-                      ? "flex justify-end"
-                      : "flex justify-start"
-                  }
+                  className={cn(
+                    "dante-message-in",
+                    isUser ? "flex justify-end" : "flex justify-start",
+                  )}
                 >
 
                   {/* =======================================
@@ -1332,6 +1352,7 @@ export default function DanteChat({
           />
         </div>
       </div>
+      )}
 
       {/* ===================================================
           COMPOSER — a separate sibling section, always the LAST
@@ -1391,6 +1412,7 @@ export default function DanteChat({
             disabled={
               isLoading
             }
+            aria-label="Message Dante"
             placeholder="Ask Dante about training, nutrition, recovery..."
             className="
               max-h-40
