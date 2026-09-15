@@ -1,18 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
 
 import { MUSCLE_DISPLAY_NAME, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
-import { MUSCLE_REGIONS, type MuscleRegion } from "@/lib/training/muscle-regions";
 import { MUSCLE_ATLAS_ENTRIES } from "@/lib/training/muscle-ontology";
 import { buildExerciseEmphasisMap, HIGHLIGHT_FILL, HIGHLIGHT_OPACITY } from "@/lib/training/muscle-highlight";
-import { useReducedMotion } from "@/lib/useReducedMotion";
+import {
+  ANATOMY_INTERACTION,
+  resolveAnatomyColor,
+  type AnatomyIntensitySample,
+} from "@/lib/training/anatomy-intensity";
 import type { MuscleMapEntry, MuscleMapProps } from "@/components/training/muscle-map/types";
 import { MuscleSearchBar } from "@/components/training/muscle-map/MuscleSearchBar";
 import { MuscleDetailPanel } from "@/components/training/muscle-map/MuscleDetailPanel";
 import { ExercisePicker } from "@/components/training/muscle-map/ExercisePicker";
 import { ExerciseEmphasisPanel } from "@/components/training/muscle-map/ExerciseEmphasisPanel";
+import { AnatomicalBodySvg } from "@/components/training/muscle-map/AnatomicalBodySvg";
 import type { ExerciseRecord } from "@/lib/workouts/providers/types";
 import { cn } from "@/lib/cn";
 
@@ -26,32 +29,20 @@ const MODE_LABEL: Record<MapMode, string> = {
   exercise: "Exercise",
 };
 
-function volumeFill(value: number, max: number): string {
-  if (max <= 0) return "var(--mf-glass-elevated)";
-  const ratio = Math.min(1, value / max);
-  const lightness = 78 - ratio * 46;
-  return `hsl(83 80% ${lightness}%)`; // acid-lime hue, intensity by exposure
-}
-
-function changeFill(changePercent: number | null): string {
-  if (changePercent === null) return "var(--mf-glass-elevated)";
-  const magnitude = Math.min(1, Math.abs(changePercent) / 50);
-  const lightness = 78 - magnitude * 46;
-  return `hsl(190 80% ${lightness}%)`; // analytics cyan — chart differentiation only, per Client OS color rules
-}
-
-function performanceFill(trend: string): string {
+function performanceTone(
+  trend: string,
+): AnatomyIntensitySample["tone"] {
   switch (trend) {
     case "improving":
-      return "var(--mf-glass-brand)";
+      return "positive";
     case "stable":
-      return "hsl(190 40% 58%)";
+      return "neutral";
     case "declining":
-      return "var(--mf-glass-warning)";
+      return "negative";
     case "mixed":
-      return "hsl(35 60% 60%)";
+      return "mixed";
     default:
-      return "var(--mf-glass-elevated)";
+      return "inactive";
   }
 }
 
@@ -65,8 +56,8 @@ export function MuscleMapClient({
   const [view, setView] = useState<"front" | "back">("front");
   const [mode, setMode] = useState<MapMode>("anatomy");
   const [selectedMuscle, setSelectedMuscle] = useState<CanonicalMuscle | null>(null);
+  const [hoveredMuscle, setHoveredMuscle] = useState<CanonicalMuscle | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseRecord | null>(null);
-  const reduceMotion = useReducedMotion();
 
   const byMuscle = useMemo(() => {
     const map = new Map<CanonicalMuscle, MuscleMapEntry>();
@@ -95,20 +86,40 @@ export function MuscleMapClient({
       ? MUSCLE_ATLAS_ENTRIES[selectedExercise.primaryMuscles[0]].preferredView
       : null;
 
+  function sampleFor(muscle: CanonicalMuscle): AnatomyIntensitySample | null {
+    if (mode === "exercise") {
+      const level = exerciseEmphasis[muscle];
+      if (!level) return null;
+      const intensity = level === "primary" ? 1 : level === "secondary" ? 0.55 : 0.28;
+      return { intensity };
+    }
+
+    if (mode === "anatomy") return {};
+
+    const entry = byMuscle.get(muscle);
+    if (!entry) return null;
+
+    if (mode === "volume") {
+      return {
+        intensity: maxVolume > 0 ? entry.analytics.currentWeek.totalEffectiveSets / maxVolume : 0,
+      };
+    }
+
+    if (mode === "change") {
+      if (entry.analytics.changePercent === null) return null;
+      return { intensity: Math.min(1, Math.abs(entry.analytics.changePercent) / 50) };
+    }
+
+    return { tone: performanceTone(entry.recommendation.inputs.performanceTrend) };
+  }
+
   function fillFor(muscle: CanonicalMuscle): string {
     if (mode === "exercise") {
       const level = exerciseEmphasis[muscle];
       return level ? HIGHLIGHT_FILL[level] : HIGHLIGHT_FILL.inactive;
     }
 
-    if (mode === "anatomy") return "var(--mf-glass-elevated)";
-
-    const entry = byMuscle.get(muscle);
-    if (!entry) return "var(--mf-glass-elevated)";
-
-    if (mode === "volume") return volumeFill(entry.analytics.currentWeek.totalEffectiveSets, maxVolume);
-    if (mode === "change") return changeFill(entry.analytics.changePercent);
-    return performanceFill(entry.recommendation.inputs.performanceTrend);
+    return resolveAnatomyColor(mode, sampleFor(muscle)).fill;
   }
 
   /** Cinematic dim/highlight: only opacity-shifts when something is selected — never on plain hover/idle. */
@@ -119,8 +130,10 @@ export function MuscleMapClient({
       return level ? HIGHLIGHT_OPACITY[level] : HIGHLIGHT_OPACITY.inactive;
     }
 
-    if (!selectedMuscle) return 1;
-    return muscle === selectedMuscle ? 1 : 0.32;
+    if (!selectedMuscle) return ANATOMY_INTERACTION.idleOpacity;
+    return muscle === selectedMuscle
+      ? ANATOMY_INTERACTION.idleOpacity
+      : ANATOMY_INTERACTION.dimmedOpacity;
   }
 
   function ariaLabelFor(muscle: CanonicalMuscle): string {
@@ -178,53 +191,6 @@ export function MuscleMapClient({
     }
   }
 
-  function renderMapFigure(figureView: "front" | "back") {
-    const regions = MUSCLE_REGIONS.filter((region) => region.view === figureView);
-
-    return (
-      <svg
-        viewBox="0 0 200 400"
-        role="img"
-        aria-label={`Muscle map, ${figureView} view, ${MODE_LABEL[mode].toLowerCase()} mode`}
-        className="mx-auto w-full max-w-[260px]"
-      >
-        <rect x="70" y="20" width="60" height="60" rx="28" fill="var(--mf-glass-bg-deep)" />
-        <rect x="72" y="76" width="56" height="130" rx="18" fill="var(--mf-glass-bg-deep)" />
-
-        {regions.map((region, index) => {
-          const fill = fillFor(region.muscle);
-          const label = ariaLabelFor(region.muscle);
-          const regionKey = `${figureView}-${region.muscle}-${index}`;
-          const isSelected = region.muscle === selectedMuscle;
-
-          const commonProps = {
-            tabIndex: 0,
-            role: "button" as const,
-            "aria-label": label,
-            "aria-pressed": isSelected,
-            onClick: () => handleSelectFromMap(region.muscle),
-            onKeyDown: (event: React.KeyboardEvent) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                handleSelectFromMap(region.muscle);
-              }
-            },
-            className:
-              "cursor-pointer transition-colors hover:opacity-90 focus:outline-none focus-visible:stroke-mf-glass-brand",
-            stroke: isSelected ? "var(--mf-glass-brand)" : "rgba(255,255,255,0.1)",
-            style: { strokeWidth: isSelected ? 2.5 : 1.5, transformOrigin: "center" as const },
-            fill,
-            initial: false as const,
-            animate: { opacity: opacityFor(region.muscle), scale: isSelected ? 1.03 : 1 },
-            transition: { duration: reduceMotion ? 0 : 0.35, ease: "easeOut" as const },
-          };
-
-          return renderRegionShape(region, regionKey, commonProps);
-        })}
-      </svg>
-    );
-  }
-
   return (
     <div className="rounded-[22px] border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-6">
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
@@ -251,7 +217,7 @@ export function MuscleMapClient({
             ))}
           </div>
 
-          {/* Front/Back toggle — mobile/tablet only. Desktop (lg+) shows both figures simultaneously, so a manual toggle would be redundant there (spec §39-40). */}
+          {/* Front/Back toggle — mobile/tablet only. Desktop (lg+) shows both figures simultaneously. */}
           <div className="flex gap-2 lg:hidden">
             {(["front", "back"] as const).map((v) => (
               <button
@@ -272,12 +238,21 @@ export function MuscleMapClient({
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <figure
               className={cn(
-                "flex flex-col items-center gap-2 transition-opacity duration-300",
+                "flex min-h-[320px] flex-col items-center justify-center gap-2 transition-opacity duration-300 sm:min-h-[380px]",
                 view === "back" && "hidden lg:flex",
                 preferredView === "back" && "lg:opacity-70",
               )}
             >
-              {renderMapFigure("front")}
+              <AnatomicalBodySvg
+                view="front"
+                fillFor={fillFor}
+                opacityFor={opacityFor}
+                ariaLabelFor={ariaLabelFor}
+                selectedMuscle={selectedMuscle}
+                hoveredMuscle={hoveredMuscle}
+                onSelectMuscle={handleSelectFromMap}
+                onHoverMuscle={setHoveredMuscle}
+              />
               <figcaption className="text-[10px] font-bold uppercase tracking-[0.2em] text-mf-glass-text-muted">
                 Front
               </figcaption>
@@ -285,12 +260,21 @@ export function MuscleMapClient({
 
             <figure
               className={cn(
-                "flex flex-col items-center gap-2 transition-opacity duration-300",
+                "flex min-h-[320px] flex-col items-center justify-center gap-2 transition-opacity duration-300 sm:min-h-[380px]",
                 view === "front" && "hidden lg:flex",
                 preferredView === "front" && "lg:opacity-70",
               )}
             >
-              {renderMapFigure("back")}
+              <AnatomicalBodySvg
+                view="back"
+                fillFor={fillFor}
+                opacityFor={opacityFor}
+                ariaLabelFor={ariaLabelFor}
+                selectedMuscle={selectedMuscle}
+                hoveredMuscle={hoveredMuscle}
+                onSelectMuscle={handleSelectFromMap}
+                onHoverMuscle={setHoveredMuscle}
+              />
               <figcaption className="text-[10px] font-bold uppercase tracking-[0.2em] text-mf-glass-text-muted">
                 Back
               </figcaption>
@@ -315,53 +299,6 @@ export function MuscleMapClient({
         )}
       </div>
     </div>
-  );
-}
-
-type RegionCommonProps = {
-  tabIndex: number;
-  role: "button";
-  "aria-label": string;
-  "aria-pressed": boolean;
-  onClick: () => void;
-  onKeyDown: (event: React.KeyboardEvent) => void;
-  className: string;
-  stroke: string;
-  style: { strokeWidth: number; transformOrigin: string };
-  fill: string;
-  initial: false;
-  animate: { opacity: number; scale: number };
-  transition: { duration: number; ease: "easeOut" };
-};
-
-function renderRegionShape(region: MuscleRegion, key: string, props: RegionCommonProps) {
-  if (region.shape === "path") {
-    return <motion.path key={key} {...props} d={region.d} />;
-  }
-
-  if (region.shape === "ellipse") {
-    return (
-      <motion.ellipse
-        key={key}
-        {...props}
-        cx={region.x + region.width / 2}
-        cy={region.y + region.height / 2}
-        rx={region.width / 2}
-        ry={region.height / 2}
-      />
-    );
-  }
-
-  return (
-    <motion.rect
-      key={key}
-      {...props}
-      x={region.x}
-      y={region.y}
-      width={region.width}
-      height={region.height}
-      rx={region.rx ?? 6}
-    />
   );
 }
 

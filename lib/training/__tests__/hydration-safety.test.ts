@@ -32,6 +32,7 @@ const MUSCLE_INTELLIGENCE_RENDER_PATH = [
   "lib/useIsDesktop.ts",
   "components/training/muscle-map/MuscleDetailPanel.tsx",
   "components/training/muscle-map/MuscleMapClient.tsx",
+  "components/training/muscle-map/AnatomicalBodySvg.tsx",
   "components/training/muscle-map/ExercisePicker.tsx",
   "components/training/muscle-map/ExerciseEmphasisPanel.tsx",
   "components/training/muscle-map/MuscleSearchBar.tsx",

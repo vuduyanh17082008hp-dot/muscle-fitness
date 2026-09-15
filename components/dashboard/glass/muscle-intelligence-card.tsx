@@ -41,36 +41,77 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
   }
 
   if (entries.length === 0) {
+    // Preview highlights — illustrative only, not fabricated analytics.
+    // Shows what the map will look like once logged sets exist.
+    const previewHighlights: MuscleMapHighlights = {
+      chest: "primary",
+      quadriceps: "secondary",
+      latissimus_dorsi: "secondary",
+      anterior_deltoid: "stabilizer",
+    };
+
     return (
       <GlassCard data-testid="muscle-intelligence-card">
         <GlassCardHeader title="Muscle Intelligence" />
 
-        {/* Real anatomy data is available even with zero trained
-            muscles this week — render it unhighlighted rather than
-            collapsing the card to a single line of text, per the
-            sparse-data design requirement (the card must still look
-            intentionally designed with no fabricated numbers). */}
-        <div className="mt-4 grid flex-1 gap-6 md:grid-cols-[minmax(0,220px)_1fr]">
-          <MuscleMap
-            highlights={{}}
-            legend={false}
-            selectedMuscle={null}
-            accentColor="var(--mf-glass-brand)"
-            className="border-mf-glass-border bg-black/10"
-          />
-
-          <div className="flex flex-col items-start justify-center gap-3">
-            <p className="text-sm font-semibold text-mf-glass-text">No completed workout data yet.</p>
-            <p className="max-w-sm text-xs leading-5 text-mf-glass-text-muted">
-              Muscle exposure is calculated from completed sets — once you finish a workout this
-              week, the muscles you trained will highlight here with effective sets, frequency and
-              a recommendation for each.
+        <div className="mt-4 grid flex-1 gap-5 md:grid-cols-[minmax(0,200px)_1fr]">
+          <div className="relative">
+            <MuscleMap
+              highlights={previewHighlights}
+              legend={false}
+              selectedMuscle="chest"
+              accentColor="var(--mf-glass-brand)"
+              className="border-mf-glass-border bg-black/10 opacity-90"
+            />
+            <p className="mt-2 text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-mf-glass-text-muted">
+              Preview
             </p>
+          </div>
+
+          <div className="flex flex-col justify-center gap-3">
+            <div>
+              <p className="text-sm font-semibold text-mf-glass-text">
+                See which muscles your training actually hits
+              </p>
+              <p className="mt-1 max-w-sm text-xs leading-5 text-mf-glass-text-muted">
+                Complete logged workouts and this map fills with real exposure —
+                not guesses.
+              </p>
+            </div>
+
+            <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] font-medium uppercase tracking-[0.06em] text-mf-glass-text-secondary">
+              {[
+                "Complete workout",
+                "Logged sets",
+                "Muscle exposure",
+                "Volume / frequency",
+                "Dante recommendation",
+              ].map((step, index) => (
+                <li key={step} className="flex items-center gap-1.5">
+                  {index > 0 ? (
+                    <span className="text-mf-glass-text-muted" aria-hidden="true">
+                      →
+                    </span>
+                  ) : null}
+                  <span className="rounded-md border border-mf-glass-border bg-white/[0.03] px-1.5 py-0.5">
+                    {step}
+                  </span>
+                </li>
+              ))}
+            </ol>
+
+            <ul className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-mf-glass-text-muted">
+              <li>Trained muscle exposure</li>
+              <li>Effective sets</li>
+              <li>Session frequency</li>
+              <li>Training emphasis</li>
+            </ul>
+
             <Link
               href="/dashboard/workouts"
-              className="mt-1 inline-flex h-9 items-center justify-center rounded-xl bg-mf-glass-brand px-4 text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+              className="mt-0.5 inline-flex h-9 w-fit items-center justify-center rounded-xl bg-mf-glass-brand px-4 text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
             >
-              Start Today&apos;s Plan
+              Log a Workout
             </Link>
           </div>
         </div>
