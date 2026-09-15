@@ -22,6 +22,7 @@ import { computeFreshness, FRESHNESS_THRESHOLDS } from "@/lib/athlete-state/data
 import { evaluateReadiness } from "@/lib/dante-core/readiness-engine";
 import { loadDemoSettings } from "@/lib/demo/settings";
 import { resolveWearableProvider } from "@/lib/wearables/registry";
+import { localDateTimeParts, resolveUserTimeZone } from "@/lib/training/load-today-session";
 
 type FitnessProfileRow = {
   goal: string | null;
@@ -96,6 +97,7 @@ export async function buildAthleteState(
     setVisionContext,
     latestFoodLogResponse,
     demoSettings,
+    timezone,
   ] = await Promise.all([
       loadTrainingContext(supabase, userId, {
         now,
@@ -122,6 +124,7 @@ export async function buildAthleteState(
         .limit(1)
         .maybeSingle(),
       loadDemoSettings(supabase, userId),
+      resolveUserTimeZone(supabase, userId),
     ]);
 
   const fitnessProfile = (fitnessProfileResponse.data as FitnessProfileRow | null) ?? null;
@@ -131,11 +134,12 @@ export async function buildAthleteState(
   // has explicitly opted into their own demo scenario — never a
   // silent fallback for a real user with no wearable connected.
   const wearableProvider = resolveWearableProvider(demoSettings);
-  const endIso = now.toISOString().slice(0, 10);
+  const localDate = localDateTimeParts(now, timezone).localDate;
   const wearableBundle = wearableProvider
-    ? await wearableProvider.fetchSnapshots(userId, { startDate: endIso, endDate: endIso })
+    ? await wearableProvider.fetchSnapshots(userId, { startDate: localDate, endDate: localDate })
     : null;
-  const latestWearableDay = wearableBundle?.days[wearableBundle.days.length - 1] ?? null;
+  const latestWearableDay =
+    wearableBundle?.days.find((day) => day.date === localDate) ?? null;
 
   const recoveryStatus: RecoveryStatusInput = recoveryContext
     ? (recoveryContext.todayScoreResult.status as RecoveryStatusInput)

@@ -40,7 +40,7 @@ export const dynamic = "force-dynamic"
 const NUTRITION_TABS = [
   { label: "Today", href: "/dashboard/nutrition#today" },
   { label: "Plan", href: "/dashboard/nutrition#plan" },
-  { label: "History", href: "/dashboard/nutrition#history" },
+  { label: "Macros", href: "/dashboard/nutrition#macros" },
   { label: "Insights", href: "/dashboard/ai-coach" },
 ]
 

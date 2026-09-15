@@ -25,6 +25,16 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+/** Accept only finite values inside the documented 1–10 check-in scale. */
+function validScale10(value: number | null | undefined): value is number {
+  return value !== null && value !== undefined && Number.isFinite(value) && value >= 1 && value <= 10
+}
+
+/** Accept only finite sleep duration within a calendar day. */
+function validSleepHours(value: number | null | undefined): value is number {
+  return value !== null && value !== undefined && Number.isFinite(value) && value >= 0 && value <= 24
+}
+
 /** 1–10 scale where a HIGH value is bad (stress, fatigue, soreness). */
 function invertedScale10(value: number) {
   return clamp((11 - value) * 10, 0, 100)
@@ -66,11 +76,11 @@ function buildDrivers(input: RecoveryCheckinInput): RecoveryDriver[] {
   // ---- Sleep (hours + quality combined) ----
   const sleepParts: number[] = []
 
-  if (input.sleepHours !== null) {
+  if (validSleepHours(input.sleepHours)) {
     sleepParts.push(sleepHoursScore(input.sleepHours))
   }
 
-  if (input.sleepQuality !== null) {
+  if (validScale10(input.sleepQuality)) {
     sleepParts.push(directScale10(input.sleepQuality))
   }
 
@@ -92,46 +102,43 @@ function buildDrivers(input: RecoveryCheckinInput): RecoveryDriver[] {
   drivers.push({
     key: "stress",
     label: "Stress",
-    score:
-      input.stress !== null
-        ? Math.round(invertedScale10(input.stress))
-        : 0,
+    score: validScale10(input.stress)
+      ? Math.round(invertedScale10(input.stress))
+      : 0,
     weight: WEIGHTS.stress,
-    available: input.stress !== null,
+    available: validScale10(input.stress),
   })
 
   // ---- Fatigue ----
   drivers.push({
     key: "fatigue",
     label: "Fatigue",
-    score:
-      input.fatigue !== null
-        ? Math.round(invertedScale10(input.fatigue))
-        : 0,
+    score: validScale10(input.fatigue)
+      ? Math.round(invertedScale10(input.fatigue))
+      : 0,
     weight: WEIGHTS.fatigue,
-    available: input.fatigue !== null,
+    available: validScale10(input.fatigue),
   })
 
   // ---- Soreness ----
   drivers.push({
     key: "soreness",
     label: "Soreness",
-    score:
-      input.soreness !== null
-        ? Math.round(invertedScale10(input.soreness))
-        : 0,
+    score: validScale10(input.soreness)
+      ? Math.round(invertedScale10(input.soreness))
+      : 0,
     weight: WEIGHTS.soreness,
-    available: input.soreness !== null,
+    available: validScale10(input.soreness),
   })
 
   // ---- Mood / readiness combined ----
   const moodReadinessParts: number[] = []
 
-  if (input.mood !== null) {
+  if (validScale10(input.mood)) {
     moodReadinessParts.push(directScale10(input.mood))
   }
 
-  if (input.readiness !== null) {
+  if (validScale10(input.readiness)) {
     moodReadinessParts.push(directScale10(input.readiness))
   }
 
@@ -155,15 +162,15 @@ function buildDrivers(input: RecoveryCheckinInput): RecoveryDriver[] {
 function missingInputLabels(input: RecoveryCheckinInput): string[] {
   const missing: string[] = []
 
-  if (input.sleepHours === null && input.sleepQuality === null) {
+  if (!validSleepHours(input.sleepHours) && !validScale10(input.sleepQuality)) {
     missing.push("sleep")
   }
 
-  if (input.stress === null) missing.push("stress")
-  if (input.fatigue === null) missing.push("fatigue")
-  if (input.soreness === null) missing.push("soreness")
+  if (!validScale10(input.stress)) missing.push("stress")
+  if (!validScale10(input.fatigue)) missing.push("fatigue")
+  if (!validScale10(input.soreness)) missing.push("soreness")
 
-  if (input.mood === null && input.readiness === null) {
+  if (!validScale10(input.mood) && !validScale10(input.readiness)) {
     missing.push("mood/readiness")
   }
 
@@ -222,7 +229,7 @@ function computeBaseline(
 ): RecoveryBaseline | null {
   const scores = history
     .map((entry) => entry.score)
-    .filter((value): value is number => value !== null)
+    .filter((value): value is number => value !== null && Number.isFinite(value) && value >= 0 && value <= 100)
 
   if (scores.length < 3) {
     return null

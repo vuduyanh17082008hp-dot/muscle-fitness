@@ -187,7 +187,7 @@ export function resolveCanonicalMuscle(
 
   const key = normalizeAliasKey(label);
 
-  return MUSCLE_ALIASES[key] ?? null;
+  return Object.prototype.hasOwnProperty.call(MUSCLE_ALIASES, key) ? MUSCLE_ALIASES[key] : null;
 }
 
 /**

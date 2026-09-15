@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { applyDecay } from "@/lib/dante-core/memory-hierarchy/consolidate";
+import { isMissingRelationError } from "@/lib/dante-core/memory-hierarchy/schema-availability";
 import type {
   ContextKey,
   DanteLearnedPattern,
@@ -24,6 +25,16 @@ type PatternRow = {
   last_reinforced_at: string;
   requires_confirmation: boolean | null;
 };
+
+let loggedMissingLearnedPatternsTable = false;
+
+function noteMissingLearnedPatternsTable(context: string): void {
+  if (loggedMissingLearnedPatternsTable) return;
+  loggedMissingLearnedPatternsTable = true;
+  console.info(
+    `[DANTE MEMORY HIERARCHY] dante_learned_patterns unavailable (${context}) — persistent learned-pattern memory is disabled until its migration is intentionally applied.`,
+  );
+}
 
 function fromRow(row: PatternRow): DanteLearnedPattern {
   return {
@@ -48,6 +59,10 @@ function fromRow(row: PatternRow): DanteLearnedPattern {
  * applied for display/decision purposes — always scoped to `userId`
  * (RLS also enforces this at the database level; this second scoping
  * is what makes cross-user isolation testable without a live database).
+ *
+ * When the table is not in the live schema (migration not applied),
+ * returns [] quietly — this path is optional for current Muscle Fitness
+ * Phase 2C and must not fail chat/dashboard loads.
  */
 export async function loadLearnedPatterns(
   supabase: SupabaseClient,
@@ -63,6 +78,10 @@ export async function loadLearnedPatterns(
     .order("confidence", { ascending: false });
 
   if (error) {
+    if (isMissingRelationError(error)) {
+      noteMissingLearnedPatternsTable("load");
+      return [];
+    }
     console.warn("[DANTE MEMORY HIERARCHY] Unable to load learned patterns:", error.message);
     return [];
   }
@@ -88,6 +107,10 @@ export async function findLearnedPattern(
     .maybeSingle();
 
   if (error) {
+    if (isMissingRelationError(error)) {
+      noteMissingLearnedPatternsTable("find");
+      return null;
+    }
     console.warn("[DANTE MEMORY HIERARCHY] Unable to load pattern:", error.message);
     return null;
   }
@@ -127,6 +150,10 @@ export async function upsertLearnedPattern(
   const { error } = await query;
 
   if (error) {
+    if (isMissingRelationError(error)) {
+      noteMissingLearnedPatternsTable("upsert");
+      return;
+    }
     console.error("[DANTE MEMORY HIERARCHY] Unable to save pattern:", error.message);
   }
 }
@@ -144,6 +171,10 @@ export async function forgetLearnedPattern(
     .eq("user_id", userId);
 
   if (error) {
+    if (isMissingRelationError(error)) {
+      noteMissingLearnedPatternsTable("forget");
+      return { ok: false, error: "Learned-pattern memory is not enabled in this environment." };
+    }
     console.error("[DANTE MEMORY HIERARCHY] Unable to delete pattern:", error.message);
     return { ok: false, error: "Unable to forget this pattern. Please try again." };
   }
@@ -170,6 +201,10 @@ export async function setPatternRequiresConfirmation(
     .eq("user_id", userId);
 
   if (error) {
+    if (isMissingRelationError(error)) {
+      noteMissingLearnedPatternsTable("update");
+      return { ok: false, error: "Learned-pattern memory is not enabled in this environment." };
+    }
     console.error("[DANTE MEMORY HIERARCHY] Unable to update pattern:", error.message);
     return { ok: false, error: "Unable to update this pattern. Please try again." };
   }

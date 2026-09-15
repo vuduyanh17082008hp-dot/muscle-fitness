@@ -4,12 +4,14 @@ import { z } from "zod";
 
 import { computeRecoveryScore, RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import type { DanteTool } from "@/lib/dante-core/tools/types";
+import { localDateTimeParts } from "@/lib/training/load-today-session";
+import { addDaysIso } from "@/lib/nutrition/date-utils";
 
-const scaleField = z.number().int().min(1).max(10).nullable().optional();
+const scaleField = z.number().finite().int().min(1).max(10).nullable().optional();
 
 const inputSchema = z
   .object({
-    sleepHours: z.number().min(0).max(24).nullable().optional(),
+    sleepHours: z.number().finite().min(0).max(24).nullable().optional(),
     sleepQuality: scaleField,
     stress: scaleField,
     fatigue: scaleField,
@@ -47,14 +49,20 @@ export const completeCheckinTool: DanteTool<CompleteCheckinInput, CompleteChecki
   },
 
   async execute(context, input) {
-    const { supabase, userId } = context;
-    const checkinDate = context.now.toISOString().slice(0, 10);
+    const { supabase, userId, now, timezone } = context;
+    // Same local calendar date as POST /api/recovery/checkin — never UTC
+    // `.toISOString().slice(0, 10)`, which writes yesterday's row for any
+    // user ahead of UTC in the early morning (e.g. Asia/Singapore).
+    const checkinDate =
+      context.temporalContext?.localDate ??
+      localDateTimeParts(now, timezone || "UTC").localDate;
 
     const { data: historyRows, error: historyError } = await supabase
       .from("recovery_checkins")
       .select("checkin_date, recovery_score")
       .eq("user_id", userId)
-      .neq("checkin_date", checkinDate)
+      .gte("checkin_date", addDaysIso(checkinDate, -29))
+      .lt("checkin_date", checkinDate)
       .order("checkin_date", { ascending: false })
       .limit(30);
 

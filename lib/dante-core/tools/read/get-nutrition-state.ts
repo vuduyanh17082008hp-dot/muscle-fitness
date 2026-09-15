@@ -50,6 +50,10 @@ export const getNutritionStateTool: DanteTool<Record<string, never>, NutritionSt
       cached(context, "foodLog", () => loadFoodLogForDate(supabase, userId, localDate)),
     ]);
 
+    if (foodLog.unavailable) {
+      return { ok: false, error: "Food log is unavailable. Consumed and remaining nutrients cannot be determined." };
+    }
+
     if (!nutritionContext.plan) {
       return { ok: true, data: { hasTarget: false } };
     }

@@ -102,4 +102,55 @@ describe("buildRecoveryRadar", () => {
 
     expect(result.limitations?.some((l) => l.toLowerCase().includes("demo wearable"))).toBe(true);
   });
+
+  it("describes resting-HR rises as above baseline (never 'below' when HR went up)", () => {
+    const result = buildRecoveryRadar(
+      baseInput({
+        restingHr: { history: series(14, 55), today: 64 },
+      }),
+    );
+
+    const resting = result.decision.signals.find((s) => s.name === "resting_hr");
+    expect(resting?.direction).toBe("worse");
+    expect(result.why.some((line) => line.includes("Resting heart rate") && line.includes("above"))).toBe(true);
+    expect(result.why.some((line) => line.includes("Resting heart rate") && line.includes("below"))).toBe(false);
+  });
+
+  it("treats HRV null today with history as unknown, not a fabricated drop", () => {
+    const result = buildRecoveryRadar(
+      baseInput({
+        hrv: { history: series(14, 60), today: null },
+      }),
+    );
+
+    const hrv = result.decision.signals.find((s) => s.name === "hrv");
+    expect(hrv?.concerning).toBe("none");
+    expect(hrv?.direction).toBe("unknown");
+    expect(hrv?.deviation.delta).toBeNull();
+  });
+
+  it("stays normal when only sleep is available and matches baseline", () => {
+    const result = buildRecoveryRadar(
+      baseInput({
+        hrv: { history: [], today: null },
+        restingHr: { history: [], today: null },
+        sleepHours: { history: series(14, 7.5), today: 7.5 },
+        recoveryScore: { history: [], today: null },
+        dataSource: { wearable: false, isDemoWearable: false, recoveryCheckins: true },
+      }),
+    );
+
+    expect(result.decision.status).toBe("normal");
+  });
+
+  it("flags conflicting multi-signal stress (low sleep + low HRV) as significant_deviation", () => {
+    const result = buildRecoveryRadar(
+      baseInput({
+        hrv: { history: series(14, 60), today: 40 },
+        sleepHours: { history: series(14, 7.5), today: 5 },
+      }),
+    );
+
+    expect(result.decision.status).toBe("significant_deviation");
+  });
 });

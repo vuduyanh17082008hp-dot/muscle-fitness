@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 
 import type { LucideIcon } from "lucide-react"
 
@@ -27,7 +27,6 @@ import { buildChatSuggestions } from "@/lib/dante-core/build-chat-suggestions"
 import type { DanteInsight } from "@/lib/dante-core/insight"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import DanteChat from "@/components/dante-chat"
-import { DanteLearnedPanel } from "@/components/dante/dante-learned-panel"
 
 /**
  * Contextual conversation starters for the "Ask Dante" section (spec:
@@ -166,7 +165,7 @@ export default async function DashboardSectionPage({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    notFound()
+    redirect(`/login?next=${encodeURIComponent(`/dashboard/${sectionKey}`)}`)
   }
 
   const [
@@ -278,10 +277,10 @@ export default async function DashboardSectionPage({
       )}
 
       {sectionKey === "ai-coach" && (
-        <div className="flex flex-col gap-8">
-          <DanteChat contextualSuggestions={aiCoachSuggestions ?? undefined} />
-          <DanteLearnedPanel />
-        </div>
+        // Persistent "Dante learned" pattern memory is intentionally not
+        // mounted on the Phase 2C chat surface — that table/migration is
+        // optional adaptive-intelligence work, not required for chat UX.
+        <DanteChat contextualSuggestions={aiCoachSuggestions ?? undefined} />
       )}
 
       {sectionKey === "settings" && (

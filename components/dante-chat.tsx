@@ -731,7 +731,12 @@ export default function DanteChat({
         // the composer out of view — the root cause of the previous
         // overlap between the chat window and whatever rendered below it.
         "flex w-full min-h-0 flex-col font-sans",
-        compact ? "h-[600px] min-h-[520px]" : "h-[min(74vh,820px)] min-h-125",
+        // Compact mode (Floating Dante / atlas Ask Dante) must fit inside
+        // a bottom sheet or short desktop panel — fixed 520/600px heights
+        // clipped the composer on phones. Cap to the available viewport.
+        compact
+          ? "h-[min(62dvh,520px)] max-h-[min(62dvh,520px)] min-h-0"
+          : "h-[min(74vh,820px)] min-h-125",
         className,
       )}
     >

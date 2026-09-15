@@ -67,9 +67,9 @@ function DesktopPanel({
       ref={panelRef}
       role="dialog"
       aria-label="Ask Dante"
-      className="fixed bottom-24 right-6 z-40 w-[380px] rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-4 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+      className="fixed bottom-24 right-6 z-40 flex max-h-[min(80vh,640px)] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-4 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <DanteMascot size="xs" state="idle" />
           <div>
@@ -88,9 +88,13 @@ function DesktopPanel({
         </button>
       </div>
 
-      <DanteChat compact heroSubtitle={contextualPrompt} />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <DanteChat compact heroSubtitle={contextualPrompt} />
+      </div>
 
-      <PanelFooter />
+      <div className="shrink-0">
+        <PanelFooter />
+      </div>
     </div>
   );
 }

@@ -130,7 +130,7 @@ export const siteConfig: SiteConfig = {
           "Dante",
 
         href:
-          "/coach",
+          "/dashboard/ai-coach",
       },
     ],
   },

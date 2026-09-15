@@ -29,7 +29,8 @@ describe("getProductByBarcode — known packaged barcode", () => {
           product_name: "Oreo Original",
           brands: "Oreo,Mondelez",
           generic_name: "Chocolate sandwich cookies",
-          serving_quantity: 29,
+          serving_quantity: "29",
+          serving_quantity_unit: "g",
           nutriments: {
             "energy-kcal_100g": 480,
             proteins_100g: 5.2,
@@ -83,3 +84,17 @@ describe("getProductByBarcode — known packaged barcode", () => {
     expect(food).toBeNull()
   })
 })
+
+
+it.each(["ml", undefined])("does not invent gram weights for serving unit %s", async (unit) => {
+  const { getProductByBarcode: lookup } = await import("@/lib/nutrition/food-data/open-food-facts");
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ product: {
+    product_name: "Serving unit test",
+    serving_quantity: 250,
+    serving_quantity_unit: unit,
+    nutriments: { "energy-kcal_100g": 50, proteins_100g: 2, carbohydrates_100g: 8, fat_100g: 1 },
+  } })));
+  const food = await lookup(unit === "ml" ? "unit-ml" : "unit-unknown");
+  expect(food?.servingSizeGrams).toBeNull();
+  expect(food?.per100g.calories).toBe(50);
+});

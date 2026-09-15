@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Route-handler tests for POST /api/recovery/checkin — the exact
@@ -48,6 +48,7 @@ type FakeRow = {
 function createFakeSupabase(options: {
   authenticatedUserId: string | null;
   seedRows?: FakeRow[];
+  timezone?: string;
 }) {
   const store = new Map<string, FakeRow>();
   for (const row of options.seedRows ?? []) {
@@ -67,6 +68,9 @@ function createFakeSupabase(options: {
         }),
       },
       from(table: string) {
+        if (table === "profiles") {
+          return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { timezone: options.timezone ?? "UTC" }, error: null }) }) }) };
+        }
         if (table !== "recovery_checkins") {
           throw new Error(`Unexpected table queried in test fake: ${table}`);
         }
@@ -74,15 +78,20 @@ function createFakeSupabase(options: {
         return {
           select() {
             let userIdFilter: string | null = null;
-            let excludedDate: string | null = null;
+            let beforeDate = "9999-12-31";
+            let fromDate = "0001-01-01";
 
             const builder = {
               eq(column: string, value: string) {
                 if (column === "user_id") userIdFilter = value;
                 return builder;
               },
-              neq(column: string, value: string) {
-                if (column === "checkin_date") excludedDate = value;
+              lt(column: string, value: string) {
+                if (column === "checkin_date") beforeDate = value;
+                return builder;
+              },
+              gte(column: string, value: string) {
+                if (column === "checkin_date") fromDate = value;
                 return builder;
               },
               order() {
@@ -91,7 +100,7 @@ function createFakeSupabase(options: {
               limit() {
                 const rows = Array.from(store.values()).filter(
                   (row) =>
-                    row.user_id === userIdFilter && row.checkin_date !== excludedDate,
+                    row.user_id === userIdFilter && row.checkin_date < beforeDate && row.checkin_date >= fromDate,
                 );
                 return Promise.resolve({ data: rows, error: null });
               },
@@ -171,6 +180,8 @@ const USER_A = "11111111-1111-1111-1111-111111111111";
 const USER_B = "22222222-2222-2222-2222-222222222222";
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-14T17:00:00Z"));
   vi.mocked(emitEvent).mockClear();
 });
 
@@ -241,7 +252,9 @@ describe("POST /api/recovery/checkin — Test 5: cross-user isolation", () => {
       authenticatedUserId: USER_A,
       seedRows: [
         { id: "b-1", user_id: USER_B, checkin_date: yesterday, recovery_score: 95 },
-        { id: "b-2", user_id: USER_B, checkin_date: today, recovery_score: 10 },
+        { id: "b-2", user_id: USER_B, checkin_date: "2026-09-12", recovery_score: 95 },
+        { id: "b-3", user_id: USER_B, checkin_date: "2026-09-11", recovery_score: 95 },
+        { id: "b-4", user_id: USER_B, checkin_date: today, recovery_score: 10 },
       ],
     });
     vi.mocked(createClient).mockResolvedValue(fake.client as never);
@@ -356,3 +369,19 @@ describe("POST /api/recovery/checkin — Test 8: structured Dante context", () =
     expect(emitEvent).not.toHaveBeenCalled();
   });
 });
+
+
+it("writes and emits the user's local date across UTC midnight", async () => {
+  const fake = createFakeSupabase({ authenticatedUserId: USER_A, timezone: "Asia/Singapore" });
+  vi.mocked(createClient).mockResolvedValue(fake.client as never);
+  const { POST } = await import("@/app/api/recovery/checkin/route");
+  const response = await POST(jsonRequest(validPayload()));
+  expect(response.status).toBe(200);
+  const data = await response.json();
+  expect(data.checkin.checkin_date).toBe("2026-09-15");
+  expect(emitEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    type: "CHECKIN_COMPLETED", payload: { checkinDate: "2026-09-15" },
+  }));
+});
+
+afterEach(() => vi.useRealTimers());

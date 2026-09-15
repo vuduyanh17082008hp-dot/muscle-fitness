@@ -144,7 +144,15 @@ export function generateDemoWearableSeries(
 ): WearableDailySnapshot[] {
   const start = new Date(`${range.startDate}T00:00:00.000Z`);
   const end = new Date(`${range.endDate}T00:00:00.000Z`);
-  const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start) {
+    return [];
+  }
+
+  const totalDays = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  if (!Number.isFinite(totalDays) || totalDays < 1 || totalDays > 120) {
+    return [];
+  }
 
   const days: WearableDailySnapshot[] = [];
 

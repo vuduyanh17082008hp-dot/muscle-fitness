@@ -49,4 +49,21 @@ describe("computeBaselineDeviation", () => {
     const b = computeBaselineDeviation([6, 7, 8, 6.5, 7.5, 7], 8);
     expect(a).toEqual(b);
   });
+
+  it("treats a single historical point as insufficient (null baseline/delta)", () => {
+    const result = computeBaselineDeviation([60], 40);
+    expect(result.sampleCount).toBe(1);
+    expect(result.baseline).toBeNull();
+    expect(result.delta).toBeNull();
+    expect(result.confidence).toBe(0);
+  });
+
+  it("activates exactly at MIN_SAMPLES_FOR_BASELINE and still reports current=0 honestly", () => {
+    const history = Array(MIN_SAMPLES_FOR_BASELINE).fill(60);
+    const result = computeBaselineDeviation(history, 0);
+    expect(result.baseline).toBe(60);
+    expect(result.delta).toBe(-60);
+    expect(result.current).toBe(0);
+    expect(result.confidence).toBeGreaterThan(0);
+  });
 });

@@ -5,30 +5,28 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { computeRecoveryScore } from "@/lib/recovery/score"
 import type { RecoveryCheckinRow } from "@/lib/recovery/types"
+import { localDateTimeParts, resolveUserTimeZone } from "@/lib/training/load-today-session"
+import { addDaysIso } from "@/lib/nutrition/date-utils"
 import { emitEvent } from "@/lib/events/emit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const scaleField = z.number().int().min(1).max(10).nullable().optional()
+const scaleField = z.number().finite().int().min(1).max(10).nullable().optional()
 
 const checkinSchema = z.object({
-  sleepHours: z.number().min(0).max(24).nullable().optional(),
+  sleepHours: z.number().finite().min(0).max(24).nullable().optional(),
   sleepQuality: scaleField,
   stress: scaleField,
   fatigue: scaleField,
   soreness: scaleField,
   mood: scaleField,
   readiness: scaleField,
-  restingHr: z.number().int().min(25).max(220).nullable().optional(),
-  steps: z.number().int().min(0).nullable().optional(),
+  restingHr: z.number().finite().int().min(25).max(220).nullable().optional(),
+  steps: z.number().finite().int().min(0).nullable().optional(),
   painIllness: z.enum(["no", "minor", "yes"]).default("no"),
   notes: z.string().max(600).nullable().optional(),
 })
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -62,6 +60,8 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data
+  const timezone = await resolveUserTimeZone(supabase, user.id)
+  const today = localDateTimeParts(new Date(), timezone).localDate
 
   /* -----------------------------------------------------
      LOAD RECENT HISTORY FOR THE BASELINE COMPARISON
@@ -71,7 +71,8 @@ export async function POST(request: Request) {
     .from("recovery_checkins")
     .select("checkin_date, recovery_score")
     .eq("user_id", user.id)
-    .neq("checkin_date", todayIso())
+    .gte("checkin_date", addDaysIso(today, -29))
+    .lt("checkin_date", today)
     .order("checkin_date", { ascending: false })
     .limit(30)
 
@@ -109,7 +110,7 @@ export async function POST(request: Request) {
     .upsert(
       {
         user_id: user.id,
-        checkin_date: todayIso(),
+        checkin_date: today,
         sleep_hours: input.sleepHours ?? null,
         sleep_quality: input.sleepQuality ?? null,
         stress: input.stress ?? null,
@@ -132,7 +133,7 @@ export async function POST(request: Request) {
     )
     .single()
 
-  if (error) {
+  if (error || !data) {
     // Structured, non-sensitive server log: real failure reason (e.g.
     // "Could not find the table 'public.recovery_checkins' in the
     // schema cache") lands in logs for diagnosis, never in the
@@ -140,15 +141,15 @@ export async function POST(request: Request) {
     // message, consistent with every other route in this app
     // (app/api/dante/*, app/api/setvision/*).
     console.error("[RECOVERY CHECKIN] save failed", {
-      code: error.code,
-      message: error.message,
+      code: error?.code,
+      message: error?.message,
       userId: user.id,
     })
 
     return NextResponse.json(
       {
         error: "Unable to save your check-in. Please try again.",
-        details: process.env.NODE_ENV === "development" ? error.message : undefined,
+        details: process.env.NODE_ENV === "development" ? error?.message : undefined,
       },
       { status: 500 },
     )
@@ -157,7 +158,7 @@ export async function POST(request: Request) {
   await emitEvent(supabase, {
     type: "CHECKIN_COMPLETED",
     userId: user.id,
-    payload: { checkinDate: todayIso() },
+    payload: { checkinDate: today },
   })
 
   await emitEvent(supabase, {

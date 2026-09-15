@@ -65,6 +65,22 @@ describe("generateDemoWearableSeries", () => {
       }
     }
   });
+
+  it("returns an empty series for inverted or invalid date ranges", () => {
+    expect(
+      generateDemoWearableSeries("recovered_athlete", "user-1", {
+        startDate: "2026-09-20",
+        endDate: "2026-09-10",
+      }),
+    ).toEqual([]);
+
+    expect(
+      generateDemoWearableSeries("recovered_athlete", "user-1", {
+        startDate: "not-a-date",
+        endDate: "2026-09-10",
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe("isDemoScenarioId", () => {
