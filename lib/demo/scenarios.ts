@@ -3,20 +3,28 @@ import type { WearableDailySnapshot } from "@/lib/wearables/types";
 
 /**
  * Competition-safe Demo Data Control (spec Part "2. DEMO DATA
- * CONTROL"). Four named, deterministic scenarios — never raw
+ * CONTROL"). Six named, deterministic scenarios — never raw
  * randomness a judge could catch flip-flopping between page loads.
- * Each scenario defines a BASELINE period and, for three of the four,
- * a RECENT deviation window — giving the Recovery Radar (which needs
- * real baseline-vs-current contrast) and the Experiment Lab (which
- * needs a multi-day history to bucket) something real to compute
- * against, not a single flat number.
+ * Four define a BASELINE period and a RECENT deviation window —
+ * giving the Recovery Radar (which needs real baseline-vs-current
+ * contrast) and the Experiment Lab (which needs a multi-day history
+ * to bucket) something real to compute against, not a single flat
+ * number. The other two exercise data-quality edges rather than a
+ * physiological deviation: `partial_data` (a whole metric category
+ * missing, never zeroed) and `stale_data` (a real sync gap — no rows
+ * for the recent window, not different-looking rows).
  */
+
+/** How many of the most recent days `stale_data` drops entirely from its own series — simulating a provider that stopped syncing, not one with nothing to report. */
+export const STALE_GAP_DAYS = 4;
 
 export type DemoScenarioId =
   | "recovered_athlete"
   | "sleep_deprived_athlete"
   | "high_training_load"
-  | "recovery_warning";
+  | "recovery_warning"
+  | "partial_data"
+  | "stale_data";
 
 export const DEMO_SCENARIOS: Array<{ id: DemoScenarioId; label: string; description: string }> = [
   {
@@ -38,6 +46,16 @@ export const DEMO_SCENARIOS: Array<{ id: DemoScenarioId; label: string; descript
     id: "recovery_warning",
     label: "Recovery Warning",
     description: "HRV, resting HR and sleep all shift unfavorably together in the last couple of days — a multi-signal deviation.",
+  },
+  {
+    id: "partial_data",
+    label: "Partial Data",
+    description: "A device that never tracks sleep — HRV, resting HR and steps report normally, but sleep is missing every day, not zeroed.",
+  },
+  {
+    id: "stale_data",
+    label: "Stale Data",
+    description: `Sync stopped ${STALE_GAP_DAYS} days ago — the provider has real history, but nothing for the recent window, unlike a device that was never connected.`,
   },
 ] as const;
 
@@ -113,6 +131,16 @@ function generateDay(
         sleepMinutes = seededRange(rng, 260, 320);
       }
       break;
+
+    // "partial_data": handled below — sleep is omitted entirely
+    // rather than given a different number, since the point of this
+    // scenario is a device category gap (missing != zero), not a
+    // different sleep VALUE.
+    //
+    // "stale_data": per-day values stay at the plausible baseline
+    // above — staleness is a SERIES-level property (recent days are
+    // dropped entirely, see generateDemoWearableSeries), not a
+    // per-day value shift.
   }
 
   return {
@@ -120,11 +148,14 @@ function generateDay(
     restingHeartRateBpm: round(restingHr),
     averageHeartRateBpm: round(restingHr + seededRange(rng, 14, 22)),
     hrvMs: round(hrv),
-    sleep: {
-      totalMinutes: round(sleepMinutes),
-      remMinutes: round(sleepMinutes * seededRange(rng, 0.18, 0.24)),
-      deepMinutes: round(sleepMinutes * seededRange(rng, 0.12, 0.18)),
-    },
+    sleep:
+      scenario === "partial_data"
+        ? null
+        : {
+            totalMinutes: round(sleepMinutes),
+            remMinutes: round(sleepMinutes * seededRange(rng, 0.18, 0.24)),
+            deepMinutes: round(sleepMinutes * seededRange(rng, 0.12, 0.18)),
+          },
     steps: round(steps),
     respiratoryRateBrpm: round(seededRange(rng, 13, 16), 1),
     skinTemperatureDeltaC: round(seededRange(rng, -0.3, 0.3), 1),
@@ -151,6 +182,18 @@ export function generateDemoWearableSeries(
   for (let i = 0; i < totalDays; i += 1) {
     const date = dateIso(-(totalDays - 1 - i), new Date(`${range.endDate}T00:00:00.000Z`));
     const daysFromEnd = totalDays - 1 - i;
+
+    // "stale_data": the most recent STALE_GAP_DAYS are dropped from
+    // the series entirely rather than generated with different
+    // values — a provider that stopped syncing has NO row for those
+    // dates, it doesn't report a row with stale-looking numbers. A
+    // caller asking only for today's date against this scenario
+    // legitimately gets an empty array, same as it would from a real
+    // provider mid-outage.
+    if (scenario === "stale_data" && daysFromEnd < STALE_GAP_DAYS) {
+      continue;
+    }
+
     days.push(generateDay(scenario, date, daysFromEnd, userId));
   }
 

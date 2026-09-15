@@ -19,6 +19,24 @@ describe("createDemoWearableProvider", () => {
     expect(bundle?.isDemo).toBe(true);
     expect(bundle?.days).toHaveLength(5);
   });
+
+  it("stale_data: a caller requesting only 'today' gets an empty bundle, same as a real provider mid-outage would", async () => {
+    const provider = createDemoWearableProvider("stale_data");
+    const bundle = await provider.fetchSnapshots("user-1", { startDate: "2026-09-15", endDate: "2026-09-15" });
+
+    expect(bundle?.days).toHaveLength(0);
+  });
+
+  it("partial_data: sleep is missing (not zero) on every returned day", async () => {
+    const provider = createDemoWearableProvider("partial_data");
+    const bundle = await provider.fetchSnapshots("user-1", { startDate: "2026-09-10", endDate: "2026-09-15" });
+
+    expect(bundle?.days.length).toBeGreaterThan(0);
+    for (const day of bundle?.days ?? []) {
+      expect(day.sleep).toBeNull();
+      expect(day.hrvMs).not.toBeNull();
+    }
+  });
 });
 
 describe("resolveWearableProvider", () => {

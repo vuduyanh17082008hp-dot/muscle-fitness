@@ -46,7 +46,14 @@ function buildAthleteState(overrides: Partial<AthleteState["recovery"]> = {}): A
     },
     nutrition: { available: true, calorieTarget: 2800, proteinTargetGrams: 180, carbsTargetGrams: 300, fatTargetGrams: 80 },
     setVision: { available: false, latestExercise: null, analysesLast30Days: 0, romConsistencyDeviation: null, tempoConsistencyDeviation: null },
-    wearable: { available: false, isDemo: false, providerLabel: null, latestDay: null },
+    wearable: {
+      available: false,
+      isDemo: false,
+      providerLabel: null,
+      latestDay: null,
+      connectionStatus: "not_connected",
+      daysSinceLastData: null,
+    },
     derived: {
       baselineDeviations: {
         sleep: { current: 7.5, baseline: 7.2, delta: 0.3, sampleCount: 10, confidence: 0.8 },

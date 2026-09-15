@@ -8,6 +8,7 @@ import type { DataFreshnessSignal } from "@/lib/athlete-state/data-freshness";
 import type { SetVisionExerciseId } from "@/lib/setvision/types";
 import type { RecoveryStatusInput } from "@/lib/training/recommendations";
 import type { WearableDailySnapshot } from "@/lib/wearables/types";
+import type { WearableConnectionStatus } from "@/lib/wearables/connection-status";
 
 /**
  * Unified Athlete State — the Athlete Digital Twin (spec §4, extended
@@ -84,18 +85,24 @@ export type AthleteState = {
 
   /**
    * WearableProvider -> normalize -> Athlete Digital Twin (spec Part
-   * "1. WEARABLE PROVIDER LAYER"). Deliberately just the latest day —
-   * a lean summary for the Twin, not the full historical series (the
-   * Health Radar loads its own richer window separately when it needs
-   * one). `available` is false for every real user today: no real
-   * provider is implemented yet, only the demo one a user can opt
-   * into (lib/demo/settings.ts) — see lib/wearables/registry.ts.
+   * "1. WEARABLE PROVIDER LAYER"). `latestDay` is the most recent day
+   * the provider actually has data for — which may be OLDER than
+   * today (see `connectionStatus`); this is a lean summary for the
+   * Twin, not the full historical series (the Health Radar loads its
+   * own richer window separately when it needs one). `available` is
+   * false for every real user today: no real provider is implemented
+   * yet, only the demo one a user can opt into (lib/demo/settings.ts)
+   * — see lib/wearables/registry.ts.
    */
   wearable: {
     available: boolean;
     isDemo: boolean;
     providerLabel: string | null;
     latestDay: WearableDailySnapshot | null;
+    /** not_connected/no_data/stale/connected/demo — see lib/wearables/connection-status.ts. Distinguishes "never connected" from "connected but hasn't synced recently", which `available` alone cannot. */
+    connectionStatus: WearableConnectionStatus;
+    /** Null when there's no data at all. */
+    daysSinceLastData: number | null;
   };
 
   /** Cross-domain signals computed FROM the sections above — never a second independent read of raw data. */

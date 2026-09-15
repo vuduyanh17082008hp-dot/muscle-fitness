@@ -22,6 +22,10 @@ import { computeFreshness, FRESHNESS_THRESHOLDS } from "@/lib/athlete-state/data
 import { evaluateReadiness } from "@/lib/dante-core/readiness-engine";
 import { loadDemoSettings } from "@/lib/demo/settings";
 import { resolveWearableProvider } from "@/lib/wearables/registry";
+import { deriveWearableConnectionState, latestAvailableDay } from "@/lib/wearables/connection-status";
+
+/** Trailing window fetched from the wearable provider — wide enough to detect a multi-day sync gap, not just today's single row. */
+const WEARABLE_WINDOW_DAYS = 7;
 
 type FitnessProfileRow = {
   goal: string | null;
@@ -130,12 +134,21 @@ export async function buildAthleteState(
   // "1. WEARABLE PROVIDER LAYER"). Only ever populated when THIS user
   // has explicitly opted into their own demo scenario — never a
   // silent fallback for a real user with no wearable connected.
+  //
+  // Fetches a trailing window, not just today: a single-day request
+  // can never tell "no wearable" and "wearable stopped syncing N days
+  // ago" apart, since both come back with zero rows for today. See
+  // lib/wearables/connection-status.ts.
   const wearableProvider = resolveWearableProvider(demoSettings);
   const endIso = now.toISOString().slice(0, 10);
+  const wearableWindowStartIso = new Date(now.getTime() - WEARABLE_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const wearableBundle = wearableProvider
-    ? await wearableProvider.fetchSnapshots(userId, { startDate: endIso, endDate: endIso })
+    ? await wearableProvider.fetchSnapshots(userId, { startDate: wearableWindowStartIso, endDate: endIso })
     : null;
-  const latestWearableDay = wearableBundle?.days[wearableBundle.days.length - 1] ?? null;
+  const latestWearableDay = latestAvailableDay(wearableBundle);
+  const wearableConnection = deriveWearableConnectionState(wearableBundle, endIso);
 
   const recoveryStatus: RecoveryStatusInput = recoveryContext
     ? (recoveryContext.todayScoreResult.status as RecoveryStatusInput)
@@ -400,6 +413,8 @@ export async function buildAthleteState(
       isDemo: wearableBundle?.isDemo ?? false,
       providerLabel: wearableBundle?.providerLabel ?? null,
       latestDay: latestWearableDay,
+      connectionStatus: wearableConnection.status,
+      daysSinceLastData: wearableConnection.daysSinceLastData,
     },
 
     derived: {

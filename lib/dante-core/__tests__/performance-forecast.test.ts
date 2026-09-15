@@ -51,6 +51,8 @@ function baseAthleteState(overrides: Partial<AthleteState> = {}): AthleteState {
       isDemo: false,
       providerLabel: null,
       latestDay: null,
+      connectionStatus: "not_connected",
+      daysSinceLastData: null,
     },
     derived: {
       baselineDeviations: {

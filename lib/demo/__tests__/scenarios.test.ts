@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEMO_SCENARIOS, generateDemoWearableSeries, isDemoScenarioId } from "@/lib/demo/scenarios";
+import { DEMO_SCENARIOS, STALE_GAP_DAYS, generateDemoWearableSeries, isDemoScenarioId } from "@/lib/demo/scenarios";
 
 const RANGE = { startDate: "2026-08-25", endDate: "2026-09-13" }; // 20 days
 
@@ -60,10 +60,55 @@ describe("generateDemoWearableSeries", () => {
         expect(day.hrvMs).toBeGreaterThan(0);
         expect(day.restingHeartRateBpm).toBeGreaterThan(30);
         expect(day.restingHeartRateBpm).toBeLessThan(100);
-        expect(day.sleep?.totalMinutes).toBeGreaterThan(0);
+        // partial_data deliberately omits sleep entirely (missing != zero) — every other scenario reports it.
+        if (scenario.id !== "partial_data") {
+          expect(day.sleep?.totalMinutes).toBeGreaterThan(0);
+        } else {
+          expect(day.sleep).toBeNull();
+        }
         expect(day.steps).toBeGreaterThanOrEqual(0);
       }
     }
+  });
+});
+
+describe("partial_data scenario", () => {
+  it("omits sleep on every day (null, not zero) while HRV/RHR/steps stay populated", () => {
+    const days = generateDemoWearableSeries("partial_data", "user-1", RANGE);
+
+    expect(days.length).toBeGreaterThan(0);
+    for (const day of days) {
+      expect(day.sleep).toBeNull();
+      expect(day.hrvMs).not.toBeNull();
+      expect(day.restingHeartRateBpm).not.toBeNull();
+      expect(day.steps).not.toBeNull();
+    }
+  });
+});
+
+describe("stale_data scenario", () => {
+  it(`drops the most recent ${STALE_GAP_DAYS} days entirely rather than reporting stale-looking rows`, () => {
+    const days = generateDemoWearableSeries("stale_data", "user-1", RANGE);
+    const requestedTotalDays = 20;
+
+    expect(days).toHaveLength(requestedTotalDays - STALE_GAP_DAYS);
+    expect(days[days.length - 1].date).not.toBe(RANGE.endDate);
+  });
+
+  it("returns an empty series when the requested window falls entirely inside the sync gap", () => {
+    const days = generateDemoWearableSeries("stale_data", "user-1", {
+      startDate: RANGE.endDate,
+      endDate: RANGE.endDate,
+    });
+
+    expect(days).toHaveLength(0);
+  });
+
+  it("is still deterministic", () => {
+    const a = generateDemoWearableSeries("stale_data", "user-1", RANGE);
+    const b = generateDemoWearableSeries("stale_data", "user-1", RANGE);
+
+    expect(a).toEqual(b);
   });
 });
 
