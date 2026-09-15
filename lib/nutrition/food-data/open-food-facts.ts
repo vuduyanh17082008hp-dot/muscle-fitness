@@ -77,7 +77,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function toNumberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+/** Volumes are not masses: never prefill ml as grams without a density. */
+function servingGrams(product: Record<string, unknown>): number | null {
+  const raw = product.serving_quantity
+  const amount = toNumberOrNull(typeof raw === "string" && /^\d+(?:\.\d+)?$/.test(raw.trim()) ? Number(raw) : raw)
+  const unit = product.serving_quantity_unit
+  return amount !== null && amount > 0 && unit === "g" ? amount : null
 }
 
 function inferPreparationState(): FoodPreparationState {
@@ -121,7 +129,7 @@ function normalizeProduct(
     },
     brand: typeof product.brands === "string" ? product.brands.split(",")[0]?.trim() ?? null : null,
     barcode: code,
-    servingSizeGrams: toNumberOrNull(product.serving_quantity),
+    servingSizeGrams: servingGrams(product),
     rawDescription: typeof product.generic_name === "string" ? product.generic_name : name,
     retrievedAt: new Date().toISOString(),
     confidence: "medium",
@@ -147,7 +155,7 @@ export async function searchPackagedFood(
   url.searchParams.set("page_size", String(Math.min(Math.max(limit, 1), 20)))
   url.searchParams.set(
     "fields",
-    "code,product_name,generic_name,brands,nutriments,serving_quantity",
+    "code,product_name,generic_name,brands,nutriments,serving_quantity,serving_quantity_unit",
   )
 
   try {
@@ -215,7 +223,7 @@ function extractPartialProduct(product: Record<string, unknown>): PartialProduct
     name,
     brand: typeof product.brands === "string" ? product.brands.split(",")[0]?.trim() ?? null : null,
     rawDescription: typeof product.generic_name === "string" ? product.generic_name : name,
-    servingSizeGrams: toNumberOrNull(product.serving_quantity),
+    servingSizeGrams: servingGrams(product),
     macros: {
       calories: toNumberOrNull(nutriments["energy-kcal_100g"]),
       protein: toNumberOrNull(nutriments["proteins_100g"]),
@@ -239,7 +247,7 @@ export async function getProductByBarcode(barcode: string): Promise<NormalizedFo
   const url = new URL(`${PRODUCT_URL_V3}/${encodeURIComponent(trimmedBarcode)}.json`)
   url.searchParams.set(
     "fields",
-    "code,product_name,generic_name,brands,nutriments,serving_quantity",
+    "code,product_name,generic_name,brands,nutriments,serving_quantity,serving_quantity_unit",
   )
 
   try {

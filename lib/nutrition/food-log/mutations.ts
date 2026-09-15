@@ -2,6 +2,7 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { isValidDateIso } from "@/lib/nutrition/date-utils"
 import { scaleMacrosToGrams } from "@/lib/nutrition/food-log-calculator"
 import type { NormalizedFoodMacros } from "@/lib/nutrition/food-data/types"
 import type { EstimationConfidence, FoodLogSource, MealType } from "./types"
@@ -50,7 +51,19 @@ export async function createFoodLog(
     return { success: false, error: "Quantity must be a positive number of grams." }
   }
 
+  const macros = [input.per100g.calories, input.per100g.protein, input.per100g.carbs, input.per100g.fat]
+  const optionalMacros = [input.per100g.fiber, input.per100g.sugar, input.per100g.sodiumMg]
+  if (macros.some((value) => !Number.isFinite(value) || value < 0) ||
+      optionalMacros.some((value) => value != null && (!Number.isFinite(value) || value < 0))) {
+    return { success: false, error: "Nutrients must be finite, non-negative numbers." }
+  }
+  if (input.logDate !== undefined && !isValidDateIso(input.logDate)) {
+    return { success: false, error: "Invalid calendar date." }
+  }
   const scaled = scaleMacrosToGrams(input.per100g, input.quantityGrams)
+  if (Object.values(scaled).some((value) => value !== null && !Number.isFinite(value))) {
+    return { success: false, error: "Nutrient totals are out of range." }
+  }
   const logDate = input.logDate ?? (await resolveLocalToday(supabase, userId))
 
   const { data, error } = await supabase
@@ -116,7 +129,8 @@ export type UpdateFoodLogQuantityInput = {
  * (per100g = storedMacros / (storedGrams/100)), then rescaling to the
  * new quantity with the same deterministic calculator used when the
  * food was first added. No re-fetch of the original source needed,
- * and the math stays exact regardless of how many times it's edited.
+ * Storage rounding means repeated edits can lose precision; the stored row
+ * is the only available baseline until per-100g provenance is persisted.
  */
 export async function updateFoodLogQuantity(
   supabase: SupabaseClient,
@@ -140,7 +154,10 @@ export async function updateFoodLogQuantity(
   }
 
   const originalGrams = Number(existing.quantity_grams)
-  const factorBackToPer100g = originalGrams > 0 ? 100 / originalGrams : 0
+  if (!Number.isFinite(originalGrams) || originalGrams <= 0) {
+    return { success: false, error: "Stored quantity is invalid. Remove and re-add this food." }
+  }
+  const factorBackToPer100g = 100 / originalGrams
 
   const per100g: NormalizedFoodMacros = {
     calories: Number(existing.calories) * factorBackToPer100g,

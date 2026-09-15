@@ -70,19 +70,23 @@ function getUtcOffsetMinutes(date: Date, timeZone: string): number {
  * `profiles.timezone` convention already used by `get_client_dashboard()`.
  */
 export function localDayRangeUtc(now: Date, timeZone: string): { startIso: string; endIso: string } {
-  const offsetMinutes = getUtcOffsetMinutes(now, timeZone);
-  const shifted = new Date(now.getTime() + offsetMinutes * 60_000);
-
-  const year = shifted.getUTCFullYear();
-  const month = shifted.getUTCMonth();
-  const day = shifted.getUTCDate();
-
-  const startShifted = Date.UTC(year, month, day, 0, 0, 0, 0);
-  const endShifted = Date.UTC(year, month, day, 23, 59, 59, 999);
-
+  const localDate = localDateTimeParts(now, timeZone).localDate;
+  // Locate each boundary independently: a daylight-saving day can be 23 or 25
+  // hours, so applying the current UTC offset to both midnights is incorrect.
+  function boundary(afterToday: boolean): number {
+    let low = now.getTime() - 48 * 60 * 60 * 1000;
+    let high = now.getTime() + 48 * 60 * 60 * 1000;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      const date = localDateTimeParts(new Date(middle), timeZone).localDate;
+      if (afterToday ? date <= localDate : date < localDate) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  }
   return {
-    startIso: new Date(startShifted - offsetMinutes * 60_000).toISOString(),
-    endIso: new Date(endShifted - offsetMinutes * 60_000).toISOString(),
+    startIso: new Date(boundary(false)).toISOString(),
+    endIso: new Date(boundary(true) - 1).toISOString(),
   };
 }
 

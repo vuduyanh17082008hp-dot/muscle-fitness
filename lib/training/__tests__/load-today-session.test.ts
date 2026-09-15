@@ -282,3 +282,11 @@ describe("localDateTimeParts", () => {
     expect(new Date(startIso).getTime()).toBeLessThanOrEqual(now.getTime());
   });
 });
+
+
+it.each([
+  ["2026-03-08T17:00:00Z", "2026-03-08T05:00:00.000Z", "2026-03-09T03:59:59.999Z"],
+  ["2026-11-01T17:00:00Z", "2026-11-01T04:00:00.000Z", "2026-11-02T04:59:59.999Z"],
+])("uses both midnight offsets on DST transition %s", (now, startIso, endIso) => {
+  expect(localDayRangeUtc(new Date(now), "America/New_York")).toEqual({ startIso, endIso });
+});

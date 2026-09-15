@@ -1,18 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { createClient } from "@/lib/supabase/server"
-
+/**
+ * Typo alias for `/auth/confirm`. Older email templates / docs linked
+ * here; the previous handler signed the user OUT and claimed success.
+ * Forward to the real OTP verification route with the query string
+ * intact so confirmation still works.
+ */
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
-
-  await supabase.auth.signOut()
-
-  const loginUrl = new URL("/login", request.url)
-
-  loginUrl.searchParams.set(
-    "message",
-    "email-confirmed"
-  )
-
-  return NextResponse.redirect(loginUrl)
+  const confirmUrl = new URL("/auth/confirm", request.url)
+  confirmUrl.search = request.nextUrl.search
+  return NextResponse.redirect(confirmUrl)
 }

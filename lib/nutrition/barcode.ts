@@ -5,7 +5,7 @@
  * barcode and how it's normalized before an Open Food Facts lookup.
  *
  * Open Food Facts itself normalizes common representations, so this
- * intentionally does the minimum necessary: strip non-digits, reject
+ * intentionally does the minimum necessary: strip spacing/hyphens, reject
  * anything that isn't a plausible retail barcode length, and expand
  * UPC-E to its UPC-A equivalent (OFF/most databases are indexed by
  * the expanded form).
@@ -41,6 +41,8 @@ function computeUpcCheckDigit(digits11: string): string {
 
 /** Expands a 6/7/8-digit UPC-E code to its 12-digit UPC-A equivalent. Returns null if the input isn't well-formed UPC-E. */
 export function expandUpcEToUpcA(input: string): string | null {
+  if (!/^\d{6,8}$/.test(input)) return null
+
   let numberSystem = "0"
   let payload = input
   let checkDigit: string | null = null
@@ -92,7 +94,9 @@ export function expandUpcEToUpcA(input: string): string | null {
   }
 
   const upcA11 = `${numberSystem}${manufacturer}${productItem}`
-  const check = checkDigit ?? computeUpcCheckDigit(upcA11)
+  const computedCheck = computeUpcCheckDigit(upcA11)
+  if (checkDigit !== null && checkDigit !== computedCheck) return null
+  const check = computedCheck
 
   return `${upcA11}${check}`
 }
@@ -103,7 +107,8 @@ export function expandUpcEToUpcA(input: string): string | null {
  * retail barcode — arbitrary text is never accepted as a barcode.
  */
 export function normalizeBarcode(raw: string): NormalizedBarcode | null {
-  const digitsOnly = raw.replace(/[^0-9]/g, "")
+  if (!/^[0-9\s-]+$/.test(raw) || raw.length > 64) return null
+  const digitsOnly = raw.replace(/[\s-]/g, "")
 
   if (!digitsOnly) {
     return null
@@ -121,9 +126,9 @@ export function normalizeBarcode(raw: string): NormalizedBarcode | null {
     return { code: digitsOnly, format: "EAN-13" }
   }
 
-  if (digitsOnly.length === 14) {
+  if (digitsOnly.length === 14 && digitsOnly.startsWith("0")) {
     // GTIN-14 padding — strip leading zeros back to a 13-digit EAN.
-    const trimmed = digitsOnly.replace(/^0+/, "").padStart(13, "0")
+    const trimmed = digitsOnly.slice(1)
     return { code: trimmed, format: "EAN-13" }
   }
 

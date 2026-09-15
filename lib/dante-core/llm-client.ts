@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Minimal Groq chat client for Dante Core explanations (spec §9).
  *
@@ -12,6 +14,8 @@
  * stay consistent, and is small/self-contained enough that the
  * duplication cost is low. See docs/dante-core.md "Known limitations".
  */
+
+import { groqMaxCompletionTokens } from "@/lib/dante-core/groq-budget";
 
 export type LlmResult = {
   reply: string;
@@ -50,7 +54,11 @@ async function callModel(model: string, prompt: string): Promise<LlmResult | nul
     messages: [{ role: "user", content: prompt }],
     temperature: gptOss ? 0.4 : 0.3,
     top_p: 0.95,
-    max_completion_tokens: gptOss ? 1536 : 1024,
+    max_completion_tokens: groqMaxCompletionTokens({
+      model,
+      inputText: prompt,
+      preferredCap: gptOss ? 1536 : 1024,
+    }),
   };
 
   if (gptOss) {
@@ -182,13 +190,20 @@ async function callGroqAgentTurnOnModel(
   tools: GroqToolSpec[],
 ): Promise<GroqAgentTurnResult | null> {
   const apiKey = getGroqKey();
+  const inputText = messages
+    .map((message) => (typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "")))
+    .join("\n");
 
   const requestBody: Record<string, unknown> = {
     model,
     messages,
     temperature: 0.2,
     top_p: 0.95,
-    max_completion_tokens: 1024,
+    max_completion_tokens: groqMaxCompletionTokens({
+      model,
+      inputText,
+      preferredCap: 1024,
+    }),
     tools: tools.map((tool) => ({
       type: "function",
       function: { name: tool.name, description: tool.description, parameters: tool.parameters },

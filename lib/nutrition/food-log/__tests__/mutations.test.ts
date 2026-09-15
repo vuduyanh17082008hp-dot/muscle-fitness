@@ -317,3 +317,28 @@ describe("deleteFoodLog", () => {
     expect(rows.has(created.data.id)).toBe(true)
   })
 })
+
+
+it.each([-1, NaN, Infinity])("does not persist an invalid nutrient %s from an internal caller", async (protein) => {
+  const { client, rows } = createFakeSupabase();
+  const result = await createFoodLog(client as never, USER_ID, {
+    mealType: "lunch", foodName: "Test", source: "local",
+    per100g: { calories: 100, protein, carbs: 10, fat: 2 }, quantityGrams: 100,
+  });
+  expect(result.success).toBe(false);
+  expect(rows.size).toBe(0);
+});
+
+it("does not zero nutrient totals when editing a corrupt zero-gram row", async () => {
+  const { client, rows } = createFakeSupabase();
+  const created = await createFoodLog(client as never, USER_ID, {
+    mealType: "lunch", foodName: "Test", source: "local",
+    per100g: { calories: 100, protein: 10, carbs: 10, fat: 2 }, quantityGrams: 100,
+  });
+  if (!created.success) throw new Error(created.error);
+  const row = rows.get(created.data.id)!;
+  row.quantity_grams = 0;
+  const result = await updateFoodLogQuantity(client as never, USER_ID, { id: row.id, quantityGrams: 200 });
+  expect(result.success).toBe(false);
+  expect(rows.get(row.id)?.calories).toBe(100);
+});

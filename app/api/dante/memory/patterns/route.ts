@@ -30,7 +30,12 @@ export async function GET() {
   }
 
   const patterns = await loadLearnedPatterns(supabase, user.id);
-  return NextResponse.json({ ok: true, patterns });
+  return NextResponse.json({
+    ok: true,
+    patterns,
+    // Empty when the optional adaptive-memory migration is not applied.
+    // Clients should treat this as "nothing learned / feature idle", not an error.
+  });
 }
 
 const actionSchema = z.object({

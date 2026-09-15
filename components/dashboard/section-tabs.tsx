@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -19,18 +20,19 @@ export type SectionTab = {
   href: string;
 };
 
-function isTabActive(pathname: string, href: string): boolean {
+function readHash(): string {
+  if (typeof window === "undefined") return "";
+  return window.location.hash;
+}
+
+function isTabActive(pathname: string, href: string, currentHash: string): boolean {
   const [hrefPath, hrefHash] = href.split("#");
 
   if (hrefHash) {
-    // Hash-based tabs (anchors within the current page) can't be told
-    // apart from the URL alone once loaded — they're treated as
-    // active only when the browser's current hash matches.
-    return (
-      pathname === hrefPath &&
-      typeof window !== "undefined" &&
-      window.location.hash === `#${hrefHash}`
-    );
+    // Hash tabs only mark active after mount (currentHash tracked via
+    // hashchange) so server HTML and the client's first paint agree —
+    // both treat every hash tab as inactive until the listener runs.
+    return pathname === hrefPath && currentHash === `#${hrefHash}`;
   }
 
   return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
@@ -38,6 +40,14 @@ function isTabActive(pathname: string, href: string): boolean {
 
 export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
   const pathname = usePathname();
+  const [currentHash, setCurrentHash] = useState("");
+
+  useEffect(() => {
+    const sync = () => setCurrentHash(readHash());
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, [pathname]);
 
   return (
     <nav
@@ -45,7 +55,7 @@ export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
       className="-mx-1 flex gap-1 overflow-x-auto border-b border-mf-glass-border px-1 pb-px"
     >
       {tabs.map((tab) => {
-        const active = isTabActive(pathname, tab.href);
+        const active = isTabActive(pathname, tab.href, currentHash);
 
         return (
           <Link

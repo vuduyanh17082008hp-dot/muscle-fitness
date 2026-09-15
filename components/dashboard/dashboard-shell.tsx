@@ -168,19 +168,19 @@ const navSections: NavSection[] = [
 /* =========================================================
    MOBILE PRIMARY NAV
 
-   A persistent thumb-reachable bottom bar for the 5 sections used
-   most often on a phone. This is additive, not a duplicate of the
-   existing hamburger drawer above: the drawer still holds the full
-   nav tree (Form Coach, Training Split, Recovery, Check-in,
-   Messages, Calendar, Settings); this bar is just a fast path to the
-   handful of sections someone opens every day.
+   A persistent thumb-reachable bottom bar for the primary sections used
+   most often on a phone (Overview, Train, Nutrition, Recovery, Progress,
+   Dante). This is additive, not a duplicate of the existing hamburger
+   drawer above: the drawer still holds the full nav tree (Check-in,
+   Messages, Calendar, Settings, Experiments); this bar is just a fast
+   path to the sections someone opens every day.
 ========================================================= */
 
 const mobilePrimaryNav: NavItem[] = [
-  { label: "Overview", href: "/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Home", href: "/dashboard", icon: LayoutDashboard, exact: true },
   { label: "Train", href: "/dashboard/workouts", icon: Dumbbell, activePrefixes: ["/dashboard/training-intelligence"] },
-  { label: "Nutrition", href: "/dashboard/nutrition", icon: Utensils },
-  { label: "Recovery", href: "/dashboard/recovery", icon: HeartPulse },
+  { label: "Fuel", href: "/dashboard/nutrition", icon: Utensils },
+  { label: "Recover", href: "/dashboard/recovery", icon: HeartPulse },
   { label: "Progress", href: "/dashboard/progress", icon: ChartNoAxesCombined },
   { label: "Dante", href: "/dashboard/ai-coach", icon: Bot },
 ];
@@ -366,12 +366,12 @@ function MobileBottomNav({ pathname, hash }: { pathname: string; hash: string })
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[9px] font-bold uppercase transition ${
+            className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 px-0.5 py-2 text-[10px] font-bold leading-tight transition ${
               active ? "text-mf-glass-brand" : "text-mf-glass-text-muted"
             }`}
           >
-            <Icon className="size-[18px]" />
-            <span className="whitespace-nowrap">{item.label}</span>
+            <Icon className="size-[18px] shrink-0" />
+            <span className="max-w-full truncate">{item.label}</span>
           </Link>
         );
       })}

@@ -8,7 +8,7 @@ import { createFoodLog } from "@/lib/nutrition/food-log/mutations"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+import { isValidDateIso } from "@/lib/nutrition/date-utils"
 
 const per100gSchema = z.object({
   calories: z.number().min(0).max(10000),
@@ -39,7 +39,7 @@ const createSchema = z.object({
   estimationReason: z.string().trim().max(500).nullable().optional(),
   estimatedFrom: z.string().trim().max(200).nullable().optional(),
 
-  logDate: z.string().regex(DATE_PATTERN).optional(),
+  logDate: z.string().refine(isValidDateIso, "Invalid calendar date.").optional(),
 })
 
 /**
@@ -60,10 +60,16 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const requestedDate = url.searchParams.get("date")
-  const date =
-    requestedDate && DATE_PATTERN.test(requestedDate) ? requestedDate : await resolveLocalToday(supabase, user.id)
+  if (requestedDate !== null && !isValidDateIso(requestedDate)) {
+    return NextResponse.json({ ok: false, error: "Invalid calendar date." }, { status: 400 })
+  }
+  const date = requestedDate ?? await resolveLocalToday(supabase, user.id)
 
   const context = await loadFoodLogForDate(supabase, user.id, date)
+
+  if (context.unavailable) {
+    return NextResponse.json({ ok: false, error: "Food log is temporarily unavailable." }, { status: 503 })
+  }
 
   return NextResponse.json({ ok: true, ...context })
 }

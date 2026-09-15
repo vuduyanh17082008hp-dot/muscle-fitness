@@ -38,6 +38,7 @@ import { isAgentToolIntent } from "@/lib/dante-core/tools/detect-intent";
 import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { createChatStreamResponse, createSingleShotChatStream } from "@/lib/dante-core/chat-stream-protocol";
+import { groqMaxCompletionTokens } from "@/lib/dante-core/groq-budget";
 import { buildDanteTemporalContext, formatDanteTemporalContext, type DanteTemporalContext } from "@/lib/dante-core/temporal-context";
 
 export const runtime = "nodejs";
@@ -834,6 +835,10 @@ function summarizeTodayFoodLog(
   foodLog: Awaited<ReturnType<typeof loadFoodLogForDate>>,
   target: { calories: number; protein: number; carbs: number; fat: number } | null,
 ): unknown {
+  if (foodLog.unavailable) {
+    return { available: false, note: "Food log unavailable. Do not infer consumed or remaining nutrients." };
+  }
+
   if (!target) {
     return {
       hasTarget: false,
@@ -972,7 +977,7 @@ async function loadUserContext(
 
       loadFoodLogForDate(supabase, userId, localDate).catch((error: unknown) => {
         console.warn("[DANTE FOOD LOG]", error);
-        return { date: localDate, entries: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 } };
+        return { date: localDate, entries: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 }, unavailable: true };
       }),
 
       loadDanteMemory(supabase, userId),
@@ -3140,7 +3145,13 @@ async function* streamGroqModel(
     messages: [{ role: "user", content: prompt }],
     temperature: gptOss ? 0.55 : 0.4,
     top_p: 0.95,
-    max_completion_tokens: gptOss ? 4096 : 2048,
+    // Cap completion so input+output stays under Groq's ~8000 TPM
+    // reservation (120b was failing at ~8069 with a fixed 4096 budget).
+    max_completion_tokens: groqMaxCompletionTokens({
+      model,
+      inputText: prompt,
+      preferredCap: gptOss ? (model.includes("120b") ? 1536 : 2048) : 2048,
+    }),
     stream: true,
   };
 

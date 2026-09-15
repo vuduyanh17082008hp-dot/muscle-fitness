@@ -2,6 +2,8 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { localDateTimeParts, resolveUserTimeZone } from "@/lib/training/load-today-session"
+import { addDaysIso } from "@/lib/nutrition/date-utils"
 import { computeRecoveryScore } from "@/lib/recovery/score"
 import { computeTrainingLoad, type RecentSessionRow } from "@/lib/recovery/training-load"
 import type {
@@ -68,14 +70,14 @@ function average(values: Array<number | null>): number | null {
   )
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 export async function loadRecoveryContext(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<RecoveryContext> {
+  const now = new Date()
+  const timezone = await resolveUserTimeZone(supabase, userId)
+  const localDate = localDateTimeParts(now, timezone).localDate
+  const monthStart = addDaysIso(localDate, -29)
   const [checkinsResponse, sessionsResponse] = await Promise.all([
     supabase
       .from("recovery_checkins")
@@ -83,6 +85,8 @@ export async function loadRecoveryContext(
         "id, user_id, checkin_date, sleep_hours, sleep_quality, stress, fatigue, soreness, mood, readiness, resting_hr, steps, pain_illness, notes, recovery_score, score_breakdown, created_at, updated_at",
       )
       .eq("user_id", userId)
+      .gte("checkin_date", monthStart)
+      .lte("checkin_date", localDate)
       .order("checkin_date", { ascending: false })
       .limit(30),
 
@@ -116,10 +120,10 @@ export async function loadRecoveryContext(
     (sessionsResponse.data as RecentSessionRow[] | null) ?? []
 
   const today =
-    checkins.find((row) => row.checkin_date === todayIso()) ?? null
+    checkins.find((row) => row.checkin_date === localDate) ?? null
 
   const history = checkins
-    .filter((row) => row.checkin_date !== todayIso())
+    .filter((row) => row.checkin_date !== localDate)
     .map((row) => ({ score: row.recovery_score }))
 
   const todayScoreResult = computeRecoveryScore(
@@ -142,7 +146,7 @@ export async function loadRecoveryContext(
       readiness: row.readiness,
     }))
 
-  const last7 = trend30Days.slice(-7)
+  const last7 = trend30Days.filter((row) => row.date >= addDaysIso(localDate, -6))
 
   const averages7Days: RecoveryAverages = {
     score: average(last7.map((row) => row.score)),
@@ -164,7 +168,12 @@ export async function loadRecoveryContext(
     sampleSize: trend30Days.length,
   }
 
-  const trainingLoad = computeTrainingLoad(sessions, todayScoreResult.score)
+  const trainingLoad = computeTrainingLoad(
+    sessions,
+    todayScoreResult.score,
+    now,
+    timezone,
+  )
 
   return {
     today,

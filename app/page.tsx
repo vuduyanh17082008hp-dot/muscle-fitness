@@ -23,6 +23,7 @@ import {
 import {
   InspirationStory,
 } from "@/components/home/inspiration-story";
+import { ProfileGateway } from "@/components/home/profile-gateway";
 import { FeatureExplorer } from "@/components/home/feature-explorer";
 import { DanteRobot } from "@/components/dante/dante-robot";
 import { Reveal, StaggerContainer, StaggerItem } from "@/components/animation/reveal";
@@ -392,7 +393,7 @@ export default function HomePage() {
             className="
               hidden
               items-center
-              gap-6
+              gap-4
 
               lg:flex
             "
@@ -454,7 +455,7 @@ export default function HomePage() {
                 hover:text-[var(--mf-brand)]
               "
             >
-              The First Rep
+              Our story
             </a>
 
             <Link
@@ -476,6 +477,12 @@ export default function HomePage() {
             >
               AI Fair
             </Link>
+            <a
+              href="#get-started"
+              className="rounded-sm py-2 text-xs font-bold uppercase tracking-[0.14em] text-zinc-200 transition hover:text-[var(--mf-brand)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--mf-brand)]"
+            >
+              Get started
+            </a>
           </nav>
 
           {/* AUTH */}
@@ -2198,178 +2205,7 @@ export default function HomePage() {
           FINAL CTA
       =================================================== */}
 
-      <section
-        className="
-          px-5
-          py-28
-
-          sm:px-6
-
-          lg:px-8
-          lg:py-36
-        "
-      >
-        <div className="mx-auto max-w-5xl text-center">
-          <p
-            className="
-              text-xs
-              font-black
-
-              uppercase
-
-              tracking-[0.28em]
-
-              text-[var(--mf-brand)]
-            "
-          >
-            Your next rep starts here
-          </p>
-
-          <h2
-            className="
-              mt-6
-
-              text-5xl
-              font-black
-
-              uppercase
-
-              leading-[0.9]
-
-              tracking-tighter
-
-              sm:text-6xl
-              lg:text-7xl
-            "
-          >
-            Start before you feel ready.
-          </h2>
-
-          <p
-            className="
-              mx-auto
-
-              mt-7
-
-              max-w-2xl
-
-              text-base
-              leading-8
-
-              text-[var(--mf-pub-text-secondary)]
-            "
-          >
-            Build your profile, define your goal, and give the system
-            enough context to make the next decision more personal.
-          </p>
-
-          <div
-            className="
-              mt-9
-
-              flex
-              flex-col
-
-              justify-center
-
-              gap-3
-
-              sm:flex-row
-            "
-          >
-            <Link
-              href="/signup"
-              className="
-                inline-flex
-
-                items-center
-                justify-center
-
-                gap-2
-
-                rounded-2xl
-
-                bg-[var(--mf-brand)]
-
-                px-6
-                py-4
-
-                text-sm
-                font-black
-
-                uppercase
-
-                tracking-wider
-
-                text-[var(--mf-brand-ink)]
-
-                transition
-
-                hover:bg-[var(--mf-brand-hover)]
-                hover:shadow-[var(--shadow-brand)]
-              "
-            >
-              Build my profile
-
-              <ArrowRight className="size-4" />
-            </Link>
-
-            <Link
-              href="/chatbot"
-              className="
-                inline-flex
-
-                items-center
-                justify-center
-
-                gap-2
-
-                rounded-2xl
-
-                border
-                border-white/10
-
-                px-6
-                py-4
-
-                text-sm
-                font-black
-
-                uppercase
-
-                tracking-wider
-
-                text-zinc-200
-
-                transition
-
-                hover:bg-white/4
-              "
-            >
-              Ask Dante
-
-              <BrainCircuit className="size-4 text-[var(--mf-violet)]" />
-            </Link>
-          </div>
-
-          <p
-            className="
-              mt-10
-
-              text-sm
-              font-black
-
-              uppercase
-
-              tracking-[0.22em]
-
-              text-zinc-700
-            "
-          >
-            Dedication · Determination · Drive · Discipline
-          </p>
-        </div>
-      </section>
+      <ProfileGateway />
 
       {/* ===================================================
           FOOTER

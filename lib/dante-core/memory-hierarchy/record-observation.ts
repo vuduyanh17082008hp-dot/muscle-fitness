@@ -7,6 +7,7 @@ import {
   findLearnedPattern,
   upsertLearnedPattern,
 } from "@/lib/dante-core/memory-hierarchy/load-patterns";
+import { isMissingRelationError } from "@/lib/dante-core/memory-hierarchy/schema-availability";
 import type {
   ContextKey,
   DanteObservation,
@@ -14,6 +15,8 @@ import type {
   ObservedOutcome,
 } from "@/lib/dante-core/memory-hierarchy/types";
 import { outcomeIsPositive } from "@/lib/dante-core/response-learning";
+
+let loggedMissingObservationsTable = false;
 
 /**
  * The write path for the REFLECTION LOOP (mission Part 10.C):
@@ -65,6 +68,15 @@ export async function recordObservationAndLearn(
     .single();
 
   if (observationError) {
+    if (isMissingRelationError(observationError)) {
+      if (!loggedMissingObservationsTable) {
+        loggedMissingObservationsTable = true;
+        console.info(
+          "[DANTE MEMORY HIERARCHY] dante_observations unavailable — reflection-loop learning is disabled until its migration is intentionally applied.",
+        );
+      }
+      return { observation: null, patternUpdated: false };
+    }
     console.error("[DANTE MEMORY HIERARCHY] Unable to record observation:", observationError.message);
     return { observation: null, patternUpdated: false };
   }
