@@ -8,8 +8,8 @@ import {
 } from "@/lib/churn-risk";
 
 import {
-  getGroqClient,
-  GROQ_MODEL,
+  createOpenAiChatCompletion,
+  OPENAI_MODEL,
 } from "@/lib/ai/client";
 
 import { parseAIJson } from "@/lib/ai/json";
@@ -154,8 +154,8 @@ export async function analyseMember(
 
   try {
     const completion =
-      await getGroqClient().chat.completions.create({
-        model: GROQ_MODEL,
+      await createOpenAiChatCompletion({
+        model: OPENAI_MODEL,
 
         temperature: 0.2,
 
@@ -186,7 +186,7 @@ ${JSON.stringify(
 
     if (!content) {
       throw new Error(
-        "Groq returned an empty response."
+        "OpenAI returned an empty response."
       );
     }
 
@@ -200,15 +200,15 @@ ${JSON.stringify(
 
       ai,
 
-      model: GROQ_MODEL,
+      model: OPENAI_MODEL,
 
-      provider: "groq" as const,
+      provider: "openai" as const,
 
       generatedByAI: true,
     };
   } catch (error) {
     console.error(
-      "Groq member analysis failed:",
+      "OpenAI member analysis failed:",
       error
     );
 
@@ -219,9 +219,9 @@ ${JSON.stringify(
         risk.riskLevel
       ),
 
-      model: GROQ_MODEL,
+      model: OPENAI_MODEL,
 
-      provider: "groq" as const,
+      provider: "openai" as const,
 
       generatedByAI: false,
     };

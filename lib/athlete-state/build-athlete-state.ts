@@ -23,6 +23,7 @@ import { evaluateReadiness } from "@/lib/dante-core/readiness-engine";
 import { loadDemoSettings } from "@/lib/demo/settings";
 import { resolveWearableProvider } from "@/lib/wearables/registry";
 import { deriveWearableConnectionState, latestAvailableDay } from "@/lib/wearables/connection-status";
+import { localDateTimeParts, resolveUserTimeZone } from "@/lib/training/load-today-session";
 
 /** Trailing window fetched from the wearable provider — wide enough to detect a multi-day sync gap, not just today's single row. */
 const WEARABLE_WINDOW_DAYS = 7;
@@ -100,6 +101,7 @@ export async function buildAthleteState(
     setVisionContext,
     latestFoodLogResponse,
     demoSettings,
+    timezone,
   ] = await Promise.all([
       loadTrainingContext(supabase, userId, {
         now,
@@ -126,6 +128,7 @@ export async function buildAthleteState(
         .limit(1)
         .maybeSingle(),
       loadDemoSettings(supabase, userId),
+      resolveUserTimeZone(supabase, userId),
     ]);
 
   const fitnessProfile = (fitnessProfileResponse.data as FitnessProfileRow | null) ?? null;
@@ -140,12 +143,11 @@ export async function buildAthleteState(
   // ago" apart, since both come back with zero rows for today. See
   // lib/wearables/connection-status.ts.
   const wearableProvider = resolveWearableProvider(demoSettings);
-  const endIso = now.toISOString().slice(0, 10);
-  const wearableWindowStartIso = new Date(now.getTime() - WEARABLE_WINDOW_DAYS * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  const endIso = localDateTimeParts(now, timezone).localDate;
+  const wearableWindowStart = new Date(now.getTime() - WEARABLE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const startIso = localDateTimeParts(wearableWindowStart, timezone).localDate;
   const wearableBundle = wearableProvider
-    ? await wearableProvider.fetchSnapshots(userId, { startDate: wearableWindowStartIso, endDate: endIso })
+    ? await wearableProvider.fetchSnapshots(userId, { startDate: startIso, endDate: endIso })
     : null;
   const latestWearableDay = latestAvailableDay(wearableBundle);
   const wearableConnection = deriveWearableConnectionState(wearableBundle, endIso);

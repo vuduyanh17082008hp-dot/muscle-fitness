@@ -112,7 +112,7 @@ function extractNutrientValue(
 
     const value = entry.value ?? entry.amount
 
-    if (typeof value === "number" && Number.isFinite(value)) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
       return value
     }
   }
@@ -334,19 +334,20 @@ export async function searchFood(
       ["cooked", "boiled", "roasted", "grilled", "baked"].includes(word),
     )
 
-    const ranked = (data.foods as UsdaFoodItem[])
+    const ranked = data.foods
+      .filter(isRecord)
       .map((item) => ({
         item,
         score: scoreCandidate(item, queryWords, wantsRaw, wantsCooked),
       }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
 
     const normalized: NormalizedFood[] = []
 
     for (const { item } of ranked) {
       const food = normalizeUsdaFood(item)
       if (food) normalized.push(food)
+      if (normalized.length >= limit) break
     }
 
     return normalized

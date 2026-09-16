@@ -20,7 +20,7 @@ export {
   explainRecommendation,
   attachKnowledgeSources,
 } from "@/lib/dante-core/explain";
-export { checkSafety } from "@/lib/dante-core/safety-layer";
+export { checkSafety, normalizeSafetyText } from "@/lib/dante-core/safety-layer";
 export { validatePremises } from "@/lib/dante-core/premise-validation";
 export {
   verifyFinalResponse,
@@ -29,11 +29,77 @@ export {
   MAX_VERIFIER_RETRIES,
 } from "@/lib/dante-core/verifier";
 export {
+  evaluateAdaptiveClosedLoop,
+  processRecoveryOutcomeForLearning,
+  buildExpectedOutcome,
+  computePredictionError,
+} from "@/lib/dante-core/adaptive-closed-loop";
+export { assertLearningScope, IMMUTABLE_LEARNING_DOMAINS } from "@/lib/dante-core/learning-guardrails";
+export { callOpenAiWithFallback, streamDanteReply } from "@/lib/dante-core/openai/client";
+export {
   buildDailyIntelligence,
   recomputeDailyIntelligence,
   getOrBuildDailyIntelligence,
 } from "@/lib/dante-core/daily-intelligence";
 export { retrieveKnowledge, retrieveByCategory } from "@/lib/dante-core/knowledge/retrieve";
+
+// Phase 2 public surface (additive)
+export {
+  createWorkingMemory,
+  putSessionFact,
+  observationToShortTerm,
+  promoteToLongTerm,
+  decayLongTerm,
+  resolveCurrentOverStale,
+  assertSameClient,
+} from "@/lib/dante-core/memory-hierarchy/memory-foundation";
+export {
+  createRecommendationRecord,
+  evaluateRecommendationOutcome,
+  mapObservedToOutcomeClass,
+  classifyOutcomeWithCausalHumility,
+  outcomeClassToObserved,
+} from "@/lib/dante-core/recommendation-outcome";
+export {
+  scoreStrategy,
+  rankStrategies,
+  contextSimilarity,
+  summarizeStrategyHistory,
+} from "@/lib/dante-core/strategy-learner";
+export {
+  resolveCommunicationMode,
+  resolveCommunicationStyle,
+  buildCommunicationPromptHints,
+  detectTurnCommunicationSignals,
+  updateCommunicationProfile,
+  buildProfileFromRecentMessages,
+  createDefaultCommunicationProfile,
+  checkCommunicationPreferenceProvenance,
+} from "@/lib/dante-core/communication-adaptation";
+export {
+  computePilotReadiness,
+  summarizeTopStrategies,
+  toRecommendationTelemetry,
+  assertPilotClientIsolation,
+  assessTechnicalPilotCapability,
+} from "@/lib/dante-core/pilot-readiness";
+export {
+  checkMemoryClaimProvenance,
+  evaluateCausalOutcome,
+  canPromoteAutomaticPolicy,
+  filterCitationsForClaim,
+  filterCitationsByTopicRelevance,
+  persistenceClaimAllowed,
+  assertRawEvidenceImmutable,
+  extractOutcomeNarrativeSignals,
+  shouldCountAsPositiveLearningEvidence,
+  toVerifiedMemorySnapshot,
+  authorizeMemoryWrite,
+  applyForgetConfoundersPressure,
+  detectsUnverifiedPriorPerformanceClaim,
+  enforceEpistemicReplyBoundaries,
+  buildHardEpistemicFinalConstraints,
+} from "@/lib/dante-core/epistemic-integrity";
 
 export type {
   ReadinessEngineInput,

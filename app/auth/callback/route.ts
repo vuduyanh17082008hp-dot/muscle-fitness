@@ -1,20 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { getSafeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/server";
 import { handleOAuthCallback } from "@/lib/auth/handle-oauth-callback";
 
-function getSafeRedirect(value: string | null): string {
-  if (!value) {
-    return "/dashboard";
-  }
-
-  if (!value.startsWith("/") || value.startsWith("//")) {
-    return "/dashboard";
-  }
-
-  return value;
-}
 
 function redirectToLoginWithError(request: NextRequest, message: string) {
   const loginUrl = new URL("/login", request.url);
@@ -31,7 +21,7 @@ export async function GET(request: NextRequest) {
     requestUrl.searchParams.get("error_description") ??
     requestUrl.searchParams.get("error");
 
-  const next = getSafeRedirect(requestUrl.searchParams.get("next"));
+  const next = getSafeNext(requestUrl.searchParams.get("next"));
 
   if (oauthError) {
     return redirectToLoginWithError(request, oauthError);

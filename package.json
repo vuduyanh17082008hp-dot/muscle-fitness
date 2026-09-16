@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run type-check && npm run lint && npm test",
     "dante:ingest-knowledge": "tsx scripts/ingest-dante-knowledge.ts"

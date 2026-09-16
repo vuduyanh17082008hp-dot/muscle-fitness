@@ -232,7 +232,13 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
 ========================================================= */
 
 function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
-  if (sources.length === 0) {
+  const safeSources = sources.filter(
+    (source) =>
+      source.title.trim().length > 0 &&
+      /^https?:\/\//i.test(source.url.trim()),
+  );
+
+  if (safeSources.length === 0) {
     return null;
   }
 
@@ -240,24 +246,20 @@ function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
     <div className="mt-4 border-t border-white/8 pt-4">
       <details className="group">
         <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-white/10 px-4 text-xs font-black uppercase tracking-[0.06em] text-zinc-400 transition hover:bg-white/[0.06]">
-          Sources ({sources.length})
+          Sources ({safeSources.length})
         </summary>
 
         <ul className="mt-3 space-y-2 rounded-2xl border border-white/8 bg-black/20 p-4">
-          {sources.map((source, index) => (
+          {safeSources.map((source, index) => (
             <li key={`${source.url}-${index}`} className="text-sm leading-6">
-              {source.url ? (
-                <a
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-amber-400 underline decoration-amber-400/30 underline-offset-2 hover:text-amber-300"
-                >
-                  {source.title || source.url}
-                </a>
-              ) : (
-                <span className="text-zinc-300">{source.title}</span>
-              )}
+              <a
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-400 underline decoration-amber-400/30 underline-offset-2 hover:text-amber-300"
+              >
+                {source.title}
+              </a>
               {source.type ? (
                 <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-600">
                   {source.type}
@@ -548,6 +550,17 @@ export default function DanteChat({
             JSON.stringify({
               message:
                 trimmed,
+              // Recent user turns only — powers Phase 2D gradual
+              // communication adaptation without dumping full transcripts.
+              messages: [
+                ...messages
+                  .filter((entry) => entry.role === "user" && entry.content.trim())
+                  .map((entry) => ({
+                    role: "user" as const,
+                    content: entry.content.trim(),
+                  })),
+                { role: "user" as const, content: trimmed },
+              ].slice(-8),
               ...contextPayload,
             }),
 
@@ -613,7 +626,7 @@ export default function DanteChat({
           updateStreamingMessage(assistantId, (message) => ({
             ...message,
             insight: finalEvent.insight,
-            sources: finalEvent.sources,
+            sources: Array.isArray(finalEvent.sources) ? finalEvent.sources : [],
             // A pending confirmation is only ever attached here, from
             // the server's own completed `done` event — never
             // rendered speculatively while text is still streaming.
@@ -796,7 +809,7 @@ export default function DanteChat({
         "flex w-full min-h-0 flex-col font-sans",
         !isEmpty &&
           (compact
-            ? "h-[600px] min-h-[520px]"
+            ? "h-[min(62dvh,520px)] max-h-[min(62dvh,520px)] min-h-0"
             : "h-[min(74vh,820px)] min-h-125"),
         className,
       )}

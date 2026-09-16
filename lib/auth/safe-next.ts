@@ -1,38 +1,25 @@
+/** Shared by browser login and server callbacks. Never accept an external redirect. */
 export function getSafeNext(
   value: string | null | undefined,
-  fallback = "/dashboard"
+  fallback = "/dashboard",
 ): string {
-  if (!value) {
-    return fallback
-  }
-
   if (
-    !value.startsWith("/") ||
-    value.startsWith("//")
+    !value?.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\") ||
+    /[\u0000-\u0020\u007f]/.test(value)
   ) {
-    return fallback
+    return fallback;
   }
 
-  /*
-   * Không cho login redirect trực tiếp đến
-   * các trang onboarding hoặc training do link cũ.
-   */
-  const blockedRoutes = [
-    "/training",
-    "/onboarding",
-    "/profile-setup",
-  ]
-
-  const isBlocked = blockedRoutes.some(
-    (route) =>
-      value === route ||
-      value.startsWith(`${route}?`) ||
-      value.startsWith(`${route}/`)
-  )
-
-  if (isBlocked) {
-    return fallback
+  // URL parsers treat backslashes and control characters specially.
+  const origin = "https://muscle-fitness.invalid";
+  try {
+    if (new URL(value, origin).origin !== origin) return fallback;
+  } catch {
+    return fallback;
   }
 
-  return value
+  // Training and onboarding are valid destinations; their own routes enforce auth.
+  return value;
 }

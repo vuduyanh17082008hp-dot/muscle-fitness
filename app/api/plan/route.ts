@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
@@ -24,8 +26,8 @@ export async function GET() {
 
   if (error) {
     return NextResponse.json(
-      { error: error.message },
-      { status: 400 },
+      { error: "Unable to load workout plans." },
+      { status: 500 },
     );
   }
 
@@ -48,22 +50,18 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: {
-    goal?: string;
-  } = {};
-
+  let body: unknown;
   try {
-    body = (await request.json()) as {
-      goal?: string;
-    };
+    body = await request.json();
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+  const parsed = z.object({ goal: z.string().trim().min(1).max(200).optional() }).safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid plan request." }, { status: 400 });
   }
 
-  const { data: fitness } = await supabase
+  const { data: fitness, error: fitnessError } = await supabase
     .from("fitness_profiles")
     .select(
       "goal, training_days, experience, calories_target, protein_target_g",
@@ -71,8 +69,12 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .maybeSingle();
 
+  if (fitnessError) {
+    return NextResponse.json({ error: "Unable to load fitness profile." }, { status: 500 });
+  }
+
   const goal =
-    body.goal ||
+    parsed.data.goal ||
     fitness?.goal ||
     "general fitness";
 

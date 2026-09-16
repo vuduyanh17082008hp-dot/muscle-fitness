@@ -1,23 +1,9 @@
 import { NextResponse } from "next/server"
 
+import { getSafeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/server"
 import { handleOAuthCallback } from "@/lib/auth/handle-oauth-callback"
 
-function getSafeNextPath(value: string | null): string {
-  if (!value) {
-    return "/dashboard"
-  }
-
-  /*
-   * Chỉ cho redirect nội bộ.
-   * Ngăn URL như //malicious-site.com.
-   */
-  if (!value.startsWith("/") || value.startsWith("//")) {
-    return "/dashboard"
-  }
-
-  return value
-}
 
 /**
  * Kept only in case this URL is still registered as a Supabase Auth
@@ -29,7 +15,7 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
 
   const code = requestUrl.searchParams.get("code")
-  const nextPath = getSafeNextPath(requestUrl.searchParams.get("next"))
+  const nextPath = getSafeNext(requestUrl.searchParams.get("next"))
 
   if (!code) {
     const loginUrl = new URL("/login", requestUrl.origin)

@@ -148,3 +148,41 @@ describe("statusForScore", () => {
     expect(statusForScore(30)).toBe("priority");
   });
 });
+
+describe("computeRecoveryScore — adversarial / malformed inputs", () => {
+  it("treats negative sleep hours and out-of-range scales as missing, not available drivers", () => {
+    const result = computeRecoveryScore(
+      input({
+        sleepHours: -3,
+        stress: 0,
+        fatigue: 11,
+        soreness: Number.NaN,
+        mood: Number.POSITIVE_INFINITY,
+        readiness: 9,
+      }),
+    );
+
+    expect(result.drivers.find((d) => d.key === "sleep")?.available).toBe(false);
+    expect(result.drivers.find((d) => d.key === "stress")?.available).toBe(false);
+    expect(result.drivers.find((d) => d.key === "fatigue")?.available).toBe(false);
+    expect(result.drivers.find((d) => d.key === "soreness")?.available).toBe(false);
+    expect(result.drivers.find((d) => d.key === "moodReadiness")?.available).toBe(true);
+    expect(result.score).toBe(90);
+  });
+
+  it("ignores malformed historical baseline scores outside 0–100", () => {
+    const result = computeRecoveryScore(
+      input({ sleepHours: 8, sleepQuality: 8, stress: 3, fatigue: 3, soreness: 3, mood: 8, readiness: 8 }),
+      [{ score: 999 }, { score: -10 }, { score: Number.NaN }, { score: 70 }, { score: 72 }, { score: 74 }],
+    );
+
+    expect(result.baseline).not.toBeNull();
+    expect(result.baseline?.sampleSize).toBe(3);
+    expect(result.baseline?.averageScore).toBe(72);
+  });
+
+  it("returns null baseline below the 3-sample threshold (1 historical point is not enough)", () => {
+    const result = computeRecoveryScore(input({ readiness: 8 }), [{ score: 70 }]);
+    expect(result.baseline).toBeNull();
+  });
+});

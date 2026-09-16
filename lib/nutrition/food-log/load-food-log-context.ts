@@ -71,6 +71,8 @@ export async function resolveLocalToday(supabase: SupabaseClient, userId: string
 }
 
 export type FoodLogContext = {
+  /** Empty UI fallback is not authoritative consumption when this is set. */
+  unavailable?: boolean
   date: string
   entries: FoodLogEntry[]
   totals: ReturnType<typeof computeDailyTotals>
@@ -94,7 +96,7 @@ export async function loadFoodLogForDate(
 
   if (error) {
     console.warn("[FOOD LOG] Unable to load food_logs:", error.message)
-    return { date: resolvedDate, entries: [], totals: computeDailyTotals([]) }
+    return { date: resolvedDate, entries: [], totals: computeDailyTotals([]), unavailable: true }
   }
 
   const entries = ((data as FoodLogRow[] | null) ?? []).map(mapFoodLogRow)

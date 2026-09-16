@@ -357,18 +357,19 @@ function DanteRobotMascot({
               </filter>
             </defs>
 
-            {/* SHADOW */}
+            {/* SHADOW — keep rx/ry numeric (string ry + animated rx
+                produces SVG "Expected length, NaN" ellipse warnings). */}
             <motion.ellipse
-              cx="100"
-              cy="214"
+              cx={100}
+              cy={214}
               rx={42}
-              ry="7"
+              ry={7}
               fill="#000"
               opacity={0.3}
               animate={
                 reduceMotion
-                  ? { opacity: 0.28 }
-                  : { opacity: [0.3, 0.18, 0.3], rx: [42, 37, 42] }
+                  ? { opacity: 0.28, rx: 42, ry: 7 }
+                  : { opacity: [0.3, 0.18, 0.3], rx: [42, 37, 42], ry: 7 }
               }
               transition={
                 reduceMotion

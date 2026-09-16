@@ -7,52 +7,57 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe("lib/ai/client (Groq client stays lazy, never throws at import time)", () => {
-  it("importing the module never throws, even with no GROQ_API_KEY set", async () => {
-    delete process.env.GROQ_API_KEY;
+describe("lib/ai/client (OpenAI-only compatibility adapter)", () => {
+  it("imports without reading OPENAI_API_KEY eagerly", async () => {
+    delete process.env.OPENAI_API_KEY;
 
     await expect(import("@/lib/ai/client")).resolves.toBeDefined();
   });
 
-  it("isGroqConfigured reflects GROQ_API_KEY presence", async () => {
-    delete process.env.GROQ_API_KEY;
-    const { isGroqConfigured: isConfiguredWithoutKey } = await import("@/lib/ai/client");
-    expect(isConfiguredWithoutKey()).toBe(false);
+  it("the deprecated isGroqConfigured name reflects OPENAI_API_KEY", async () => {
+    delete process.env.OPENAI_API_KEY;
+    const { isGroqConfigured: withoutKey } = await import("@/lib/ai/client");
+    expect(withoutKey()).toBe(false);
 
     vi.resetModules();
-    process.env.GROQ_API_KEY = "test-key";
-    const { isGroqConfigured: isConfiguredWithKey } = await import("@/lib/ai/client");
-    expect(isConfiguredWithKey()).toBe(true);
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    const { isGroqConfigured: withKey } = await import("@/lib/ai/client");
+    expect(withKey()).toBe(true);
   });
 
-  it("getGroqClient throws only when called, not on import, when the key is missing", async () => {
-    delete process.env.GROQ_API_KEY;
+  it("keeps OPENAI_API_KEY access lazy until a completion is requested", async () => {
+    delete process.env.OPENAI_API_KEY;
     const { getGroqClient } = await import("@/lib/ai/client");
 
-    expect(() => getGroqClient()).toThrow(/Missing GROQ_API_KEY/);
+    const client = getGroqClient();
+    await expect(
+      client.chat.completions.create({
+        messages: [{ role: "user", content: "hello" }],
+      }),
+    ).rejects.toThrow(/OPENAI_API_KEY is missing/);
   });
 
-  it("getGroqClient returns a client and caches it across calls when the key is present", async () => {
-    process.env.GROQ_API_KEY = "test-key";
+  it("returns the same OpenAI-backed compatibility adapter across calls", async () => {
     const { getGroqClient } = await import("@/lib/ai/client");
 
-    const first = getGroqClient();
-    const second = getGroqClient();
-
-    expect(first).toBe(second);
+    expect(getGroqClient()).toBe(getGroqClient());
   });
 
-  it("GROQ_MODEL falls back to the documented default when unset", async () => {
-    delete process.env.GROQ_MODEL;
-    const { GROQ_MODEL } = await import("@/lib/ai/client");
+  it("uses the OpenAI default model when no override is set", async () => {
+    delete process.env.DANTE_OPENAI_MODEL;
+    delete process.env.OPENAI_MODEL;
+    const { GROQ_MODEL, OPENAI_MODEL } = await import("@/lib/ai/client");
 
-    expect(GROQ_MODEL).toBe("openai/gpt-oss-120b");
+    expect(GROQ_MODEL).toBe("gpt-4o-mini");
+    expect(GROQ_MODEL).toBe(OPENAI_MODEL);
   });
 
-  it("GROQ_MODEL respects an explicit override", async () => {
+  it("uses the Dante OpenAI model override and ignores GROQ_MODEL", async () => {
+    process.env.DANTE_OPENAI_MODEL = "gpt-5-mini";
     process.env.GROQ_MODEL = "llama-3.3-70b-versatile";
-    const { GROQ_MODEL } = await import("@/lib/ai/client");
+    const { GROQ_MODEL, OPENAI_MODEL } = await import("@/lib/ai/client");
 
-    expect(GROQ_MODEL).toBe("llama-3.3-70b-versatile");
+    expect(OPENAI_MODEL).toBe("gpt-5-mini");
+    expect(GROQ_MODEL).toBe("gpt-5-mini");
   });
 });

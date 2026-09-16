@@ -97,3 +97,57 @@ describe("computeTrainingLoad — session RPE null/missing (Test 11)", () => {
     expect(result.lastSessionDaysAgo).toBeNull();
   });
 });
+
+describe("computeTrainingLoad — timezone / future / conflicting signals", () => {
+  it("buckets a late-evening Asia/Singapore session onto the local date, not UTC yesterday", () => {
+    const now = new Date("2026-09-14T17:30:00Z"); // 01:30 SGT on Sep 15
+    const sessions: RecentSessionRow[] = [
+      session({
+        completed_at: "2026-09-14T16:30:00Z", // 00:30 SGT Sep 15
+        session_rpe: 7,
+        total_volume_kg: 3000,
+      }),
+    ];
+
+    const result = computeTrainingLoad(sessions, 80, now, "Asia/Singapore");
+
+    expect(result.sessionsLast7Days).toBe(1);
+    expect(result.lastSessionDaysAgo).toBe(0);
+  });
+
+  it("ignores future-dated sessions", () => {
+    const now = new Date("2026-09-14T12:00:00Z");
+    const result = computeTrainingLoad(
+      [session({ completed_at: "2026-09-20T12:00:00Z", session_rpe: 9 })],
+      40,
+      now,
+      "UTC",
+    );
+
+    expect(result.sessionsLast7Days).toBe(0);
+    expect(result.state).toBe("amber"); // low recovery, but not high load
+  });
+
+  it("stays amber (not red) for low recovery without high recent load", () => {
+    const result = computeTrainingLoad(
+      [session({ completed_at: "2026-09-13T12:00:00Z", session_rpe: 6 })],
+      40,
+      new Date("2026-09-14T12:00:00Z"),
+      "UTC",
+    );
+
+    expect(result.state).toBe("amber");
+  });
+
+  it("goes red when low recovery coincides with high recent strain", () => {
+    const now = new Date("2026-09-14T12:00:00Z");
+    const sessions = Array.from({ length: 5 }, (_, i) =>
+      session({
+        completed_at: new Date(now.getTime() - i * 24 * 60 * 60 * 1000).toISOString(),
+        session_rpe: 9,
+      }),
+    );
+
+    expect(computeTrainingLoad(sessions, 40, now, "UTC").state).toBe("red");
+  });
+});

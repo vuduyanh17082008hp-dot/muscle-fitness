@@ -195,7 +195,7 @@ function PanelContent({
       {tab === "exercises" ? <ExercisesTab muscle={muscle} availableEquipment={availableEquipment} /> : null}
 
       {tab === "dante" ? (
-        <div className="min-h-[420px]">
+        <div className="min-h-0">
           <DanteChat
             compact
             heroSubtitle={`Ask about your ${MUSCLE_DISPLAY_NAME[muscle]}…`}

@@ -30,6 +30,7 @@
  *   3. Safe, clearly-flagged default
  */
 
+import { isValidDateIso, todayIso } from "@/lib/nutrition/date-utils"
 import { calculateAge } from "@/features/onboarding/calculations"
 
 import type {
@@ -236,7 +237,7 @@ function toNumber(value: number | string | null | undefined): number | null {
     return null
   }
 
-  const parsed = typeof value === "number" ? value : Number.parseFloat(value)
+  const parsed = typeof value === "number" ? value : Number(value)
 
   return Number.isFinite(parsed) ? parsed : null
 }
@@ -329,11 +330,11 @@ export function mapProfileToNutritionInput(rows: {
   const heightCm = toNumber(rows.fitnessProfile?.height_cm)
   const weightKg = toNumber(rows.fitnessProfile?.weight_kg)
 
-  if (heightCm === null) missingRequiredFields.push("height")
-  if (weightKg === null) missingRequiredFields.push("weight")
+  if (heightCm === null || heightCm <= 0) missingRequiredFields.push("height")
+  if (weightKg === null || weightKg <= 0) missingRequiredFields.push("weight")
 
   const dateOfBirth = rows.profile?.date_of_birth ?? null
-  if (!dateOfBirth) {
+  if (!dateOfBirth || !isValidDateIso(dateOfBirth) || dateOfBirth > todayIso()) {
     missingRequiredFields.push("date of birth")
   }
 

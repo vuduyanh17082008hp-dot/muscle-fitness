@@ -53,6 +53,24 @@ function formatTodayLabel(now: Date, timeZone: string): string {
   }
 }
 
+function formatGreeting(now: Date, timeZone: string): string {
+  try {
+    const hourRaw = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hour: "numeric",
+      hour12: false,
+    }).format(now);
+    const hour = Number.parseInt(hourRaw, 10);
+    if (!Number.isFinite(hour)) return "Hello";
+    if (hour < 5) return "Good evening";
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  } catch {
+    return "Hello";
+  }
+}
+
 function unwrap<T>(result: PromiseSettledResult<T>, label: string): T | null {
   if (result.status === "fulfilled") {
     return result.value;
@@ -229,6 +247,7 @@ export default async function DashboardPage() {
       <DashboardHeader
           displayName={displayName}
           todayLabel={formatTodayLabel(now, timeZone)}
+          greeting={formatGreeting(now, timeZone)}
           avatarUrl={profile.avatar_url}
         />
 

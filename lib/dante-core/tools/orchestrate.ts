@@ -6,6 +6,7 @@ import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { safeExecuteTool } from "@/lib/dante-core/tools/safe-execute";
 import { callDanteAgentTurn, type DanteAgentTurnResult, type DanteChatMessage, type DanteToolCall, type DanteToolSpec } from "@/lib/dante-core/llm-client";
+import { estimateTokenCount, fitTextToTokenBudget } from "@/lib/dante-core/openai/prompt-budget";
 import { formatDanteTemporalContext } from "@/lib/dante-core/temporal-context";
 import { decideDanteLanguage, buildDanteLanguageInstruction } from "@/lib/dante-language";
 import { buildEpistemicPolicyInstruction } from "@/lib/dante-core/epistemics/policy";
@@ -88,7 +89,9 @@ function assistantToolCallMessage(call: DanteToolCall): DanteChatMessage {
 }
 
 function toolResultMessage(call: DanteToolCall, result: unknown): DanteChatMessage {
-  return { role: "tool", tool_call_id: call.id, name: call.name, content: JSON.stringify(result) };
+  const raw = JSON.stringify(result);
+  const content = estimateTokenCount(raw) > 1200 ? fitTextToTokenBudget(raw, 1200) : raw;
+  return { role: "tool", tool_call_id: call.id, name: call.name, content };
 }
 
 function toolSpecs(): DanteToolSpec[] {
@@ -97,6 +100,41 @@ function toolSpecs(): DanteToolSpec[] {
     description: tool.description,
     parameters: zodToJsonSchema(tool.inputSchema),
   }));
+}
+
+type EnvelopeSource = NonNullable<DanteResponseEnvelope["sources"]>[number];
+
+function sourcesFromKnowledgeToolResult(data: unknown): EnvelopeSource[] {
+  if (!data || typeof data !== "object") return [];
+
+  const chunks = (data as { chunks?: unknown }).chunks;
+  if (!Array.isArray(chunks)) return [];
+
+  const sources: EnvelopeSource[] = [];
+  const seen = new Set<string>();
+
+  for (const chunk of chunks) {
+    if (!chunk || typeof chunk !== "object") continue;
+
+    const title = typeof (chunk as { title?: unknown }).title === "string" ? (chunk as { title: string }).title.trim() : "";
+    const source = typeof (chunk as { source?: unknown }).source === "string" ? (chunk as { source: string }).source.trim() : "";
+    const sourceUrl =
+      typeof (chunk as { sourceUrl?: unknown }).sourceUrl === "string" ? (chunk as { sourceUrl: string }).sourceUrl.trim() : "";
+
+    if (!title || !sourceUrl || !/^https?:\/\//i.test(sourceUrl)) continue;
+
+    const key = `${title}|${sourceUrl}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    sources.push({
+      type: source || "Dante Knowledge Brain",
+      title,
+      url: sourceUrl,
+    });
+  }
+
+  return sources;
 }
 
 export async function runDanteAgentTurn(
@@ -113,6 +151,8 @@ export async function runDanteAgentTurn(
 
   const specs = toolSpecs();
   const toolTraceSummary: string[] = [];
+  const sources: EnvelopeSource[] = [];
+  const seenSourceKeys = new Set<string>();
   // Loop protection (Part 10/O): the SAME tool name + args in one turn is refused the second time, never silently re-run.
   const seenCalls = new Set<string>();
 
@@ -120,7 +160,7 @@ export async function runDanteAgentTurn(
     const decision = await callModel(messages, specs);
 
     if (decision.type === "final") {
-      return { reply: decision.reply, toolTraceSummary };
+      return { reply: decision.reply, sources, toolTraceSummary };
     }
 
     const call = decision.toolCalls[0];
@@ -160,6 +200,7 @@ export async function runDanteAgentTurn(
 
       return {
         reply: `I'd like to: **${summary}**. Confirm to proceed, or cancel — nothing has been saved yet.`,
+        sources,
         pendingConfirmation: { actionId: pending.actionId, toolName: tool.name, summary: pending.summary },
         toolTraceSummary,
       };
@@ -173,6 +214,15 @@ export async function runDanteAgentTurn(
       continue;
     }
 
+    if (tool.name === "retrieve_knowledge" || tool.name === "get_exercise_guidance") {
+      for (const source of sourcesFromKnowledgeToolResult(result.data)) {
+        const key = `${source.title}|${source.url}`;
+        if (seenSourceKeys.has(key)) continue;
+        seenSourceKeys.add(key);
+        sources.push(source);
+      }
+    }
+
     logToolEvent("DANTE_TOOL_SUCCESS", { tool: tool.name });
     toolTraceSummary.push(TRACE_LABEL[tool.name] ?? `Checked ${tool.name}`);
     messages.push(assistantToolCallMessage(call), toolResultMessage(call, result.data));
@@ -180,6 +230,7 @@ export async function runDanteAgentTurn(
 
   return {
     reply: "I checked several things but couldn't finish forming an answer in time — could you ask again, maybe more specifically?",
+    sources,
     toolTraceSummary,
   };
 }

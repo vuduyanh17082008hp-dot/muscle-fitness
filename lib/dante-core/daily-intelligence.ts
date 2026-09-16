@@ -70,7 +70,7 @@ async function resolveNutritionAdherence(
 
   const targetCalories = nutritionContext.plan?.target.calories ?? null;
 
-  if (!targetCalories || targetCalories <= 0) {
+  if (foodLog.unavailable || !targetCalories || targetCalories <= 0) {
     return null;
   }
 

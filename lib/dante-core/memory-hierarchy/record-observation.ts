@@ -7,13 +7,23 @@ import {
   findLearnedPattern,
   upsertLearnedPattern,
 } from "@/lib/dante-core/memory-hierarchy/load-patterns";
+import { isMissingRelationError } from "@/lib/dante-core/memory-hierarchy/schema-availability";
 import type {
   ContextKey,
   DanteObservation,
   InterventionType,
   ObservedOutcome,
 } from "@/lib/dante-core/memory-hierarchy/types";
+import { assertLearningScope } from "@/lib/dante-core/learning-guardrails";
 import { outcomeIsPositive } from "@/lib/dante-core/response-learning";
+import {
+  evaluateCausalOutcome,
+  shouldCountAsPositiveLearningEvidence,
+  type ConfounderSignals,
+  type OutcomeDimensions,
+} from "@/lib/dante-core/epistemic-integrity";
+
+let loggedMissingObservationsTable = false;
 
 /**
  * The write path for the REFLECTION LOOP (mission Part 10.C):
@@ -28,6 +38,9 @@ import { outcomeIsPositive } from "@/lib/dante-core/response-learning";
  * of "unknown" still records the L1 observation for auditability, but
  * is never folded into a pattern — half-known evidence must not move
  * confidence in either direction.
+ *
+ * Confounded / mixed multi-metric outcomes also record L1 intact but
+ * do not inflate positive pattern confidence.
  */
 
 export type RecordObservationInput = {
@@ -40,12 +53,29 @@ export type RecordObservationInput = {
   goalAligned: boolean | null;
   provenance: string;
   now?: Date;
+  /** Optional multi-metric / confounder context for causal humility. */
+  causalContext?: {
+    dimensions: OutcomeDimensions;
+    confounders: ConfounderSignals;
+    interventionIsVolumeReduction?: boolean;
+  };
 };
 
 export async function recordObservationAndLearn(
   supabase: SupabaseClient,
   input: RecordObservationInput,
 ): Promise<{ observation: DanteObservation | null; patternUpdated: boolean }> {
+  const scope = assertLearningScope({
+    userId: input.userId,
+    interventionType: input.interventionType,
+    provenance: input.provenance,
+  });
+
+  if (!scope.allowed) {
+    console.warn("[DANTE MEMORY HIERARCHY] Learning blocked:", scope.reason);
+    return { observation: null, patternUpdated: false };
+  }
+
   const observedAt = (input.now ?? new Date()).toISOString();
 
   const { data: observationRow, error: observationError } = await supabase
@@ -65,6 +95,15 @@ export async function recordObservationAndLearn(
     .single();
 
   if (observationError) {
+    if (isMissingRelationError(observationError)) {
+      if (!loggedMissingObservationsTable) {
+        loggedMissingObservationsTable = true;
+        console.info(
+          "[DANTE MEMORY HIERARCHY] dante_observations unavailable — reflection-loop learning is disabled until its migration is intentionally applied.",
+        );
+      }
+      return { observation: null, patternUpdated: false };
+    }
     console.error("[DANTE MEMORY HIERARCHY] Unable to record observation:", observationError.message);
     return { observation: null, patternUpdated: false };
   }
@@ -82,8 +121,33 @@ export async function recordObservationAndLearn(
     observedAt: observationRow.observed_at as string,
   };
 
-  const isPositive = outcomeIsPositive(input.outcome);
-  const eligibleForConsolidation = input.contextKey !== "insufficient_data" && isPositive !== null;
+  const observedPositive = outcomeIsPositive(input.outcome);
+  let eligibleForConsolidation =
+    input.contextKey !== "insufficient_data" && observedPositive !== null;
+
+  let positiveForLearning = observedPositive === true;
+
+  if (input.causalContext && eligibleForConsolidation) {
+    const causal = evaluateCausalOutcome({
+      dimensions: input.causalContext.dimensions,
+      confounders: input.causalContext.confounders,
+      interventionIsVolumeReduction: input.causalContext.interventionIsVolumeReduction,
+    });
+
+    if (observedPositive === true) {
+      positiveForLearning = shouldCountAsPositiveLearningEvidence({
+        observedPositive: true,
+        causal,
+      });
+      // Confounded "improvements" keep L1 but skip pattern inflation.
+      if (!positiveForLearning) {
+        eligibleForConsolidation = false;
+      }
+    } else if (observedPositive === false && causal.confounderCount > 0) {
+      // Still allow negative evidence — contradictory outcomes must reduce confidence.
+      positiveForLearning = false;
+    }
+  }
 
   if (!eligibleForConsolidation) {
     return { observation, patternUpdated: false };
@@ -95,7 +159,7 @@ export async function recordObservationAndLearn(
     userId: input.userId,
     contextKey: input.contextKey,
     interventionType: input.interventionType,
-    positive: isPositive,
+    positive: positiveForLearning,
     now: input.now,
   });
 

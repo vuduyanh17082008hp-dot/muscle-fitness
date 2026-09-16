@@ -68,7 +68,15 @@ function describeSignal(signal: RadarSignal, unit: string): string {
   }
 
   const magnitude = Math.abs(deviation.delta);
-  const trendWord = signal.direction === "worse" ? "below" : signal.direction === "better" ? "above" : "at";
+  // Direction wording must follow the actual current-vs-baseline comparison,
+  // not the "worse/better" classification — resting HR rises are "worse" but
+  // still *above* baseline, and drops are "better" but *below* baseline.
+  const trendWord =
+    deviation.current > deviation.baseline
+      ? "above"
+      : deviation.current < deviation.baseline
+        ? "below"
+        : "at";
 
   return `${label} is ${magnitude}${unit} ${trendWord} your usual ${deviation.baseline}${unit} (currently ${deviation.current}${unit}).`;
 }

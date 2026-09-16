@@ -17,15 +17,15 @@ describe("normalizeBarcode", () => {
     expect(result).toEqual({ code: "036000291452", format: "UPC-A" })
   })
 
-  it("strips non-digit characters before validating", () => {
+  it("strips spaces and hyphens before validating", () => {
     const result = normalizeBarcode(" 762-2210-951353 ")
     expect(result).toEqual({ code: "7622210951353", format: "EAN-13" })
   })
 
   it("normalizes a 14-digit GTIN by trimming to 13 digits", () => {
-    const result = normalizeBarcode("00007622210951353".slice(0, 14))
+    const result = normalizeBarcode("07622210951353")
     expect(result?.format).toBe("EAN-13")
-    expect(result?.code).toHaveLength(13)
+    expect(result?.code).toBe("7622210951353")
   })
 
   it("expands a 6-digit UPC-E code to a 12-digit UPC-A code", () => {
@@ -59,3 +59,14 @@ describe("expandUpcEToUpcA", () => {
     expect(expandUpcEToUpcA("abcdef")).toBeNull()
   })
 })
+
+
+it.each(["food7622210951353", "https://example.com/7622210951353", "17622210951353"])("rejects ambiguous barcode %s instead of changing its identity", (input) => {
+  expect(normalizeBarcode(input)).toBeNull();
+});
+
+it("validates explicit UPC-E check digits", () => {
+  expect(expandUpcEToUpcA("04252614")).toBe("042100005264");
+  expect(expandUpcEToUpcA("04252615")).toBeNull();
+  expect(expandUpcEToUpcA("0425261x")).toBeNull();
+});

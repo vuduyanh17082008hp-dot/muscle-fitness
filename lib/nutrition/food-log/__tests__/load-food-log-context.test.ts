@@ -102,12 +102,13 @@ describe("loadFoodLogForDate — graceful degradation (never crashes the caller)
 
     expect(context.entries).toEqual([]);
     expect(context.totals.calories).toBe(0);
+    expect(context.unavailable).toBe(true);
   });
 
   it("never throws even under the exact original bug condition (missing table error)", async () => {
     const supabase = fakeSupabase("nutrition_logs", { data: [], error: null }); // wrong table configured -> simulates drift
 
-    await expect(loadFoodLogForDate(supabase, "user-1", "2026-01-01")).resolves.not.toThrow();
+    await expect(loadFoodLogForDate(supabase, "user-1", "2026-01-01")).resolves.toMatchObject({ unavailable: true, entries: [] });
   });
 });
 

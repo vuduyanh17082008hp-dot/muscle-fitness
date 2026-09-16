@@ -16,6 +16,7 @@ import {
   Mail,
 } from "lucide-react";
 
+import { getSafeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/brand/logo";
 
@@ -63,24 +64,13 @@ function getLoginErrorMessage(message: string): string {
   return message || "Couldn't complete this request. Please try again.";
 }
 
-function getSafeRedirect(next: string | null): string {
-  if (!next) {
-    return "/dashboard";
-  }
-
-  if (!next.startsWith("/") || next.startsWith("//")) {
-    return "/dashboard";
-  }
-
-  return next;
-}
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const redirectTo = useMemo(
-    () => getSafeRedirect(searchParams.get("next")),
+    () => getSafeNext(searchParams.get("next")),
     [searchParams],
   );
 

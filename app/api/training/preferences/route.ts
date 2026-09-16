@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { z } from "zod";
+import { preferenceSchema, generatedProgramSchema } from "@/lib/training/preferences-schema";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -8,112 +9,13 @@ import { createClient } from "@/lib/supabase/server";
    SCHEMA
 ========================================================= */
 
-const muscleSchema =
-  z.enum([
-    "Chest",
-    "Upper Chest",
-    "Back Width",
-    "Back Thickness",
-    "Side Delts",
-    "Rear Delts",
-    "Quads",
-    "Hamstrings",
-    "Glutes",
-    "Biceps",
-    "Triceps",
-    "Calves",
-    "Abs",
-  ]);
-
-const preferenceSchema =
-  z.object({
-    splitType:
-      z.enum([
-        "auto",
-        "full_body",
-        "upper_lower",
-        "push_pull_legs",
-        "ppl_upper_lower",
-        "arnold",
-        "torso_limbs",
-        "body_part",
-        "custom",
-      ]),
-
-    trainingDays:
-      z.number()
-        .int()
-        .min(2)
-        .max(7),
-
-    customSplit:
-      z.array(
-        z.object({
-          name:
-            z.string()
-              .min(1)
-              .max(50),
-
-          muscles:
-            z.array(
-              muscleSchema
-            ),
-        })
-      ),
-
-    priorityMuscles:
-      z.array(
-        muscleSchema
-      ).max(3),
-
-    intensityStyle:
-      z.enum([
-        "conservative",
-        "moderate",
-        "hard",
-        "very_hard",
-      ]),
-
-    volumeStyle:
-      z.enum([
-        "low",
-        "moderate",
-        "high",
-      ]),
-
-    failureStyle:
-      z.enum([
-        "rare",
-        "isolation_only",
-        "selected_last_sets",
-      ]),
-
-    exerciseStyle:
-      z.enum([
-        "mixed",
-        "machine",
-        "free_weights",
-      ]),
-
-    excludedExercises:
-      z.array(
-        z.string()
-      ),
-
-    targetSessionMinutes:
-      z.number()
-        .int()
-        .min(30)
-        .max(180),
-  });
-
 const requestSchema =
   z.object({
     preferences:
       preferenceSchema,
 
     generatedProgram:
-      z.unknown()
+      generatedProgramSchema
         .nullable()
         .optional(),
   });
@@ -162,7 +64,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          error.message,
+          "Unable to load training preferences.",
       },
       {
         status: 500,
@@ -309,7 +211,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          error.message,
+          "Unable to save training preferences.",
       },
       {
         status: 500,

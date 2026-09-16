@@ -1,4 +1,5 @@
 import type { TrainingLoadSummary, TrainingLoadState } from "@/lib/recovery/types"
+import { addDaysIso } from "@/lib/nutrition/date-utils"
 
 export type RecentSessionRow = {
   completed_at: string | null
@@ -6,26 +7,47 @@ export type RecentSessionRow = {
   total_volume_kg: number | null
 }
 
-function daysAgo(dateIso: string, now: Date): number {
-  const then = new Date(dateIso)
-  const diffMs = now.getTime() - then.getTime()
+function toLocalDateIso(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(instant)
+}
 
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+function calendarDaysBetween(earlierDateIso: string, laterDateIso: string): number {
+  const earlier = Date.parse(`${earlierDateIso}T12:00:00.000Z`)
+  const later = Date.parse(`${laterDateIso}T12:00:00.000Z`)
+  if (!Number.isFinite(earlier) || !Number.isFinite(later)) return Number.POSITIVE_INFINITY
+  return Math.floor((later - earlier) / (1000 * 60 * 60 * 24))
 }
 
 /**
  * Connects today's recovery score to recent training load using simple,
  * explainable rules. This never cancels a workout automatically — it only
  * classifies the day as green / amber / red for the athlete to act on.
+ *
+ * Session day-bucketing uses the athlete's IANA timezone so a late-evening
+ * session in Asia/Singapore is not counted on the previous UTC date.
  */
 export function computeTrainingLoad(
   sessions: RecentSessionRow[],
   recoveryScore: number | null,
   now: Date = new Date(),
+  timeZone: string = "UTC",
 ): TrainingLoadSummary {
+  const todayLocal = toLocalDateIso(now, timeZone)
+  const windowStart = addDaysIso(todayLocal, -6)
+
   const last7 = sessions.filter((session) => {
     if (!session.completed_at) return false
-    return daysAgo(session.completed_at, now) < 7
+    const completedAt = new Date(session.completed_at)
+    if (!Number.isFinite(completedAt.getTime()) || completedAt.getTime() > now.getTime()) {
+      return false
+    }
+    const sessionDay = toLocalDateIso(completedAt, timeZone)
+    return sessionDay >= windowStart && sessionDay <= todayLocal
   })
 
   const sessionsLast7Days = last7.length
@@ -33,14 +55,14 @@ export function computeTrainingLoad(
   const trainingDaySet = new Set(
     last7
       .filter((session) => session.completed_at)
-      .map((session) => session.completed_at!.slice(0, 10)),
+      .map((session) => toLocalDateIso(new Date(session.completed_at!), timeZone)),
   )
 
   const restDaysLast7Days = Math.max(0, 7 - trainingDaySet.size)
 
   const rpeValues = last7
     .map((session) => session.session_rpe)
-    .filter((value): value is number => value !== null)
+    .filter((value): value is number => value !== null && Number.isFinite(value))
 
   const averageSessionRpe =
     rpeValues.length > 0
@@ -53,7 +75,7 @@ export function computeTrainingLoad(
 
   const volumeValues = last7
     .map((session) => session.total_volume_kg)
-    .filter((value): value is number => value !== null && value > 0)
+    .filter((value): value is number => value !== null && Number.isFinite(value) && value > 0)
 
   const totalVolumeKgLast7Days =
     volumeValues.length > 0
@@ -61,7 +83,11 @@ export function computeTrainingLoad(
       : null
 
   const mostRecent = sessions
-    .filter((session) => session.completed_at)
+    .filter((session) => {
+      if (!session.completed_at) return false
+      const completedAt = new Date(session.completed_at)
+      return Number.isFinite(completedAt.getTime()) && completedAt.getTime() <= now.getTime()
+    })
     .sort(
       (a, b) =>
         new Date(b.completed_at!).getTime() -
@@ -69,7 +95,7 @@ export function computeTrainingLoad(
     )[0]
 
   const lastSessionDaysAgo = mostRecent?.completed_at
-    ? daysAgo(mostRecent.completed_at, now)
+    ? calendarDaysBetween(toLocalDateIso(new Date(mostRecent.completed_at), timeZone), todayLocal)
     : null
 
   const highLoad =

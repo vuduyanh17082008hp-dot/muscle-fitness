@@ -110,8 +110,16 @@ export function resolveAbortedContent(existingContent: string): string {
   return existingContent ? `${existingContent}\n\n*Stopped.*` : "Stopped.";
 }
 
-export function resolveStreamErrorContent(existingContent: string, partial: boolean, fallbackMessage: string): string {
-  return partial && existingContent ? `${existingContent}\n\n*Response interrupted.*` : fallbackMessage;
+/**
+ * Prefer already-streamed text over a generic fallback.
+ * Never wipe a usable answer when a later stage fails — even if the
+ * server `partial` flag is missing or wrong.
+ */
+export function resolveStreamErrorContent(existingContent: string, _partial: boolean, fallbackMessage: string): string {
+  if (existingContent.trim().length > 0) {
+    return `${existingContent}\n\n*Response interrupted.*`;
+  }
+  return fallbackMessage;
 }
 
 function isChatStreamEvent(value: unknown): value is ChatStreamEvent {

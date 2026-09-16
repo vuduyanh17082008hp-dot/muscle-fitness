@@ -161,6 +161,17 @@ describe("resolveAbortedContent / resolveStreamErrorContent", () => {
     expect(result).toBe("Bench Press: +2.5kg based on last session.\n\n*Response interrupted.*");
     expect(result).not.toContain("couldn't complete");
   });
+
+  it("preserves streamed text even when partial flag is false (partial rejection must not collapse the answer)", () => {
+    const result = resolveStreamErrorContent(
+      "Recovery is 72. Keep volume steady today.",
+      false,
+      PROVIDER_FAILURE_MESSAGE,
+    );
+
+    expect(result).toBe("Recovery is 72. Keep volume steady today.\n\n*Response interrupted.*");
+    expect(result).not.toContain("couldn't complete");
+  });
 });
 
 describe("createChatStreamResponse / createSingleShotChatStream", () => {

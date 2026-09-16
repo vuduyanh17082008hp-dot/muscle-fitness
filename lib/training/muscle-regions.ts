@@ -44,6 +44,10 @@ export const MUSCLE_REGIONS: MuscleRegion[] = [
   },
   { muscle: "anterior_deltoid", view: "front", shape: "ellipse", x: 44, y: 90, width: 20, height: 26 },
   { muscle: "anterior_deltoid", view: "front", shape: "ellipse", x: 136, y: 90, width: 20, height: 26 },
+  // Lateral head is visible from the front as the outer shoulder cap —
+  // without these regions the atlas could only select it from the back view.
+  { muscle: "lateral_deltoid", view: "front", shape: "ellipse", x: 34, y: 92, width: 12, height: 22 },
+  { muscle: "lateral_deltoid", view: "front", shape: "ellipse", x: 154, y: 92, width: 12, height: 22 },
   { muscle: "biceps", view: "front", shape: "rect", x: 38, y: 120, width: 16, height: 40, rx: 8 },
   { muscle: "biceps", view: "front", shape: "rect", x: 146, y: 120, width: 16, height: 40, rx: 8 },
   { muscle: "forearms", view: "front", shape: "rect", x: 36, y: 163, width: 14, height: 38, rx: 7 },

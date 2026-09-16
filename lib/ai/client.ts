@@ -1,39 +1,74 @@
 import "server-only";
 
-import Groq from "groq-sdk";
+/**
+ * Shared OpenAI chat helper for non-Dante business features
+ * (member analysis, campaign generation, business insights).
+ *
+ * Dante chat/tool-calling uses lib/dante-core/openai/client.ts directly.
+ */
 
-export const GROQ_MODEL =
-  process.env.GROQ_MODEL?.trim() ||
-  "openai/gpt-oss-120b";
+import { getOpenAiApiKey, OPENAI_CHAT_BASE_URL } from "@/lib/dante-core/openai/config";
 
-let cachedClient: Groq | null = null;
+export const OPENAI_MODEL =
+  process.env.DANTE_OPENAI_MODEL?.trim() ||
+  process.env.OPENAI_MODEL?.trim() ||
+  "gpt-4o-mini";
 
-/** True when GROQ_API_KEY is present — check before calling getGroqClient() to avoid a throw. */
-export function isGroqConfigured(): boolean {
-  return Boolean(process.env.GROQ_API_KEY?.trim());
+/** @deprecated Use OPENAI_MODEL */
+export const GROQ_MODEL = OPENAI_MODEL;
+
+type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+type ChatCompletionResult = {
+  choices: Array<{ message?: { content?: string | null } }>;
+};
+
+export async function createOpenAiChatCompletion(input: {
+  model?: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<ChatCompletionResult> {
+  const apiKey = getOpenAiApiKey();
+
+  const response = await fetch(`${OPENAI_CHAT_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: input.model ?? OPENAI_MODEL,
+      messages: input.messages,
+      temperature: input.temperature ?? 0.3,
+      max_tokens: input.maxTokens ?? 2048,
+    }),
+  });
+
+  const data = (await response.json()) as ChatCompletionResult & { error?: { message?: string } };
+
+  if (!response.ok) {
+    throw new Error(data.error?.message ?? `OpenAI returned HTTP ${response.status}.`);
+  }
+
+  return data;
 }
 
-/**
- * Lazily constructs the Groq client on first use. Reading
- * GROQ_API_KEY happens here, not at module scope — importing this
- * file (e.g. transitively, while Next.js collects route data during
- * `next build`) must never throw just because the env var isn't set
- * in that environment. Only an actual request that needs Groq should
- * fail, and it should fail at request/runtime, not at import time.
- */
-export function getGroqClient(): Groq {
-  if (cachedClient) {
-    return cachedClient;
-  }
+/** @deprecated Groq SDK shim — routes to OpenAI. */
+export const groq = {
+  chat: {
+    completions: {
+      create: createOpenAiChatCompletion,
+    },
+  },
+};
 
-  const apiKey = process.env.GROQ_API_KEY?.trim();
+/** @deprecated Compatibility name; production requests use OpenAI only. */
+export function isGroqConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY?.trim());
+}
 
-  if (!apiKey) {
-    throw new Error(
-      "Missing GROQ_API_KEY. Add GROQ_API_KEY to .env.local."
-    );
-  }
-
-  cachedClient = new Groq({ apiKey });
-  return cachedClient;
+/** @deprecated Compatibility adapter; returns the OpenAI-backed client shim. */
+export function getGroqClient(): typeof groq {
+  return groq;
 }
