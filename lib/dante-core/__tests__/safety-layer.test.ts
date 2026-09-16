@@ -20,6 +20,12 @@ describe("checkSafety", () => {
     expect(result.responseOverride).toContain("emergency");
   });
 
+  it("triggers on chest-hurts phrasing during exercise", () => {
+    const result = checkSafety("My chest hurts when I run but I want to finish today's workout.");
+    expect(result.triggered).toBe(true);
+    expect(result.category).toBe("chest_pain_cardiac");
+  });
+
   it("triggers on fainting language", () => {
     const result = checkSafety("I nearly fainted during my last set of squats.");
     expect(result.triggered).toBe(true);

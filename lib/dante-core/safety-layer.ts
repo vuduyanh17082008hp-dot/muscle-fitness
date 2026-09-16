@@ -51,6 +51,9 @@ const RULES: SafetyRule[] = [
     patterns: [
       /\bchest pain\b/i,
       /\bpain in my chest\b/i,
+      /\bchest hurts?\b/i,
+      /\bhurts? in (my |the )?chest\b/i,
+      /\bmy chest (is |feels )?(hurt(ing)?|aching|tight)\b/i,
       /\btightness in (my |the )?chest\b/i,
       /\bcan'?t breathe\b/i,
       /\bshort(ness)? of breath\b/i,
