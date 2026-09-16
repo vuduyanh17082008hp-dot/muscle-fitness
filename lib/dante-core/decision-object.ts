@@ -52,6 +52,7 @@ export function buildAutoregulationTraceableDecision(
   decision: AutoregulationDecision,
   readiness: ReadinessResult,
   sources: KnowledgeSourceRef[] = [],
+  now: Date = new Date(),
 ): TraceableDecision<AutoregulationDecision> {
   const dataUsed: Record<string, string | number | null> = {
     readinessScore: readiness.readinessScore,
@@ -75,5 +76,7 @@ export function buildAutoregulationTraceableDecision(
     dataUsed,
     confidence: decision.confidence,
     sources,
+    decisionId: crypto.randomUUID(),
+    createdAt: now.toISOString(),
   };
 }

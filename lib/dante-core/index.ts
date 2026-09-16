@@ -21,6 +21,13 @@ export {
   attachKnowledgeSources,
 } from "@/lib/dante-core/explain";
 export { checkSafety } from "@/lib/dante-core/safety-layer";
+export { validatePremises } from "@/lib/dante-core/premise-validation";
+export {
+  verifyFinalResponse,
+  runVerifiedGeneration,
+  buildCorrectionBrief,
+  MAX_VERIFIER_RETRIES,
+} from "@/lib/dante-core/verifier";
 export {
   buildDailyIntelligence,
   recomputeDailyIntelligence,
@@ -46,5 +53,15 @@ export type {
   ConfidenceLevel,
 } from "@/lib/dante-core/types";
 export type { SafetyCategory, SafetyCheckResult } from "@/lib/dante-core/safety-layer";
+export type { PremiseIssue, PremiseIssueType, PremiseValidationInput } from "@/lib/dante-core/premise-validation";
+export type {
+  VerifierCheckCode,
+  VerifierFact,
+  VerifierFinding,
+  VerifierInput,
+  VerifierResult,
+  VerifierSafetyState,
+  VerifiedGenerationResult,
+} from "@/lib/dante-core/verifier";
 export type { DailyIntelligence } from "@/lib/dante-core/daily-intelligence";
 export type { KnowledgeEntry, KnowledgeCategory } from "@/lib/dante-core/knowledge/types";

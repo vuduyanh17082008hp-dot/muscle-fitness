@@ -5,15 +5,18 @@ import { zodToJsonSchema } from "@/lib/dante-core/tools/json-schema";
 import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { safeExecuteTool } from "@/lib/dante-core/tools/safe-execute";
-import { callGroqAgentTurn, type GroqAgentTurnResult, type GroqChatMessage, type GroqToolCall, type GroqToolSpec } from "@/lib/dante-core/llm-client";
+import { callDanteAgentTurn, type DanteAgentTurnResult, type DanteChatMessage, type DanteToolCall, type DanteToolSpec } from "@/lib/dante-core/llm-client";
 import { formatDanteTemporalContext } from "@/lib/dante-core/temporal-context";
+import { decideDanteLanguage, buildDanteLanguageInstruction } from "@/lib/dante-language";
+import { buildEpistemicPolicyInstruction } from "@/lib/dante-core/epistemics/policy";
+import { buildToolAuthorityInstruction } from "@/lib/dante-core/epistemics/tool-authority";
 import type { ToolContext } from "@/lib/dante-core/tools/types";
 import type { DanteResponseEnvelope } from "@/lib/dante-core/tools/response-envelope";
 
 /**
  * The agentic tool-call loop (Part 10): UNDERSTAND -> SELECT TOOL ->
  * READ REAL STATE / PROPOSE ACTION -> (CONFIRM) -> REPORT. Extends the
- * existing Groq orchestration (lib/dante-core/llm-client.ts) rather
+ * existing OpenAI orchestration (lib/dante-core/llm-client.ts) rather
  * than a second model client. A write tool NEVER executes from this
  * loop — it always stops at a pending confirmation (Part 7/16); only
  * lib/dante-core/tools/pending-actions.ts::confirmPendingAction, called
@@ -21,9 +24,11 @@ import type { DanteResponseEnvelope } from "@/lib/dante-core/tools/response-enve
  */
 export const MAX_TOOL_ROUNDS = 4;
 
-export type ModelCaller = (messages: GroqChatMessage[], tools: GroqToolSpec[]) => Promise<GroqAgentTurnResult>;
+export type ModelCaller = (messages: DanteChatMessage[], tools: DanteToolSpec[]) => Promise<DanteAgentTurnResult>;
 
-function buildSystemPrompt(context: ToolContext): string {
+function buildSystemPrompt(context: ToolContext, userMessage: string): string {
+  const languageDecision = context.languageDecision ?? decideDanteLanguage({ currentMessage: userMessage });
+
   return `You are Dante's tool-selection layer inside Muscle Fitness.
 
 Select at most ONE tool per turn from the tools you were given. Use the
@@ -52,7 +57,13 @@ retrieve_knowledge for it.
 ${formatDanteTemporalContext(context.temporalContext ?? null)}
 
 Once you have enough information, respond with your final natural-
-language answer instead of another tool call.`;
+language answer instead of another tool call.
+
+${buildDanteLanguageInstruction(languageDecision)}
+
+${buildEpistemicPolicyInstruction()}
+
+${buildToolAuthorityInstruction(DANTE_TOOLS)}`;
 }
 
 const TRACE_LABEL: Record<string, string> = {
@@ -68,7 +79,7 @@ const TRACE_LABEL: Record<string, string> = {
   retrieve_knowledge: "Checked knowledge base",
 };
 
-function assistantToolCallMessage(call: GroqToolCall): GroqChatMessage {
+function assistantToolCallMessage(call: DanteToolCall): DanteChatMessage {
   return {
     role: "assistant",
     content: "",
@@ -76,11 +87,11 @@ function assistantToolCallMessage(call: GroqToolCall): GroqChatMessage {
   };
 }
 
-function toolResultMessage(call: GroqToolCall, result: unknown): GroqChatMessage {
+function toolResultMessage(call: DanteToolCall, result: unknown): DanteChatMessage {
   return { role: "tool", tool_call_id: call.id, name: call.name, content: JSON.stringify(result) };
 }
 
-function toolSpecs(): GroqToolSpec[] {
+function toolSpecs(): DanteToolSpec[] {
   return DANTE_TOOLS.map((tool) => ({
     name: tool.name,
     description: tool.description,
@@ -93,10 +104,10 @@ export async function runDanteAgentTurn(
   userMessage: string,
   options?: { callModel?: ModelCaller },
 ): Promise<DanteResponseEnvelope> {
-  const callModel = options?.callModel ?? callGroqAgentTurn;
+  const callModel = options?.callModel ?? callDanteAgentTurn;
 
-  const messages: GroqChatMessage[] = [
-    { role: "system", content: buildSystemPrompt(context) },
+  const messages: DanteChatMessage[] = [
+    { role: "system", content: buildSystemPrompt(context, userMessage) },
     { role: "user", content: userMessage },
   ];
 

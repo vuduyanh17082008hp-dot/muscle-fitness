@@ -128,7 +128,7 @@ function isChatStreamEvent(value: unknown): value is ChatStreamEvent {
  * Builds the actual streamed HTTP Response from an async generator of
  * events — the one place that turns the ChatStreamEvent contract into
  * bytes, so every call site in the route (safety layer, agentic tool
- * loop, legacy Groq path) frames its output identically.
+ * loop, main OpenAI reply path) frames its output identically.
  */
 export function createChatStreamResponse(
   produce: (emit: (event: ChatStreamEvent) => void) => Promise<void>,

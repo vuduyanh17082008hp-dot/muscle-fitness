@@ -559,12 +559,14 @@ export default async function MemberDetailPage({
               />
             </div>
 
-            <Link
-              href={`/business/campaigns/new?member=${member.id}`}
-              className="mt-8 flex h-12 w-full items-center justify-center rounded-xl bg-cyan-300 px-5 text-sm font-semibold text-black transition hover:bg-cyan-200"
+            <button
+              type="button"
+              disabled
+              title="Campaign generation is coming soon"
+              className="mt-8 flex h-12 w-full cursor-not-allowed items-center justify-center rounded-xl bg-cyan-300/30 px-5 text-sm font-semibold text-black/50"
             >
-              Generate Outreach
-            </Link>
+              Generate Outreach — Coming soon
+            </button>
 
             <p className="mt-3 text-center text-[11px] text-white/30">
               AI generated · Human approval

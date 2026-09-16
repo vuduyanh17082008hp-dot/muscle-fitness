@@ -1,4 +1,4 @@
-import { callGroqWithFallback } from "@/lib/dante-core/llm-client";
+import { callDanteLlm } from "@/lib/dante-core/llm-client";
 import { retrieveKnowledge } from "@/lib/dante-core/knowledge/retrieve";
 import type {
   KnowledgeSourceRef,
@@ -108,7 +108,7 @@ export function attachKnowledgeSources<TDecision>(
  *
  * Never throws on an LLM failure: falls back to a plain-text render
  * of WHY/CONFIDENCE so the user always gets a real, traceable
- * explanation even if Groq is unreachable.
+ * explanation even if OpenAI is unreachable.
  */
 export async function explainRecommendation<TDecision>(
   decision: TraceableDecision<TDecision>,
@@ -123,7 +123,7 @@ export async function explainRecommendation<TDecision>(
 
   try {
     const prompt = buildExplanationPrompt(decision);
-    const result = await callGroqWithFallback(prompt);
+    const result = await callDanteLlm(prompt);
 
     if (!result) {
       return { decision, explanation: fallbackExplanation, explanationSource: "fallback" };

@@ -77,15 +77,15 @@ vi.mock("@/lib/dante-core/tools/pending-actions", () => ({
 }));
 
 import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
-import type { GroqAgentTurnResult, GroqChatMessage, GroqToolSpec } from "@/lib/dante-core/llm-client";
+import type { DanteAgentTurnResult, DanteChatMessage, DanteToolSpec } from "@/lib/dante-core/llm-client";
 
 const context = { supabase: {} as never, userId: "user-1", now: new Date("2026-09-13T10:00:00.000Z") };
 
-function toolCallTurn(id: string, name: string, args: unknown): GroqAgentTurnResult {
+function toolCallTurn(id: string, name: string, args: unknown): DanteAgentTurnResult {
   return { type: "tool_calls", toolCalls: [{ id, name, arguments: args }] };
 }
 
-function finalTurn(reply: string): GroqAgentTurnResult {
+function finalTurn(reply: string): DanteAgentTurnResult {
   return { type: "final", reply };
 }
 
@@ -98,7 +98,7 @@ describe("runDanteAgentTurn", () => {
 
   it("executes a read tool and returns the model's final reply", async () => {
     const callModel = vi
-      .fn<(messages: GroqChatMessage[], tools: GroqToolSpec[]) => Promise<GroqAgentTurnResult>>()
+      .fn<(messages: DanteChatMessage[], tools: DanteToolSpec[]) => Promise<DanteAgentTurnResult>>()
       .mockResolvedValueOnce(toolCallTurn("1", "fake_read", {}))
       .mockResolvedValueOnce(finalTurn("Here is your answer."));
 
@@ -187,7 +187,7 @@ describe("runDanteAgentTurn", () => {
       { callModel },
     );
 
-    const [messages] = callModel.mock.calls[0] as [GroqChatMessage[], GroqToolSpec[]];
+    const [messages] = callModel.mock.calls[0] as [DanteChatMessage[], DanteToolSpec[]];
     const systemMessage = messages.find((message) => message.role === "system");
 
     expect(systemMessage?.content).toContain("Timezone: Asia/Singapore");
@@ -200,7 +200,7 @@ describe("runDanteAgentTurn", () => {
 
     await runDanteAgentTurn(context, "what time is it?", { callModel });
 
-    const [messages] = callModel.mock.calls[0] as [GroqChatMessage[], GroqToolSpec[]];
+    const [messages] = callModel.mock.calls[0] as [DanteChatMessage[], DanteToolSpec[]];
     const systemMessage = messages.find((message) => message.role === "system");
 
     expect(systemMessage?.content).toContain("not available");
@@ -208,7 +208,7 @@ describe("runDanteAgentTurn", () => {
   });
 
   it("stops after MAX_TOOL_ROUNDS and never loops forever (Test P)", async () => {
-    const callModel = vi.fn((_messages: GroqChatMessage[], _tools: GroqToolSpec[]) => {
+    const callModel = vi.fn((_messages: DanteChatMessage[], _tools: DanteToolSpec[]) => {
       const round = callModel.mock.calls.length; // 1-indexed after this call is recorded
       return Promise.resolve(toolCallTurn(String(round), "fake_read", { round }));
     });

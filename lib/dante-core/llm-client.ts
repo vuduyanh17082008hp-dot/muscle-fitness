@@ -1,150 +1,171 @@
+import "server-only";
+
+import OpenAI from "openai";
+import type {
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+} from "openai/resources/chat/completions";
+
 /**
- * Minimal Groq chat client for Dante Core explanations (spec §9).
- *
- * KNOWN DUPLICATION, documented rather than hidden: app/api/chatbot/
- * route.ts already implements a Groq fetch-with-model-fallback client
- * (callGroqModel/generateDanteReply) for the main Dante conversation.
- * That file is ~3,300 lines and load-bearing for the live product
- * chat; extracting a shared helper from it without the ability to
- * exercise the change in a real browser session was judged too risky
- * for this pass. This module intentionally mirrors its env vars
- * (GROQ_API_KEY, GROQ_MODEL) and model-fallback behavior so the two
- * stay consistent, and is small/self-contained enough that the
- * duplication cost is low. See docs/dante-core.md "Known limitations".
+ * Dante's LLM client — OpenAI is the only provider (no Groq/Gemini
+ * fallback chain; a missing/failing key degrades to each caller's own
+ * deterministic text, never a second provider). Server-only, lazily
+ * initialized: reading OPENAI_API_KEY happens on first actual
+ * request, never at module import, so `next build` never fails just
+ * because the key isn't set in that environment.
  */
 
-export type LlmResult = {
-  reply: string;
-  model: string;
-};
+const REASONING_EFFORTS = new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
-function getGroqKey(): string {
-  const apiKey = process.env.GROQ_API_KEY?.trim();
+export function getOpenAiModel(): string {
+  return process.env.OPENAI_MODEL?.trim() || "gpt-5.4-mini";
+}
+
+function getReasoningEffort(): ReasoningEffort {
+  const raw = process.env.OPENAI_REASONING_EFFORT?.trim().toLowerCase();
+  return raw && REASONING_EFFORTS.has(raw) ? (raw as ReasoningEffort) : "low";
+}
+
+/**
+ * `reasoning_effort` is only accepted by OpenAI's reasoning-capable
+ * models (o-series: o1/o3/o4-mini..., and the gpt-5 family) — sending
+ * it to a non-reasoning model (gpt-4o, gpt-4.1, gpt-3.5-turbo, ...) is
+ * rejected as an unknown parameter. Pattern-matched against the model
+ * name since there's no live capability-introspection endpoint to
+ * check against.
+ */
+export function supportsReasoningEffort(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return /^o[1-9]/.test(normalized) || normalized.startsWith("gpt-5") || normalized.startsWith("gpt-oss");
+}
+
+/**
+ * Reasoning-capable models also reject a custom `temperature` — only
+ * the default (1) is accepted, confirmed live against gpt-5.4-mini
+ * ("Unsupported value: 'temperature' does not support 0.3 with this
+ * model. Only the default (1) value is supported."). So the same
+ * model check decides both fields at once: reasoning models get
+ * `reasoning_effort` and no `temperature`; standard models get the
+ * caller's `temperature` and no `reasoning_effort`. Spread into the
+ * request body so an unsupported field is cleanly omitted rather than
+ * sent as `undefined`.
+ */
+function chatCompletionTuning(
+  model: string,
+  standardTemperature: number,
+): { reasoning_effort: ReasoningEffort } | { temperature: number } {
+  return supportsReasoningEffort(model)
+    ? { reasoning_effort: getReasoningEffort() }
+    : { temperature: standardTemperature };
+}
+
+function getOpenAiKey(): string {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
 
   if (!apiKey) {
-    throw new Error("GROQ_API_KEY is missing from .env.local");
+    throw new Error("OPENAI_API_KEY is missing from .env.local");
   }
 
   return apiKey;
 }
 
-function getGroqModels(): string[] {
-  return Array.from(
-    new Set(
-      [
-        process.env.GROQ_MODEL?.trim(),
-        "openai/gpt-oss-120b",
-        "openai/gpt-oss-20b",
-        "llama-3.3-70b-versatile",
-      ].filter((model): model is string => Boolean(model)),
-    ),
-  );
+/** True when OPENAI_API_KEY is present — check before calling code paths that need it, to avoid a throw. */
+export function isOpenAiConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-async function callModel(model: string, prompt: string): Promise<LlmResult | null> {
-  const apiKey = getGroqKey();
-  const gptOss = model.startsWith("openai/gpt-oss");
+let cachedClient: OpenAI | null = null;
 
-  const requestBody: Record<string, unknown> = {
-    model,
-    messages: [{ role: "user", content: prompt }],
-    temperature: gptOss ? 0.4 : 0.3,
-    top_p: 0.95,
-    max_completion_tokens: gptOss ? 1536 : 1024,
-  };
-
-  if (gptOss) {
-    requestBody.reasoning_effort = "low";
-    requestBody.reasoning_format = "hidden";
+function getOpenAiClient(): OpenAI {
+  if (cachedClient) {
+    return cachedClient;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  cachedClient = new OpenAI({ apiKey: getOpenAiKey() });
+  return cachedClient;
+}
 
-  let response: Response;
+export class OpenAiProviderError extends Error {
+  readonly status: number | null;
 
-  try {
-    response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
+  constructor(message: string, status: number | null = null) {
+    super(message);
+    this.name = "OpenAiProviderError";
+    this.status = status;
+  }
+}
+
+function toProviderError(error: unknown, model: string): OpenAiProviderError {
+  if (error instanceof OpenAI.APIError) {
+    return new OpenAiProviderError(`${model}: ${error.message}`, error.status ?? null);
   }
 
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-    error?: { message?: string };
-  };
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Groq rejected GROQ_API_KEY.");
-    }
-
-    throw new Error(
-      `${model}: ${data.error?.message ?? `Groq returned HTTP ${response.status}.`}`,
-    );
+  if (error instanceof Error) {
+    return new OpenAiProviderError(`${model}: ${error.message}`);
   }
 
-  const reply = data.choices?.[0]?.message?.content?.trim();
+  return new OpenAiProviderError(`${model}: ${String(error)}`);
+}
 
-  if (!reply) {
+export type LlmResult = { reply: string; model: string; provider: "openai" };
+
+/**
+ * Single non-streaming completion for Dante Core's explanation layer
+ * (lib/dante-core/explain.ts) and daily narrative
+ * (lib/dante-core/daily-intelligence.ts). Never throws — returns null
+ * on any failure (missing key, timeout, provider error, empty reply)
+ * so callers fall back to their own deterministic text. This is the
+ * ONLY fallback behavior in this module; there is no second LLM
+ * provider to retry against.
+ */
+export async function callDanteLlm(prompt: string): Promise<LlmResult | null> {
+  if (!isOpenAiConfigured()) {
+    console.error("[DANTE CORE LLM] OPENAI_API_KEY is not configured");
     return null;
   }
 
-  return { reply, model };
-}
+  const model = getOpenAiModel();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
-/**
- * Tries each configured model in order, falling back on failure
- * (except an unrecoverable 401). Returns null if every model failed
- * to produce content — callers must handle that by falling back to
- * the structured decision object alone (never silently returning
- * nothing to the user).
- */
-export async function callGroqWithFallback(prompt: string): Promise<LlmResult | null> {
-  const models = getGroqModels();
-  let lastError: unknown = null;
+  try {
+    const client = getOpenAiClient();
+    const response = await client.chat.completions.create(
+      {
+        model,
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 1024,
+        ...chatCompletionTuning(model, 0.3),
+      },
+      { signal: controller.signal },
+    );
 
-  for (const model of models) {
-    try {
-      const result = await callModel(model, prompt);
-      if (result) {
-        return result;
-      }
-    } catch (error) {
-      lastError = error;
+    const reply = response.choices[0]?.message?.content?.trim();
 
-      if (error instanceof Error && error.message.includes("rejected GROQ_API_KEY")) {
-        throw error;
-      }
+    if (!reply) {
+      return null;
     }
-  }
 
-  if (lastError) {
-    console.error("[DANTE CORE LLM] all models failed", lastError);
+    return { reply, model, provider: "openai" };
+  } catch (error) {
+    console.error("[DANTE CORE LLM] request failed", toProviderError(error, model).message);
+    return null;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return null;
 }
 
 /* =========================================================
    TOOL-CALLING (Agentic Performance Interface, Part 10)
 
-   Extends this SAME Groq client with function-calling support for
-   lib/dante-core/tools/orchestrate.ts, rather than teaching a second
-   module how to talk to Groq. Provider-specific parsing (tool_calls
-   shape, JSON-encoded arguments) stays contained here — callers only
-   ever see the plain GroqAgentTurnResult union below.
+   Extends this SAME OpenAI client with function-calling support for
+   lib/dante-core/tools/orchestrate.ts. Provider-specific shapes
+   (tool_calls, JSON-encoded arguments) stay contained here — callers
+   only ever see the plain DanteAgentTurnResult union below.
 ========================================================= */
 
-export type GroqChatMessage = {
+export type DanteChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   tool_call_id?: string;
@@ -153,16 +174,16 @@ export type GroqChatMessage = {
   tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
 };
 
-export type GroqToolSpec = {
+export type DanteToolSpec = {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
 };
 
-export type GroqToolCall = { id: string; name: string; arguments: unknown };
+export type DanteToolCall = { id: string; name: string; arguments: unknown };
 
-export type GroqAgentTurnResult =
-  | { type: "tool_calls"; toolCalls: GroqToolCall[] }
+export type DanteAgentTurnResult =
+  | { type: "tool_calls"; toolCalls: DanteToolCall[] }
   | { type: "final"; reply: string };
 
 function parseToolCallArguments(raw: string): unknown {
@@ -176,99 +197,106 @@ function parseToolCallArguments(raw: string): unknown {
   }
 }
 
-async function callGroqAgentTurnOnModel(
-  model: string,
-  messages: GroqChatMessage[],
-  tools: GroqToolSpec[],
-): Promise<GroqAgentTurnResult | null> {
-  const apiKey = getGroqKey();
-
-  const requestBody: Record<string, unknown> = {
-    model,
-    messages,
-    temperature: 0.2,
-    top_p: 0.95,
-    max_completion_tokens: 1024,
-    tools: tools.map((tool) => ({
-      type: "function",
-      function: { name: tool.name, description: tool.description, parameters: tool.parameters },
-    })),
-    tool_choice: "auto",
-  };
-
+/**
+ * Throws OpenAiProviderError on failure (unlike callDanteLlm) — the
+ * agent tool loop has its own per-round error handling; a silent null
+ * here would be indistinguishable from "the model chose not to reply".
+ */
+export async function callDanteAgentTurn(
+  messages: DanteChatMessage[],
+  tools: DanteToolSpec[],
+): Promise<DanteAgentTurnResult> {
+  const model = getOpenAiModel();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
 
-  let response: Response;
-
   try {
-    response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
+    const client = getOpenAiClient();
+    const response = await client.chat.completions.create(
+      {
+        model,
+        messages: messages as ChatCompletionMessageParam[],
+        max_completion_tokens: 1024,
+        ...chatCompletionTuning(model, 0.2),
+        tools: tools.map(
+          (tool): ChatCompletionTool => ({
+            type: "function",
+            function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+          }),
+        ),
+        tool_choice: "auto",
+      },
+      { signal: controller.signal },
+    );
+
+    const message = response.choices[0]?.message;
+    const toolCalls = message?.tool_calls?.filter((call) => call.type === "function") ?? [];
+
+    if (toolCalls.length > 0) {
+      return {
+        type: "tool_calls",
+        toolCalls: toolCalls.map((call) => ({
+          id: call.id,
+          name: call.function.name,
+          arguments: parseToolCallArguments(call.function.arguments),
+        })),
+      };
+    }
+
+    const reply = message?.content?.trim();
+
+    if (!reply) {
+      throw new OpenAiProviderError(`${model} returned neither content nor a tool call.`);
+    }
+
+    return { type: "final", reply };
+  } catch (error) {
+    throw error instanceof OpenAiProviderError ? error : toProviderError(error, model);
   } finally {
     clearTimeout(timeout);
   }
-
-  const data = (await response.json()) as {
-    choices?: Array<{
-      message?: {
-        content?: string | null;
-        tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
-      };
-    }>;
-    error?: { message?: string };
-  };
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Groq rejected GROQ_API_KEY.");
-    }
-
-    throw new Error(`${model}: ${data.error?.message ?? `Groq returned HTTP ${response.status}.`}`);
-  }
-
-  const message = data.choices?.[0]?.message;
-
-  if (message?.tool_calls && message.tool_calls.length > 0) {
-    return {
-      type: "tool_calls",
-      toolCalls: message.tool_calls.map((call) => ({
-        id: call.id,
-        name: call.function.name,
-        arguments: parseToolCallArguments(call.function.arguments),
-      })),
-    };
-  }
-
-  const reply = message?.content?.trim();
-
-  return reply ? { type: "final", reply } : null;
 }
 
-/** Same model-fallback behavior as callGroqWithFallback, extended with tool-calling. */
-export async function callGroqAgentTurn(messages: GroqChatMessage[], tools: GroqToolSpec[]): Promise<GroqAgentTurnResult> {
-  const models = getGroqModels();
-  let lastError: unknown = null;
+/* =========================================================
+   STREAMING — used by app/api/chatbot/route.ts's main Dante reply
+========================================================= */
 
-  for (const model of models) {
-    try {
-      const result = await callGroqAgentTurnOnModel(model, messages, tools);
-      if (result) {
-        return result;
-      }
+/**
+ * Streams a single completion for the given prompt, yielding plain
+ * text deltas as they arrive. Throws OpenAiProviderError (never a raw
+ * SDK error) on any failure, including a missing key, so the route
+ * can categorize the failure for observability.
+ */
+export async function* streamDanteLlmReply(
+  prompt: string,
+  signal: AbortSignal,
+): AsyncGenerator<string, void, unknown> {
+  const model = getOpenAiModel();
+  const client = getOpenAiClient();
 
-      lastError = new Error(`${model} returned neither content nor a tool call.`);
-    } catch (error) {
-      lastError = error;
+  let stream: Awaited<ReturnType<typeof client.chat.completions.create>>;
 
-      if (error instanceof Error && error.message.includes("rejected GROQ_API_KEY")) {
-        throw error;
-      }
-    }
+  try {
+    stream = await client.chat.completions.create(
+      {
+        model,
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 4096,
+        ...chatCompletionTuning(model, 0.4),
+        stream: true,
+      },
+      { signal },
+    );
+  } catch (error) {
+    throw toProviderError(error, model);
   }
 
-  throw new Error(lastError instanceof Error ? lastError.message : "All Dante models failed to produce a response.");
+  try {
+    for await (const chunk of stream as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) yield delta;
+    }
+  } catch (error) {
+    throw toProviderError(error, model);
+  }
 }

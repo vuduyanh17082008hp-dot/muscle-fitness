@@ -31,6 +31,7 @@ import {
   resolveAbortedContent,
   resolveStreamErrorContent,
   type ChatStreamEvent,
+  type ChatStreamSource,
 } from "@/lib/dante-core/chat-stream-protocol";
 
 /* =========================================================
@@ -49,6 +50,8 @@ type ChatMessage = {
   content: string;
   /** "Why This?" evidence, when this reply carried a real, deterministic recommendation. Never fabricated by the LLM. */
   insight?: DanteInsight | null;
+  /** Citation provenance for this reply — only ever the server's own retrieved/evidence sources, never invented client-side. Empty/missing renders nothing (never a crash). */
+  sources?: ChatStreamSource[] | null;
   /** Set only when Dante proposed a write tool call — nothing is saved until the user explicitly confirms (see PendingConfirmationPanel below). Only ever populated from a server `done` event, never while streaming. */
   pendingConfirmation?: PendingConfirmation | null;
   /** Once the user acts on pendingConfirmation, frozen here so the buttons don't re-render as active after a page state update. */
@@ -214,6 +217,56 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
           </details>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   SOURCES — citation provenance for evidence-grounded replies
+   (retrieved Knowledge Brain chunks + live external evidence, see
+   getSources() in app/api/chatbot/route.ts). Plain text/links only —
+   these are server-computed titles/URLs, never raw retrieved content
+   rendered as markup, so no sanitization is needed here the way
+   message.content needs rehypeSanitize. Renders nothing when there
+   are no sources rather than an empty "Sources" section.
+========================================================= */
+
+function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
+  if (sources.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 border-t border-white/8 pt-4">
+      <details className="group">
+        <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-white/10 px-4 text-xs font-black uppercase tracking-[0.06em] text-zinc-400 transition hover:bg-white/[0.06]">
+          Sources ({sources.length})
+        </summary>
+
+        <ul className="mt-3 space-y-2 rounded-2xl border border-white/8 bg-black/20 p-4">
+          {sources.map((source, index) => (
+            <li key={`${source.url}-${index}`} className="text-sm leading-6">
+              {source.url ? (
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-400 underline decoration-amber-400/30 underline-offset-2 hover:text-amber-300"
+                >
+                  {source.title || source.url}
+                </a>
+              ) : (
+                <span className="text-zinc-300">{source.title}</span>
+              )}
+              {source.type ? (
+                <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-600">
+                  {source.type}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }
@@ -560,6 +613,7 @@ export default function DanteChat({
           updateStreamingMessage(assistantId, (message) => ({
             ...message,
             insight: finalEvent.insight,
+            sources: finalEvent.sources,
             // A pending confirmation is only ever attached here, from
             // the server's own completed `done` event — never
             // rendered speculatively while text is still streaming.
@@ -1321,6 +1375,10 @@ export default function DanteChat({
 
                         {message.insight ? (
                           <DanteInsightPanel insight={message.insight} />
+                        ) : null}
+
+                        {message.sources && message.sources.length > 0 ? (
+                          <DanteSourcesPanel sources={message.sources} />
                         ) : null}
 
                         {message.pendingConfirmation ? (

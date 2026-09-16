@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import {
-  groq,
+  getGroqClient,
   GROQ_MODEL,
 } from "@/lib/ai/client";
 
@@ -80,7 +80,7 @@ export async function generateCampaign(
   model: string;
 }> {
   const completion =
-    await groq.chat.completions.create({
+    await getGroqClient().chat.completions.create({
       model: GROQ_MODEL,
 
       temperature: 0.5,

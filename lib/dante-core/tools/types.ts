@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ZodType, ZodTypeDef } from "zod";
 
 import type { DanteTemporalContext } from "@/lib/dante-core/temporal-context";
+import type { DanteLanguageDecision } from "@/lib/dante-language";
 
 /** Loosens ZodType's Def/Input generics — a schema with `.default()`/`.transform()` fields legitimately has a narrower raw-input type than its parsed output type, and only the output (TInput here, i.e. what `execute` receives) matters to a DanteTool. */
 type ToolInputSchema<TInput> = ZodType<TInput, ZodTypeDef, unknown>;
@@ -43,6 +44,8 @@ export type ToolContext = {
   timezone?: string | null;
   /** The same deterministic time context injected into Dante's prompt (see lib/dante-core/temporal-context.ts) — computed once per turn from `now` + `timezone` above. */
   temporalContext?: DanteTemporalContext | null;
+  /** The same language decision injected into Dante's main prompt (see lib/dante-language.ts) — computed once per turn from the client's current message, never re-decided per tool call. */
+  languageDecision?: DanteLanguageDecision;
   /**
    * Request-local memoization for shared loaders (see
    * lib/dante-core/tools/request-cache.ts::cached) — one Map per

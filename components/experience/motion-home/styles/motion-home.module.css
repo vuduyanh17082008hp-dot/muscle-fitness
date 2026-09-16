@@ -1,0 +1,186 @@
+/* JetBrains Mono for chapter indices / data-readout labels only — see
+   app/experience/layout.tsx for where --font-jetbrains-mono is loaded. */
+.monoLabel {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+/* pulseDot keyframe (spec effect family #3) — nav/eyebrow status dots. */
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.pulseDot {
+  animation: pulseDot 2.4s ease-in-out infinite;
+}
+
+/* Ecosystem connector "signal travels through path" (spec #28). Global
+   keyframe name (CSS module scoping only renames classes, not
+   @keyframes) — referenced directly via style.animation in Ecosystem.tsx. */
+@keyframes ecosystem-signal {
+  to { stroke-dashoffset: -20; }
+}
+
+/* Global 80px technical grid, extremely low opacity (spec #17). */
+.globalGrid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.5) 1px, transparent 1px);
+  background-size: 80px 80px;
+}
+
+/* Global film grain via tiled SVG turbulence — no raster asset (spec #16). */
+.globalGrain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 120px 120px;
+}
+
+/* Page transition mask overlay (spec effect #7). */
+.transitionOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mf-pub-bg, #050505);
+}
+.transitionLabel {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mf-brand, #d8ff20);
+}
+
+/* Custom cursor (spec effect #8a) — fixed layer above all content. */
+.cursorRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  pointer-events: none;
+}
+.cursorRing {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(200, 245, 39, 0.4);
+  transition: width 0.2s ease, height 0.2s ease, border-color 0.2s ease;
+  will-change: transform;
+}
+.cursorDot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--mf-brand, #d8ff20);
+  will-change: transform;
+}
+.cursorTrailDot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  border-radius: 9999px;
+  background: var(--mf-brand, #d8ff20);
+  will-change: transform;
+}
+
+/* Hero CTA radial pointer highlight (spec #26) — driven by --mx/--my. */
+.radialCta {
+  position: relative;
+  overflow: hidden;
+}
+.radialCta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(120px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.25), transparent 70%);
+  pointer-events: none;
+}
+.radialCta:hover::after {
+  opacity: 1;
+}
+
+/* ============================================================
+   HERO INTELLIGENCE ORB — Hero-only, smaller sibling of the main
+   Ecosystem core. Isolated class names (heroOrb*) so nothing here can
+   collide with the ecosystem's own styling (which doesn't use this
+   module at all — but isolated naming keeps intent unambiguous).
+   ============================================================ */
+
+@keyframes heroOrbFloat {
+  0%, 100% { transform: translateY(-3px); }
+  50% { transform: translateY(3px); }
+}
+.heroOrbFloat {
+  animation: heroOrbFloat 7s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes heroOrbBreatheHalo {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.07); opacity: 0.6; }
+}
+.heroOrbHalo {
+  animation: heroOrbBreatheHalo 6.5s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes heroOrbBreatheNucleus {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.06); filter: brightness(1.18); }
+}
+.heroOrbNucleus {
+  animation: heroOrbBreatheNucleus 5.6s ease-in-out infinite;
+  will-change: transform, filter;
+}
+
+@keyframes heroOrbSpinCw { to { transform: rotateZ(360deg); } }
+@keyframes heroOrbSpinCcw { to { transform: rotateZ(-360deg); } }
+
+.heroOrbGyro1 { animation: heroOrbSpinCw 26s linear infinite; }
+.heroOrbGyro2 { animation: heroOrbSpinCcw 36s linear infinite; }
+.heroOrbGyro3 { animation: heroOrbSpinCw 46s linear infinite; }
+
+.heroOrbRingA { animation: heroOrbSpinCw 60s linear infinite; }
+.heroOrbRingB { animation: heroOrbSpinCw 44s linear infinite; }
+.heroOrbRingC { animation: heroOrbSpinCcw 24s linear infinite; }
+
+@keyframes heroOrbPulse {
+  0% { transform: scale(0.35); opacity: 0.3; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+.heroOrbPulse {
+  animation: heroOrbPulse 3.8s ease-out infinite;
+  will-change: transform, opacity;
+}
+.heroOrbPulseTwo {
+  animation-delay: 1.9s;
+}
+
+.debugPanel {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  z-index: 210;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(5, 5, 6, 0.85);
+  padding: 8px 10px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: rgba(200, 245, 39, 0.9);
+}

@@ -8,7 +8,7 @@ import {
 } from "@/lib/churn-risk";
 
 import {
-  groq,
+  getGroqClient,
   GROQ_MODEL,
 } from "@/lib/ai/client";
 
@@ -154,7 +154,7 @@ export async function analyseMember(
 
   try {
     const completion =
-      await groq.chat.completions.create({
+      await getGroqClient().chat.completions.create({
         model: GROQ_MODEL,
 
         temperature: 0.2,
