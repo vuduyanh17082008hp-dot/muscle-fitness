@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  GROQ_MAX_INPUT_TOKENS,
   GROQ_TPM_SOFT_CEILING,
   estimateTokenCount,
+  fitAssembledPromptToBudget,
+  fitTextToTokenBudget,
   groqMaxCompletionTokens,
 } from "@/lib/dante-core/groq-budget";
 import { isMissingRelationError } from "@/lib/dante-core/memory-hierarchy/schema-availability";
@@ -29,6 +32,42 @@ describe("groqMaxCompletionTokens", () => {
     });
 
     expect(completion).toBe(2048);
+  });
+
+  it("never lets an oversized input reserve more than the soft ceiling", () => {
+    // Simulates the live DANTE_INSTRUCTIONS footprint (~11k tokens)
+    // BEFORE section fitting — completion clamp alone must still be
+    // non-zero and cannot invent room above the ceiling.
+    const prompt = "y".repeat(44_000);
+    const completion = groqMaxCompletionTokens({
+      model: "openai/gpt-oss-120b",
+      inputText: prompt,
+    });
+
+    expect(completion).toBe(256);
+    expect(estimateTokenCount(prompt) + completion).toBeGreaterThan(GROQ_TPM_SOFT_CEILING);
+  });
+});
+
+describe("fitTextToTokenBudget / fitAssembledPromptToBudget", () => {
+  it("condenses long instruction text under the token budget", () => {
+    const huge = `HEAD_PRIORITY_RULES\n${"middle ".repeat(20_000)}\nTAIL_CITATION_RULES`;
+    const fitted = fitTextToTokenBudget(huge, 2200);
+
+    expect(estimateTokenCount(fitted)).toBeLessThanOrEqual(2200);
+    expect(fitted.startsWith("HEAD_PRIORITY_RULES")).toBe(true);
+    expect(fitted.includes("TAIL_CITATION_RULES")).toBe(true);
+    expect(fitted).toContain("condensed for model context budget");
+  });
+
+  it("keeps the CLIENT QUESTION footer when trimming an assembled prompt", () => {
+    const head = `SYSTEM\n${"profile ".repeat(30_000)}`;
+    const prompt = `${head}\n============================================================\nCLIENT QUESTION\n============================================================\n\nWhat should I train today?\n`;
+    const fitted = fitAssembledPromptToBudget(prompt, GROQ_MAX_INPUT_TOKENS);
+
+    expect(estimateTokenCount(fitted)).toBeLessThanOrEqual(GROQ_MAX_INPUT_TOKENS);
+    expect(fitted).toContain("CLIENT QUESTION");
+    expect(fitted).toContain("What should I train today?");
   });
 });
 

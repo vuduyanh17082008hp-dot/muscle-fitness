@@ -31,6 +31,7 @@ import {
   resolveAbortedContent,
   resolveStreamErrorContent,
   type ChatStreamEvent,
+  type ChatStreamSource,
 } from "@/lib/dante-core/chat-stream-protocol";
 
 /* =========================================================
@@ -49,6 +50,8 @@ type ChatMessage = {
   content: string;
   /** "Why This?" evidence, when this reply carried a real, deterministic recommendation. Never fabricated by the LLM. */
   insight?: DanteInsight | null;
+  /** Structured citation list from the server `done` event — only URLs that were actually retrieved. */
+  sources?: ChatStreamSource[];
   /** Set only when Dante proposed a write tool call — nothing is saved until the user explicitly confirms (see PendingConfirmationPanel below). Only ever populated from a server `done` event, never while streaming. */
   pendingConfirmation?: PendingConfirmation | null;
   /** Once the user acts on pendingConfirmation, frozen here so the buttons don't re-render as active after a page state update. */
@@ -214,6 +217,46 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
           </details>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Structured Sources from the server `done` event only — never parsed
+ * out of markdown the model invented. Empty/unsafe URLs are filtered
+ * server-side; this panel still guards against non-http(s) hrefs.
+ */
+function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
+  const safeSources = sources.filter(
+    (source) =>
+      source.title.trim().length > 0 &&
+      /^https?:\/\//i.test(source.url.trim()),
+  );
+
+  if (safeSources.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 border-t border-white/8 pt-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+        Sources
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {safeSources.map((source, index) => (
+          <li key={`${source.url}-${index}`} className="text-xs leading-5 text-zinc-400">
+            <span className="text-zinc-500">{source.type}: </span>
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-amber-300/90 underline-offset-2 hover:underline"
+            >
+              {source.title}
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -560,6 +603,7 @@ export default function DanteChat({
           updateStreamingMessage(assistantId, (message) => ({
             ...message,
             insight: finalEvent.insight,
+            sources: Array.isArray(finalEvent.sources) ? finalEvent.sources : [],
             // A pending confirmation is only ever attached here, from
             // the server's own completed `done` event — never
             // rendered speculatively while text is still streaming.
@@ -1307,6 +1351,10 @@ export default function DanteChat({
 
                         {message.insight ? (
                           <DanteInsightPanel insight={message.insight} />
+                        ) : null}
+
+                        {message.sources && message.sources.length > 0 ? (
+                          <DanteSourcesPanel sources={message.sources} />
                         ) : null}
 
                         {message.pendingConfirmation ? (

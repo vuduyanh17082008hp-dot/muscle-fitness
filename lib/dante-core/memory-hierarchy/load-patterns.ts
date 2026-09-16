@@ -164,6 +164,28 @@ export async function forgetLearnedPattern(
   userId: string,
   patternId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Select first so a missing/foreign pattern is an explicit miss —
+  // never a silent `{ ok: true }` after deleting zero rows.
+  const { data: owned, error: selectError } = await supabase
+    .from("dante_learned_patterns")
+    .select("id")
+    .eq("id", patternId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (selectError) {
+    if (isMissingRelationError(selectError)) {
+      noteMissingLearnedPatternsTable("forget");
+      return { ok: false, error: "Learned-pattern memory is not enabled in this environment." };
+    }
+    console.error("[DANTE MEMORY HIERARCHY] Unable to verify pattern ownership:", selectError.message);
+    return { ok: false, error: "Unable to forget this pattern. Please try again." };
+  }
+
+  if (!owned) {
+    return { ok: false, error: "Pattern not found." };
+  }
+
   const { error } = await supabase
     .from("dante_learned_patterns")
     .delete()
