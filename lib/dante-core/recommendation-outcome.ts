@@ -24,6 +24,7 @@ export type OutcomeClass =
   | "PARTIAL_SUCCESS"
   | "NEUTRAL"
   | "FAILURE"
+  | "UNCERTAIN"
   | "UNKNOWN";
 
 export type RecommendationStatus =
@@ -104,10 +105,20 @@ export function isWithinHorizon(
   return observedAt.getTime() <= horizonDueAt(createdAt, horizon).getTime();
 }
 
+import {
+  evaluateCausalOutcome,
+  type CausalEvaluation,
+  type ConfounderSignals,
+  type OutcomeDimensions,
+} from "@/lib/dante-core/epistemic-integrity";
+
 /**
  * Map fine-grained observed movement onto the Phase 2 outcome class.
  * PARTIAL_SUCCESS covers "maintained when improve was expected" —
  * not a failure, not a full hit.
+ *
+ * When multi-dimensional / confounder context is supplied, causal
+ * humility can downgrade SUCCESS → UNCERTAIN / PARTIAL_SUCCESS.
  */
 export function mapObservedToOutcomeClass(
   expected: ExpectedOutcome,
@@ -125,6 +136,58 @@ export function mapObservedToOutcomeClass(
   if (observed === "maintained") return "PARTIAL_SUCCESS";
   if (observed === "worsened") return "FAILURE";
   return "NEUTRAL";
+}
+
+export function classifyOutcomeWithCausalHumility(input: {
+  expected: ExpectedOutcome;
+  observed: ObservedOutcome;
+  dimensions?: OutcomeDimensions;
+  confounders?: ConfounderSignals;
+  interventionIsVolumeReduction?: boolean;
+  userDemandsSuccess?: boolean;
+  userDemandsAutoPolicy?: boolean;
+}): { outcomeClass: OutcomeClass; causal: CausalEvaluation | null } {
+  const base = mapObservedToOutcomeClass(input.expected, input.observed);
+
+  if (!input.dimensions && !input.confounders) {
+    return { outcomeClass: base, causal: null };
+  }
+
+  const dimensions: OutcomeDimensions = input.dimensions ?? {
+    recoveryDelta: null,
+    performanceDeltaPercent: null,
+    adherenceDelta: null,
+    painIncreased: null,
+  };
+
+  const confounders: ConfounderSignals = input.confounders ?? {
+    sleepChangedHours: null,
+    calorieChangeKcal: null,
+    stressDecreased: null,
+    volumeChangePercent: null,
+    intensityChanged: null,
+    otherMeaningfulChanges: [],
+  };
+
+  const causal = evaluateCausalOutcome({
+    dimensions,
+    confounders,
+    interventionIsVolumeReduction: input.interventionIsVolumeReduction,
+    userDemandsSuccess: input.userDemandsSuccess,
+    userDemandsAutoPolicy: input.userDemandsAutoPolicy,
+  });
+
+  // Prefer the more conservative of base vs causal when causal has enough signal.
+  let outcomeClass: OutcomeClass = base;
+  if (causal.outcomeClass === "UNCERTAIN" || causal.outcomeClass === "PARTIAL_SUCCESS") {
+    outcomeClass = causal.outcomeClass;
+  } else if (causal.outcomeClass === "FAILURE" && base === "SUCCESS") {
+    outcomeClass = "UNCERTAIN";
+  } else if (causal.confounderCount > 0 && base === "SUCCESS") {
+    outcomeClass = "UNCERTAIN";
+  }
+
+  return { outcomeClass, causal };
 }
 
 export function evaluateRecommendationOutcome(input: {
@@ -194,6 +257,7 @@ export function outcomeClassToObserved(outcomeClass: OutcomeClass): ObservedOutc
       return "improved";
     case "PARTIAL_SUCCESS":
     case "NEUTRAL":
+    case "UNCERTAIN":
       return "maintained";
     case "FAILURE":
       return "worsened";
@@ -203,6 +267,6 @@ export function outcomeClassToObserved(outcomeClass: OutcomeClass): ObservedOutc
 }
 
 export function outcomeClassIsPositive(outcomeClass: OutcomeClass): boolean | null {
-  if (outcomeClass === "UNKNOWN") return null;
+  if (outcomeClass === "UNKNOWN" || outcomeClass === "UNCERTAIN") return null;
   return outcomeClass === "SUCCESS" || outcomeClass === "PARTIAL_SUCCESS" || outcomeClass === "NEUTRAL";
 }

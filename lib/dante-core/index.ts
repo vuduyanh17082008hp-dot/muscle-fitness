@@ -50,6 +50,7 @@ export {
   createRecommendationRecord,
   evaluateRecommendationOutcome,
   mapObservedToOutcomeClass,
+  classifyOutcomeWithCausalHumility,
   outcomeClassToObserved,
 } from "@/lib/dante-core/recommendation-outcome";
 export {
@@ -67,6 +68,23 @@ export {
   computePilotReadiness,
   summarizeTopStrategies,
 } from "@/lib/dante-core/pilot-readiness";
+export {
+  checkMemoryClaimProvenance,
+  evaluateCausalOutcome,
+  canPromoteAutomaticPolicy,
+  filterCitationsForClaim,
+  filterCitationsByTopicRelevance,
+  persistenceClaimAllowed,
+  assertRawEvidenceImmutable,
+  extractOutcomeNarrativeSignals,
+  shouldCountAsPositiveLearningEvidence,
+  toVerifiedMemorySnapshot,
+  authorizeMemoryWrite,
+  applyForgetConfoundersPressure,
+  detectsUnverifiedPriorPerformanceClaim,
+  enforceEpistemicReplyBoundaries,
+  buildHardEpistemicFinalConstraints,
+} from "@/lib/dante-core/epistemic-integrity";
 
 export type {
   ReadinessEngineInput,

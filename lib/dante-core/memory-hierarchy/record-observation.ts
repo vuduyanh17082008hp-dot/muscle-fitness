@@ -16,6 +16,12 @@ import type {
 } from "@/lib/dante-core/memory-hierarchy/types";
 import { assertLearningScope } from "@/lib/dante-core/learning-guardrails";
 import { outcomeIsPositive } from "@/lib/dante-core/response-learning";
+import {
+  evaluateCausalOutcome,
+  shouldCountAsPositiveLearningEvidence,
+  type ConfounderSignals,
+  type OutcomeDimensions,
+} from "@/lib/dante-core/epistemic-integrity";
 
 let loggedMissingObservationsTable = false;
 
@@ -32,6 +38,9 @@ let loggedMissingObservationsTable = false;
  * of "unknown" still records the L1 observation for auditability, but
  * is never folded into a pattern — half-known evidence must not move
  * confidence in either direction.
+ *
+ * Confounded / mixed multi-metric outcomes also record L1 intact but
+ * do not inflate positive pattern confidence.
  */
 
 export type RecordObservationInput = {
@@ -44,6 +53,12 @@ export type RecordObservationInput = {
   goalAligned: boolean | null;
   provenance: string;
   now?: Date;
+  /** Optional multi-metric / confounder context for causal humility. */
+  causalContext?: {
+    dimensions: OutcomeDimensions;
+    confounders: ConfounderSignals;
+    interventionIsVolumeReduction?: boolean;
+  };
 };
 
 export async function recordObservationAndLearn(
@@ -106,8 +121,33 @@ export async function recordObservationAndLearn(
     observedAt: observationRow.observed_at as string,
   };
 
-  const isPositive = outcomeIsPositive(input.outcome);
-  const eligibleForConsolidation = input.contextKey !== "insufficient_data" && isPositive !== null;
+  const observedPositive = outcomeIsPositive(input.outcome);
+  let eligibleForConsolidation =
+    input.contextKey !== "insufficient_data" && observedPositive !== null;
+
+  let positiveForLearning = observedPositive === true;
+
+  if (input.causalContext && eligibleForConsolidation) {
+    const causal = evaluateCausalOutcome({
+      dimensions: input.causalContext.dimensions,
+      confounders: input.causalContext.confounders,
+      interventionIsVolumeReduction: input.causalContext.interventionIsVolumeReduction,
+    });
+
+    if (observedPositive === true) {
+      positiveForLearning = shouldCountAsPositiveLearningEvidence({
+        observedPositive: true,
+        causal,
+      });
+      // Confounded "improvements" keep L1 but skip pattern inflation.
+      if (!positiveForLearning) {
+        eligibleForConsolidation = false;
+      }
+    } else if (observedPositive === false && causal.confounderCount > 0) {
+      // Still allow negative evidence — contradictory outcomes must reduce confidence.
+      positiveForLearning = false;
+    }
+  }
 
   if (!eligibleForConsolidation) {
     return { observation, patternUpdated: false };
@@ -119,7 +159,7 @@ export async function recordObservationAndLearn(
     userId: input.userId,
     contextKey: input.contextKey,
     interventionType: input.interventionType,
-    positive: isPositive,
+    positive: positiveForLearning,
     now: input.now,
   });
 

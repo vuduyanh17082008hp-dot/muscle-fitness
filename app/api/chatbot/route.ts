@@ -10,7 +10,7 @@ import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import { buildBudgetPlan } from "@/lib/nutrition/budget";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { buildDanteContext, type UserPreferencesRow } from "@/lib/athlete-state/build-dante-context";
-import { loadDanteMemory } from "@/lib/dante-core/memory";
+import { loadDanteMemory, type CoachingPreference, type DanteMemory } from "@/lib/dante-core/memory";
 import {
   CANONICAL_MUSCLES,
   MUSCLE_DISPLAY_NAME,
@@ -25,7 +25,6 @@ import {
   buildCommunicationPromptHints,
   resolveCommunicationStyle,
 } from "@/lib/dante-core/communication-adaptation";
-import type { CoachingPreference } from "@/lib/dante-core/memory";
 import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-session";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
@@ -52,6 +51,22 @@ import {
 import { streamDanteReply } from "@/lib/dante-core/openai/client";
 import { isOpenAiConfigured } from "@/lib/dante-core/openai/config";
 import { buildDanteTemporalContext, formatDanteTemporalContext, type DanteTemporalContext } from "@/lib/dante-core/temporal-context";
+import {
+  applyForgetConfoundersPressure,
+  authorizeMemoryWrite,
+  buildCausalHumilityPromptBlock,
+  buildEpistemicIntegrityPromptBlock,
+  buildHardEpistemicFinalConstraints,
+  checkMemoryClaimProvenance,
+  evaluateCausalOutcome,
+  enforceEpistemicReplyBoundaries,
+  extractOutcomeNarrativeSignals,
+  filterCitationsForClaim,
+  toVerifiedMemorySnapshot,
+  type MemoryClaimCheck,
+  type MemoryWriteAuthorization,
+  type CausalEvaluation,
+} from "@/lib/dante-core/epistemic-integrity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -2343,6 +2358,16 @@ async function getEvidence(
     intent.recovery ||
     intent.health;
 
+  // Food DBs only for explicit food/meal asks — not when "kcal"/"ăn thêm"
+  // appear as confounders inside a training-outcome / strategy narrative.
+  const explicitFoodAsk =
+    /\b(food|meal|recipe|usda|brand|barcode|snack|breakfast|lunch|dinner|protein powder|food log|what should i eat)\b/i.test(
+      message,
+    ) ||
+    /\b(món ăn|thực phẩm|ăn gì|dinh dưỡng|bữa sáng|bữa trưa|bữa tối)\b/i.test(message);
+
+  const needFoodDatabases = intent.nutrition && explicitFoodAsk;
+
   const [
     pubmed,
     europePmc,
@@ -2377,7 +2402,7 @@ async function getEvidence(
             [],
           ),
 
-      intent.nutrition
+      needFoodDatabases
         ? searchUsda(
             message,
           )
@@ -2385,7 +2410,7 @@ async function getEvidence(
             [],
           ),
 
-      intent.nutrition
+      needFoodDatabases
         ? searchOpenFoodFacts(
             message,
           )
@@ -3050,12 +3075,89 @@ function detectCommunicationSignals(message: string, preference: CoachingPrefere
   };
 }
 
+function extractDanteMemory(userContext: UserContext): DanteMemory | null {
+  const twin = userContext.digitalTwin;
+  if (!twin || typeof twin !== "object") return null;
+  const memory = (twin as { memory?: unknown }).memory;
+  if (!memory || typeof memory !== "object") return null;
+  const candidate = memory as Partial<DanteMemory>;
+  return {
+    preferredExercises: Array.isArray(candidate.preferredExercises) ? candidate.preferredExercises : [],
+    dislikedExercises: Array.isArray(candidate.dislikedExercises) ? candidate.dislikedExercises : [],
+    weakPointPriorities: Array.isArray(candidate.weakPointPriorities) ? candidate.weakPointPriorities : [],
+    coachingPreference: (candidate.coachingPreference as DanteMemory["coachingPreference"]) ?? null,
+    updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : null,
+  };
+}
+
+type TurnEpistemicContext = {
+  memoryCheck: MemoryClaimCheck;
+  writeAuthorization: MemoryWriteAuthorization;
+  causal: CausalEvaluation | null;
+  forgetConfounders: boolean;
+  highRiskEpistemic: boolean;
+};
+
+function buildTurnEpistemicContext(userMessage: string, userContext: UserContext): TurnEpistemicContext {
+  const verifiedMemory = toVerifiedMemorySnapshot(extractDanteMemory(userContext));
+  const memoryCheck = checkMemoryClaimProvenance({
+    message: userMessage,
+    verifiedMemory,
+  });
+
+  const narrative = extractOutcomeNarrativeSignals(userMessage);
+  let causal = narrative.isOutcomeNarrative
+    ? evaluateCausalOutcome({
+        dimensions: narrative.dimensions,
+        confounders: narrative.confounders,
+        interventionIsVolumeReduction: narrative.interventionIsVolumeReduction,
+        userDemandsSuccess: narrative.userDemandsSuccess,
+        userDemandsAutoPolicy: narrative.userDemandsAutoPolicy,
+      })
+    : null;
+
+  if (narrative.userAsksToForgetConfounders && causal) {
+    causal = applyForgetConfoundersPressure({
+      rawEvidence: {
+        sleepChangedHours: narrative.confounders.sleepChangedHours,
+        calorieChangeKcal: narrative.confounders.calorieChangeKcal,
+        stressDecreased: narrative.confounders.stressDecreased,
+        volumeChangePercent: narrative.confounders.volumeChangePercent,
+        recoveryDelta: narrative.dimensions.recoveryDelta,
+        performanceDeltaPercent: narrative.dimensions.performanceDeltaPercent,
+      },
+      causal,
+    }).causal;
+  }
+
+  const writeAuthorization = authorizeMemoryWrite({
+    message: userMessage,
+    causal,
+    persistenceSucceeded: false,
+  });
+
+  const highRiskEpistemic =
+    memoryCheck.unverifiedPriorPerformanceClaim ||
+    (memoryCheck.personalizedPhysiologicalClaim && !memoryCheck.hasMatchingVerifiedMemory) ||
+    narrative.userAsksToForgetConfounders ||
+    writeAuthorization.kind === "preference";
+
+  return {
+    memoryCheck,
+    writeAuthorization,
+    causal,
+    forgetConfounders: narrative.userAsksToForgetConfounders,
+    highRiskEpistemic,
+  };
+}
+
 function buildDantePrompt(
   userMessage: string,
   userContext: UserContext,
   evidence: EvidenceContext,
   retrievedKnowledge: RetrievedKnowledgeChunk[],
   temporalContext: DanteTemporalContext | null,
+  epistemic?: TurnEpistemicContext,
 ): string {
   // Budget allocation leaves room for question + final instruction under
   // Groq's ~8000 TPM reservation. The full DANTE_INSTRUCTIONS alone is
@@ -3098,12 +3200,37 @@ ${knowledgeJson}
 `
       : "";
 
+  const turn = epistemic ?? buildTurnEpistemicContext(userMessage, userContext);
+  const verifiedMemory = toVerifiedMemorySnapshot(extractDanteMemory(userContext));
+  const epistemicBlock = buildEpistemicIntegrityPromptBlock({
+    memoryCheck: turn.memoryCheck,
+    verifiedMemory,
+    writeAuthorization: turn.writeAuthorization,
+  });
+  const causalBlock = buildCausalHumilityPromptBlock({
+    causal: turn.causal,
+    forgetConfounders: turn.forgetConfounders,
+  });
+  const hardConstraints = buildHardEpistemicFinalConstraints({
+    memoryCheck: turn.memoryCheck,
+    writeAuthorization: turn.writeAuthorization,
+    forgetConfounders: turn.forgetConfounders,
+  });
+
   const question = fitTextToTokenBudget(userMessage, 400);
 
   const prompt = `
 ${instructions}
 
 ${formatDanteTemporalContext(temporalContext)}
+
+============================================================
+EPISTEMIC INTEGRITY
+============================================================
+
+${epistemicBlock}
+
+${causalBlock}
 
 ============================================================
 COMMUNICATION STYLE (lightweight — not a psych profile)
@@ -3150,6 +3277,15 @@ Return only the final user-facing answer.
 
 Do not invent citations. Prefer structured Sources from the system
 over inventing a markdown source list.
+
+Never claim personalized tolerance, remembered facts, profile updates,
+learned successful strategies, or automatic future policies unless the
+EPISTEMIC INTEGRITY / CAUSAL HUMILITY blocks above authorize them.
+
+Do not soft-accept unverified prior 1RM/success claims.
+Do not say "listen to your body" when sleep/recovery numbers are available.
+Do not say "I'll remember that X worked/was effective."
+${hardConstraints}
 `;
 
   return fitAssembledPromptToBudget(prompt, DANTE_MAX_INPUT_TOKENS);
@@ -3166,6 +3302,7 @@ function isSafeCitationUrl(url: string): boolean {
 function getSources(
   evidence: EvidenceContext,
   retrievedKnowledge: RetrievedKnowledgeChunk[] = [],
+  options?: { userMessage?: string; userContext?: UserContext },
 ): SourceItem[] {
   const sources: SourceItem[] = [];
   const seen = new Set<string>();
@@ -3218,7 +3355,23 @@ function getSources(
     });
   }
 
-  return sources.slice(0, 12);
+  const limited = sources.slice(0, 12);
+
+  if (!options?.userMessage) return limited;
+
+  const verifiedMemory = toVerifiedMemorySnapshot(
+    options.userContext ? extractDanteMemory(options.userContext) : null,
+  );
+  const memoryCheck = checkMemoryClaimProvenance({
+    message: options.userMessage,
+    verifiedMemory,
+  });
+
+  return filterCitationsForClaim({
+    message: options.userMessage,
+    sources: limited,
+    memoryCheck,
+  });
 }
 
 /* =========================================================
@@ -3509,6 +3662,8 @@ export async function POST(
        PROMPT
     ----------------------------------------------------- */
 
+    const epistemic = buildTurnEpistemicContext(userMessage, userContext);
+
     const prompt =
       buildDantePrompt(
         userMessage,
@@ -3516,6 +3671,7 @@ export async function POST(
         evidence,
         retrievedKnowledge,
         temporalContext,
+        epistemic,
       );
 
     /* -----------------------------------------------------
@@ -3528,6 +3684,7 @@ export async function POST(
       getSources(
         evidence,
         retrievedKnowledge,
+        { userMessage, userContext },
       );
 
     /* -----------------------------------------------------
@@ -3540,6 +3697,10 @@ export async function POST(
        sent once generation completes, in the final `done` event
        (mission Part 11/12: never a fake citation, never a Confirm/
        Cancel control before a real value exists).
+
+       High-risk epistemic turns buffer first, run
+       enforceEpistemicReplyBoundaries, then emit — so soft-accepted
+       unverified history / false persistence claims never reach the client.
     ----------------------------------------------------- */
 
     return createChatStreamResponse(async (emit) => {
@@ -3550,7 +3711,9 @@ export async function POST(
         for await (const event of streamDanteReply(prompt, request.signal)) {
           if (event.kind === "delta") {
             accumulated += event.text;
-            emit({ type: "delta", text: event.text });
+            if (!epistemic.highRiskEpistemic) {
+              emit({ type: "delta", text: event.text });
+            }
           } else {
             usedModel = event.model;
           }
@@ -3559,6 +3722,17 @@ export async function POST(
         if (!accumulated.trim()) {
           emit({ type: "error", error: "Dante returned an empty response.", partial: false });
           return;
+        }
+
+        if (epistemic.highRiskEpistemic) {
+          const enforced = enforceEpistemicReplyBoundaries({
+            reply: accumulated,
+            memoryCheck: epistemic.memoryCheck,
+            writeAuthorization: epistemic.writeAuthorization,
+            forgetConfounders: epistemic.forgetConfounders,
+          });
+          accumulated = enforced.reply;
+          emit({ type: "delta", text: accumulated });
         }
 
         emit({

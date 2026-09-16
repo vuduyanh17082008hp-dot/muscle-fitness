@@ -56,6 +56,7 @@ export function computePilotReadiness(events: PilotRecommendationEvent[]): Pilot
     PARTIAL_SUCCESS: 0,
     NEUTRAL: 0,
     FAILURE: 0,
+    UNCERTAIN: 0,
     UNKNOWN: 0,
   };
 
