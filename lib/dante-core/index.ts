@@ -20,7 +20,7 @@ export {
   explainRecommendation,
   attachKnowledgeSources,
 } from "@/lib/dante-core/explain";
-export { checkSafety } from "@/lib/dante-core/safety-layer";
+export { checkSafety, normalizeSafetyText } from "@/lib/dante-core/safety-layer";
 export {
   evaluateAdaptiveClosedLoop,
   processRecoveryOutcomeForLearning,
@@ -63,10 +63,18 @@ export {
   resolveCommunicationMode,
   resolveCommunicationStyle,
   buildCommunicationPromptHints,
+  detectTurnCommunicationSignals,
+  updateCommunicationProfile,
+  buildProfileFromRecentMessages,
+  createDefaultCommunicationProfile,
+  checkCommunicationPreferenceProvenance,
 } from "@/lib/dante-core/communication-adaptation";
 export {
   computePilotReadiness,
   summarizeTopStrategies,
+  toRecommendationTelemetry,
+  assertPilotClientIsolation,
+  assessTechnicalPilotCapability,
 } from "@/lib/dante-core/pilot-readiness";
 export {
   checkMemoryClaimProvenance,

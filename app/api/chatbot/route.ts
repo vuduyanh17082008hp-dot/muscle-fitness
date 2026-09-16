@@ -23,6 +23,9 @@ import { compareToTargets } from "@/lib/nutrition/food-log/totals";
 import { checkSafety } from "@/lib/dante-core/safety-layer";
 import {
   buildCommunicationPromptHints,
+  buildProfileFromRecentMessages,
+  checkCommunicationPreferenceProvenance,
+  detectTurnCommunicationSignals,
   resolveCommunicationStyle,
 } from "@/lib/dante-core/communication-adaptation";
 import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-session";
@@ -3062,16 +3065,46 @@ function extractCoachingPreference(userContext: UserContext): CoachingPreference
   return null;
 }
 
-function detectCommunicationSignals(message: string, preference: CoachingPreference | null) {
-  const lower = message.toLowerCase();
+function extractRecentUserMessages(body: unknown, currentMessage: string): string[] {
+  const recent: string[] = [];
+  if (isRecord(body) && Array.isArray(body.messages)) {
+    for (const item of body.messages) {
+      if (!isRecord(item)) continue;
+      if (item.role === "user" && typeof item.content === "string" && item.content.trim()) {
+        recent.push(item.content.trim());
+      }
+    }
+  }
+  if (currentMessage && (recent.length === 0 || recent[recent.length - 1] !== currentMessage)) {
+    recent.push(currentMessage);
+  }
+  // Cap history used for communication adaptation — not a raw transcript dump into the model.
+  return recent.slice(-8);
+}
+
+function detectCommunicationSignals(
+  message: string,
+  preference: CoachingPreference | null,
+  recentUserMessages: string[] = [message],
+) {
+  const turn = detectTurnCommunicationSignals(message);
+  const profile = buildProfileFromRecentMessages(recentUserMessages, preference);
+  const provenance = checkCommunicationPreferenceProvenance({
+    message,
+    coachingPreference: preference,
+    profile,
+  });
+
   return {
     coachingPreference: preference,
-    asksWhy: /\b(why|explain|how come|what does .+ mean)\b/i.test(lower),
-    asksChallenge: /\b(push me|challenge me|be harder|hold me accountable)\b/i.test(lower),
-    asksReflect: /\b(reflect|how do i feel|what am i noticing)\b/i.test(lower),
-    // Presence is reserved for safety-adjacent turns handled by checkSafety;
-    // never auto-selected from casual wording here.
-    needsPresence: false,
+    asksWhy: turn.asksWhy,
+    asksChallenge: turn.asksChallenge,
+    asksReflect: turn.asksReflect,
+    // Presence from emotional disclosure / "no advice" — safety still runs first separately.
+    needsPresence: turn.wantsPresence,
+    profile,
+    turn,
+    communicationProvenance: provenance,
   };
 }
 
@@ -3158,6 +3191,7 @@ function buildDantePrompt(
   retrievedKnowledge: RetrievedKnowledgeChunk[],
   temporalContext: DanteTemporalContext | null,
   epistemic?: TurnEpistemicContext,
+  recentUserMessages: string[] = [userMessage],
 ): string {
   // Budget allocation leaves room for question + final instruction under
   // Groq's ~8000 TPM reservation. The full DANTE_INSTRUCTIONS alone is
@@ -3166,10 +3200,23 @@ function buildDantePrompt(
   const instructions = fitTextToTokenBudget(DANTE_INSTRUCTIONS, 2200);
   const profileJson = fitJsonToTokenBudget(userContext, 1800);
   const evidenceJson = fitJsonToTokenBudget(evidence, 1100);
-  const communicationStyle = resolveCommunicationStyle(
-    detectCommunicationSignals(userMessage, extractCoachingPreference(userContext)),
+  const communicationSignals = detectCommunicationSignals(
+    userMessage,
+    extractCoachingPreference(userContext),
+    recentUserMessages,
   );
-  const communicationHints = buildCommunicationPromptHints(communicationStyle);
+  const communicationStyle = resolveCommunicationStyle(communicationSignals);
+  let communicationHints = buildCommunicationPromptHints(communicationStyle);
+  if (
+    communicationSignals.communicationProvenance &&
+    /bạn biết|ban biet|you know|you remember|as you know|tôi thích|toi thich|i (like|prefer)/i.test(
+      userMessage,
+    )
+  ) {
+    communicationHints += communicationSignals.communicationProvenance.mayClaimKnownPreference
+      ? " Stored communication preference exists — you may briefly acknowledge it."
+      : " Do not claim you already knew or remembered a communication preference; no verified stored preference supports that claim.";
+  }
   const knowledgeJson =
     retrievedKnowledge.length > 0
       ? fitJsonToTokenBudget(
@@ -3664,6 +3711,8 @@ export async function POST(
 
     const epistemic = buildTurnEpistemicContext(userMessage, userContext);
 
+    const recentUserMessages = extractRecentUserMessages(body, userMessage);
+
     const prompt =
       buildDantePrompt(
         userMessage,
@@ -3672,6 +3721,7 @@ export async function POST(
         retrievedKnowledge,
         temporalContext,
         epistemic,
+        recentUserMessages,
       );
 
     /* -----------------------------------------------------

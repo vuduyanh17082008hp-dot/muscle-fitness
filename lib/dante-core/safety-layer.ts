@@ -17,6 +17,11 @@
  * severity categories (cardiac, neurological, fainting) and more
  * conservative for the categories where false positives are more
  * likely (soreness/DOMS language overlapping with "injury" language).
+ *
+ * Multilingual note: English + Vietnamese concept phrases are matched
+ * on the original text and on a diacritic-stripped form so mixed-language
+ * input ("đau ngực when running") still fires. No architecture change —
+ * same RULES list, broader phrase coverage.
  */
 
 export type SafetyCategory =
@@ -45,6 +50,20 @@ type SafetyRule = {
 const TRAINING_VS_MEDICAL_FOOTER =
   "Dante can help with training and nutrition questions, but this isn't something to guess about here — please talk to a doctor or other qualified professional.";
 
+/**
+ * Strip Vietnamese (and other) combining marks so "đau ngực" and "dau nguc"
+ * share one concept match path. Does not invent medical meaning — only
+ * normalizes orthography before the same RULES patterns run.
+ */
+export function normalizeSafetyText(message: string): string {
+  return message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    // Vietnamese "đ" / "Đ" are not decomposed by NFD — map explicitly.
+    .replace(/đ/g, "d");
+}
+
 const RULES: SafetyRule[] = [
   {
     category: "chest_pain_cardiac",
@@ -59,6 +78,15 @@ const RULES: SafetyRule[] = [
       /\bshort(ness)? of breath\b/i,
       /\bheart (is )?racing\b/i,
       /\birregular heartbeat\b/i,
+      // Vietnamese / mixed — matched on original + diacritic-stripped text.
+      /đau ngực/i,
+      /dau nguc/i,
+      /đau ở ngực/i,
+      /dau o nguc/i,
+      /khó thở/i,
+      /kho tho/i,
+      /không thở được/i,
+      /khong tho duoc/i,
     ],
     response: `That combination of symptoms can be a medical emergency. If this is happening right now, stop exercising and seek emergency medical care immediately (call your local emergency number). ${TRAINING_VS_MEDICAL_FOOTER}`,
   },
@@ -70,6 +98,18 @@ const RULES: SafetyRule[] = [
       /\bblack(ed)? out\b/i,
       /\bsevere(ly)? dizzy\b/i,
       /\broom (is|was) spinning\b/i,
+      /ngất xỉu/i,
+      /ngat xiu/i,
+      /(?<![\p{L}])ngất(?![\p{L}])/iu,
+      /(?<![\p{L}])ngat(?![\p{L}])/iu,
+      /bị ngất/i,
+      /bi ngat/i,
+      /chóng mặt nghiêm trọng/i,
+      /chong mat nghiem trong/i,
+      /chóng mặt nặng/i,
+      /chong mat nang/i,
+      /chóng mặt dữ/i,
+      /chong mat du/i,
     ],
     response: `Fainting or blacking out during or after training is not something to self-diagnose. Stop training and get checked by a medical professional, especially if it happens more than once. ${TRAINING_VS_MEDICAL_FOOTER}`,
   },
@@ -82,6 +122,12 @@ const RULES: SafetyRule[] = [
       /\bloss of (feeling|sensation)\b/i,
       /\bsudden weakness\b/i,
       /\bslurred speech\b/i,
+      /tê bì/i,
+      /te bi/i,
+      /tê tay|tê chân/i,
+      /te tay|te chan/i,
+      /yếu đột ngột/i,
+      /yeu dot ngot/i,
     ],
     response: `Numbness, tingling, or sudden weakness — especially spreading down a limb — needs medical evaluation, not training advice. Please see a doctor promptly (or emergency care if it came on suddenly). ${TRAINING_VS_MEDICAL_FOOTER}`,
   },
@@ -94,6 +140,16 @@ const RULES: SafetyRule[] = [
       /\bfelt (a |it )?pop\b/i,
       /\bcan'?t (put weight on|walk on|move) (my |the )?(leg|arm|knee|shoulder|back)\b/i,
       /\bsomething (snapped|tore)\b/i,
+      /chấn thương cấp/i,
+      /chan thuong cap/i,
+      /chảy máu nghiêm trọng/i,
+      /chay mau nghiem trong/i,
+      /chảy máu nhiều/i,
+      /chay mau nhieu/i,
+      /chảy máu không cầm/i,
+      /chay mau khong cam/i,
+      /đau dữ dội/i,
+      /dau du doi/i,
     ],
     response: `That sounds like it could be an acute injury rather than normal training soreness. Please stop training on it and have it evaluated by a doctor or physiotherapist before continuing. ${TRAINING_VS_MEDICAL_FOOTER}`,
   },
@@ -103,6 +159,10 @@ const RULES: SafetyRule[] = [
       /\b(sharp|stabbing) pain\b/i,
       /\bjoint (is |feels )?unstable\b/i,
       /\bswelling (that|which)? (won'?t|does'?nt) go down\b/i,
+      /đau nhói/i,
+      /dau nhoi/i,
+      /khớp không ổn định/i,
+      /khop khong on dinh/i,
     ],
     response: `That description goes beyond normal training soreness and is worth having looked at by a doctor or physiotherapist rather than worked through with training adjustments alone. ${TRAINING_VS_MEDICAL_FOOTER}`,
   },
@@ -130,17 +190,23 @@ const RULES: SafetyRule[] = [
 ];
 
 export function checkSafety(message: string): SafetyCheckResult {
+  // Match against original + diacritic-stripped forms so Vietnamese accents
+  // and mixed EN/VI strings hit the same concept patterns.
+  const candidates = [message, normalizeSafetyText(message)];
+
   for (const rule of RULES) {
     for (const pattern of rule.patterns) {
-      const match = message.match(pattern);
+      for (const candidate of candidates) {
+        const match = candidate.match(pattern);
 
-      if (match) {
-        return {
-          triggered: true,
-          category: rule.category,
-          matchedPhrase: match[0],
-          responseOverride: rule.response,
-        };
+        if (match) {
+          return {
+            triggered: true,
+            category: rule.category,
+            matchedPhrase: match[0],
+            responseOverride: rule.response,
+          };
+        }
       }
     }
   }

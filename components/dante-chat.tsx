@@ -538,6 +538,17 @@ export default function DanteChat({
             JSON.stringify({
               message:
                 trimmed,
+              // Recent user turns only — powers Phase 2D gradual
+              // communication adaptation without dumping full transcripts.
+              messages: [
+                ...messages
+                  .filter((entry) => entry.role === "user" && entry.content.trim())
+                  .map((entry) => ({
+                    role: "user" as const,
+                    content: entry.content.trim(),
+                  })),
+                { role: "user" as const, content: trimmed },
+              ].slice(-8),
               ...contextPayload,
             }),
 
