@@ -76,7 +76,7 @@ export async function generateCampaign(
   input: CampaignGenerationInput
 ): Promise<{
   campaign: GeneratedCampaign;
-  provider: "groq";
+  provider: "openai";
   model: string;
 }> {
   const completion =
@@ -124,7 +124,7 @@ ${JSON.stringify(
 
   return {
     campaign,
-    provider: "groq",
+    provider: "openai",
     model: GROQ_MODEL,
   };
 }

@@ -212,10 +212,16 @@ export function MuscleMapClient({
             className:
               "cursor-pointer transition-colors hover:opacity-90 focus:outline-none focus-visible:stroke-mf-glass-brand",
             stroke: isSelected ? "var(--mf-glass-brand)" : "rgba(255,255,255,0.1)",
-            style: { strokeWidth: isSelected ? 2.5 : 1.5, transformOrigin: "center" as const },
+            // Animate opacity only. Framer `scale` on <ellipse> can
+            // decompose into rx/ry and emit SVG "Expected length, NaN".
+            style: {
+              strokeWidth: isSelected ? 2.5 : 1.5,
+              transformOrigin: "center" as const,
+              transform: isSelected ? "scale(1.03)" : "scale(1)",
+            },
             fill,
             initial: false as const,
-            animate: { opacity: opacityFor(region.muscle), scale: isSelected ? 1.03 : 1 },
+            animate: { opacity: opacityFor(region.muscle) },
             transition: { duration: reduceMotion ? 0 : 0.35, ease: "easeOut" as const },
           };
 
@@ -327,10 +333,10 @@ type RegionCommonProps = {
   onKeyDown: (event: React.KeyboardEvent) => void;
   className: string;
   stroke: string;
-  style: { strokeWidth: number; transformOrigin: string };
+  style: { strokeWidth: number; transformOrigin: string; transform: string };
   fill: string;
   initial: false;
-  animate: { opacity: number; scale: number };
+  animate: { opacity: number };
   transition: { duration: number; ease: "easeOut" };
 };
 

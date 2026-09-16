@@ -22,11 +22,51 @@ export {
 } from "@/lib/dante-core/explain";
 export { checkSafety } from "@/lib/dante-core/safety-layer";
 export {
+  evaluateAdaptiveClosedLoop,
+  processRecoveryOutcomeForLearning,
+  buildExpectedOutcome,
+  computePredictionError,
+} from "@/lib/dante-core/adaptive-closed-loop";
+export { assertLearningScope, IMMUTABLE_LEARNING_DOMAINS } from "@/lib/dante-core/learning-guardrails";
+export { callOpenAiWithFallback, streamDanteReply } from "@/lib/dante-core/openai/client";
+export {
   buildDailyIntelligence,
   recomputeDailyIntelligence,
   getOrBuildDailyIntelligence,
 } from "@/lib/dante-core/daily-intelligence";
 export { retrieveKnowledge, retrieveByCategory } from "@/lib/dante-core/knowledge/retrieve";
+
+// Phase 2 public surface (additive)
+export {
+  createWorkingMemory,
+  putSessionFact,
+  observationToShortTerm,
+  promoteToLongTerm,
+  decayLongTerm,
+  resolveCurrentOverStale,
+  assertSameClient,
+} from "@/lib/dante-core/memory-hierarchy/memory-foundation";
+export {
+  createRecommendationRecord,
+  evaluateRecommendationOutcome,
+  mapObservedToOutcomeClass,
+  outcomeClassToObserved,
+} from "@/lib/dante-core/recommendation-outcome";
+export {
+  scoreStrategy,
+  rankStrategies,
+  contextSimilarity,
+  summarizeStrategyHistory,
+} from "@/lib/dante-core/strategy-learner";
+export {
+  resolveCommunicationMode,
+  resolveCommunicationStyle,
+  buildCommunicationPromptHints,
+} from "@/lib/dante-core/communication-adaptation";
+export {
+  computePilotReadiness,
+  summarizeTopStrategies,
+} from "@/lib/dante-core/pilot-readiness";
 
 export type {
   ReadinessEngineInput,

@@ -21,6 +21,11 @@ import { LOCAL_EXERCISE_LIBRARY } from "@/lib/workouts/exercise-library";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { compareToTargets } from "@/lib/nutrition/food-log/totals";
 import { checkSafety } from "@/lib/dante-core/safety-layer";
+import {
+  buildCommunicationPromptHints,
+  resolveCommunicationStyle,
+} from "@/lib/dante-core/communication-adaptation";
+import type { CoachingPreference } from "@/lib/dante-core/memory";
 import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-session";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
@@ -39,12 +44,13 @@ import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { createChatStreamResponse, createSingleShotChatStream } from "@/lib/dante-core/chat-stream-protocol";
 import {
-  GROQ_MAX_INPUT_TOKENS,
+  DANTE_MAX_INPUT_TOKENS,
   fitAssembledPromptToBudget,
   fitJsonToTokenBudget,
   fitTextToTokenBudget,
-  groqMaxCompletionTokens,
-} from "@/lib/dante-core/groq-budget";
+} from "@/lib/dante-core/openai/prompt-budget";
+import { streamDanteReply } from "@/lib/dante-core/openai/client";
+import { isOpenAiConfigured } from "@/lib/dante-core/openai/config";
 import { buildDanteTemporalContext, formatDanteTemporalContext, type DanteTemporalContext } from "@/lib/dante-core/temporal-context";
 
 export const runtime = "nodejs";
@@ -2515,11 +2521,29 @@ illness), prioritize sources in this order when supplied:
 3. MedlinePlus (for plain-language, consumer-friendly explanations)
 
 If none of the above are supplied in EXTERNAL EVIDENCE for a
-recovery or health-adjacent question, say exactly:
-"External evidence is temporarily unavailable." — then continue
-answering from general coaching knowledge. Recovery score,
-check-in and trend data still come from the CLIENT PROFILE and
-remain fully usable even when evidence retrieval fails.
+recovery or health-adjacent question, keep answering. Distinguish
+clearly between:
+
+1. CLIENT PROFILE / app data — recovery score, check-in, trends,
+   plan, and other live Muscle Fitness numbers remain fully usable.
+2. General training and safety coaching — still allowed.
+3. Externally verified evidence — only claim this when EXTERNAL
+   EVIDENCE actually supplied supporting sources.
+
+Never tell the user that "external evidence is temporarily
+unavailable." Prefer a soft phrasing such as: this guidance draws
+on your app data and general coaching practice; it is not citing a
+retrieved external study right now.
+
+PARTIAL EVIDENCE RULE (do not collapse the answer):
+
+If EXTERNAL EVIDENCE is missing, empty, or only covers part of the
+question, do NOT replace the whole reply with a generic fallback.
+Preserve every safe, verifiable part (profile numbers, plan data,
+general safety coaching). Soften or omit only the specific claims
+that would require external verification you do not have. Never
+invent a source, PMID, FDC ID, or product nutrition data to fill
+the gap.
 
 For food calories and macronutrients:
 
@@ -2545,8 +2569,9 @@ Do not invent an FDC ID.
 
 Do not invent product nutrition data.
 
-If external evidence is not available, clearly say that the answer
-is based on general coaching knowledge rather than retrieved source data.
+If external evidence is not available, keep the useful answer and
+state briefly that profile/app data and general coaching are the
+basis — without claiming external verification.
 
 ============================================================
 CLIENT PERSONALIZATION
@@ -2996,6 +3021,35 @@ literally present in one of those two sections.
    BUILD PROMPT
 ========================================================= */
 
+function extractCoachingPreference(userContext: UserContext): CoachingPreference | null {
+  const twin = userContext.digitalTwin;
+  if (!twin || typeof twin !== "object") return null;
+  const memory = (twin as { memory?: { coachingPreference?: unknown } }).memory;
+  const preference = memory?.coachingPreference;
+  if (
+    preference === "direct" ||
+    preference === "encouraging" ||
+    preference === "detailed" ||
+    preference === "concise"
+  ) {
+    return preference;
+  }
+  return null;
+}
+
+function detectCommunicationSignals(message: string, preference: CoachingPreference | null) {
+  const lower = message.toLowerCase();
+  return {
+    coachingPreference: preference,
+    asksWhy: /\b(why|explain|how come|what does .+ mean)\b/i.test(lower),
+    asksChallenge: /\b(push me|challenge me|be harder|hold me accountable)\b/i.test(lower),
+    asksReflect: /\b(reflect|how do i feel|what am i noticing)\b/i.test(lower),
+    // Presence is reserved for safety-adjacent turns handled by checkSafety;
+    // never auto-selected from casual wording here.
+    needsPresence: false,
+  };
+}
+
 function buildDantePrompt(
   userMessage: string,
   userContext: UserContext,
@@ -3010,6 +3064,10 @@ function buildDantePrompt(
   const instructions = fitTextToTokenBudget(DANTE_INSTRUCTIONS, 2200);
   const profileJson = fitJsonToTokenBudget(userContext, 1800);
   const evidenceJson = fitJsonToTokenBudget(evidence, 1100);
+  const communicationStyle = resolveCommunicationStyle(
+    detectCommunicationSignals(userMessage, extractCoachingPreference(userContext)),
+  );
+  const communicationHints = buildCommunicationPromptHints(communicationStyle);
   const knowledgeJson =
     retrievedKnowledge.length > 0
       ? fitJsonToTokenBudget(
@@ -3046,6 +3104,13 @@ ${knowledgeJson}
 ${instructions}
 
 ${formatDanteTemporalContext(temporalContext)}
+
+============================================================
+COMMUNICATION STYLE (lightweight — not a psych profile)
+============================================================
+
+${communicationHints}
+Never let communication style override safety, medical, or evidence rules.
 
 ============================================================
 CLIENT PROFILE
@@ -3087,208 +3152,7 @@ Do not invent citations. Prefer structured Sources from the system
 over inventing a markdown source list.
 `;
 
-  return fitAssembledPromptToBudget(prompt, GROQ_MAX_INPUT_TOKENS);
-}
-
-/* =========================================================
-   GROQ
-========================================================= */
-
-function getGroqKey(): string {
-  const apiKey =
-    process.env.GROQ_API_KEY?.trim();
-
-  if (!apiKey) {
-    throw new Error(
-      "GROQ_API_KEY is missing from .env.local",
-    );
-  }
-
-  return apiKey;
-}
-
-function getGroqModels(): string[] {
-  return Array.from(
-    new Set(
-      [
-        process.env.GROQ_MODEL?.trim(),
-
-        "openai/gpt-oss-120b",
-
-        "openai/gpt-oss-20b",
-
-        "llama-3.3-70b-versatile",
-      ].filter(
-        (
-          model,
-        ): model is string =>
-          Boolean(model),
-      ),
-    ),
-  );
-}
-
-/* =========================================================
-   SINGLE GROQ REQUEST — STREAMING
-
-   Real incremental streaming (mission "TRUE RESPONSE STREAMING"):
-   requests `stream: true` from Groq's OpenAI-compatible endpoint and
-   yields each `delta.content` piece as it arrives over the response
-   body, instead of waiting for the full completion. Provider-specific
-   SSE framing (`data: {...}` lines, the terminal `data: [DONE]`) stays
-   entirely inside this function — callers only ever see plain text
-   chunks.
-========================================================= */
-
-type GroqStreamChunk = {
-  choices?: Array<{
-    delta?: { content?: string | null };
-    finish_reason?: string | null;
-  }>;
-  error?: { message?: string };
-};
-
-async function* streamGroqModel(
-  model: string,
-  prompt: string,
-  signal: AbortSignal,
-): AsyncGenerator<string, void, unknown> {
-  const apiKey = getGroqKey();
-  const gptOss = model.startsWith("openai/gpt-oss");
-
-  const requestBody: Record<string, unknown> = {
-    model,
-    messages: [{ role: "user", content: prompt }],
-    temperature: gptOss ? 0.55 : 0.4,
-    top_p: 0.95,
-    // Cap completion so input+output stays under Groq's ~8000 TPM
-    // reservation (120b was failing at ~8069 with a fixed 4096 budget).
-    max_completion_tokens: groqMaxCompletionTokens({
-      model,
-      inputText: prompt,
-      preferredCap: gptOss ? (model.includes("120b") ? 1536 : 2048) : 2048,
-    }),
-    stream: true,
-  };
-
-  // GPT-OSS reasoning configuration — reasoning_format=hidden means
-  // only the final answer's tokens ever reach delta.content.
-  if (gptOss) {
-    requestBody.reasoning_effort = "low";
-    requestBody.reasoning_format = "hidden";
-  }
-
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-    signal,
-  });
-
-  if (!response.ok || !response.body) {
-    let message = `Groq returned HTTP ${response.status}.`;
-
-    try {
-      const errorBody = (await response.json()) as GroqStreamChunk;
-      message = errorBody.error?.message ?? message;
-    } catch {
-      // Response body wasn't JSON (or already consumed) — keep the generic HTTP message.
-    }
-
-    if (response.status === 401) {
-      throw new Error("Groq rejected GROQ_API_KEY. Create a new Groq key and update .env.local.");
-    }
-
-    throw new Error(`${model}: ${message}`);
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
-
-        const payload = trimmed.slice(5).trim();
-        if (payload === "[DONE]") return;
-
-        try {
-          const chunk = JSON.parse(payload) as GroqStreamChunk;
-          const delta = chunk.choices?.[0]?.delta?.content;
-          if (delta) yield delta;
-        } catch {
-          // A malformed/partial SSE line — skip it rather than aborting the whole stream.
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-/* =========================================================
-   GROQ WITH FALLBACK — STREAMING
-
-   Same model-fallback list as before, but fallback is only safe
-   BEFORE the first real text chunk of a given model — once a model
-   has started streaming real content, switching models mid-answer
-   would duplicate/corrupt what the user already sees, so a failure
-   past that point is surfaced as an interrupted response instead of
-   silently retried.
-========================================================= */
-
-type DanteStreamEvent = { kind: "delta"; text: string } | { kind: "model"; model: string };
-
-async function* streamDanteReply(prompt: string, signal: AbortSignal): AsyncGenerator<DanteStreamEvent, void, unknown> {
-  const models = getGroqModels();
-  let lastError: Error | null = null;
-
-  for (const model of models) {
-    let emittedAny = false;
-
-    try {
-      console.log(`[DANTE] Trying ${model}`);
-
-      for await (const delta of streamGroqModel(model, prompt, signal)) {
-        emittedAny = true;
-        yield { kind: "delta", text: delta };
-      }
-
-      yield { kind: "model", model };
-      return;
-    } catch (error: unknown) {
-      const resolvedError = error instanceof Error ? error : new Error(String(error));
-
-      if (resolvedError.name === "AbortError") {
-        throw resolvedError;
-      }
-
-      console.error(`[DANTE] ${model} failed:`, resolvedError.message);
-
-      if (emittedAny || resolvedError.message.includes("GROQ_API_KEY")) {
-        // Already streamed real content on this model, or the key itself is bad —
-        // neither case is recoverable by trying a different model.
-        throw resolvedError;
-      }
-
-      lastError = resolvedError;
-    }
-  }
-
-  throw new Error(lastError?.message ?? "All Dante models failed to produce a final answer.");
+  return fitAssembledPromptToBudget(prompt, DANTE_MAX_INPUT_TOKENS);
 }
 
 /* =========================================================
@@ -3369,7 +3233,7 @@ export async function GET() {
     ok: true,
     service: "Dante — Muscle Fitness Intelligence",
     status: "ready",
-    mode: process.env.GROQ_API_KEY?.trim() ? "production" : "configuration-required",
+    mode: isOpenAiConfigured() ? "production" : "configuration-required",
   });
 }
 
@@ -3667,10 +3531,10 @@ export async function POST(
       );
 
     /* -----------------------------------------------------
-       GROQ — STREAMING
+       OPENAI — STREAMING
 
-       Real incremental streaming: each Groq delta is forwarded to the
-       client as soon as it arrives (see streamDanteReply above).
+       Real incremental streaming: each OpenAI delta is forwarded to the
+       client as soon as it arrives (see streamDanteReply in openai/client).
        Structured metadata (sources/insight) — never fabricated,
        always the same deterministic values computed above — is only
        sent once generation completes, in the final `done` event
@@ -3718,7 +3582,7 @@ export async function POST(
         const partial = accumulated.length > 0;
 
         logToolEvent(partial ? "DANTE_STREAM_FAILED" : "DANTE_PROVIDER_FAILED", {
-          stage: partial ? "stream" : "groq",
+          stage: partial ? "stream" : "openai",
           errorCategory: error instanceof Error ? error.name : "unknown",
         });
 

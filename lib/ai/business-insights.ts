@@ -110,7 +110,7 @@ ${JSON.stringify(
       businessInsightResponseSchema
     ),
 
-    provider: "groq" as const,
+    provider: "openai" as const,
 
     model: GROQ_MODEL,
   };

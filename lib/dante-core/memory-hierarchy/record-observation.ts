@@ -14,6 +14,7 @@ import type {
   InterventionType,
   ObservedOutcome,
 } from "@/lib/dante-core/memory-hierarchy/types";
+import { assertLearningScope } from "@/lib/dante-core/learning-guardrails";
 import { outcomeIsPositive } from "@/lib/dante-core/response-learning";
 
 let loggedMissingObservationsTable = false;
@@ -49,6 +50,17 @@ export async function recordObservationAndLearn(
   supabase: SupabaseClient,
   input: RecordObservationInput,
 ): Promise<{ observation: DanteObservation | null; patternUpdated: boolean }> {
+  const scope = assertLearningScope({
+    userId: input.userId,
+    interventionType: input.interventionType,
+    provenance: input.provenance,
+  });
+
+  if (!scope.allowed) {
+    console.warn("[DANTE MEMORY HIERARCHY] Learning blocked:", scope.reason);
+    return { observation: null, patternUpdated: false };
+  }
+
   const observedAt = (input.now ?? new Date()).toISOString();
 
   const { data: observationRow, error: observationError } = await supabase

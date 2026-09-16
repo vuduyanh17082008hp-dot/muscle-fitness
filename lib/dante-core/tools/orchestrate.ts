@@ -5,8 +5,14 @@ import { zodToJsonSchema } from "@/lib/dante-core/tools/json-schema";
 import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { safeExecuteTool } from "@/lib/dante-core/tools/safe-execute";
-import { callGroqAgentTurn, type GroqAgentTurnResult, type GroqChatMessage, type GroqToolCall, type GroqToolSpec } from "@/lib/dante-core/llm-client";
-import { estimateTokenCount, fitTextToTokenBudget } from "@/lib/dante-core/groq-budget";
+import {
+  callOpenAiAgentTurn,
+  type OpenAiAgentTurnResult,
+  type OpenAiChatMessage,
+  type OpenAiToolCall,
+  type OpenAiToolSpec,
+} from "@/lib/dante-core/openai/client";
+import { estimateTokenCount, fitTextToTokenBudget } from "@/lib/dante-core/openai/prompt-budget";
 import { formatDanteTemporalContext } from "@/lib/dante-core/temporal-context";
 import type { ToolContext } from "@/lib/dante-core/tools/types";
 import type { DanteResponseEnvelope } from "@/lib/dante-core/tools/response-envelope";
@@ -22,7 +28,7 @@ import type { DanteResponseEnvelope } from "@/lib/dante-core/tools/response-enve
  */
 export const MAX_TOOL_ROUNDS = 4;
 
-export type ModelCaller = (messages: GroqChatMessage[], tools: GroqToolSpec[]) => Promise<GroqAgentTurnResult>;
+export type ModelCaller = (messages: OpenAiChatMessage[], tools: OpenAiToolSpec[]) => Promise<OpenAiAgentTurnResult>;
 
 function buildSystemPrompt(context: ToolContext): string {
   return `You are Dante's tool-selection layer inside Muscle Fitness.
@@ -69,7 +75,7 @@ const TRACE_LABEL: Record<string, string> = {
   retrieve_knowledge: "Checked knowledge base",
 };
 
-function assistantToolCallMessage(call: GroqToolCall): GroqChatMessage {
+function assistantToolCallMessage(call: OpenAiToolCall): OpenAiChatMessage {
   return {
     role: "assistant",
     content: "",
@@ -77,15 +83,15 @@ function assistantToolCallMessage(call: GroqToolCall): GroqChatMessage {
   };
 }
 
-function toolResultMessage(call: GroqToolCall, result: unknown): GroqChatMessage {
-  // Cap tool payloads so a large get_* JSON blob cannot recreate the
-  // same Groq TPM overflow the stuffed-prompt path had.
+function toolResultMessage(call: OpenAiToolCall, result: unknown): OpenAiChatMessage {
+  // Cap tool payloads so a large get_* JSON blob cannot blow the
+  // prompt budget on the next agent model round.
   const raw = JSON.stringify(result);
   const content = estimateTokenCount(raw) > 1200 ? fitTextToTokenBudget(raw, 1200) : raw;
   return { role: "tool", tool_call_id: call.id, name: call.name, content };
 }
 
-function toolSpecs(): GroqToolSpec[] {
+function toolSpecs(): OpenAiToolSpec[] {
   return DANTE_TOOLS.map((tool) => ({
     name: tool.name,
     description: tool.description,
@@ -133,9 +139,9 @@ export async function runDanteAgentTurn(
   userMessage: string,
   options?: { callModel?: ModelCaller },
 ): Promise<DanteResponseEnvelope> {
-  const callModel = options?.callModel ?? callGroqAgentTurn;
+  const callModel = options?.callModel ?? callOpenAiAgentTurn;
 
-  const messages: GroqChatMessage[] = [
+  const messages: OpenAiChatMessage[] = [
     { role: "system", content: buildSystemPrompt(context) },
     { role: "user", content: userMessage },
   ];

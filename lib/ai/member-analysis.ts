@@ -186,7 +186,7 @@ ${JSON.stringify(
 
     if (!content) {
       throw new Error(
-        "Groq returned an empty response."
+        "OpenAI returned an empty response."
       );
     }
 
@@ -202,13 +202,13 @@ ${JSON.stringify(
 
       model: GROQ_MODEL,
 
-      provider: "groq" as const,
+      provider: "openai" as const,
 
       generatedByAI: true,
     };
   } catch (error) {
     console.error(
-      "Groq member analysis failed:",
+      "OpenAI member analysis failed:",
       error
     );
 
@@ -221,7 +221,7 @@ ${JSON.stringify(
 
       model: GROQ_MODEL,
 
-      provider: "groq" as const,
+      provider: "openai" as const,
 
       generatedByAI: false,
     };

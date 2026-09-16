@@ -299,18 +299,19 @@ export function DanteRobot({
               </filter>
             </defs>
 
-            {/* SHADOW */}
+            {/* SHADOW — keep rx/ry numeric (string ry + animated rx
+                produces SVG "Expected length, NaN" ellipse warnings). */}
             <motion.ellipse
-              cx="100"
-              cy="214"
+              cx={100}
+              cy={214}
               rx={42}
-              ry="7"
+              ry={7}
               fill="#000"
               opacity={0.3}
               animate={
                 reduceMotion
-                  ? { opacity: 0.28 }
-                  : { opacity: [0.3, 0.18, 0.3], rx: [42, 37, 42] }
+                  ? { opacity: 0.28, rx: 42, ry: 7 }
+                  : { opacity: [0.3, 0.18, 0.3], rx: [42, 37, 42], ry: 7 }
               }
               transition={
                 reduceMotion
@@ -548,22 +549,26 @@ function Eye({ cx, cy, scale, color, glow, state, reduceMotion, glowFilterId }: 
   const thinkingShift =
     state === "thinking" && !reduceMotion ? { x: [-2, 2, -2] } : { x: 0 };
 
+  // Guard against non-finite radii so Framer never writes NaN into SVG.
+  const rx = Number.isFinite(scale.rx) ? scale.rx : 7;
+  const ry = Number.isFinite(scale.ry) ? scale.ry : 8.5;
+
   const eyeAnimate =
     state === "speaking" && !reduceMotion
       ? {
-          rx: scale.rx,
-          ry: [scale.ry, scale.ry * 0.7, scale.ry, scale.ry * 0.85, scale.ry],
+          rx,
+          ry: [ry, ry * 0.7, ry, ry * 0.85, ry],
         }
-      : { rx: scale.rx, ry: scale.ry };
+      : { rx, ry };
 
   return (
     <motion.g animate={thinkingShift} transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}>
-      <ellipse cx={cx} cy={cy} rx={scale.rx + 4} ry={scale.ry + 4} fill={color} opacity={glow * 0.18} filter={`url(#${glowFilterId})`} />
+      <ellipse cx={cx} cy={cy} rx={rx + 4} ry={ry + 4} fill={color} opacity={glow * 0.18} filter={`url(#${glowFilterId})`} />
       <motion.ellipse
         cx={cx}
         cy={cy}
-        rx={scale.rx}
-        ry={scale.ry}
+        rx={rx}
+        ry={ry}
         animate={eyeAnimate}
         transition={{ duration: state === "speaking" ? 1.6 : 0.35, repeat: state === "speaking" ? Infinity : 0, ease: "easeInOut" }}
         fill={color}

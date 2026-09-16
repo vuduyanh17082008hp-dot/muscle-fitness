@@ -116,7 +116,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isHawkerLensConfigured(): boolean {
-  return Boolean(process.env.GROQ_VISION_MODEL?.trim() && process.env.GROQ_API_KEY?.trim());
+  return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
 function buildImageQuality(raw: RawVisionResponse["imageQuality"]): ImageQualityCheck {
@@ -183,10 +183,13 @@ function parseComponents(raw: RawVisionResponse["components"]): DetectedComponen
 export async function analyzeHawkerPhoto(
   imageDataUrl: string,
 ): Promise<HawkerVisionResult | null> {
-  const model = process.env.GROQ_VISION_MODEL?.trim();
-  const apiKey = process.env.GROQ_API_KEY?.trim();
+  const model =
+    process.env.DANTE_OPENAI_VISION_MODEL?.trim() ||
+    process.env.OPENAI_VISION_MODEL?.trim() ||
+    "gpt-4o-mini";
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
 
-  if (!model || !apiKey) {
+  if (!apiKey) {
     return null;
   }
 
@@ -194,7 +197,7 @@ export async function analyzeHawkerPhoto(
   const timer = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
 
   try {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       signal: controller.signal,
       headers: {
@@ -204,7 +207,7 @@ export async function analyzeHawkerPhoto(
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        max_completion_tokens: 1024,
+        max_tokens: 1024,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
