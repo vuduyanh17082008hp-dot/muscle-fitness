@@ -1,6 +1,0 @@
-[33m60d2982[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mintegration/dante-phase2[m[33m)[m merge: integrate Dante phase 2 into main Muscle Fitness project
-[33m8e92679[m[33m ([m[1;32magent/claude[m[33m)[m chore(claude): preserve current work before Dante phase 2 integration
-[33m0bf6cd6[m[33m ([m[1;31morigin/agent/codex[m[33m, [m[1;32magent/codex[m[33m)[m fix(dante): finalize phase 2d 2e multilingual safety
-[33mbf4d972[m feat(dante): complete phase 2 epistemic integrity and adaptive coaching core
-[33me843b1b[m fix(dante): catch chest-hurts phrasing in safety gate
-[33m4ae5e9d[m feat(dante): complete phase 2 adaptive coaching core
