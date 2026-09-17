@@ -19,6 +19,38 @@ describe("targeted response intelligence patch", () => {
     expect(result.triggered).toBe(false);
   });
 
+  it("gives current explicit recovery state precedence over older conflicting turns", () => {
+    const firstMessage = "I slept 4 hours, recovery is 42, my shoulder feels irritated, but I want to PR bench today.";
+    const secondMessage = "My shoulder feels slightly irritated, I slept 8 hours, recovery is good, but I want to test a 1RM today.";
+    const thirdMessage = "My shoulder feels slightly irritated, I slept 8 hours, recovery is good, and I'm doing a normal submaximal session.";
+
+    const first = checkSafety(firstMessage);
+    expect(first.contextTrace?.observations).toEqual(expect.arrayContaining([
+      "joint_irritation",
+      "very_low_recovery",
+      "major_sleep_deprivation",
+      "max_attempt_intent",
+    ]));
+    expect(first.responseOverride).toMatch(/major sleep loss|low recovery/i);
+
+    const second = checkSafety(secondMessage, { recentMessages: [firstMessage] });
+    expect(second.category).toBe("composed_training_risk");
+    expect(second.contextTrace?.observations).toEqual([
+      "joint_irritation",
+      "max_attempt_intent",
+    ]);
+    expect(second.contextTrace?.conflicts).toEqual([
+      "performance_goal_vs_safety",
+      "joint_irritation_vs_max_attempt",
+    ]);
+    expect(second.responseOverride).not.toMatch(/major sleep loss|low recovery|sleep deprivation|recovery (?:is )?(?:42|low)/i);
+
+    const third = checkSafety(thirdMessage, { recentMessages: [firstMessage, secondMessage] });
+    expect(third.triggered).toBe(false);
+    expect(third.category).toBeNull();
+    expect(third.responseOverride).toBeNull();
+  });
+
   it("acknowledges English self-harm and checks immediacy before training", () => {
     const result = checkSafety("I feel like nobody understands me, I want to die, and I can't bench 225.");
     expect(result.category).toBe("self_harm_crisis");

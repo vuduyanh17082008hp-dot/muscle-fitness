@@ -1,6 +1,31 @@
 import { decideDanteLanguage, type DanteLanguageDecision } from "@/lib/dante-language";
 
-/** Deterministic safety gate. It never diagnoses or delegates safety policy to a provider. */
+/**
+ * Safety Layer (spec Part A §8).
+ *
+ * Dante is a training/nutrition assistant, not a medical professional.
+ * This module runs BEFORE any LLM call and short-circuits to a fixed,
+ * conservative escalation message when a message matches a red-flag
+ * pattern. It deliberately distinguishes ordinary training language
+ * ("my legs are sore", "my shoulder feels tight after bench") from
+ * genuine red flags ("chest pain", "I fainted", "numbness down my
+ * arm") — the goal is to catch real safety cases, not to slap a
+ * warning on every normal question, which would train users to
+ * ignore warnings entirely.
+ *
+ * This is pattern matching over the user's own words, not a
+ * diagnostic system. A miss is possible; when in doubt the patterns
+ * below are written to be a little over-inclusive for the highest-
+ * severity categories (cardiac, neurological, fainting) and more
+ * conservative for the categories where false positives are more
+ * likely (soreness/DOMS language overlapping with "injury" language).
+ *
+ * Multilingual note: English + Vietnamese concept phrases are matched
+ * on the original text and on a diacritic-stripped form so mixed-language
+ * input ("đau ngực when running") still fires. No architecture change —
+ * same RULES list, broader phrase coverage.
+ */
+
 export type SafetyCategory =
   | "chest_pain_cardiac"
   | "fainting_dizziness"
@@ -86,9 +111,18 @@ const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury" | "
   },
 };
 
-/** Normalize orthography only; this does not infer a diagnosis. */
+/**
+ * Strip Vietnamese (and other) combining marks so "đau ngực" and "dau nguc"
+ * share one concept match path. Does not invent medical meaning — only
+ * normalizes orthography before the same RULES patterns run.
+ */
 export function normalizeSafetyText(message: string): string {
-  return message.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d");
+  return message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    // Vietnamese "đ" / "Đ" are not decomposed by NFD — map explicitly.
+    .replace(/đ/g, "d");
 }
 
 const RULES: SafetyRule[] = [
@@ -96,11 +130,25 @@ const RULES: SafetyRule[] = [
     category: "chest_pain_cardiac",
     responseMode: "HARD_BLOCK",
     patterns: [
-      /\bchest pain\b/i, /\bpain in my chest\b/i, /\bchest hurts?\b/i,
-      /\bhurts? in (my |the )?chest\b/i, /\bmy chest (is |feels )?(hurt(ing)?|aching|tight)\b/i,
-      /\btightness in (my |the )?chest\b/i, /\bcan'?t breathe\b/i, /\bshort(ness)? of breath\b/i,
-      /\bheart (is )?racing\b/i, /\birregular heartbeat\b/i, /đau ngực/i, /dau nguc/i,
-      /đau ở ngực/i, /dau o nguc/i, /khó thở/i, /kho tho/i, /không thở được/i, /khong tho duoc/i,
+      /\bchest pain\b/i,
+      /\bpain in my chest\b/i,
+      /\bchest hurts?\b/i,
+      /\bhurts? in (my |the )?chest\b/i,
+      /\bmy chest (is |feels )?(hurt(ing)?|aching|tight)\b/i,
+      /\btightness in (my |the )?chest\b/i,
+      /\bcan'?t breathe\b/i,
+      /\bshort(ness)? of breath\b/i,
+      /\bheart (is )?racing\b/i,
+      /\birregular heartbeat\b/i,
+      // Vietnamese / mixed — matched on original + diacritic-stripped text.
+      /đau ngực/i,
+      /dau nguc/i,
+      /đau ở ngực/i,
+      /dau o nguc/i,
+      /khó thở/i,
+      /kho tho/i,
+      /không thở được/i,
+      /khong tho duoc/i,
     ],
     response: HARD_BLOCK_RESPONSES.chest_pain_cardiac,
   },
@@ -108,10 +156,23 @@ const RULES: SafetyRule[] = [
     category: "fainting_dizziness",
     responseMode: "HARD_BLOCK",
     patterns: [
-      /\bfaint(ed|ing)?\b/i, /\bpassed out\b/i, /\bblack(ed)? out\b/i, /\bsevere(ly)? dizzy\b/i,
-      /\broom (is|was) spinning\b/i, /ngất xỉu/i, /ngat xiu/i, /(?<![\p{L}])ngất(?![\p{L}])/iu,
-      /(?<![\p{L}])ngat(?![\p{L}])/iu, /bị ngất/i, /bi ngat/i, /chóng mặt nghiêm trọng/i,
-      /chong mat nghiem trong/i, /chóng mặt nặng/i, /chong mat nang/i, /chóng mặt dữ/i, /chong mat du/i,
+      /\bfaint(ed|ing)?\b/i,
+      /\bpassed out\b/i,
+      /\bblack(ed)? out\b/i,
+      /\bsevere(ly)? dizzy\b/i,
+      /\broom (is|was) spinning\b/i,
+      /ngất xỉu/i,
+      /ngat xiu/i,
+      /(?<![\p{L}])ngất(?![\p{L}])/iu,
+      /(?<![\p{L}])ngat(?![\p{L}])/iu,
+      /bị ngất/i,
+      /bi ngat/i,
+      /chóng mặt nghiêm trọng/i,
+      /chong mat nghiem trong/i,
+      /chóng mặt nặng/i,
+      /chong mat nang/i,
+      /chóng mặt dữ/i,
+      /chong mat du/i,
     ],
     response: HARD_BLOCK_RESPONSES.fainting_dizziness,
   },
@@ -119,9 +180,18 @@ const RULES: SafetyRule[] = [
     category: "neurological_symptoms",
     responseMode: "HARD_BLOCK",
     patterns: [
-      /\bnumbness\b/i, /\btingling down (my )?(arm|leg)\b/i, /\bcan'?t feel my (arm|leg|hand|foot)\b/i,
-      /\bloss of (feeling|sensation)\b/i, /\bsudden weakness\b/i, /\bslurred speech\b/i,
-      /tê bì/i, /te bi/i, /tê tay|tê chân/i, /te tay|te chan/i, /yếu đột ngột/i, /yeu dot ngot/i,
+      /\bnumbness\b/i,
+      /\btingling down (my )?(arm|leg)\b/i,
+      /\bcan'?t feel my (arm|leg|hand|foot)\b/i,
+      /\bloss of (feeling|sensation)\b/i,
+      /\bsudden weakness\b/i,
+      /\bslurred speech\b/i,
+      /tê bì/i,
+      /te bi/i,
+      /tê tay|tê chân/i,
+      /te tay|te chan/i,
+      /yếu đột ngột/i,
+      /yeu dot ngot/i,
     ],
     response: HARD_BLOCK_RESPONSES.neurological_symptoms,
   },
@@ -129,11 +199,22 @@ const RULES: SafetyRule[] = [
     category: "severe_pain",
     responseMode: "HARD_BLOCK",
     patterns: [
-      /\bsevere pain\b/i, /\bexcruciating\b/i, /\bheard? a pop\b/i, /\bfelt (a |it )?pop\b/i,
+      /\bsevere pain\b/i,
+      /\bexcruciating\b/i,
+      /\bheard? a pop\b/i,
+      /\bfelt (a |it )?pop\b/i,
       /\bcan'?t (put weight on|walk on|move) (my |the )?(leg|arm|knee|shoulder|back)\b/i,
-      /\bsomething (snapped|tore)\b/i, /chấn thương cấp/i, /chan thuong cap/i,
-      /chảy máu nghiêm trọng/i, /chay mau nghiem trong/i, /chảy máu nhiều/i, /chay mau nhieu/i,
-      /chảy máu không cầm/i, /chay mau khong cam/i, /đau dữ dội/i, /dau du doi/i,
+      /\bsomething (snapped|tore)\b/i,
+      /chấn thương cấp/i,
+      /chan thuong cap/i,
+      /chảy máu nghiêm trọng/i,
+      /chay mau nghiem trong/i,
+      /chảy máu nhiều/i,
+      /chay mau nhieu/i,
+      /chảy máu không cầm/i,
+      /chay mau khong cam/i,
+      /đau dữ dội/i,
+      /dau du doi/i,
     ],
     response: HARD_BLOCK_RESPONSES.severe_pain,
   },
@@ -141,9 +222,13 @@ const RULES: SafetyRule[] = [
     category: "possible_injury",
     responseMode: "SAFE_REDIRECT",
     patterns: [
-      /\b(sharp|stabbing) pain\b/i, /\bjoint (is |feels )?unstable\b/i,
-      /\bswelling (that|which)? (won'?t|does'?nt) go down\b/i, /đau nhói/i, /dau nhoi/i,
-      /khớp không ổn định/i, /khop khong on dinh/i,
+      /\b(sharp|stabbing) pain\b/i,
+      /\bjoint (is |feels )?unstable\b/i,
+      /\bswelling (that|which)? (won'?t|does'?nt) go down\b/i,
+      /đau nhói/i,
+      /dau nhoi/i,
+      /khớp không ổn định/i,
+      /khop khong on dinh/i,
       /(?:painkiller|thuốc giảm đau|thuoc giam dau).{0,180}(?:heavy squat|squat nặng|squat nang|tập nặng|tap nang)/i,
       /(?:đầu gối|dau goi|knee).{0,60}(?:bị gì|bi gi|what(?:'s| is) wrong|diagnos)/i,
     ],
@@ -153,8 +238,11 @@ const RULES: SafetyRule[] = [
     category: "eating_disorder_indicator",
     responseMode: "HARD_BLOCK",
     patterns: [
-      /\bpurg(e|ing) after (eating|meals)\b/i, /\bmaking myself throw up\b/i,
-      /\bhaven'?t eaten in \d+ days?\b/i, /\bstarv(e|ing) myself\b/i, /\bafraid to eat\b/i,
+      /\bpurg(e|ing) after (eating|meals)\b/i,
+      /\bmaking myself throw up\b/i,
+      /\bhaven'?t eaten in \d+ days?\b/i,
+      /\bstarv(e|ing) myself\b/i,
+      /\bafraid to eat\b/i,
       /\bbinge and purge\b/i,
     ],
     response: HARD_BLOCK_RESPONSES.eating_disorder_indicator,
@@ -343,11 +431,34 @@ function detectComposedTrainingRisk(message: string): { matchedPhrase: string; o
   return { matchedPhrase: "composed physical-risk signals", observations };
 }
 
-function buildComposedTrainingRiskResponse(language: SupportedSafetyLanguage): string {
+function buildComposedTrainingRiskResponse(
+  language: SupportedSafetyLanguage,
+  observations: string[],
+): string {
+  const hasLowRecovery = observations.includes("very_low_recovery");
+  const hasMajorSleepLoss = observations.includes("major_sleep_deprivation");
+
   if (language === "vi") {
-    return "Hôm nay đừng thử PR hoặc mức tạ tối đa. Bạn đang có nhiều tín hiệu cùng hướng: ngủ rất ít, recovery thấp và khớp vai bị kích ứng. Mình không thể chẩn đoán nguyên nhân đau qua chat, nhưng sự kết hợp này không phù hợp để cố max bench. Hãy giữ mục tiêu bench dài hạn, còn hôm nay nghỉ hoặc tập một buổi nhẹ hơn/nhóm cơ khác chỉ khi hoàn toàn không gây đau; tránh mọi động tác làm triệu chứng tăng. Nếu đau kéo dài, nặng lên, sưng, mất vững hoặc hạn chế vận động đáng kể, hãy đi khám hoặc gặp physiotherapist.";
+    const additionalRisks = [
+      hasMajorSleepLoss ? "ngủ rất ít" : null,
+      hasLowRecovery ? "recovery thấp" : null,
+    ].filter((item): item is string => item !== null);
+    const rationale = additionalRisks.length > 0
+      ? `Khớp vai đang bị kích ứng, cùng với ${additionalRisks.join(" và ")}, làm tăng thêm rủi ro của một lần thử mức tạ tối đa.`
+      : "Khớp vai đang bị kích ứng, và một lần thử 1RM là mức gắng sức tối đa; chỉ riêng tổ hợp hiện tại đó đã đủ để không thử max hôm nay.";
+
+    return `Hôm nay đừng thử PR hoặc mức tạ tối đa. ${rationale} Mình không thể chẩn đoán nguyên nhân đau qua chat. Hãy giữ mục tiêu bench dài hạn, còn hôm nay nghỉ hoặc tập một buổi nhẹ hơn/nhóm cơ khác chỉ khi hoàn toàn không gây đau; tránh mọi động tác làm triệu chứng tăng. Nếu đau kéo dài, nặng lên, sưng, mất vững hoặc hạn chế vận động đáng kể, hãy đi khám hoặc gặp physiotherapist.`;
   }
-  return "Do not attempt the PR or a max-effort lift today. You have several signals pointing the same way: major sleep loss, low recovery, and an irritated shoulder. I cannot diagnose the cause of the shoulder symptom through chat, but that combination is not a good day to force a max attempt. Keep the long-term strength goal; today choose rest or a lower-risk session around the irritated joint only if it is completely pain-free, and stop any movement that increases symptoms. Seek medical or physiotherapy assessment if the pain persists, worsens, swells, causes instability, or meaningfully limits movement.";
+
+  const additionalRisks = [
+    hasMajorSleepLoss ? "major sleep loss" : null,
+    hasLowRecovery ? "low recovery" : null,
+  ].filter((item): item is string => item !== null);
+  const rationale = additionalRisks.length > 0
+    ? `The irritated shoulder, together with ${additionalRisks.join(" and ")}, adds risk to a max-effort attempt.`
+    : "The shoulder is currently irritated, and a 1RM is a max-effort attempt; that current combination alone is enough not to max today.";
+
+  return `Do not attempt the PR or a max-effort lift today. ${rationale} I cannot diagnose the cause of the shoulder symptom through chat. Keep the long-term strength goal; today choose rest or a lower-risk session around the irritated joint only if it is completely pain-free, and stop any movement that increases symptoms. Seek medical or physiotherapy assessment if the pain persists, worsens, swells, causes instability, or meaningfully limits movement.`;
 }
 
 function isContextualInjuryFollowUp(message: string, recentMessages: string[]): boolean {
@@ -359,33 +470,11 @@ function isContextualInjuryFollowUp(message: string, recentMessages: string[]): 
 
 export function checkSafety(message: string, options: SafetyCheckOptions = {}): SafetyCheckResult {
   const language = detectSafetyLanguage(message, options);
-  const composedRisk = detectComposedTrainingRisk(message);
-  if (composedRisk) {
-    return {
-      triggered: true,
-      category: "composed_training_risk",
-      matchedPhrase: composedRisk.matchedPhrase,
-      responseMode: "SAFE_REDIRECT",
-      language,
-      responseOverride: buildComposedTrainingRiskResponse(language),
-      contextTrace: {
-        risk: "HIGH",
-        observations: composedRisk.observations,
-        conflicts: ["performance_goal_vs_safety", "joint_irritation_vs_recovery"],
-        diagnosticUncertainty: "HIGH",
-        acuteCurrentState: true,
-        chronicTraitWriteAllowed: false,
-      },
-    };
-  }
-  let matched = matchRule(message);
-  if (!matched && isContextualInjuryFollowUp(message, options.recentMessages ?? [])) {
-    const possibleInjury = RULES.find((rule) => rule.category === "possible_injury");
-    if (possibleInjury) matched = { rule: possibleInjury, matchedPhrase: "contextual injury follow-up" };
-  }
 
-  if (!matched) return { triggered: false, category: null, matchedPhrase: null, responseMode: null, language, responseOverride: null, contextTrace: null };
-  if (matched.rule.responseMode === "HARD_BLOCK") {
+  // Explicit medical emergencies and self-harm always outrank training-risk
+  // redirects so the existing safety gate cannot be weakened by composition.
+  let matched = matchRule(message);
+  if (matched?.rule.responseMode === "HARD_BLOCK") {
     return {
       triggered: true,
       category: matched.rule.category,
@@ -403,6 +492,33 @@ export function checkSafety(message: string, options: SafetyCheckOptions = {}): 
       },
     };
   }
+
+  const composedRisk = detectComposedTrainingRisk(message);
+  if (composedRisk) {
+    return {
+      triggered: true,
+      category: "composed_training_risk",
+      matchedPhrase: composedRisk.matchedPhrase,
+      responseMode: "SAFE_REDIRECT",
+      language,
+      responseOverride: buildComposedTrainingRiskResponse(language, composedRisk.observations),
+      contextTrace: {
+        risk: "HIGH",
+        observations: composedRisk.observations,
+        conflicts: ["performance_goal_vs_safety", "joint_irritation_vs_max_attempt"],
+        diagnosticUncertainty: "HIGH",
+        acuteCurrentState: true,
+        chronicTraitWriteAllowed: false,
+      },
+    };
+  }
+
+  if (!matched && isContextualInjuryFollowUp(message, options.recentMessages ?? [])) {
+    const possibleInjury = RULES.find((rule) => rule.category === "possible_injury");
+    if (possibleInjury) matched = { rule: possibleInjury, matchedPhrase: "contextual injury follow-up" };
+  }
+
+  if (!matched) return { triggered: false, category: null, matchedPhrase: null, responseMode: null, language, responseOverride: null, contextTrace: null };
 
   const allMessages = [...(options.recentMessages ?? []), message].join("\n");
   const trace = buildPossibleInjuryTrace(allMessages);
