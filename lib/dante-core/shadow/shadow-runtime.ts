@@ -41,6 +41,10 @@ import {
   type CalibrationObservation,
   type UncertaintyProfile,
 } from "@/lib/dante-core/shadow/types";
+import {
+  recordPhase4OutcomeEvaluation,
+  recordPhase4RecommendationTrace,
+} from "@/lib/dante-core/validation/instrumentation";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -315,14 +319,15 @@ export async function observeDailyDecisionInShadow(input: {
     confidence: confidenceForShadowAction(flow.action, uncertainty),
     createdAt: now.toISOString(),
   };
-  await appendShadowEvent(input.supabase, {
+  const expectedOutcome = expectedOutcomeForDecision(input.productionDecision.decision);
+  const shadowSaved = await appendShadowEvent(input.supabase, {
     userId: input.userId,
     eventType: "SHADOW_DECISION",
     recommendationId,
     contextSignature: signals.contextSignature,
     productionDecision: input.productionDecision as unknown as Record<string, unknown>,
     shadowDecision,
-    expectedOutcome: expectedOutcomeForDecision(input.productionDecision.decision),
+    expectedOutcome,
     actualOutcome: null,
     uncertaintyProfile: uncertainty,
     driftState: drift,
@@ -351,6 +356,27 @@ export async function observeDailyDecisionInShadow(input: {
     },
     occurredAt: now.toISOString(),
   });
+  if (shadowSaved) {
+    // Validation telemetry is downstream, best-effort, and has no control path
+    // back into either this shadow decision or the production recommendation.
+    try {
+      await recordPhase4RecommendationTrace({
+        supabase: input.supabase,
+        userId: input.userId,
+        athleteState: input.athleteState,
+        recommendationId,
+        productionDecision: input.productionDecision as unknown as Record<string, unknown>,
+        shadowDecision,
+        expectedOutcome,
+        uncertainty,
+        occurredAt: now.toISOString(),
+      });
+    } catch (error) {
+      console.warn("[DANTE PHASE4] T0 instrumentation failed without affecting Phase 3", {
+        reason: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  }
 
   return shadowDecision;
 }
@@ -483,6 +509,21 @@ export async function processPhase3RecoveryOutcome(input: {
     occurredAt: now.toISOString(),
   });
   if (!outcomeSaved) return;
+
+  try {
+    await recordPhase4OutcomeEvaluation({
+      supabase: input.supabase,
+      userId: input.userId,
+      source,
+      actual,
+      rawRecoveryScore: input.currentRecoveryScore,
+      occurredAt: now.toISOString(),
+    });
+  } catch (error) {
+    console.warn("[DANTE PHASE4] T1 instrumentation failed without affecting Phase 3", {
+      reason: error instanceof Error ? error.message : "unknown",
+    });
+  }
 
   const calibration = calibrationObservationFromOutcome({
     userId: input.userId,

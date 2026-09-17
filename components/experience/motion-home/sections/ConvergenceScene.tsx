@@ -83,7 +83,7 @@ export function ConvergenceScene({ routes }: { routes: HomepageRoutes }) {
       className="relative bg-[var(--mf-pub-bg)] px-6 py-28 lg:px-12 lg:py-36"
     >
       <div className="mx-auto max-w-4xl text-center">
-        <div className="converge-fade relative mx-auto size-48 sm:size-56">
+        <div className="converge-fade relative mx-auto mb-10 size-48 sm:mb-12 sm:size-56">
           <svg viewBox="0 0 220 220" className="size-full overflow-visible" role="img" aria-label="Train, measure, recover, adapt, progress — a closed loop">
             <path
               ref={loopRef}

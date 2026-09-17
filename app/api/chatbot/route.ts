@@ -3718,15 +3718,19 @@ export async function POST(
        SAFETY LAYER (Dante Core, spec Part A §8)
 
        Runs before any LLM call or context loading. A matched
-       red-flag message short-circuits straight to a fixed,
-       conservative escalation response — never a normal Dante
-       reply. See lib/dante-core/safety-layer.ts for the pattern
-       list and the reasoning behind it.
+       red-flag message short-circuits to deterministic safety copy.
+       Emergency categories remain hard blocks; non-emergency injury
+       conflicts block risky loading while preserving bounded, safe
+       coaching in the already-selected response language.
     ----------------------------------------------------- */
 
     const safetyCheck =
       checkSafety(
         userMessage,
+        {
+          languageDecision,
+          recentMessages: getRecentUserMessages(body, 3),
+        },
       );
 
     if (

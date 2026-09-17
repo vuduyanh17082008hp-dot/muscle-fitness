@@ -67,7 +67,7 @@ export function AthleteSignalScene() {
               ".signal-fragment",
               { opacity: 0, scale: 0.8 },
               { opacity: 1, scale: 1, duration: 0.3, stagger: 0.03, ease: ease.precise },
-              "-=0.3",
+              "<0.08",
             )
             .to(paths, { strokeDashoffset: 0, duration: 0.3, stagger: 0.02, ease: ease.precise }, "<")
             .fromTo(".signal-state", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.3, ease: ease.soft }, "-=0.2");

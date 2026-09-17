@@ -81,7 +81,7 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
       ref={rootRef}
       id="hero"
       data-chapter="hero"
-      className="relative flex min-h-screen items-center overflow-hidden border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)] px-6 py-24 lg:px-12"
+      className="relative flex min-h-screen items-center overflow-hidden border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)] px-6 pt-28 pb-20 sm:pt-32 sm:pb-24 lg:px-12 lg:py-24"
     >
       <ParticleCanvas />
 

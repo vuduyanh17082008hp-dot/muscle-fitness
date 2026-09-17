@@ -137,7 +137,7 @@ export function MuscleIntelligenceScene({
           </Link>
         </div>
 
-        <div className="muscle-dante relative mx-auto grid size-[240px] place-items-center sm:size-[280px] lg:size-[340px]">
+        <div className="muscle-dante relative mx-auto grid size-[200px] place-items-center sm:size-[240px] lg:size-[290px]">
           <div
             aria-hidden="true"
             className={`absolute inset-[-15%] rounded-full ${styles.heroOrbHalo}`}
@@ -181,7 +181,7 @@ export function MuscleIntelligenceScene({
             />
           </svg>
 
-          <DanteRobot size="lg" state="idle" interactive ariaLabel="Dante, your adaptive coach" />
+          <DanteRobot size="md" state="idle" interactive ariaLabel="Dante, your adaptive coach" />
 
           <div className="absolute -bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-violet-400/25 bg-[var(--mf-pub-bg)]/90 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--mf-violet)]">
             <span className="size-1.5 rounded-full bg-[var(--mf-violet)]" aria-hidden="true" />

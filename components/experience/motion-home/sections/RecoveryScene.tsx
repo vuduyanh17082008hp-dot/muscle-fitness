@@ -124,54 +124,58 @@ export function RecoveryScene({
         </div>
 
         <div className="mt-14 grid gap-10 lg:grid-cols-2">
-          <div className="recovery-fade recovery-breathe relative mx-auto grid place-items-center">
-            <svg viewBox="0 0 160 160" className="size-64 -rotate-90">
-              <circle cx="80" cy="80" r="70" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
-              <circle
-                ref={ringRef}
-                cx="80"
-                cy="80"
-                r="70"
-                fill="none"
-                stroke="var(--mf-violet)"
-                strokeWidth="8"
-                strokeLinecap="round"
-                strokeDasharray={RING_CIRCUMFERENCE}
-                strokeDashoffset={RING_CIRCUMFERENCE}
-              />
-            </svg>
+          <div className="recovery-fade flex flex-col items-center gap-8">
+            {/* Ring + centre readout + badges — self-contained relative wrapper */}
+            <div className="recovery-breathe relative mx-auto grid size-64 place-items-center">
+              <svg viewBox="0 0 160 160" className="size-full -rotate-90">
+                <circle cx="80" cy="80" r="70" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
+                <circle
+                  ref={ringRef}
+                  cx="80"
+                  cy="80"
+                  r="70"
+                  fill="none"
+                  stroke="var(--mf-violet)"
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  strokeDasharray={RING_CIRCUMFERENCE}
+                  strokeDashoffset={RING_CIRCUMFERENCE}
+                />
+              </svg>
 
-            <div className="absolute flex flex-col items-center">
-              <span className="text-5xl font-black tabular-nums text-[var(--mf-pub-text)]">{Math.round(readiness)}</span>
-              <span className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--mf-violet)]">
-                {recovery.status}
-              </span>
+              <div className="absolute flex flex-col items-center">
+                <span className="text-5xl font-black tabular-nums text-[var(--mf-pub-text)]">{Math.round(readiness)}</span>
+                <span className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--mf-violet)]">
+                  {recovery.status}
+                </span>
+              </div>
+
+              <div className="absolute -bottom-4 flex gap-4 text-center">
+                {[
+                  { label: "Sleep", value: recovery.sleepHours ? `${recovery.sleepHours}h` : "—" },
+                  { label: "Load", value: recovery.hasLiveScore ? "Tracked" : "—" },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    tabIndex={0}
+                    data-cursor-hover
+                    className="group rounded-xl border border-white/10 bg-black/30 px-3 py-2 outline-none"
+                  >
+                    <p className="text-xs font-bold text-[var(--mf-pub-text)] transition-colors duration-200 group-hover:text-[var(--mf-violet)] group-focus-visible:text-[var(--mf-violet)]">
+                      {item.value}
+                    </p>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--mf-pub-text-muted)] transition-colors duration-200 group-hover:text-[var(--mf-violet)] group-focus-visible:text-[var(--mf-violet)]">
+                      {item.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="absolute -bottom-4 flex gap-4 text-center">
-              {[
-                { label: "Sleep", value: recovery.sleepHours ? `${recovery.sleepHours}h` : "—" },
-                { label: "Load", value: recovery.hasLiveScore ? "Tracked" : "—" },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  tabIndex={0}
-                  data-cursor-hover
-                  className="group rounded-xl border border-white/10 bg-black/30 px-3 py-2 outline-none"
-                >
-                  <p className="text-xs font-bold text-[var(--mf-pub-text)] transition-colors duration-200 group-hover:text-[var(--mf-violet)] group-focus-visible:text-[var(--mf-violet)]">
-                    {item.value}
-                  </p>
-                  <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--mf-pub-text-muted)] transition-colors duration-200 group-hover:text-[var(--mf-violet)] group-focus-visible:text-[var(--mf-violet)]">
-                    {item.label}
-                  </p>
-                </div>
-              ))}
-            </div>
-
+            {/* Open Recovery link — sibling below ring, never overlaps badges */}
             <Link
               href={routes.recovery}
-              className="recovery-fade mt-24 flex items-center gap-2 text-sm font-black uppercase tracking-[0.12em] text-[var(--mf-violet)] transition hover:text-violet-300"
+              className="recovery-fade mt-6 flex items-center gap-2 text-sm font-black uppercase tracking-[0.12em] text-[var(--mf-violet)] transition hover:text-violet-300"
             >
               Open Recovery
             </Link>
