@@ -52,7 +52,7 @@ these — they never recompute what those modules already own.
 2. **Predictive / statistical intelligence** — `trend-engine.ts` (wraps
    `classifyPerformanceTrend`, fuses in an optional SetVision velocity-loss
    cross-check without overriding the classification).
-3. **LLM + RAG explanation** — `explain.ts` + `knowledge/`. The LLM (Groq,
+3. **LLM + RAG explanation** — `explain.ts` + `knowledge/`. The LLM (OpenAI,
    via `lib/dante-core/llm-client.ts`) receives the already-final
    recommendation, its reasons, its data, and up to 2 retrieved knowledge
    entries, and is explicitly instructed never to change any number.
@@ -215,15 +215,114 @@ conflict), safety layer (normal-vs-red-flag boundary), knowledge retrieval
 (category filtering, stopword handling, no-fabrication check on the registry
 itself).
 
+## Layer 1 — premise validation (new)
+
+`lib/dante-core/premise-validation.ts::validatePremises` — deterministic,
+pattern-based. Given the raw message plus three booleans (does this user have
+training history / recovery data / a nutrition profile), it returns a
+structured `PremiseIssue[]` (`anchored_numeric_target`, `unclear_deadline`,
+`missing_baseline`, `missing_required_variable`). It generates no
+recommendation itself — deeper semantic assumption detection (an unstated
+causal claim buried in prose) is explicitly out of reach for regex matching
+and is left to a future Critic-role deliberation stage rather than faked here
+as a false-positive generator. Not yet wired into `app/api/chatbot/route.ts`.
+
+## Layer 6 — final response verifier (new)
+
+`lib/dante-core/verifier/` — runs on the LLM's actual output TEXT (not its
+inputs), catching what got through despite everything upstream. Four checks,
+each a pure function over already-known data (`verifier/checks.ts`):
+
+- `checkSafetyAdherence` — if safety was triggered, the reply must match the
+  required escalation text verbatim (defense-in-depth against a future wiring
+  bug bypassing the upstream short-circuit in `route.ts`).
+- `checkDeterministicValueMutation` — for every known fact whose label is
+  mentioned in the reply, the nearby number must match the fact's value
+  (exact, rounded, one-decimal, or percent-of-fraction).
+- `checkInventedAthleteMetric` — a fixed set of "your X is N" patterns
+  (recovery, readiness, sleep, HRV, calories/protein, load) must be backed by
+  a matching known fact; otherwise the LLM invented a specific athlete metric.
+- `checkCitationMismatch` — "research shows"/"studies suggest" language
+  requires at least one retrieved source this turn (does not verify the claim
+  actually matches that source's content — presence-only, a stated
+  limitation, not a hidden one).
+
+`verifyFinalResponse()` aggregates all four into a `VerifierResult`
+(`passed`, `findings`, `correctionBrief`). `runVerifiedGeneration()` is a
+generic, side-effect-free bounded-retry helper (`MAX_VERIFIER_RETRIES = 2` —
+3 total generation attempts, then a caller-supplied deterministic fallback,
+itself re-verified rather than assumed to pass) — it never calls an LLM
+itself; the caller supplies `generate`.
+
+**Now wired into `app/api/chatbot/route.ts`, on both response paths:**
+
+- **Legacy Q&A path** (the prompt-stuffed flow, most conversational traffic):
+  previously forwarded each provider delta to the client the instant it arrived
+  (true token streaming). It now buffers the full reply via
+  `runVerifiedGeneration`, verifies it, and only then emits it as one
+  `delta` + `done` pair — the same "single-shot" wire shape the safety-layer
+  and agent-loop paths already used, so the client's NDJSON parser needed no
+  changes. **Real, disclosed cost: the per-token "typing" effect is gone on
+  this path.** A generation failure now also never leaves partial text in
+  the client's hands (nothing is emitted until the whole thing passes),
+  which is a behavior change from before (previously a mid-stream failure
+  could show already-streamed text plus an "interrupted" note). Retries
+  reuse the same prompt with the verifier's `correctionBrief` appended — this
+  path has no side effects, so real regeneration is safe.
+  `knownFacts` for this path come from `buildKnownFactsFromContext()`
+  (`lib/dante-core/verifier/known-facts-from-context.ts`), reading back
+  through the same recovery/food-log summaries already built for the
+  prompt — deliberately narrow (recovery score, readiness, sleep hours,
+  calories/protein), matching exactly the dimensions
+  `checkInventedAthleteMetric` checks for; HRV and training load are not
+  extracted (not available in a clean single-number form here) so a claim
+  about either is correctly flagged as unbacked rather than guessed.
+- **Agent-loop path** (action-shaped messages — add food, start workout,
+  confirm a recommendation): verified **once, with no regeneration** — by
+  the time `envelope.reply` exists, the loop may already have created a
+  pending-action row or executed a read, so re-running it on a verifier
+  failure risks duplicating those effects. `knownFacts` is deliberately
+  `[]` here (the envelope exposes no structured numeric facts today — see
+  `DanteResponseEnvelope`), so this fails closed: any specific
+  athlete-metric assertion in this path's reply must stand on its own or it
+  is treated as invented. On failure, the reply text is replaced by a plain
+  fallback message while the envelope's own deterministic fields
+  (`sources`/`actions`/`pendingConfirmation`) are preserved unchanged.
+
+Both paths log `DANTE_VERIFIER_RETRY` / `DANTE_VERIFIER_FALLBACK`
+(`lib/dante-core/tools/observability.ts`) — no raw prompt/reply text, just
+the occurrence.
+
+Not covered by an automated test in this pass: the live route's full
+request→verify→emit wiring itself (no existing test harness for this
+3,900-line route — mocking Supabase + the OpenAI stream + a dozen external
+APIs was judged disproportionate to this change; the four verifier checks
+and the retry/fallback loop are unit-tested in isolation, and so is the new
+`buildKnownFactsFromContext`). This should get real conversational QA
+(English, Vietnamese, an actual fabricated-number attempt) in a live
+session before being considered fully proven.
+
+## DecisionObject identity (new)
+
+`TraceableDecision<T>` (`lib/dante-core/types.ts`) gained two **optional**
+fields — `decisionId` (crypto.randomUUID()) and `createdAt` (ISO string) — so
+the ~25 existing call sites that build a `TraceableDecision` literal directly
+are unaffected. Only `buildAutoregulationTraceableDecision` populates them so
+far; the other builders (`daily-decision-engine.ts`,
+`adaptive-program-engine.ts`, etc.) don't yet — a real remaining gap, not
+backfilled this pass.
+
 ## Known limitations
 
-- **LLM client duplication**: `lib/dante-core/llm-client.ts` re-implements a
-  small Groq fetch-with-fallback client rather than extracting one from
-  `app/api/chatbot/route.ts` (a ~3,300-line, live, production file). This was
-  a deliberate risk tradeoff — extracting a shared helper from that file
-  without the ability to exercise the change in a real browser session was
-  judged too risky. Revisit once there's a way to test the chatbot route
-  live end-to-end.
+- **Single provider, no fallback LLM**: as of the OpenAI migration, Dante has
+  exactly one LLM provider (`OPENAI_API_KEY` / `OPENAI_MODEL`, default
+  `gpt-5.4-mini`, in `lib/dante-core/llm-client.ts`) — no Groq/Gemini
+  fallback chain. `app/api/chatbot/route.ts`'s streaming path now delegates
+  to `streamDanteLlmReply()` from that same module (the prior
+  Groq-fetch-duplicated-in-the-route problem this bullet used to describe no
+  longer applies). If OpenAI is misconfigured or down, the main chat route
+  surfaces an error to the client; only `explain.ts` and
+  `daily-intelligence.ts` have a deterministic (non-LLM) text fallback.
 - **Per-muscle recovery is a heuristic**, not measured physiology (see
   formula above) — this is stated in the UI (`MuscleReadinessPanel`
   footnote) as well as here.

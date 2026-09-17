@@ -1,16 +1,29 @@
 "use client";
 
 import {
+  Component,
   useEffect,
   useId,
   useMemo,
   useRef,
   useState,
 } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 
 import { cn } from "@/lib/utils";
+
+/* =========================================================
+   NUMERIC GUARD — every ellipse rx/ry below traces back to
+   getEyeScale(), which already returns concrete numbers for
+   every state. This is cheap insurance against a future state
+   branch (or prop) slipping through undefined/NaN and crashing
+   the SVG render, not a fix for a currently-reachable bug.
+========================================================= */
+
+function safeNum(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
 
 /* =========================================================
    PUBLIC TYPES
@@ -67,10 +80,55 @@ function randomBetween(min: number, max: number) {
 }
 
 /* =========================================================
-   COMPONENT
+   SCOPED ERROR BOUNDARY — isolates the mascot's SVG render so a
+   future crash inside DanteRobot (e.g. an unguarded ellipse
+   attribute) unmounts only this small element, not the entire
+   Dante chat window it's embedded in.
 ========================================================= */
 
-export function DanteRobot({
+type DanteRobotBoundaryState = { hasError: boolean };
+
+class DanteRobotErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  DanteRobotBoundaryState
+> {
+  state: DanteRobotBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("[DanteRobot] render error", error);
+  }
+
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
+
+/** Static placeholder matching the mascot's own footprint — no layout shift if the real render ever fails. */
+function DanteRobotFallback({ px, className }: { px: number; className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn("relative select-none rounded-full bg-[var(--mf-violet)]/10", className)}
+      style={{ width: px, height: px * 1.12 }}
+    />
+  );
+}
+
+export function DanteRobot(props: DanteRobotProps) {
+  const px = SIZE_PX[props.size ?? "md"];
+
+  return (
+    <DanteRobotErrorBoundary fallback={<DanteRobotFallback px={px} className={props.className} />}>
+      <DanteRobotMascot {...props} />
+    </DanteRobotErrorBoundary>
+  );
+}
+
+function DanteRobotMascot({
   state = "idle",
   size = "md",
   interactive = false,
@@ -299,18 +357,19 @@ export function DanteRobot({
               </filter>
             </defs>
 
-            {/* SHADOW */}
+            {/* SHADOW — keep rx/ry numeric (string ry + animated rx
+                produces SVG "Expected length, NaN" ellipse warnings). */}
             <motion.ellipse
-              cx="100"
-              cy="214"
+              cx={100}
+              cy={214}
               rx={42}
-              ry="7"
+              ry={7}
               fill="#000"
               opacity={0.3}
               animate={
                 reduceMotion
-                  ? { opacity: 0.28 }
-                  : { opacity: [0.3, 0.18, 0.3], rx: [42, 37, 42] }
+                  ? { opacity: 0.28, rx: 42, ry: 7 }
+                  : { opacity: [0.3, 0.18, 0.3], rx: [42, 37, 42], ry: 7 }
               }
               transition={
                 reduceMotion
@@ -545,25 +604,28 @@ type EyeProps = {
 };
 
 function Eye({ cx, cy, scale, color, glow, state, reduceMotion, glowFilterId }: EyeProps) {
+  const rx = safeNum(scale?.rx, 7);
+  const ry = safeNum(scale?.ry, 8.5);
+
   const thinkingShift =
     state === "thinking" && !reduceMotion ? { x: [-2, 2, -2] } : { x: 0 };
 
   const eyeAnimate =
     state === "speaking" && !reduceMotion
       ? {
-          rx: scale.rx,
-          ry: [scale.ry, scale.ry * 0.7, scale.ry, scale.ry * 0.85, scale.ry],
+          rx,
+          ry: [ry, ry * 0.7, ry, ry * 0.85, ry],
         }
-      : { rx: scale.rx, ry: scale.ry };
+      : { rx, ry };
 
   return (
     <motion.g animate={thinkingShift} transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}>
-      <ellipse cx={cx} cy={cy} rx={scale.rx + 4} ry={scale.ry + 4} fill={color} opacity={glow * 0.18} filter={`url(#${glowFilterId})`} />
+      <ellipse cx={cx} cy={cy} rx={rx + 4} ry={ry + 4} fill={color} opacity={glow * 0.18} filter={`url(#${glowFilterId})`} />
       <motion.ellipse
         cx={cx}
         cy={cy}
-        rx={scale.rx}
-        ry={scale.ry}
+        rx={rx}
+        ry={ry}
         animate={eyeAnimate}
         transition={{ duration: state === "speaking" ? 1.6 : 0.35, repeat: state === "speaking" ? Infinity : 0, ease: "easeInOut" }}
         fill={color}

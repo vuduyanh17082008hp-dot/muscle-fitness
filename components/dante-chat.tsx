@@ -31,6 +31,7 @@ import {
   resolveAbortedContent,
   resolveStreamErrorContent,
   type ChatStreamEvent,
+  type ChatStreamSource,
 } from "@/lib/dante-core/chat-stream-protocol";
 
 /* =========================================================
@@ -49,6 +50,8 @@ type ChatMessage = {
   content: string;
   /** "Why This?" evidence, when this reply carried a real, deterministic recommendation. Never fabricated by the LLM. */
   insight?: DanteInsight | null;
+  /** Citation provenance for this reply — only ever the server's own retrieved/evidence sources, never invented client-side. Empty/missing renders nothing (never a crash). */
+  sources?: ChatStreamSource[] | null;
   /** Set only when Dante proposed a write tool call — nothing is saved until the user explicitly confirms (see PendingConfirmationPanel below). Only ever populated from a server `done` event, never while streaming. */
   pendingConfirmation?: PendingConfirmation | null;
   /** Once the user acts on pendingConfirmation, frozen here so the buttons don't re-render as active after a page state update. */
@@ -214,6 +217,58 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
           </details>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   SOURCES — citation provenance for evidence-grounded replies
+   (retrieved Knowledge Brain chunks + live external evidence, see
+   getSources() in app/api/chatbot/route.ts). Plain text/links only —
+   these are server-computed titles/URLs, never raw retrieved content
+   rendered as markup, so no sanitization is needed here the way
+   message.content needs rehypeSanitize. Renders nothing when there
+   are no sources rather than an empty "Sources" section.
+========================================================= */
+
+function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
+  const safeSources = sources.filter(
+    (source) =>
+      source.title.trim().length > 0 &&
+      /^https?:\/\//i.test(source.url.trim()),
+  );
+
+  if (safeSources.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 border-t border-white/8 pt-4">
+      <details className="group">
+        <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-white/10 px-4 text-xs font-black uppercase tracking-[0.06em] text-zinc-400 transition hover:bg-white/[0.06]">
+          Sources ({safeSources.length})
+        </summary>
+
+        <ul className="mt-3 space-y-2 rounded-2xl border border-white/8 bg-black/20 p-4">
+          {safeSources.map((source, index) => (
+            <li key={`${source.url}-${index}`} className="text-sm leading-6">
+              <a
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-400 underline decoration-amber-400/30 underline-offset-2 hover:text-amber-300"
+              >
+                {source.title}
+              </a>
+              {source.type ? (
+                <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-600">
+                  {source.type}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }
@@ -495,6 +550,17 @@ export default function DanteChat({
             JSON.stringify({
               message:
                 trimmed,
+              // Recent user turns only — powers Phase 2D gradual
+              // communication adaptation without dumping full transcripts.
+              messages: [
+                ...messages
+                  .filter((entry) => entry.role === "user" && entry.content.trim())
+                  .map((entry) => ({
+                    role: "user" as const,
+                    content: entry.content.trim(),
+                  })),
+                { role: "user" as const, content: trimmed },
+              ].slice(-8),
               ...contextPayload,
             }),
 
@@ -560,6 +626,7 @@ export default function DanteChat({
           updateStreamingMessage(assistantId, (message) => ({
             ...message,
             insight: finalEvent.insight,
+            sources: Array.isArray(finalEvent.sources) ? finalEvent.sources : [],
             // A pending confirmation is only ever attached here, from
             // the server's own completed `done` event — never
             // rendered speculatively while text is still streaming.
@@ -728,15 +795,22 @@ export default function DanteChat({
         // composer). The conversation pane is the ONLY flex-1 child, and
         // it carries min-h-0 so it actually shrinks to the container's
         // fixed height instead of growing to fit its content and pushing
-        // the composer out of view — the root cause of the previous
-        // overlap between the chat window and whatever rendered below it.
+        // the composer out of view.
+        //
+        // The fixed height (and its min-h floor) only applies once
+        // there's a real scrollable conversation to bound (isEmpty
+        // === false). The empty state (hero + composer, no message
+        // history yet) carries no height/min-height at all — it's a
+        // compact intro card, not a conversation pane, so it sizes to
+        // its own (intentionally small) content instead of being
+        // forced up to the conversation view's floor, which used to
+        // leave the card taller than its content needed and made it
+        // dominate the page above Recovery Knowledge Hub.
         "flex w-full min-h-0 flex-col font-sans",
-        // Compact mode (Floating Dante / atlas Ask Dante) must fit inside
-        // a bottom sheet or short desktop panel — fixed 520/600px heights
-        // clipped the composer on phones. Cap to the available viewport.
-        compact
-          ? "h-[min(62dvh,520px)] max-h-[min(62dvh,520px)] min-h-0"
-          : "h-[min(74vh,820px)] min-h-125",
+        !isEmpty &&
+          (compact
+            ? "h-[min(62dvh,520px)] max-h-[min(62dvh,520px)] min-h-0"
+            : "h-[min(74vh,820px)] min-h-125"),
         className,
       )}
     >
@@ -823,36 +897,37 @@ export default function DanteChat({
             from-[#181c25]
             to-[#12151c]
             px-6
-            py-8
+            py-5
             text-center
-            sm:py-9
+            sm:py-6
           "
         >
-          {/* DANTE HERO — mascot + identity. Kept compact so the
-              starters below read as clearly secondary, not a second
-              hero. */}
+          {/* DANTE HERO — mascot + identity. Kept compact (sm robot,
+              tight spacing) so this intro card reads as a lightweight
+              conversation starter, not a full-height section of its
+              own. */}
           <DanteRobot
             state={visualState}
-            size="md"
+            size="sm"
             interactive
           />
 
-          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--mf-violet)]">
+          <p className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--mf-violet)]">
             Dante
           </p>
 
-          <h2 className="mt-1.5 text-2xl font-bold text-white md:text-3xl">
+          <h2 className="mt-1 text-xl font-bold text-white md:text-2xl">
             {heroTitle}
           </h2>
 
-          <p className="mt-2.5 line-clamp-2 max-w-md text-sm leading-6 text-white/50">
+          <p className="mt-2 line-clamp-2 max-w-md text-sm leading-6 text-white/50">
             {heroSubtitle}
           </p>
 
           {/* CONTEXTUAL STARTERS — visually secondary to the hero
               above: smaller type, quieter surface, no competing focal
               weight. 2x2 on desktop, single column on narrow mobile. */}
-          <div className="mt-6 grid w-full max-w-lg grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <div className="mt-4 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
             {emptyStatePrompts.map((item) => (
               <button
                 key={item.label}
@@ -865,7 +940,7 @@ export default function DanteChat({
                   border-[var(--mf-violet)]/20
                   bg-[var(--mf-violet)]/6
                   px-4
-                  py-3
+                  py-2.5
                   text-left
                   text-xs
                   font-semibold
@@ -888,9 +963,16 @@ export default function DanteChat({
       )}
 
       {/* ===================================================
-          CHAT WINDOW
+          CHAT WINDOW — only once there's a real conversation beyond
+          the seeded welcome message. In the empty state the hero
+          block above already covers this space (same welcome copy,
+          via heroTitle/heroSubtitle); rendering this too produced a
+          second, near-empty rounded surface directly under it, since
+          a flex-1 min-h-0 pane squeezed toward zero height still paints
+          its own border/padding.
       =================================================== */}
 
+      {!isEmpty && (
       <div
         ref={chatWindowRef}
         onScroll={handleChatWindowScroll}
@@ -920,11 +1002,10 @@ export default function DanteChat({
               return (
                 <div
                   key={message.id}
-                  className={
-                    isUser
-                      ? "flex justify-end"
-                      : "flex justify-start"
-                  }
+                  className={cn(
+                    "dante-message-in",
+                    isUser ? "flex justify-end" : "flex justify-start",
+                  )}
                 >
 
                   {/* =======================================
@@ -1309,6 +1390,10 @@ export default function DanteChat({
                           <DanteInsightPanel insight={message.insight} />
                         ) : null}
 
+                        {message.sources && message.sources.length > 0 ? (
+                          <DanteSourcesPanel sources={message.sources} />
+                        ) : null}
+
                         {message.pendingConfirmation ? (
                           <PendingConfirmationPanel
                             pendingConfirmation={message.pendingConfirmation}
@@ -1337,6 +1422,7 @@ export default function DanteChat({
           />
         </div>
       </div>
+      )}
 
       {/* ===================================================
           COMPOSER — a separate sibling section, always the LAST
@@ -1357,7 +1443,7 @@ export default function DanteChat({
         <div
           className="
             flex
-            min-h-14
+            min-h-12
             flex-1
             items-end
             rounded-[20px]
@@ -1365,7 +1451,7 @@ export default function DanteChat({
             border-white/10
             bg-[#171c26]
             px-5
-            py-3.5
+            py-2.5
             transition
             focus-within:border-[var(--mf-violet)]/40
             focus-within:bg-[#1c222e]
@@ -1396,6 +1482,7 @@ export default function DanteChat({
             disabled={
               isLoading
             }
+            aria-label="Message Dante"
             placeholder="Ask Dante about training, nutrition, recovery..."
             className="
               max-h-40
@@ -1431,8 +1518,8 @@ export default function DanteChat({
             aria-label="Stop Dante's response"
             className="
               flex
-              h-14
-              w-14
+              h-12
+              w-12
               shrink-0
               items-center
               justify-center
@@ -1458,8 +1545,8 @@ export default function DanteChat({
             aria-label="Send message to Dante"
             className="
               flex
-              h-14
-              w-14
+              h-12
+              w-12
               shrink-0
               items-center
               justify-center

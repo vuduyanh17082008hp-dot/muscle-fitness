@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * own control flow.
  */
 
-const { fakeReadTool, fakeWriteTool, createPendingActionMock } = vi.hoisted(() => {
+const { fakeReadTool, fakeWriteTool, fakeKnowledgeTool, createPendingActionMock } = vi.hoisted(() => {
   // Hand-built fake zod-shaped schemas (not the real zod) — vi.hoisted
   // runs before module imports are initialized, so the real `zod`
   // import can't be referenced safely inside this factory.
@@ -54,6 +54,45 @@ const { fakeReadTool, fakeWriteTool, createPendingActionMock } = vi.hoisted(() =
     execute: vi.fn(async () => ({ ok: true as const, data: { done: true } })),
   };
 
+  const fakeKnowledgeTool = {
+    name: "retrieve_knowledge",
+    description: "fake knowledge",
+    inputSchema: {
+      safeParse(input: unknown) {
+        if (typeof input !== "object" || input === null) return { success: false as const };
+        return { success: true as const, data: input };
+      },
+    },
+    mode: "read" as const,
+    risk: "low" as const,
+    requiresConfirmation: false,
+    execute: vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        chunks: [
+          {
+            title: "RDL cues",
+            category: "exercise_technique",
+            source: "Dante Knowledge Brain",
+            sourceUrl: "https://example.com/rdl",
+          },
+          {
+            title: "Injected",
+            category: "safety",
+            source: "bad",
+            sourceUrl: "javascript:alert(1)",
+          },
+          {
+            title: "No URL",
+            category: "training",
+            source: "internal",
+            sourceUrl: null,
+          },
+        ],
+      },
+    })),
+  };
+
   const createPendingActionMock = vi.fn(async (_supabase: unknown, _userId: string, toolName: string, _args: unknown, summary: string) => ({
     actionId: "action-1",
     toolName,
@@ -61,11 +100,11 @@ const { fakeReadTool, fakeWriteTool, createPendingActionMock } = vi.hoisted(() =
     expiresAt: "2026-09-13T10:10:00.000Z",
   }));
 
-  return { fakeReadTool, fakeWriteTool, createPendingActionMock };
+  return { fakeReadTool, fakeWriteTool, fakeKnowledgeTool, createPendingActionMock };
 });
 
 vi.mock("@/lib/dante-core/tools/registry", () => {
-  const tools = [fakeReadTool, fakeWriteTool];
+  const tools = [fakeReadTool, fakeWriteTool, fakeKnowledgeTool];
   return {
     DANTE_TOOLS: tools,
     getDanteTool: (name: string) => tools.find((tool) => tool.name === name),
@@ -77,15 +116,15 @@ vi.mock("@/lib/dante-core/tools/pending-actions", () => ({
 }));
 
 import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
-import type { GroqAgentTurnResult, GroqChatMessage, GroqToolSpec } from "@/lib/dante-core/llm-client";
+import type { DanteAgentTurnResult, DanteChatMessage, DanteToolSpec } from "@/lib/dante-core/llm-client";
 
 const context = { supabase: {} as never, userId: "user-1", now: new Date("2026-09-13T10:00:00.000Z") };
 
-function toolCallTurn(id: string, name: string, args: unknown): GroqAgentTurnResult {
+function toolCallTurn(id: string, name: string, args: unknown): DanteAgentTurnResult {
   return { type: "tool_calls", toolCalls: [{ id, name, arguments: args }] };
 }
 
-function finalTurn(reply: string): GroqAgentTurnResult {
+function finalTurn(reply: string): DanteAgentTurnResult {
   return { type: "final", reply };
 }
 
@@ -93,12 +132,32 @@ describe("runDanteAgentTurn", () => {
   beforeEach(() => {
     fakeReadTool.execute.mockClear();
     fakeWriteTool.execute.mockClear();
+    fakeKnowledgeTool.execute.mockClear();
     createPendingActionMock.mockClear();
+  });
+
+  it("maps retrieve_knowledge chunks into envelope sources and drops unsafe/empty URLs", async () => {
+    const callModel = vi
+      .fn()
+      .mockResolvedValueOnce(toolCallTurn("1", "retrieve_knowledge", { query: "rdl" }))
+      .mockResolvedValueOnce(finalTurn("Use a hip hinge."));
+
+    const envelope = await runDanteAgentTurn(context, "how do I do an RDL?", { callModel });
+
+    expect(fakeKnowledgeTool.execute).toHaveBeenCalledTimes(1);
+    expect(envelope.sources).toEqual([
+      {
+        type: "Dante Knowledge Brain",
+        title: "RDL cues",
+        url: "https://example.com/rdl",
+      },
+    ]);
+    expect(envelope.reply).toBe("Use a hip hinge.");
   });
 
   it("executes a read tool and returns the model's final reply", async () => {
     const callModel = vi
-      .fn<(messages: GroqChatMessage[], tools: GroqToolSpec[]) => Promise<GroqAgentTurnResult>>()
+      .fn<(messages: DanteChatMessage[], tools: DanteToolSpec[]) => Promise<DanteAgentTurnResult>>()
       .mockResolvedValueOnce(toolCallTurn("1", "fake_read", {}))
       .mockResolvedValueOnce(finalTurn("Here is your answer."));
 
@@ -187,7 +246,7 @@ describe("runDanteAgentTurn", () => {
       { callModel },
     );
 
-    const [messages] = callModel.mock.calls[0] as [GroqChatMessage[], GroqToolSpec[]];
+    const [messages] = callModel.mock.calls[0] as [DanteChatMessage[], DanteToolSpec[]];
     const systemMessage = messages.find((message) => message.role === "system");
 
     expect(systemMessage?.content).toContain("Timezone: Asia/Singapore");
@@ -200,7 +259,7 @@ describe("runDanteAgentTurn", () => {
 
     await runDanteAgentTurn(context, "what time is it?", { callModel });
 
-    const [messages] = callModel.mock.calls[0] as [GroqChatMessage[], GroqToolSpec[]];
+    const [messages] = callModel.mock.calls[0] as [DanteChatMessage[], DanteToolSpec[]];
     const systemMessage = messages.find((message) => message.role === "system");
 
     expect(systemMessage?.content).toContain("not available");
@@ -208,7 +267,7 @@ describe("runDanteAgentTurn", () => {
   });
 
   it("stops after MAX_TOOL_ROUNDS and never loops forever (Test P)", async () => {
-    const callModel = vi.fn((_messages: GroqChatMessage[], _tools: GroqToolSpec[]) => {
+    const callModel = vi.fn((_messages: DanteChatMessage[], _tools: DanteToolSpec[]) => {
       const round = callModel.mock.calls.length; // 1-indexed after this call is recorded
       return Promise.resolve(toolCallTurn(String(round), "fake_read", { round }));
     });

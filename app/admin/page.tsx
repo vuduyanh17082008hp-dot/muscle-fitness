@@ -47,8 +47,14 @@ export default async function AdminHomePage() {
 
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
-            href="/admin/ai-evaluation"
+            href="/admin/dante-validation"
             className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
+          >
+            Dante Validation
+          </Link>
+          <Link
+            href="/admin/ai-evaluation"
+            className="rounded-xl border border-amber-500/40 px-5 py-3 text-sm font-semibold text-amber-300 transition hover:border-amber-400"
           >
             AI Evaluation Dashboard
           </Link>

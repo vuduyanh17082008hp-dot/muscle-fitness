@@ -86,6 +86,17 @@ describe("PUT /api/demo/settings", () => {
     expect(rows.get(USER_ID)).toMatchObject({ enabled: true, scenario: "recovered_athlete" });
   });
 
+  it("accepts the data-quality scenarios (partial_data, stale_data) alongside the physiological ones", async () => {
+    const { client, rows } = createFakeSupabase();
+    vi.mocked(createClient).mockResolvedValue(client as never);
+
+    const { PUT } = await import("../route");
+    const response = await PUT(putJson({ enabled: true, scenario: "stale_data" }));
+
+    expect(response.status).toBe(200);
+    expect(rows.get(USER_ID)).toMatchObject({ enabled: true, scenario: "stale_data" });
+  });
+
   it("rejects an unknown scenario id", async () => {
     const { client } = createFakeSupabase();
     vi.mocked(createClient).mockResolvedValue(client as never);

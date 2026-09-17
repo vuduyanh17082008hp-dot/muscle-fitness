@@ -6,7 +6,7 @@ import { z, type ZodTypeAny } from "zod";
  * Minimal zod -> JSON Schema converter, covering exactly the zod node
  * types used by lib/dante-core/tools/*'s input schemas (object,
  * string, number, boolean, enum, array, optional, nullable, default).
- * Only needed to hand Groq's OpenAI-compatible function-calling API a
+ * Only needed to hand OpenAI's function-calling API a
  * `parameters` schema for each tool — the zod schema itself remains
  * the single source of truth and the only thing that actually
  * validates a call's arguments (see pending-actions.ts /

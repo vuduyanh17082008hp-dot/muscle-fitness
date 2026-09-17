@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadReadinessForUser } from "@/lib/dante-core/server/load-readiness-for-user";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
-import { callGroqWithFallback } from "@/lib/dante-core/llm-client";
+import { callDanteLlm } from "@/lib/dante-core/llm-client";
 import type { AppEventType } from "@/lib/events/types";
 
 /**
@@ -120,7 +120,7 @@ ${JSON.stringify(intel, null, 2)}
 Reply with ONLY the sentence, nothing else.`;
 
   try {
-    const result = await callGroqWithFallback(prompt);
+    const result = await callDanteLlm(prompt);
     return result?.reply.trim() || fallback;
   } catch {
     return fallback;

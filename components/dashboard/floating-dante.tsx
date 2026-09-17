@@ -43,9 +43,13 @@ export function FloatingDante() {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
 
-  // Skip the floating trigger on the full Dante page itself — it would
-  // float on top of the exact same conversation it opens.
-  if (pathname === "/dashboard/ai-coach") {
+  // Skip the floating trigger on pages that already embed a full,
+  // in-flow DanteChat composer of their own — the full Dante page
+  // (ai-coach) and Recovery's "Recovery Coach" section. Opening the
+  // floating panel there rendered a second, fixed-position DanteChat
+  // on top of the one already in the page, which visually collided
+  // with in-flow content behind it (e.g. Recovery Knowledge Hub).
+  if (pathname === "/dashboard/ai-coach" || pathname === "/dashboard/recovery") {
     return null;
   }
 

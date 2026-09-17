@@ -1,9 +1,14 @@
 import "server-only";
 
+import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AppEvent, AppEventType } from "@/lib/events/types";
+import { processRecoveryOutcomeForLearning } from "@/lib/dante-core/adaptive-closed-loop";
 import { recomputeDailyIntelligence } from "@/lib/dante-core/daily-intelligence";
+import { processPhase3RecoveryOutcome } from "@/lib/dante-core/shadow/shadow-runtime";
+import { addDaysIso } from "@/lib/nutrition/date-utils";
+import { localDateTimeParts, resolveUserTimeZone } from "@/lib/training/load-today-session";
 
 /**
  * emitEvent() (spec Part B §14).
@@ -62,5 +67,64 @@ export async function emitEvent<T extends AppEventType>(
     await recomputeDailyIntelligence(supabase, event.userId, event.type);
   } catch (error) {
     console.error("[EVENTS] recomputeDailyIntelligence failed for", event.type, error);
+  }
+
+  if (event.type === "RECOVERY_UPDATED") {
+    try {
+      const timezone = await resolveUserTimeZone(supabase, event.userId);
+      const today = localDateTimeParts(new Date(), timezone).localDate;
+      const yesterday = addDaysIso(today, -1);
+
+      const [{ data: previousRow }, { data: todayRow }] = await Promise.all([
+        supabase
+          .from("recovery_checkins")
+          .select("recovery_score, sleep_hours, stress, soreness")
+          .eq("user_id", event.userId)
+          .eq("checkin_date", yesterday)
+          .maybeSingle(),
+        supabase
+          .from("recovery_checkins")
+          .select("recovery_score, sleep_hours, stress, soreness")
+          .eq("user_id", event.userId)
+          .eq("checkin_date", today)
+          .maybeSingle(),
+      ]);
+
+      const payload = event.payload as { recoveryScore?: number | null; status?: string | null };
+      const currentRecoveryScore =
+        (todayRow?.recovery_score as number | null) ??
+        (payload.recoveryScore ?? null);
+
+      try {
+        await processRecoveryOutcomeForLearning(supabase, {
+          userId: event.userId,
+          previousRecoveryScore: (previousRow?.recovery_score as number | null) ?? null,
+          currentRecoveryScore,
+          contextSignals: {
+            sleepHours: (todayRow?.sleep_hours as number | null) ?? null,
+            stress: (todayRow?.stress as number | null) ?? null,
+            soreness: (todayRow?.soreness as number | null) ?? null,
+            recoveryScore: currentRecoveryScore,
+            trainingLoadState: null,
+          },
+        });
+      } catch (error) {
+        console.error("[EVENTS] Phase 2 adaptive learning failed for RECOVERY_UPDATED", error);
+      }
+
+      after(async () => {
+        try {
+          await processPhase3RecoveryOutcome({
+            supabase,
+            userId: event.userId,
+            currentRecoveryScore,
+          });
+        } catch (error) {
+          console.error("[EVENTS] Phase 3 shadow outcome linkage failed for RECOVERY_UPDATED", error);
+        }
+      });
+    } catch (error) {
+      console.error("[EVENTS] unable to load recovery outcome context", error);
+    }
   }
 }

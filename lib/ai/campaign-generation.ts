@@ -3,8 +3,8 @@ import "server-only";
 import { z } from "zod";
 
 import {
-  groq,
-  GROQ_MODEL,
+  createOpenAiChatCompletion,
+  OPENAI_MODEL,
 } from "@/lib/ai/client";
 
 import { parseAIJson } from "@/lib/ai/json";
@@ -76,12 +76,12 @@ export async function generateCampaign(
   input: CampaignGenerationInput
 ): Promise<{
   campaign: GeneratedCampaign;
-  provider: "groq";
+  provider: "openai";
   model: string;
 }> {
   const completion =
-    await groq.chat.completions.create({
-      model: GROQ_MODEL,
+    await createOpenAiChatCompletion({
+      model: OPENAI_MODEL,
 
       temperature: 0.5,
 
@@ -113,7 +113,7 @@ ${JSON.stringify(
 
   if (!content) {
     throw new Error(
-      "Groq returned an empty campaign."
+      "OpenAI returned an empty campaign."
     );
   }
 
@@ -124,7 +124,7 @@ ${JSON.stringify(
 
   return {
     campaign,
-    provider: "groq",
-    model: GROQ_MODEL,
+    provider: "openai",
+    model: OPENAI_MODEL,
   };
 }

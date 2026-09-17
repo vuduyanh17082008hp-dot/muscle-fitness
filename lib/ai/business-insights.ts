@@ -3,8 +3,8 @@ import "server-only";
 import { z } from "zod";
 
 import {
-  groq,
-  GROQ_MODEL,
+  createOpenAiChatCompletion,
+  OPENAI_MODEL,
 } from "@/lib/ai/client";
 
 import { parseAIJson } from "@/lib/ai/json";
@@ -67,8 +67,8 @@ export async function generateBusinessInsights(
   data: Record<string, unknown>
 ) {
   const completion =
-    await groq.chat.completions.create({
-      model: GROQ_MODEL,
+    await createOpenAiChatCompletion({
+      model: OPENAI_MODEL,
 
       temperature: 0.2,
 
@@ -100,7 +100,7 @@ ${JSON.stringify(
 
   if (!content) {
     throw new Error(
-      "Groq returned empty business insights."
+      "OpenAI returned empty business insights."
     );
   }
 
@@ -110,8 +110,8 @@ ${JSON.stringify(
       businessInsightResponseSchema
     ),
 
-    provider: "groq" as const,
+    provider: "openai" as const,
 
-    model: GROQ_MODEL,
+    model: OPENAI_MODEL,
   };
 }

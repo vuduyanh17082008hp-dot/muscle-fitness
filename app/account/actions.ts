@@ -180,7 +180,7 @@ export async function saveProfileAction(
     .from("profiles")
     .upsert(
       {
-        id: user.id,
+        user_id: user.id,
         email: user.email ?? null,
         full_name: fullName,
         username,
@@ -188,7 +188,7 @@ export async function saveProfileAction(
         updated_at: now,
       },
       {
-        onConflict: "id",
+        onConflict: "user_id",
       }
     )
 

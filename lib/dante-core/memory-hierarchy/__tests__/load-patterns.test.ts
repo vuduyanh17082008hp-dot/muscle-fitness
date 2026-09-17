@@ -17,6 +17,7 @@ import {
 function createFakePatternsTable(rows: Array<{ id: string; user_id: string; status: string }>) {
   const deleteCalls: Array<{ id: string; userId: string }> = [];
   const updateCalls: Array<{ id: string; userId: string; values: Record<string, unknown> }> = [];
+  const selectCalls: Array<{ id: string; userId: string }> = [];
 
   const supabase = {
     from(table: string) {
@@ -26,30 +27,50 @@ function createFakePatternsTable(rows: Array<{ id: string; user_id: string; stat
 
       return {
         select: () => ({
-          eq: (_col: string, userId: string) => ({
-            neq: () => ({
-              order: async () => ({
-                data: rows
-                  .filter((row) => row.user_id === userId && row.status !== "forgotten")
-                  .map((row) => ({
-                    id: row.id,
-                    user_id: row.user_id,
-                    context_key: "poor_sleep",
-                    intervention_type: "reduce_volume",
-                    tier: "policy",
-                    status: row.status,
-                    sample_count: 8,
-                    positive_count: 7,
-                    confidence: 0.85,
-                    summary: "summary",
-                    first_observed_at: "2026-01-01T00:00:00.000Z",
-                    last_reinforced_at: "2026-01-01T00:00:00.000Z",
-                    requires_confirmation: false,
-                  })),
-                error: null,
-              }),
-            }),
-          }),
+          eq: (col1: string, value1: string) => {
+            // loadLearnedPatterns: .eq("user_id", userId).neq(...).order(...)
+            if (col1 === "user_id") {
+              return {
+                neq: () => ({
+                  order: async () => ({
+                    data: rows
+                      .filter((row) => row.user_id === value1 && row.status !== "forgotten")
+                      .map((row) => ({
+                        id: row.id,
+                        user_id: row.user_id,
+                        context_key: "poor_sleep",
+                        intervention_type: "reduce_volume",
+                        tier: "policy",
+                        status: row.status,
+                        sample_count: 8,
+                        positive_count: 7,
+                        confidence: 0.85,
+                        summary: "summary",
+                        first_observed_at: "2026-01-01T00:00:00.000Z",
+                        last_reinforced_at: "2026-01-01T00:00:00.000Z",
+                        requires_confirmation: false,
+                      })),
+                    error: null,
+                  }),
+                }),
+              };
+            }
+
+            // forgetLearnedPattern ownership check:
+            // .select("id").eq("id", patternId).eq("user_id", userId).maybeSingle()
+            return {
+              eq: (_col2: string, userId: string) => {
+                selectCalls.push({ id: value1, userId });
+                const owned = rows.find((row) => row.id === value1 && row.user_id === userId);
+                return {
+                  maybeSingle: async () => ({
+                    data: owned ? { id: owned.id } : null,
+                    error: null,
+                  }),
+                };
+              },
+            };
+          },
         }),
 
         delete: () => ({
@@ -74,7 +95,7 @@ function createFakePatternsTable(rows: Array<{ id: string; user_id: string; stat
     },
   };
 
-  return { supabase, deleteCalls, updateCalls };
+  return { supabase, deleteCalls, updateCalls, selectCalls };
 }
 
 describe("loadLearnedPatterns — cross-user isolation", () => {
@@ -99,16 +120,19 @@ describe("loadLearnedPatterns — cross-user isolation", () => {
 });
 
 describe("forgetLearnedPattern / setPatternRequiresConfirmation — cross-user isolation", () => {
-  it("scopes the delete query by BOTH pattern id and the requesting user id", async () => {
-    const { supabase, deleteCalls } = createFakePatternsTable([{ id: "p1", user_id: "user-a", status: "active" }]);
+  it("verifies ownership before delete and scopes both queries by user id", async () => {
+    const { supabase, deleteCalls, selectCalls } = createFakePatternsTable([
+      { id: "p1", user_id: "user-a", status: "active" },
+    ]);
 
-    await forgetLearnedPattern(supabase as never, "attacker", "p1");
+    const miss = await forgetLearnedPattern(supabase as never, "attacker", "p1");
+    expect(miss).toEqual({ ok: false, error: "Pattern not found." });
+    expect(selectCalls).toEqual([{ id: "p1", userId: "attacker" }]);
+    expect(deleteCalls).toEqual([]);
 
-    expect(deleteCalls).toEqual([{ id: "p1", userId: "attacker" }]);
-    // The query is scoped by the ATTACKER's id, not the pattern owner's —
-    // a real Postgres row-count-zero result (or RLS) is what actually
-    // prevents the cross-user delete; this proves the code never
-    // widens the scope to "any user" on its own.
+    const hit = await forgetLearnedPattern(supabase as never, "user-a", "p1");
+    expect(hit).toEqual({ ok: true });
+    expect(deleteCalls).toEqual([{ id: "p1", userId: "user-a" }]);
   });
 
   it("scopes the update (ASK FIRST / KEEP) query by both pattern id and the requesting user id", async () => {

@@ -173,4 +173,8 @@ export type TraceableDecision<TDecision> = {
   sources: KnowledgeSourceRef[];
   /** Honest caveats on this specific decision (small sample, heuristic definition, demo data, etc.) — optional so existing callers are unaffected; DecisionCard renders it when present. */
   limitations?: string[];
+  /** Stable identity for this decision instance, for audit/rollback linkage. Optional so the ~25 existing call sites that build a TraceableDecision literal directly are unaffected — only builders that opt in (buildAutoregulationTraceableDecision) populate it. */
+  decisionId?: string;
+  /** ISO 8601 timestamp of when this decision was produced. */
+  createdAt?: string;
 };

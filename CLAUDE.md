@@ -23,7 +23,7 @@ Client (end user), business (coach/gym operator), and platform-admin are
 
 - `/dashboard/*`, `/account*`, `/onboarding`, `/coach`, `/chatbot` — end
   user, gated by `lib/auth/permissions.ts` / per-page `supabase.auth.getUser()`
-  checks, role resolved via `lib/auth/guard.ts::resolveActorRole` (`user_roles`
+  checks, role resolved via `lib/auth/permissions.ts::resolveActorRole` (`user_roles`
   table first, `profiles.role` fallback, defaults to `"client"`).
 - `/business/*` — coach/gym-owner portal, gated by
   `requireBusinessAdmin()` (`lib/business/require-business-admin.ts`), backed
@@ -136,6 +136,14 @@ applied (not done automatically by this pass — review before running).
 
 ## HawkerLens SG
 
-Do not build yet. When it arrives, it should plug into nutrition the same
-way barcode/search/photo do today — produce a `ConfirmedFood`-shaped entry,
-nothing bespoke.
+This doc previously said "do not build yet" — that's stale. It's already
+built and live at `/dashboard/nutrition` (`lib/hawkerlens/`,
+`app/api/hawkerlens/{scan,confirm}/route.ts`,
+`components/nutrition/hawkerlens-panel.tsx`). It correctly plugs into
+nutrition the way this doc always required: `app/api/hawkerlens/confirm/route.ts`
+calls the same `createFoodLog()` every other source (barcode/search/photo)
+uses, tagged `source: "ai_estimate"`, gated behind a real-vs-demo vision
+check with explicit "Demo mode" UI disclosure. No architectural fix needed
+here — this is a documentation correction only. Whether to keep it live,
+gate it further, or fold it into a broader HawkerLens SG rollout is a
+product decision, not an architecture-review action.

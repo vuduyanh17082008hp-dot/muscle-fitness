@@ -1,289 +1,196 @@
 /**
- * DANTE Language Configuration
+ * Dante's response-language policy — provider-neutral, single source
+ * of truth for which language Dante's final user-facing response
+ * should be written in. Deterministic detection (no LLM call, no
+ * heavy language-ID library) feeding a short, explicit prompt
+ * instruction: this module decides WHICH language to ask for and
+ * why; the model still writes the actual prose.
  *
- * English is the primary and default language for the DANTE
- * coaching system.
- *
- * This module is intentionally isolated from the main chatbot
- * implementation so language behaviour can be changed without
- * modifying DANTE's fitness, research, tool, or provider logic.
+ * Replaces a prior version of this file that hard-forced English
+ * regardless of the user's own language — that policy is gone. Dante
+ * now adapts to the user's current conversational language (see
+ * decideDanteLanguage below for the exact priority order).
  */
 
-export const DANTE_PRIMARY_LANGUAGE = "English" as const;
+export type DanteLanguageSource =
+  | "explicit_request"
+  | "conversation"
+  | "message"
+  | "stored_preference"
+  | "fallback";
 
-export const DANTE_LANGUAGE_POLICY = `
-============================================================
-DANTE LANGUAGE POLICY
-============================================================
+export type DanteLanguageConfidence = "high" | "medium" | "low";
 
-PRIMARY LANGUAGE:
-English
+export type DanteLanguageDecision = {
+  /** Short code Dante is instructed to answer in, e.g. "en", "vi". */
+  language: string;
+  /** Human-readable name for the prompt, e.g. "English", "Vietnamese". */
+  languageName: string;
+  source: DanteLanguageSource;
+  confidence: DanteLanguageConfidence;
+};
 
-English is DANTE's primary and default response language.
+const ENGLISH: Omit<DanteLanguageDecision, "source" | "confidence"> = { language: "en", languageName: "English" };
+const VIETNAMESE: Omit<DanteLanguageDecision, "source" | "confidence"> = { language: "vi", languageName: "Vietnamese" };
 
-LANGUAGE RULES:
+/** A temporary request ("answer this in English") — matched narrowly so it doesn't fire on ordinary sentences that merely contain the word "English"/"Vietnamese". */
+const EXPLICIT_ENGLISH_REQUEST: RegExp[] = [
+  /\b(answer|reply|respond|explain|write|say)\b[^.!?]{0,20}\bin\s+english\b/i,
+  /\benglish\s+please\b/i,
+  /\bswitch\s+(back\s+)?to\s+english\b/i,
+  /\buse\s+english\b/i,
+  /\bactually,?\s+(answer|reply|respond)\b[^.!?]{0,20}\benglish\b/i,
+];
 
-1. Always answer in clear, natural English by default.
+const EXPLICIT_VIETNAMESE_REQUEST: RegExp[] = [
+  /tr[aả]\s*l[oờ][iì]\s*b[ằă]ng\s*ti[eế]ng\s*vi[eệ]t/i,
+  /\b(answer|reply|respond|explain|write|say)\b[^.!?]{0,20}\bin\s+vietnamese\b/i,
+  /\bvietnamese\s+please\b/i,
+  /chuy[eể]n\s*sang\s*ti[eế]ng\s*vi[eệ]t/i,
+  /quay\s*l[aạ]i\s*ti[eế]ng\s*vi[eệ]t/i,
+  /n[oó]i\s*ti[eế]ng\s*vi[eệ]t/i,
+  /d[uù]ng\s*ti[eế]ng\s*vi[eệ]t/i,
+];
 
-2. English remains the default even when:
-   - the user writes in Vietnamese,
-   - the user's profile contains Vietnamese,
-   - previous conversation messages contain Vietnamese,
-   - the user's browser or system locale is Vietnamese,
-   - retrieved context contains Vietnamese.
+/** Precomposed Vietnamese-only vowels (Latin Extended Additional) — this range is not shared with French/Spanish/Portuguese/German, so a match here is a reliable, low-false-positive Vietnamese signal without a language-ID library. */
+const VIETNAMESE_SPECIFIC_VOWELS = /[Ạ-ỹ]/;
+/** đ/Đ alone is common enough elsewhere (e.g. Croatian) that it's only used together with a common Vietnamese function word, never alone. */
+const VIETNAMESE_DJ = /[đĐ]/;
+const VIETNAMESE_COMMON_WORDS =
+  /\b(t[oô]i|b[aạ]n|c[uủ]a|kh[oô]ng|v[aà]|l[aà]|h[oô]m\s*nay|n[eê]n|đư[oợ]c|cho|v[oớ]i|n[aà]y|nh[uữ]ng|m[oộ]t|c[aá]c|c[oó]|đang|s[eẽ]|đ[aã]|t[aậ]p|gi[oờ]|mu[oố]n)\b/i;
 
-3. Do NOT automatically mirror the language used by the user.
-
-4. Only use another language when the user explicitly requests it.
-
-Examples of explicit requests:
-
-- "Answer in Vietnamese."
-- "Trả lời bằng tiếng Việt."
-- "Explain this in Vietnamese."
-- "Use Vietnamese for this answer."
-
-5. If the user asks a question in Vietnamese WITHOUT explicitly
-requesting Vietnamese output, answer in English.
-
-Example:
-
-USER:
-"Tôi nên ăn bao nhiêu protein một ngày?"
-
-CORRECT RESPONSE LANGUAGE:
-English
-
-INCORRECT RESPONSE LANGUAGE:
-Vietnamese
-
-6. If the user explicitly requests Vietnamese, DANTE may answer
-that request in Vietnamese.
-
-Example:
-
-USER:
-"Trả lời bằng tiếng Việt: Tôi nên ăn bao nhiêu protein?"
-
-CORRECT RESPONSE LANGUAGE:
-Vietnamese
-
-7. A temporary request to use another language applies only to
-the relevant response unless the user clearly asks to continue
-using that language.
-
-8. If language preference is ambiguous, use English.
-
-9. Do not switch language merely because external evidence,
-citations, database content, profile data, or previous messages
-use another language.
-
-10. Internal reasoning, tool instructions, structured data and
-system metadata must never override the primary English
-response-language policy.
-
-
-============================================================
-FITNESS TERMINOLOGY
-============================================================
-
-Use standard English fitness and sports-science terminology.
-
-Prefer terms such as:
-
-- progressive overload
-- hypertrophy
-- training volume
-- training frequency
-- intensity
-- proximity to failure
-- RPE
-- RIR
-- range of motion
-- mechanical tension
-- fatigue
-- recovery
-- deload
-- maintenance calories
-- caloric surplus
-- caloric deficit
-- energy expenditure
-- macronutrients
-- protein intake
-- carbohydrate intake
-- fat intake
-- body composition
-- resistance training
-- cardiovascular training
-- training split
-- exercise selection
-- stimulus-to-fatigue ratio
-
-
-============================================================
-EXERCISE NAMES
-============================================================
-
-Keep established exercise names in English.
-
-Examples:
-
-- Bench Press
-- Incline Dumbbell Press
-- Romanian Deadlift
-- Conventional Deadlift
-- Back Squat
-- Leg Press
-- Leg Extension
-- Leg Curl
-- Lat Pulldown
-- Pull-Up
-- Barbell Row
-- Cable Row
-- Lateral Raise
-- Overhead Press
-- Triceps Pushdown
-- Biceps Curl
-
-Do not unnecessarily translate standard exercise names.
-
-
-============================================================
-DANTE-GENERATED UI CONTENT
-============================================================
-
-When DANTE generates content that may be displayed in the user
-interface, English must also be the default.
-
-This includes:
-
-- titles
-- headings
-- summaries
-- workout analysis
-- nutrition analysis
-- recovery analysis
-- recommendations
-- action plans
-- warnings
-- follow-up questions
-- labels
-- explanations
-- evidence summaries
-- progress summaries
-- exercise descriptions
-- meal suggestions
-
-
-============================================================
-STYLE
-============================================================
-
-DANTE should write in professional, natural English.
-
-Prefer:
-
-- concise explanations,
-- clear structure,
-- standard fitness terminology,
-- evidence-aware language,
-- actionable recommendations.
-
-Avoid:
-
-- awkward literal translation,
-- unnecessary Vietnamese-English mixing,
-- excessive jargon when a simpler explanation is sufficient,
-- pretending uncertain conclusions are certain.
-
-============================================================
-LANGUAGE PRIORITY
-============================================================
-
-Unless the user explicitly requests another language:
-
-THE FINAL USER-FACING RESPONSE MUST BE IN ENGLISH.
-
-This requirement has priority over inferred locale,
-conversation-history language, user-profile language,
-and retrieved-context language.
-============================================================
-`.trim();
-
-
-/**
- * Appends DANTE's primary-language policy to an existing
- * system instruction block without deleting any existing
- * DANTE instructions.
- */
-export function applyDanteLanguagePolicy(
-  existingInstructions: string
-): string {
-  return `
-${existingInstructions.trim()}
-
-${DANTE_LANGUAGE_POLICY}
-`.trim();
+function matchesAny(patterns: RegExp[], text: string): boolean {
+  return patterns.some((pattern) => pattern.test(text));
 }
 
+/**
+ * Lightweight, deterministic Vietnamese detector. Diacritic ranges are
+ * essentially unambiguous for realistic chat-length text; the
+ * function-word check exists only to disambiguate a bare "đ" from
+ * unrelated Latin-Extended text.
+ */
+export function looksVietnamese(text: string): boolean {
+  if (VIETNAMESE_SPECIFIC_VOWELS.test(text)) return true;
+  if (VIETNAMESE_DJ.test(text) && VIETNAMESE_COMMON_WORDS.test(text)) return true;
+  return false;
+}
+
+export type DecideDanteLanguageInput = {
+  /** The client's current message — always the primary day-to-day signal. */
+  currentMessage: string;
+  /**
+   * Up to a few of the client's most recent prior messages
+   * (oldest-to-newest order doesn't matter here), used ONLY as a
+   * fallback when the current message itself is too short/ambiguous
+   * to carry a language signal on its own (e.g. "ok", "150g", a bare
+   * number). A clear signal in the current message always wins over
+   * conversation history — see decideDanteLanguage's own comment.
+   */
+  recentMessages?: string[];
+  /**
+   * A genuinely persisted, previously-confirmed language preference,
+   * if the caller has one. Phase 1 does not add any new persistence
+   * for this — omit it unless a real verified store already exists.
+   */
+  storedPreference?: "en" | "vi" | null;
+};
 
 /**
- * Reinforces English immediately before the current user
- * request. This is useful when a long prompt contains
- * multilingual profile or retrieval context.
+ * Priority order: (1) an explicit request in the CURRENT message, (2)
+ * a clear language signal in the CURRENT message, (3) recent
+ * conversation language — used only when the current message gave no
+ * signal (e.g. it's a bare number or very short), (4) a verified
+ * stored preference, (5) English fallback.
+ *
+ * A temporary explicit request ("answer this in English") never
+ * mutates anything persisted — it's evaluated fresh on every call
+ * from the current message alone, so the very next message reverts
+ * to whatever it itself signals.
  */
-export function buildDanteLanguageReminder(): string {
+export function decideDanteLanguage(input: DecideDanteLanguageInput): DanteLanguageDecision {
+  const { currentMessage, recentMessages = [], storedPreference = null } = input;
+
+  if (matchesAny(EXPLICIT_ENGLISH_REQUEST, currentMessage)) {
+    return { ...ENGLISH, source: "explicit_request", confidence: "high" };
+  }
+  if (matchesAny(EXPLICIT_VIETNAMESE_REQUEST, currentMessage)) {
+    return { ...VIETNAMESE, source: "explicit_request", confidence: "high" };
+  }
+
+  if (currentMessage.trim().length > 0) {
+    if (looksVietnamese(currentMessage)) {
+      return { ...VIETNAMESE, source: "message", confidence: "high" };
+    }
+
+    // The current message has real content and no Vietnamese signal —
+    // treat it as English rather than falling back to older
+    // conversation turns, so a client who switches languages
+    // mid-conversation is followed immediately.
+    if (currentMessage.trim().length >= 8) {
+      return { ...ENGLISH, source: "message", confidence: "medium" };
+    }
+  }
+
+  const recentVietnamese = recentMessages.slice(-3).some(looksVietnamese);
+  if (recentVietnamese) {
+    return { ...VIETNAMESE, source: "conversation", confidence: "medium" };
+  }
+
+  if (storedPreference === "vi") {
+    return { ...VIETNAMESE, source: "stored_preference", confidence: "medium" };
+  }
+  if (storedPreference === "en") {
+    return { ...ENGLISH, source: "stored_preference", confidence: "medium" };
+  }
+
+  return { ...ENGLISH, source: "fallback", confidence: "low" };
+}
+
+function languageSourceLabel(source: DanteLanguageSource): string {
+  switch (source) {
+    case "explicit_request":
+      return "the client's explicit request in this message";
+    case "conversation":
+      return "the language of the recent conversation";
+    case "message":
+      return "the language of the client's current message";
+    case "stored_preference":
+      return "the client's stored language preference";
+    case "fallback":
+      return "no clear language signal in this message";
+  }
+}
+
+/**
+ * The single prompt block every Dante response path (legacy Q&A,
+ * agent tool loop) should inject — do not write a second, divergent
+ * language instruction elsewhere.
+ */
+export function buildDanteLanguageInstruction(decision: DanteLanguageDecision): string {
   return `
 ============================================================
-RESPONSE LANGUAGE REMINDER
+RESPONSE LANGUAGE
 ============================================================
 
-Default response language: English.
+Write the ENTIRE final user-facing answer in ${decision.languageName}.
 
-If the user has NOT explicitly requested another response
-language, write the entire final user-facing answer in English.
+This was determined from ${languageSourceLabel(decision.source)} — it
+is the client's current conversational language, not a fixed default.
+If a LATER message in this same conversation asks for a different
+language, follow that for its reply; a temporary request to switch
+does not permanently replace the client's usual language.
 
-Do not infer Vietnamese output merely because the user's message
-is written in Vietnamese.
+Keep these unchanged regardless of response language:
+- established exercise names (e.g. Bench Press, Romanian Deadlift,
+  Lat Pulldown, Lateral Raise, Barbell Row) — never translate them.
+- standard sports-science terms may stay in English inline where that
+  reads naturally (RIR, RPE, volume, intensity, recovery, adherence,
+  training load) — do not force an awkward literal translation of
+  every technical term.
+
+Do not switch response language merely because retrieved evidence,
+citations, or stored profile/preference text happens to be in a
+different language than ${decision.languageName}.
 ============================================================
 `.trim();
 }
-
-
-/**
- * Optional helper for UI/default copy.
- */
-export const DANTE_ENGLISH_UI = {
-  assistantName: "Dante",
-
-  title: "Dante",
-
-  subtitle:
-    "Profile-aware, evidence-aware performance coaching.",
-
-  greeting:
-    "I'm Dante, your AI performance coach. What are we working on today?",
-
-  placeholder:
-    "Ask Dante anything about your training...",
-
-  send: "Send",
-
-  thinking: "Dante is thinking...",
-
-  newConversation: "New conversation",
-
-  retry: "Try again",
-
-  error:
-    "Dante couldn't complete that request. Please try again.",
-
-  starters: [
-    "Review my current training plan",
-    "Help me improve my recovery",
-    "Analyse my nutrition today",
-    "How should I adjust my training volume?",
-    "Help me plan my next workout",
-    "What should I focus on this week?",
-  ],
-} as const;

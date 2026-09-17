@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
@@ -8,6 +8,7 @@ import { buildDailyDecision } from "@/lib/dante-core/daily-decision-engine";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { logProgramAdaptations } from "@/lib/dante-core/program-adaptation-log";
 import { buildPerformanceForecast } from "@/lib/dante-core/performance-forecast";
+import { observeDailyDecisionInShadow } from "@/lib/dante-core/shadow/shadow-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +59,26 @@ export async function GET(request: Request) {
     logProgramAdaptations(supabase, user.id, programAdaptations).catch((error: unknown) => {
       console.warn("[DAILY DECISION API] Unable to log program adaptations:", error);
     });
+
+    // Phase 3 is observational only. Production decision construction is
+    // already complete, and this result is never read back into the response.
+    try {
+      after(async () => {
+        try {
+          await observeDailyDecisionInShadow({
+            supabase,
+            userId: user.id,
+            athleteState,
+            productionDecision: decision,
+            productionActions: proposedActions,
+          });
+        } catch (error) {
+          console.warn("[DANTE PHASE3] Shadow observation failed without affecting production", error);
+        }
+      });
+    } catch (error) {
+      console.warn("[DANTE PHASE3] Shadow observation could not be scheduled", error);
+    }
 
     return NextResponse.json({
       ok: true,

@@ -1,19 +1,74 @@
 import "server-only";
 
-import Groq from "groq-sdk";
+/**
+ * Shared OpenAI chat helper for non-Dante business features
+ * (member analysis, campaign generation, business insights).
+ *
+ * Dante chat/tool-calling uses lib/dante-core/openai/client.ts directly.
+ */
 
-const apiKey = process.env.GROQ_API_KEY;
+import { getOpenAiApiKey, OPENAI_CHAT_BASE_URL } from "@/lib/dante-core/openai/config";
 
-if (!apiKey) {
-  throw new Error(
-    "Missing GROQ_API_KEY. Add GROQ_API_KEY to .env.local."
-  );
+export const OPENAI_MODEL =
+  process.env.DANTE_OPENAI_MODEL?.trim() ||
+  process.env.OPENAI_MODEL?.trim() ||
+  "gpt-4o-mini";
+
+/** @deprecated Use OPENAI_MODEL */
+export const GROQ_MODEL = OPENAI_MODEL;
+
+type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+type ChatCompletionResult = {
+  choices: Array<{ message?: { content?: string | null } }>;
+};
+
+export async function createOpenAiChatCompletion(input: {
+  model?: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<ChatCompletionResult> {
+  const apiKey = getOpenAiApiKey();
+
+  const response = await fetch(`${OPENAI_CHAT_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: input.model ?? OPENAI_MODEL,
+      messages: input.messages,
+      temperature: input.temperature ?? 0.3,
+      max_tokens: input.maxTokens ?? 2048,
+    }),
+  });
+
+  const data = (await response.json()) as ChatCompletionResult & { error?: { message?: string } };
+
+  if (!response.ok) {
+    throw new Error(data.error?.message ?? `OpenAI returned HTTP ${response.status}.`);
+  }
+
+  return data;
 }
 
-export const GROQ_MODEL =
-  process.env.GROQ_MODEL?.trim() ||
-  "openai/gpt-oss-120b";
+/** @deprecated Groq SDK shim — routes to OpenAI. */
+export const groq = {
+  chat: {
+    completions: {
+      create: createOpenAiChatCompletion,
+    },
+  },
+};
 
-export const groq = new Groq({
-  apiKey,
-});
+/** @deprecated Compatibility name; production requests use OpenAI only. */
+export function isGroqConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY?.trim());
+}
+
+/** @deprecated Compatibility adapter; returns the OpenAI-backed client shim. */
+export function getGroqClient(): typeof groq {
+  return groq;
+}

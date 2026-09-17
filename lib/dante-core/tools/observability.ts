@@ -22,14 +22,17 @@ export type DanteToolEvent =
   | "DANTE_TIME_CONTEXT_READY"
   | "DANTE_CONTEXT_FAILED"
   | "DANTE_PROVIDER_FAILED"
-  | "DANTE_STREAM_FAILED";
+  | "DANTE_STREAM_FAILED"
+  /** Layer 6 Final Response Verifier outcomes — see lib/dante-core/verifier/. */
+  | "DANTE_VERIFIER_RETRY"
+  | "DANTE_VERIFIER_FALLBACK";
 
 export type DanteToolEventMeta = {
   tool?: string;
   durationMs?: number;
   /** IANA zone name only (e.g. "Asia/Singapore") or "unavailable" — never a full profile. */
   timezone?: string;
-  /** Coarse pipeline stage label (e.g. "request-start", "groq", "stream"). */
+  /** Coarse pipeline stage label (e.g. "request-start", "openai", "stream"). */
   stage?: string;
   /** A short error CATEGORY (e.g. "timeout", "http_5xx", "abort") — never a raw message, stack trace, or provider payload. */
   errorCategory?: string;

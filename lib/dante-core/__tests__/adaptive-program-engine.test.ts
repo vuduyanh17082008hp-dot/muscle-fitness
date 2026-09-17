@@ -53,6 +53,8 @@ function baseAthleteState(overrides: Partial<AthleteState["recovery"]> = {}): At
       isDemo: false,
       providerLabel: null,
       latestDay: null,
+      connectionStatus: "not_connected",
+      daysSinceLastData: null,
     },
     derived: {
       baselineDeviations: {

@@ -110,8 +110,16 @@ export function resolveAbortedContent(existingContent: string): string {
   return existingContent ? `${existingContent}\n\n*Stopped.*` : "Stopped.";
 }
 
-export function resolveStreamErrorContent(existingContent: string, partial: boolean, fallbackMessage: string): string {
-  return partial && existingContent ? `${existingContent}\n\n*Response interrupted.*` : fallbackMessage;
+/**
+ * Prefer already-streamed text over a generic fallback.
+ * Never wipe a usable answer when a later stage fails — even if the
+ * server `partial` flag is missing or wrong.
+ */
+export function resolveStreamErrorContent(existingContent: string, _partial: boolean, fallbackMessage: string): string {
+  if (existingContent.trim().length > 0) {
+    return `${existingContent}\n\n*Response interrupted.*`;
+  }
+  return fallbackMessage;
 }
 
 function isChatStreamEvent(value: unknown): value is ChatStreamEvent {
@@ -128,7 +136,7 @@ function isChatStreamEvent(value: unknown): value is ChatStreamEvent {
  * Builds the actual streamed HTTP Response from an async generator of
  * events — the one place that turns the ChatStreamEvent contract into
  * bytes, so every call site in the route (safety layer, agentic tool
- * loop, legacy Groq path) frames its output identically.
+ * loop, main OpenAI reply path) frames its output identically.
  */
 export function createChatStreamResponse(
   produce: (emit: (event: ChatStreamEvent) => void) => Promise<void>,
