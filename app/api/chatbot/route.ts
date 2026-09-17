@@ -21,6 +21,7 @@ import { LOCAL_EXERCISE_LIBRARY } from "@/lib/workouts/exercise-library";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { compareToTargets } from "@/lib/nutrition/food-log/totals";
 import { checkSafety } from "@/lib/dante-core/safety-layer";
+import { resolveCasualControlFlow } from "@/lib/dante-core/casual-intent";
 import { decideDanteLanguage, buildDanteLanguageInstruction, type DanteLanguageDecision } from "@/lib/dante-language";
 import { buildEpistemicPolicyInstruction } from "@/lib/dante-core/epistemics/policy";
 import { buildToolAuthorityInstruction } from "@/lib/dante-core/epistemics/tool-authority";
@@ -3709,11 +3710,6 @@ export async function POST(
        INTENT
     ----------------------------------------------------- */
 
-    const intent =
-      detectIntent(
-        userMessage,
-      );
-
     /* -----------------------------------------------------
        SAFETY LAYER (Dante Core, spec Part A §8)
 
@@ -3753,6 +3749,27 @@ export async function POST(
         safetyCategory: safetyCheck.category,
       });
     }
+
+    // Keep obvious social reactions social. This is deliberately below the
+    // safety gate and above coaching/tool routing; it is turn-local and has
+    // no effect on stored preferences or Phase 3/4 control state.
+    const casual = resolveCasualControlFlow(userMessage, languageDecision.language === "vi" ? "vi" : "en");
+    if (casual.branch === "CASUAL" && casual.reply) {
+      return createSingleShotChatStream(casual.reply, {
+        model: "dante-casual-intent",
+        insight: null,
+        sources: [],
+        actions: [],
+        pendingConfirmation: null,
+        toolTraceSummary: [],
+        safetyTriggered: false,
+        safetyCategory: null,
+      });
+    }
+
+    // Intent classification is deliberately after the safety/casual exits;
+    // a social turn must never enter normal coaching context assembly.
+    const intent = detectIntent(userMessage);
 
     /* -----------------------------------------------------
        AGENTIC TOOL LOOP (Part 2/10) — Dante Actions/Interface upgrade.

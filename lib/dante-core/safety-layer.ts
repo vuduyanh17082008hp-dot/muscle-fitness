@@ -9,7 +9,9 @@ export type SafetyCategory =
   | "severe_pain"
   | "eating_disorder_indicator"
   | "dangerous_substance"
-  | "self_harm_crisis";
+  | "self_harm_crisis"
+  | "composed_training_risk"
+  | "ambiguous_safety";
 
 export type SafetyResponseMode = "HARD_BLOCK" | "SAFE_REDIRECT";
 export type SupportedSafetyLanguage = "en" | "vi";
@@ -49,7 +51,7 @@ type SafetyRule = {
   response: LocalizedCopy | null;
 };
 
-const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury">, LocalizedCopy> = {
+const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury" | "composed_training_risk">, LocalizedCopy> = {
   chest_pain_cardiac: {
     en: "That combination of symptoms can be a medical emergency. If this is happening right now, stop exercising and seek emergency medical care immediately (call your local emergency number). Dante can help with training and nutrition questions, but this isn't something to guess about here — please talk to a doctor or other qualified professional.",
     vi: "Tổ hợp triệu chứng này có thể là tình huống cấp cứu y khoa. Nếu đang xảy ra ngay lúc này, hãy ngừng tập và tìm hỗ trợ y tế khẩn cấp ngay (gọi số cấp cứu tại nơi bạn ở). Dante có thể hỗ trợ về tập luyện và dinh dưỡng, nhưng trường hợp này cần được nhân viên y tế đánh giá thay vì tìm cách tập vòng qua rủi ro.",
@@ -75,8 +77,12 @@ const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury">, L
     vi: "Dante không cung cấp hướng dẫn liều dùng hoặc phối hợp các chất này. Cách làm được yêu cầu có thể mang rủi ro nghiêm trọng, vì vậy hãy trao đổi với nhân viên y tế có chuyên môn. Mình vẫn có thể giúp bạn theo đuổi mục tiêu hình thể hoặc hiệu suất bằng tập luyện, dinh dưỡng, giấc ngủ và recovery.",
   },
   self_harm_crisis: {
-    en: "I'm sorry you're carrying this. Your safety comes before any bench or training question. If you might act on these thoughts now, are in immediate danger, or have already harmed yourself, call your local emergency number or crisis service now. If you are not in immediate danger, please contact someone you trust and a qualified mental-health professional today, and move away from anything you could use to hurt yourself. You do not have to handle this alone.",
-    vi: "Mình rất tiếc vì bạn đang phải chịu đựng điều này. An toàn của bạn quan trọng hơn mọi câu hỏi về bench hay tập luyện. Nếu bạn có thể hành động theo những ý nghĩ này ngay lúc này, đang gặp nguy hiểm tức thời, hoặc đã tự làm hại mình, hãy gọi số cấp cứu hoặc dịch vụ khủng hoảng tại nơi bạn ở ngay. Nếu chưa ở trong nguy hiểm tức thời, hãy liên hệ một người bạn tin tưởng và chuyên gia sức khỏe tâm thần hôm nay, đồng thời tránh xa những thứ bạn có thể dùng để làm hại bản thân. Bạn không cần phải chịu đựng một mình.",
+    en: "I hear both parts of what you wrote: you are saying you want to die, and you are also talking about how much the bench goal is affecting you. Before anything about training, are you thinking about acting on this right now, do you have a plan or means to hurt yourself, or do you feel unable to stay safe? If there may be immediate danger, call your local emergency number or crisis service now, move near someone you trust, and move away from anything you could use to hurt yourself. If it is not immediate, please still contact someone you trust and a qualified mental-health professional today. You do not have to handle this alone.",
+    vi: "Mình nghe thấy cả hai điều: bạn đang nói rằng bạn muốn chết, và bạn vẫn đang nghĩ đến việc tập chân ngày mai. Trước mọi chuyện về tập luyện, ngay lúc này bạn có đang nghĩ đến việc hành động theo điều đó, có kế hoạch hoặc phương tiện làm hại bản thân, hay cảm thấy mình không thể giữ an toàn không? Nếu có nguy hiểm trước mắt, hãy gọi số cấp cứu hoặc dịch vụ khủng hoảng tại nơi bạn ở ngay, đến gần người bạn tin tưởng và tránh xa những thứ có thể dùng để làm hại bản thân. Nếu chưa phải nguy hiểm tức thời, hãy vẫn liên hệ một người bạn tin tưởng và chuyên gia sức khỏe tâm thần hôm nay. Bạn không cần chịu đựng một mình.",
+  },
+  ambiguous_safety: {
+    en: "I want to check what you mean by \"I'm dying.\" Do you mean that figuratively, or are you in immediate danger or thinking about hurting yourself? Please answer that before we talk about training.",
+    vi: "Mình muốn kiểm tra ý bạn khi nói \"mình đang chết\". Bạn đang nói theo nghĩa bóng, hay đang gặp nguy hiểm trước mắt hoặc nghĩ đến việc làm hại bản thân? Hãy trả lời điều đó trước khi mình nói về tập luyện.",
   },
 };
 
@@ -183,6 +189,12 @@ const RULES: SafetyRule[] = [
       /khong muon song nua/i,
     ],
     response: HARD_BLOCK_RESPONSES.self_harm_crisis,
+  },
+  {
+    category: "ambiguous_safety",
+    responseMode: "HARD_BLOCK",
+    patterns: [/^\s*i(?:'m| am) dying\s*[.!?]*$/i],
+    response: HARD_BLOCK_RESPONSES.ambiguous_safety,
   },
 ];
 
@@ -314,6 +326,30 @@ function buildPossibleInjuryResponse(input: {
   return [decision, why, calibration, alternative, escalation, autonomy].join("\n\n");
 }
 
+function detectComposedTrainingRisk(message: string): { matchedPhrase: string; observations: string[] } | null {
+  const text = normalizeSafetyText(message);
+  const jointIrritation = /(?:shoulder|knee|elbow|hip|ankle|wrist|joint).{0,45}(?:irritat|ache|sore|pain|hurts?|discomfort)|(?:irritat|ache|sore|pain|hurts?|discomfort).{0,45}(?:shoulder|knee|elbow|hip|ankle|wrist|joint)/i.test(text);
+  const poorRecovery = /\brecovery\s*(?:score\s*)?(?:is|at|=)?\s*(?:[0-4]\d|50)\b|\b(?:very low|poor|bad) recovery\b/i.test(text);
+  const majorSleepLoss = /(?:slept|sleeping|sleep)\s*(?:only\s*)?(?:[0-4](?:[.,]\d+)?|4)\s*(?:hours?|h|gio|tieng)\b/i.test(text);
+  const maxAttempt = /\b(?:pr|pb|personal record|one[- ]rep max|1\s*rm|max(?:imum)? attempt)\b|\b(?:max(?: out)?|record)\b.{0,24}\b(?:bench|squat|deadlift|lift)\b/i.test(text);
+  // Any reported joint pain paired with a max/1RM intention blocks the
+  // max attempt; poor recovery or major sleep loss escalates the trace but
+  // is not required to prevent pushing through pain for a test lift.
+  if (!jointIrritation || !maxAttempt) return null;
+  const observations = ["joint_irritation"];
+  if (poorRecovery) observations.push("very_low_recovery");
+  if (majorSleepLoss) observations.push("major_sleep_deprivation");
+  observations.push("max_attempt_intent");
+  return { matchedPhrase: "composed physical-risk signals", observations };
+}
+
+function buildComposedTrainingRiskResponse(language: SupportedSafetyLanguage): string {
+  if (language === "vi") {
+    return "Hôm nay đừng thử PR hoặc mức tạ tối đa. Bạn đang có nhiều tín hiệu cùng hướng: ngủ rất ít, recovery thấp và khớp vai bị kích ứng. Mình không thể chẩn đoán nguyên nhân đau qua chat, nhưng sự kết hợp này không phù hợp để cố max bench. Hãy giữ mục tiêu bench dài hạn, còn hôm nay nghỉ hoặc tập một buổi nhẹ hơn/nhóm cơ khác chỉ khi hoàn toàn không gây đau; tránh mọi động tác làm triệu chứng tăng. Nếu đau kéo dài, nặng lên, sưng, mất vững hoặc hạn chế vận động đáng kể, hãy đi khám hoặc gặp physiotherapist.";
+  }
+  return "Do not attempt the PR or a max-effort lift today. You have several signals pointing the same way: major sleep loss, low recovery, and an irritated shoulder. I cannot diagnose the cause of the shoulder symptom through chat, but that combination is not a good day to force a max attempt. Keep the long-term strength goal; today choose rest or a lower-risk session around the irritated joint only if it is completely pain-free, and stop any movement that increases symptoms. Seek medical or physiotherapy assessment if the pain persists, worsens, swells, causes instability, or meaningfully limits movement.";
+}
+
 function isContextualInjuryFollowUp(message: string, recentMessages: string[]): boolean {
   if (!recentMessages.some((item) => ["possible_injury", "severe_pain"].includes(matchRule(item)?.rule.category ?? ""))) return false;
   const current = normalizeSafetyText(message);
@@ -323,6 +359,25 @@ function isContextualInjuryFollowUp(message: string, recentMessages: string[]): 
 
 export function checkSafety(message: string, options: SafetyCheckOptions = {}): SafetyCheckResult {
   const language = detectSafetyLanguage(message, options);
+  const composedRisk = detectComposedTrainingRisk(message);
+  if (composedRisk) {
+    return {
+      triggered: true,
+      category: "composed_training_risk",
+      matchedPhrase: composedRisk.matchedPhrase,
+      responseMode: "SAFE_REDIRECT",
+      language,
+      responseOverride: buildComposedTrainingRiskResponse(language),
+      contextTrace: {
+        risk: "HIGH",
+        observations: composedRisk.observations,
+        conflicts: ["performance_goal_vs_safety", "joint_irritation_vs_recovery"],
+        diagnosticUncertainty: "HIGH",
+        acuteCurrentState: true,
+        chronicTraitWriteAllowed: false,
+      },
+    };
+  }
   let matched = matchRule(message);
   if (!matched && isContextualInjuryFollowUp(message, options.recentMessages ?? [])) {
     const possibleInjury = RULES.find((rule) => rule.category === "possible_injury");
