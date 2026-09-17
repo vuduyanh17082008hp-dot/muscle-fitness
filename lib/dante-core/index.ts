@@ -101,6 +101,56 @@ export {
   buildHardEpistemicFinalConstraints,
 } from "@/lib/dante-core/epistemic-integrity";
 
+// Phase 3 public surface. All runtime integration is hard-gated to SHADOW.
+export {
+  buildUncertaintyProfile,
+  detectAthleteDrift,
+  assessAdaptationStability,
+  informationValue,
+  scoreContextualStrategies,
+  executeShadowControlFlow,
+  classifyFailure,
+} from "@/lib/dante-core/shadow/adaptive-control";
+export {
+  unknownOutcome,
+  linkRecommendationOutcome,
+  summarizeCalibration,
+  calibrationObservationFromOutcome,
+} from "@/lib/dante-core/shadow/outcome-calibration";
+export {
+  governConsolidation,
+  reevaluateFromRawEpisodes,
+} from "@/lib/dante-core/shadow/consolidation-governor";
+export {
+  extractStructuredSignals,
+  athleteStateToDriftSnapshot,
+} from "@/lib/dante-core/shadow/signal-extraction";
+export {
+  CURRENT_PHASE3_PROMOTION_LEVEL,
+  PHASE3_PROMOTION_LEVELS,
+} from "@/lib/dante-core/shadow/types";
+
+export type {
+  MetaAction,
+  ExtractedSignals,
+  UncertaintyProfile,
+  AthleteDriftSnapshot,
+  DriftAssessment,
+  AdaptationRecord,
+  StabilityAssessment,
+  ShadowStrategyCandidate,
+  ShadowStrategyScore,
+  ShadowDecision,
+  MultiDimensionalOutcome,
+  OutcomeLink,
+  CalibrationObservation,
+  CalibrationSummary,
+  FailureClass,
+  FailureReaction,
+  ConsolidationCandidate,
+  ConsolidationDecision,
+} from "@/lib/dante-core/shadow/types";
+
 export type {
   ReadinessEngineInput,
   ReadinessResult,
