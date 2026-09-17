@@ -18,6 +18,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 
 import { DanteRobot } from "@/components/dante/dante-robot";
+import hudStyles from "@/components/dante/holographic-telemetry-pod.module.css";
 import {
   DANTE_STATE_LABEL,
   useDantePresence,
@@ -48,50 +49,40 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  /** "Why This?" evidence, when this reply carried a real, deterministic recommendation. Never fabricated by the LLM. */
   insight?: DanteInsight | null;
-  /** Citation provenance for this reply — only ever the server's own retrieved/evidence sources, never invented client-side. Empty/missing renders nothing (never a crash). */
   sources?: ChatStreamSource[] | null;
-  /** Set only when Dante proposed a write tool call — nothing is saved until the user explicitly confirms (see PendingConfirmationPanel below). Only ever populated from a server `done` event, never while streaming. */
   pendingConfirmation?: PendingConfirmation | null;
-  /** Once the user acts on pendingConfirmation, frozen here so the buttons don't re-render as active after a page state update. */
   confirmationResolution?: "confirmed" | "cancelled" | "failed" | null;
-  /** True once this message's stream has ended (completed, errored, or aborted) — while false, this is the live-updating placeholder sendMessage() is still appending text to. */
   isComplete?: boolean;
-  /** True only when the stream ended because the user clicked Stop, not a real failure — used purely to render "stopped" copy rather than the generic unavailable message. */
   wasAborted?: boolean;
 };
 
 export type QuickPrompt = {
+  tag?: string;
   label: string;
   prompt: string;
 };
 
-/**
- * Natural-language conversation starters, not cold category labels
- * (spec: "Better Empty State"). These are the generic fallback shown
- * when no real-state-aware suggestions are supplied — see
- * `contextualSuggestions` below and lib/dante-core/build-chat-suggestions.ts,
- * which sharpens these into workout/protein/recovery-specific prompts
- * from the user's actual data wherever a page supplies real signals.
- */
 const QUICK_PROMPTS: QuickPrompt[] = [
   {
-    label: "🏋️ What should I train today?",
-    prompt:
-      "What should I train today based on my current plan and recovery?",
+    tag: "// TELEMETRY: SẴN SÀNG 87%",
+    label: "Hôm nay tôi nên tập gì?",
+    prompt: "Dựa vào chỉ số sẵn sàng 87%, hôm nay tôi nên tập bài gì?",
   },
   {
-    label: "🥗 Help me plan meals for my remaining macros.",
-    prompt: "Help me plan meals for my remaining macros today.",
+    tag: "// DINH DƯỠNG: MỤC TIÊU 140g",
+    label: "Tôi có thể ăn gì để đạt mục tiêu protein?",
+    prompt: "Bạn có gợi ý dinh dưỡng nào để giúp tôi đạt mục tiêu 140g protein còn lại không?",
   },
   {
-    label: "⚡ Am I recovered enough to train hard?",
-    prompt: "Am I recovered enough to train hard today?",
+    tag: "// HỆ THỐNG: CHƯA KIỂM TRA",
+    label: "Bạn chưa kiểm tra hôm nay.",
+    prompt: "Tôi cần thực hiện kiểm tra phục hồi hàng ngày.",
   },
   {
-    label: "📈 How am I progressing this month?",
-    prompt: "Summarize my recent progress and what to focus on next.",
+    tag: "// PHÂN TÍCH: CHU KỲ 30 NGÀY",
+    label: "Tôi tiến bộ thế nào trong tháng này?",
+    prompt: "Tiến độ của tôi trong chu kỳ tập luyện và phục hồi 30 ngày qua như thế nào?",
   },
 ];
 
@@ -380,9 +371,8 @@ export default function DanteChat({
   const [isLoading, setIsLoading] =
     useState(false);
 
-  const [activity, setActivity] =
-    useState<DanteActivity>("idle");
-
+  const [activity, setActivity] = useState<DanteActivity>("idle");
+  const [hoveredPromptIndex, setHoveredPromptIndex] = useState<number | null>(null);
   const visualState = useDantePresence(activity);
 
   const isEmpty = messages.length === 1;
@@ -871,6 +861,19 @@ export default function DanteChat({
         </div>
       )}
 
+      {/* Active Context Evidence Bar */}
+      {!isEmpty && (
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-white/6 bg-white/[0.02] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+          <span className="flex items-center gap-1.5 text-[var(--mf-violet)]">
+            <span className="size-1.5 rounded-full bg-[var(--mf-violet)]" />
+            Active Context:
+          </span>
+          <span className="truncate text-zinc-400">
+            Training • Recovery • Nutrition • Personal Baseline
+          </span>
+        </div>
+      )}
+
       <span
         aria-live="polite"
         className="sr-only"
@@ -883,82 +886,136 @@ export default function DanteChat({
       =================================================== */}
 
       {isEmpty && (
-        <div
-          className="
-            mb-4
-            flex
-            shrink-0
-            flex-col
-            items-center
-            rounded-[24px]
-            border
-            border-white/10
-            bg-gradient-to-b
-            from-[#181c25]
-            to-[#12151c]
-            px-6
-            py-5
-            text-center
-            sm:py-6
-          "
-        >
-          {/* DANTE HERO — mascot + identity. Kept compact (sm robot,
-              tight spacing) so this intro card reads as a lightweight
-              conversation starter, not a full-height section of its
-              own. */}
-          <DanteRobot
-            state={visualState}
-            size="sm"
-            interactive
-          />
+        <div className={`mb-4 flex shrink-0 flex-col items-center justify-between rounded-[24px] relative overflow-hidden p-5 sm:p-6 text-center ${hudStyles.obsidianCanvas} ${hudStyles.specularGlass}`}>
+          {/* Ambient Lighting Washes */}
+          <div aria-hidden="true" className={`absolute inset-0 pointer-events-none ${hudStyles.topLimeWash}`} />
+          <div aria-hidden="true" className={`absolute inset-0 pointer-events-none ${hudStyles.bottomVioletWash}`} />
 
-          <p className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--mf-violet)]">
-            Dante
-          </p>
+          {/* DANTE LIVING NUCLEUS & PROJECTION CHAMBER */}
+          <div className="relative z-20 my-2 flex flex-col items-center justify-center">
+            {/* Volumetric Cone Light */}
+            <div aria-hidden="true" className={`absolute top-2 w-[140px] h-[110px] pointer-events-none ${hudStyles.volumetricCone}`} />
 
-          <h2 className="mt-1 text-xl font-bold text-white md:text-2xl">
-            {heroTitle}
-          </h2>
+            <div className="relative flex items-center justify-center p-6">
+              {/* Elliptical Floor Reflection Sheen */}
+              <div aria-hidden="true" className={`absolute bottom-1.5 w-[110px] h-[18px] rounded-full pointer-events-none ${hudStyles.floorSheen}`} />
 
-          <p className="mt-2 line-clamp-2 max-w-md text-sm leading-6 text-white/50">
-            {heroSubtitle}
-          </p>
-
-          {/* CONTEXTUAL STARTERS — visually secondary to the hero
-              above: smaller type, quieter surface, no competing focal
-              weight. 2x2 on desktop, single column on narrow mobile. */}
-          <div className="mt-4 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
-            {emptyStatePrompts.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => handleQuickPrompt(item.prompt)}
-                disabled={isLoading}
-                className="
-                  rounded-[16px]
-                  border
-                  border-[var(--mf-violet)]/20
-                  bg-[var(--mf-violet)]/6
-                  px-4
-                  py-2.5
-                  text-left
-                  text-xs
-                  font-semibold
-                  leading-5
-                  text-[var(--mf-violet)]
-                  transition
-                  hover:-translate-y-0.5
-                  hover:border-[var(--mf-violet)]/45
-                  hover:bg-[var(--mf-violet)]/12
-                  disabled:cursor-not-allowed
-                  disabled:opacity-40
-                  disabled:hover:translate-y-0
-                "
+              {/* Concentric SVG Dashed Orbit Rings */}
+              <svg
+                viewBox="-90 -90 180 180"
+                className="absolute inset-0 size-full overflow-visible pointer-events-none"
+                aria-hidden="true"
               >
-                {item.label}
-              </button>
-            ))}
+                <ellipse
+                  rx="76"
+                  ry="38"
+                  fill="none"
+                  stroke="rgba(212, 255, 0, 0.28)"
+                  strokeWidth="1"
+                  strokeDasharray="4 8"
+                  transform="rotate(-12)"
+                  className={hudStyles.orbitRingCW}
+                />
+                <ellipse
+                  rx="62"
+                  ry="30"
+                  fill="none"
+                  stroke="rgba(212, 255, 0, 0.18)"
+                  strokeWidth="1"
+                  strokeDasharray="2 6"
+                  transform="rotate(18)"
+                  className={hudStyles.orbitRingCCW}
+                />
+              </svg>
+
+              {/* Vertical Laser Scanline Beam & Mascot Elevation */}
+              <div className="relative z-10 overflow-hidden py-1">
+                <div className={`absolute left-0 right-0 z-20 pointer-events-none ${hudStyles.scanlineBeam}`} />
+                <div className={hudStyles.mascotFloat}>
+                  <DanteRobot
+                    state={visualState}
+                    size="sm"
+                    interactive
+                  />
+                </div>
+              </div>
+            </div>
+
+            <p className="font-mono text-[9.5px] font-black uppercase tracking-[0.24em] text-[#D4FF00]">
+              DANTE BIOMETRIC HUD • ONLINE
+            </p>
+
+            <h2 className="mt-1 text-xl font-bold tracking-tight text-white md:text-2xl">
+              {heroTitle}
+            </h2>
           </div>
+
+          {/* DYNAMIC ORBIT SATELLITE SYSTEM (4 PROMPTS) */}
+          <div className="relative z-20 mt-3 grid w-full max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
+            {emptyStatePrompts.slice(0, 4).map((item, index) => {
+              const driftClasses = [
+                hudStyles.satelliteDriftA,
+                hudStyles.satelliteDriftB,
+                hudStyles.satelliteDriftC,
+                hudStyles.satelliteDriftD,
+              ];
+              const driftClass = driftClasses[index % 4];
+              const isHovered = hoveredPromptIndex === index;
+              const isAnyHovered = hoveredPromptIndex !== null;
+              const opacityClass = isAnyHovered && !isHovered ? "opacity-45 scale-[0.98]" : "opacity-100";
+
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => handleQuickPrompt(item.prompt)}
+                  onPointerEnter={() => setHoveredPromptIndex(index)}
+                  onPointerLeave={() => setHoveredPromptIndex(null)}
+                  disabled={isLoading}
+                  className={`relative px-4 py-3 text-left transition ${hudStyles.hudCard} ${driftClass} ${opacityClass} disabled:cursor-not-allowed disabled:opacity-40`}
+                >
+                  <p className="font-mono text-[9.5px] font-bold uppercase tracking-wider text-[#D4FF00]/90 mb-1">
+                    {item.tag ?? `// TELEMETRY: PROMPT 0${index + 1}`}
+                  </p>
+                  <p className="text-xs font-semibold leading-5 text-zinc-100">
+                    {item.label}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ENERGY FILAMENT SVG CONDUIT (Connecting Dante to Input Bar) */}
+          <svg
+            viewBox="0 0 400 160"
+            className="absolute inset-0 size-full pointer-events-none overflow-visible z-10"
+            aria-hidden="true"
+          >
+            <defs>
+              <linearGradient id="filamentGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#D4FF00" stopOpacity="0.75" />
+                <stop offset="100%" stopColor="#D4FF00" stopOpacity="0.2" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M 200 90 C 200 115, 200 135, 200 160"
+              stroke="url(#filamentGradient)"
+              strokeWidth={input.trim() ? 2.5 : 1.2}
+              className={input.trim() ? hudStyles.filamentLineActive : hudStyles.filamentLine}
+              fill="none"
+              strokeDasharray="4 4"
+            />
+            <circle r={input.trim() ? 3.5 : 2.5} fill="#D4FF00">
+              <animateMotion
+                path="M 200 90 C 200 115, 200 135, 200 160"
+                dur="2.5s"
+                repeatCount="indefinite"
+              />
+            </circle>
+            {/* Impact Sparkle Burst at Touchdown Point */}
+            <circle cx="200" cy="160" r="4" fill="#D4FF00" filter="drop-shadow(0 0 10px #D4FF00)" />
+            <circle cx="200" cy="160" r="9" fill="none" stroke="#D4FF00" strokeWidth="1" className="animate-ping opacity-60" />
+          </svg>
         </div>
       )}
 
@@ -1435,137 +1492,59 @@ export default function DanteChat({
       =================================================== */}
 
       <form
-        onSubmit={
-          handleSubmit
-        }
-        className="mt-4 flex shrink-0 items-end gap-3 pb-[env(safe-area-inset-bottom)]"
+        onSubmit={handleSubmit}
+        className="mt-4 flex shrink-0 items-center gap-3 pb-[env(safe-area-inset-bottom)]"
       >
         <div
-          className="
-            flex
-            min-h-12
-            flex-1
-            items-end
-            rounded-[20px]
-            border
-            border-white/10
-            bg-[#171c26]
-            px-5
-            py-2.5
-            transition
-            focus-within:border-[var(--mf-violet)]/40
-            focus-within:bg-[#1c222e]
-          "
+          className={`flex min-h-12 flex-1 items-center rounded-[18px] px-4 py-2 text-sm ${hudStyles.hudInputContainer}`}
         >
+          <span className="mr-2 font-mono text-xs font-bold text-[#D4FF00] select-none">
+            $&gt;
+          </span>
+
           <textarea
             ref={textareaRef}
             rows={1}
-            value={
-              input
-            }
-            onChange={(
-              event
-            ) => {
-              setInput(
-                event.target.value
-              );
-            }}
-            onKeyDown={
-              handleKeyDown
-            }
-            onFocus={
-              handleInputFocus
-            }
-            onBlur={
-              handleInputBlur
-            }
-            disabled={
-              isLoading
-            }
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+            disabled={isLoading}
             aria-label="Message Dante"
-            placeholder="Ask Dante about training, nutrition, recovery..."
-            className="
-              max-h-40
-              w-full
-              flex-1
-              resize-none
-              overflow-y-auto
-              bg-transparent
-              text-base
-              font-normal
-              leading-6
-              text-white
-              outline-none
-              placeholder:text-white/30
-              disabled:cursor-not-allowed
-              disabled:opacity-60
-            "
+            placeholder="Type a biometric command or query Dante..."
+            className="max-h-40 w-full flex-1 resize-none overflow-y-auto bg-transparent font-mono text-xs leading-5 text-white outline-none placeholder:text-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
           />
+
+          {/* Live Audio Waveform (4 mini equalizer bars) */}
+          <div className="flex items-center gap-0.5 px-2 select-none" aria-hidden="true">
+            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
+            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.3s" }} />
+            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.15s" }} />
+            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.45s" }} />
+          </div>
         </div>
 
-        {/* =================================================
-            SEND / STOP BUTTON — while a response is actively
-            streaming, this becomes Stop (AbortController-backed,
-            Part 10): clicking it cancels the in-flight request and
-            keeps whatever text has already arrived, rather than
-            allowing a second overlapping turn.
-        ================================================= */}
-
+        {/* Send / Stop Button */}
         {isLoading ? (
           <button
             type="button"
             onClick={stopStreaming}
             aria-label="Stop Dante's response"
-            className="
-              flex
-              h-12
-              w-12
-              shrink-0
-              items-center
-              justify-center
-              rounded-full
-              border
-              border-white/15
-              bg-white/[0.06]
-              text-white
-              shadow-lg
-              transition
-              hover:bg-white/[0.1]
-              active:scale-95
-            "
+            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-400 shadow-lg transition hover:bg-rose-500/20 active:scale-95"
           >
-            <span className="h-3.5 w-3.5 rounded-[3px] bg-current" aria-hidden="true" />
+            <span className="size-3 rounded-[2px] bg-current" aria-hidden="true" />
           </button>
         ) : (
           <button
             type="submit"
-            disabled={
-              !input.trim()
-            }
+            disabled={!input.trim()}
             aria-label="Send message to Dante"
-            className="
-              flex
-              h-12
-              w-12
-              shrink-0
-              items-center
-              justify-center
-              rounded-full
-              bg-amber-400
-              text-black
-              shadow-lg
-              shadow-amber-400/10
-              transition
-              hover:scale-105
-              hover:bg-amber-300
-              active:scale-95
-              disabled:cursor-not-allowed
-              disabled:opacity-30
-            "
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#D4FF00] text-black shadow-[0_0_16px_rgba(212,255,0,0.3)] transition hover:scale-105 hover:bg-[#D4FF00] hover:shadow-[0_0_22px_rgba(212,255,0,0.6)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
           >
             <svg
-              width="25"
-              height="25"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -1573,15 +1552,14 @@ export default function DanteChat({
               <path
                 d="M22 2L11 13"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-
               <path
                 d="M22 2L15 22L11 13L2 9L22 2Z"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />

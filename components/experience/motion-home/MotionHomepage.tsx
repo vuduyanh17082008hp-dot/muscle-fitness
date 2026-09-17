@@ -18,9 +18,11 @@ import { AthleteSignalScene } from "@/components/experience/motion-home/sections
 import { TrainingScene } from "@/components/experience/motion-home/sections/TrainingScene";
 import { MuscleIntelligenceScene } from "@/components/experience/motion-home/sections/MuscleIntelligenceScene";
 import { RecoveryScene } from "@/components/experience/motion-home/sections/RecoveryScene";
+import { NutritionScene } from "@/components/experience/motion-home/sections/NutritionScene";
 import { AdaptScene } from "@/components/experience/motion-home/sections/AdaptScene";
 import { DanteScene } from "@/components/experience/motion-home/sections/DanteScene";
 import { ConvergenceScene } from "@/components/experience/motion-home/sections/ConvergenceScene";
+import { UserSegmentScene } from "@/components/experience/motion-home/sections/UserSegmentScene";
 import { MotionFooter } from "@/components/experience/motion-home/sections/MotionFooter";
 import type { MotionHomepageViewModel } from "@/components/experience/motion-home/data/homepageViewModel";
 import styles from "@/components/experience/motion-home/styles/motion-home.module.css";
@@ -38,6 +40,7 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
   }, []);
 
   const { routes } = viewModel;
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <PageTransition>
@@ -89,8 +92,41 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
               >
                 Start now
               </Link>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((open) => !open)}
+                aria-label="Toggle navigation menu"
+                className="inline-flex size-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 lg:hidden"
+              >
+                <span className="text-xs font-bold uppercase">{mobileMenuOpen ? "✕" : "☰"}</span>
+              </button>
             </div>
           </div>
+
+          {/* Mobile Menu Drawer — closes immediately on any link click */}
+          {mobileMenuOpen && (
+            <div className="border-t border-white/10 bg-[var(--mf-pub-bg)]/95 px-6 py-4 backdrop-blur-2xl lg:hidden">
+              <nav className="flex flex-col gap-3">
+                {[
+                  { label: "Dashboard", href: routes.dashboard },
+                  { label: "Train", href: routes.training },
+                  { label: "Nutrition", href: routes.nutrition },
+                  { label: "Progress", href: routes.progress },
+                  { label: "Dante", href: routes.chatbot },
+                  { label: "Log in", href: routes.login },
+                ].map((link) => (
+                  <Link
+                    key={link.label}
+                    href={link.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="rounded-lg px-3 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-white/5 hover:text-white"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+          )}
         </header>
 
         <ChapterNav activeChapter={activeChapter} />
@@ -99,10 +135,12 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
           <HeroScene routes={routes} />
           <ProblemScene />
           <AdaptiveTrainingScene />
+          <UserSegmentScene routes={routes} />
           <AthleteSignalScene />
           <TrainingScene training={viewModel.training} routes={routes} />
           <MuscleIntelligenceScene muscle={viewModel.muscle} dante={viewModel.dante} routes={routes} />
           <RecoveryScene recovery={viewModel.recovery} nutrition={viewModel.nutrition} routes={routes} />
+          <NutritionScene nutrition={viewModel.nutrition} routes={routes} />
           <AdaptScene adapt={viewModel.adapt} />
           <DanteScene dante={viewModel.dante} routes={routes} />
           <ConvergenceScene routes={routes} />

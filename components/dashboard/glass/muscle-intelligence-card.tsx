@@ -12,6 +12,7 @@ import {
 } from "@/lib/dashboard/muscle-intelligence";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { GlassCard, GlassCardHeader } from "@/components/dashboard/glass/glass-card";
+import { DanteAgentInteractive } from "@/components/dante/dante-agent-interactive";
 
 export type MuscleIntelligenceCardProps = {
   entries: MuscleIntelligenceEntry[];
@@ -28,6 +29,7 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
   const [selectedMuscle, setSelectedMuscle] = useState<CanonicalMuscle | null>(
     entries[0]?.muscle ?? null,
   );
+  const [viewMode, setViewMode] = useState<"dante" | "map">("dante");
 
   if (error) {
     return (
@@ -40,24 +42,50 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
     );
   }
 
+  const ViewModeToggle = (
+    <div className="inline-flex rounded-lg border border-white/10 bg-black/40 p-0.5 text-[10px] font-bold uppercase tracking-wider">
+      <button
+        type="button"
+        onClick={() => setViewMode("dante")}
+        className={`rounded-md px-2.5 py-1 transition ${
+          viewMode === "dante"
+            ? "bg-[#D4FF00]/15 text-[#D4FF00] shadow-xs"
+            : "text-zinc-400 hover:text-white"
+        }`}
+      >
+        Dante AI
+      </button>
+      <button
+        type="button"
+        onClick={() => setViewMode("map")}
+        className={`rounded-md px-2.5 py-1 transition ${
+          viewMode === "map"
+            ? "bg-[#D4FF00]/15 text-[#D4FF00] shadow-xs"
+            : "text-zinc-400 hover:text-white"
+        }`}
+      >
+        Anatomy Map
+      </button>
+    </div>
+  );
+
   if (entries.length === 0) {
     return (
       <GlassCard data-testid="muscle-intelligence-card">
-        <GlassCardHeader title="Muscle Intelligence" />
+        <GlassCardHeader title="Muscle Intelligence" action={ViewModeToggle} />
 
-        {/* Real anatomy data is available even with zero trained
-            muscles this week — render it unhighlighted rather than
-            collapsing the card to a single line of text, per the
-            sparse-data design requirement (the card must still look
-            intentionally designed with no fabricated numbers). */}
-        <div className="mt-4 grid flex-1 gap-6 md:grid-cols-[minmax(0,220px)_1fr]">
-          <MuscleMap
-            highlights={{}}
-            legend={false}
-            selectedMuscle={null}
-            accentColor="var(--mf-glass-brand)"
-            className="border-mf-glass-border bg-black/10"
-          />
+        <div className="mt-4 grid flex-1 gap-6 md:grid-cols-[minmax(0,280px)_1fr]">
+          {viewMode === "dante" ? (
+            <DanteAgentInteractive />
+          ) : (
+            <MuscleMap
+              highlights={{}}
+              legend={false}
+              selectedMuscle={null}
+              accentColor="var(--mf-glass-brand)"
+              className="border-mf-glass-border bg-black/10"
+            />
+          )}
 
           <div className="flex flex-col items-start justify-center gap-3">
             <p className="text-sm font-semibold text-mf-glass-text">No completed workout data yet.</p>
@@ -86,31 +114,37 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
 
   return (
     <GlassCard data-testid="muscle-intelligence-card">
-      <GlassCardHeader title="Muscle Intelligence" />
+      <GlassCardHeader title="Muscle Intelligence" action={ViewModeToggle} />
 
-      <div className="mt-4 grid flex-1 gap-6 md:grid-cols-[minmax(0,220px)_1fr]">
+      <div className="mt-4 grid flex-1 gap-6 md:grid-cols-[minmax(0,300px)_1fr]">
         <div>
-          <MuscleMap
-            highlights={highlights}
-            legend={false}
-            selectedMuscle={selected?.muscle ?? null}
-            onSelectMuscle={setSelectedMuscle}
-            accentColor="var(--mf-glass-brand)"
-            className="border-mf-glass-border bg-black/10"
-          />
+          {viewMode === "dante" ? (
+            <DanteAgentInteractive />
+          ) : (
+            <div>
+              <MuscleMap
+                highlights={highlights}
+                legend={false}
+                selectedMuscle={selected?.muscle ?? null}
+                onSelectMuscle={setSelectedMuscle}
+                accentColor="var(--mf-glass-brand)"
+                className="border-mf-glass-border bg-black/10"
+              />
 
-          <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1">
-            {LEGEND.map((item) => (
-              <span key={item.label} className="flex items-center gap-1.5 text-[10px] font-semibold text-mf-glass-text-muted">
-                <span
-                  className="size-2 rounded-full bg-mf-glass-brand"
-                  style={{ opacity: item.opacity }}
-                  aria-hidden="true"
-                />
-                {item.label}
-              </span>
-            ))}
-          </div>
+              <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1">
+                {LEGEND.map((item) => (
+                  <span key={item.label} className="flex items-center gap-1.5 text-[10px] font-semibold text-mf-glass-text-muted">
+                    <span
+                      className="size-2 rounded-full bg-mf-glass-brand"
+                      style={{ opacity: item.opacity }}
+                      aria-hidden="true"
+                    />
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Accessible text alternative to the interactive body map. */}
           <ul className="sr-only">
