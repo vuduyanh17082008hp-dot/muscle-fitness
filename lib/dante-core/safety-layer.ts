@@ -73,7 +73,20 @@ type SafetyRule = {
   category: SafetyCategory;
   responseMode: SafetyResponseMode;
   patterns: RegExp[];
+  matcher?: (message: string) => string | null;
   response: LocalizedCopy | null;
+};
+
+type SymptomConcept = {
+  id: string;
+  patterns: RegExp[];
+};
+
+type SymptomMention = {
+  index: number;
+  matchedPhrase: string;
+  present: boolean;
+  temporalRank: 0 | 1 | 2;
 };
 
 const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury" | "composed_training_risk">, LocalizedCopy> = {
@@ -124,6 +137,137 @@ export function normalizeSafetyText(message: string): string {
     // Vietnamese "đ" / "Đ" are not decomposed by NFD — map explicitly.
     .replace(/đ/g, "d");
 }
+
+const TEMPORAL_BOUNDARY = /[.!?;,\n]|\b(?:but|however|yet|although|though)\b/gi;
+const NEGATION_SCOPE_BOUNDARY = /[.!?;,\n]|\b(?:but|however|yet|although|though)\b|\b(?:and\s+)?(?:now|today|currently|suddenly)\b/gi;
+
+function lastBoundaryEnd(text: string, beforeIndex: number, boundary: RegExp): number {
+  const prefix = text.slice(0, beforeIndex);
+  const matcher = new RegExp(boundary.source, boundary.flags);
+  let end = 0;
+  let match: RegExpExecArray | null;
+  while ((match = matcher.exec(prefix)) !== null) {
+    end = match.index + match[0].length;
+    if (match[0].length === 0) matcher.lastIndex += 1;
+  }
+  return end;
+}
+
+function nextBoundaryStart(text: string, afterIndex: number): number {
+  const suffix = text.slice(afterIndex);
+  const matcher = new RegExp(TEMPORAL_BOUNDARY.source, TEMPORAL_BOUNDARY.flags);
+  const match = matcher.exec(suffix);
+  return match ? afterIndex + match.index : text.length;
+}
+
+function temporalRankAt(text: string, index: number, endIndex: number): 0 | 1 | 2 {
+  const start = lastBoundaryEnd(text, index, TEMPORAL_BOUNDARY);
+  const end = nextBoundaryStart(text, endIndex);
+  const clause = text.slice(start, end);
+  if (/\b(?:now|today|currently|at present|hom nay)\b/i.test(clause)) return 2;
+  if (/\b(?:yesterday|earlier|before|previously|used to|hom qua|ngay hom qua)\b/i.test(clause)) return 0;
+  return 1;
+}
+
+function hasNearbyNegation(text: string, symptomIndex: number): boolean {
+  const start = lastBoundaryEnd(text, symptomIndex, NEGATION_SCOPE_BOUNDARY);
+  const prefix = text.slice(start, symptomIndex).slice(-80);
+  return /(?:\b(?:no|not|without|never|deny|denies|denied|khong|ko|chang|chua)\b|\b(?:khong|ko)\s+(?:co|bi|cam|thay|bi\s+cam)\b|\b(?:do|does|did)\s+not\s+(?:currently\s+)?(?:have|feel|experience)\b|\b(?:don't|doesn't|didn't)\s+(?:currently\s+)?(?:have|feel|experience)\b)(?:[\s\p{L}'-]{0,40})$/iu.test(prefix);
+}
+
+function hasFollowingResolution(text: string, symptomEnd: number): boolean {
+  const suffix = text.slice(symptomEnd, symptomEnd + 80);
+  return /^\s*(?:(?:is|are|was|were|has|have|had|went|feels?)\s+)?(?:now\s+|currently\s+)?(?:gone|resolved|absent|none|not present|no longer present|went away|khong con)\b/i.test(suffix);
+}
+
+function inferredCurrentAbsence(text: string, afterIndex: number): SymptomMention | null {
+  const suffix = text.slice(afterIndex, afterIndex + 160);
+  const match = suffix.match(
+    /(?:\b(?:today|now|currently|at present)\b[^.!?;\n]{0,70}\b(?:gone|resolved|absent|none|no longer|khong con|(?:i\s+)?(?:do not|don't)(?:\s+(?:have|feel|experience)(?:\s+(?:it|that|this))?)?)\b|\b(?:none|no longer|khong con)\b[^.!?;\n]{0,30}\b(?:today|now|currently|at present)\b)/i,
+  );
+  if (!match || match.index === undefined) return null;
+  return {
+    index: afterIndex + match.index,
+    matchedPhrase: match[0],
+    present: false,
+    temporalRank: 2,
+  };
+}
+
+/**
+ * Resolve each symptom concept independently so a local denial of one symptom
+ * cannot suppress a different current red flag. Current/today/now statements
+ * outrank historical ones; within the same time frame, the later statement wins.
+ */
+function matchPresentSymptom(message: string, concepts: SymptomConcept[]): string | null {
+  const text = normalizeSafetyText(message);
+
+  for (const concept of concepts) {
+    const mentions: SymptomMention[] = [];
+    const seen = new Set<string>();
+
+    for (const pattern of concept.patterns) {
+      const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+      const matcher = new RegExp(pattern.source, flags);
+      let match: RegExpExecArray | null;
+
+      while ((match = matcher.exec(text)) !== null) {
+        const endIndex = match.index + match[0].length;
+        const key = `${match.index}:${endIndex}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          mentions.push({
+            index: match.index,
+            matchedPhrase: match[0],
+            present: !hasNearbyNegation(text, match.index) && !hasFollowingResolution(text, endIndex),
+            temporalRank: temporalRankAt(text, match.index, endIndex),
+          });
+
+          const absence = inferredCurrentAbsence(text, endIndex);
+          if (absence) mentions.push(absence);
+        }
+        if (match[0].length === 0) matcher.lastIndex += 1;
+      }
+    }
+
+    const resolved = mentions.sort((left, right) =>
+      right.temporalRank - left.temporalRank || right.index - left.index,
+    )[0];
+    if (resolved?.present) return resolved.matchedPhrase;
+  }
+
+  return null;
+}
+
+const NEUROLOGICAL_SYMPTOMS: SymptomConcept[] = [
+  {
+    id: "numbness",
+    patterns: [
+      /\bnumb(?:ness)?\b/i,
+      /\bcan'?t feel my (?:arm|leg|hand|foot)\b/i,
+      /\bloss of (?:feeling|sensation)\b/i,
+      /te bi/i,
+      /te tay|te chan/i,
+    ],
+  },
+  {
+    id: "tingling",
+    patterns: [/\btingl(?:e|es|ed|ing)\b/i],
+  },
+  {
+    id: "sudden_weakness",
+    patterns: [
+      /\bsudden weakness\b/i,
+      /\bsuddenly (?:became|become|felt|feel|got|get) weak\b/i,
+      /\bsuddenly lost (?:my )?strength\b/i,
+      /yeu dot ngot/i,
+    ],
+  },
+  {
+    id: "slurred_speech",
+    patterns: [/\bslurred speech\b/i],
+  },
+];
 
 const RULES: SafetyRule[] = [
   {
@@ -179,20 +323,8 @@ const RULES: SafetyRule[] = [
   {
     category: "neurological_symptoms",
     responseMode: "HARD_BLOCK",
-    patterns: [
-      /\bnumbness\b/i,
-      /\btingling down (my )?(arm|leg)\b/i,
-      /\bcan'?t feel my (arm|leg|hand|foot)\b/i,
-      /\bloss of (feeling|sensation)\b/i,
-      /\bsudden weakness\b/i,
-      /\bslurred speech\b/i,
-      /tê bì/i,
-      /te bi/i,
-      /tê tay|tê chân/i,
-      /te tay|te chan/i,
-      /yếu đột ngột/i,
-      /yeu dot ngot/i,
-    ],
+    patterns: [],
+    matcher: (message) => matchPresentSymptom(message, NEUROLOGICAL_SYMPTOMS),
     response: HARD_BLOCK_RESPONSES.neurological_symptoms,
   },
   {
@@ -269,6 +401,10 @@ const RULES: SafetyRule[] = [
       /\b(?:end|take) my life\b/i,
       /tôi muốn chết/i,
       /toi muon chet/i,
+      /tao muốn chết/i,
+      /tao muon chet/i,
+      /mình muốn chết/i,
+      /minh muon chet/i,
       /muốn tự tử/i,
       /muon tu tu/i,
       /tự sát/i,
@@ -288,6 +424,11 @@ const RULES: SafetyRule[] = [
 
 function matchRule(message: string): { rule: SafetyRule; matchedPhrase: string } | null {
   for (const rule of RULES) {
+    if (rule.matcher) {
+      const matchedPhrase = rule.matcher(message);
+      if (matchedPhrase) return { rule, matchedPhrase };
+      continue;
+    }
     for (const pattern of rule.patterns) {
       for (const candidate of [message, normalizeSafetyText(message)]) {
         const match = candidate.match(pattern);
@@ -416,10 +557,11 @@ function buildPossibleInjuryResponse(input: {
 
 function detectComposedTrainingRisk(message: string): { matchedPhrase: string; observations: string[] } | null {
   const text = normalizeSafetyText(message);
-  const jointIrritation = /(?:shoulder|knee|elbow|hip|ankle|wrist|joint).{0,45}(?:irritat|ache|sore|pain|hurts?|discomfort)|(?:irritat|ache|sore|pain|hurts?|discomfort).{0,45}(?:shoulder|knee|elbow|hip|ankle|wrist|joint)/i.test(text);
-  const poorRecovery = /\brecovery\s*(?:score\s*)?(?:is|at|=)?\s*(?:[0-4]\d|50)\b|\b(?:very low|poor|bad) recovery\b/i.test(text);
-  const majorSleepLoss = /(?:slept|sleeping|sleep)\s*(?:only\s*)?(?:[0-4](?:[.,]\d+)?|4)\s*(?:hours?|h|gio|tieng)\b/i.test(text);
-  const maxAttempt = /\b(?:pr|pb|personal record|one[- ]rep max|1\s*rm|max(?:imum)? attempt)\b|\b(?:max(?: out)?|record)\b.{0,24}\b(?:bench|squat|deadlift|lift)\b/i.test(text);
+  const jointIrritation = /(?:shoulder|knee|elbow|hip|ankle|wrist|joint|vai|goi|khop|khuyu|co\s+tay).{0,45}(?:irritat|ache|sore|pain|hurts?|discomfort|dau|kich\s+ung)|(?:irritat|ache|sore|pain|hurts?|discomfort|dau|kich\s+ung).{0,45}(?:shoulder|knee|elbow|hip|ankle|wrist|joint|vai|goi|khop)/i.test(text);
+  const poorRecovery = hasCurrentOrUnmarkedMatch(text, /\brecovery\s*(?:score\s*)?(?:is|was|at|=)?\s*(?:[0-4]\d|50)\b|\b(?:very low|poor|bad) recovery\b/i);
+  const majorSleepLoss = hasCurrentOrUnmarkedMatch(text, /(?:slept|sleeping|sleep|ngu)\s*(?:only\s*)?(?:[0-4](?:[.,]\d+)?|4)\s*(?:hours?|h|gio|tieng)\b/i);
+  const maxAttemptMentioned = /\b(?:pr|pb|personal record|one[- ]rep max|1\s*rm|max(?:imum)? attempt)\b|\b(?:max(?: out)?|record)\b.{0,24}\b(?:bench|squat|deadlift|lift)\b|(?:bench|squat|deadlift).{0,20}(?:1\s*rm|pr|max)|(?:1\s*rm|pr|max).{0,20}(?:bench|squat|duoc\s+khong)/i.test(text);
+  const maxAttempt = maxAttemptMentioned && !/(?:\b(?:no|not|don't|do not|khong|ko|khong muon)\b)[^.!?;\n]{0,28}\b(?:pr|pb|1\s*rm|max(?:imum)?|record)\b/i.test(text);
   // Any reported joint pain paired with a max/1RM intention blocks the
   // max attempt; poor recovery or major sleep loss escalates the trace but
   // is not required to prevent pushing through pain for a test lift.
@@ -429,6 +571,17 @@ function detectComposedTrainingRisk(message: string): { matchedPhrase: string; o
   if (majorSleepLoss) observations.push("major_sleep_deprivation");
   observations.push("max_attempt_intent");
   return { matchedPhrase: "composed physical-risk signals", observations };
+}
+
+function hasCurrentOrUnmarkedMatch(text: string, pattern: RegExp): boolean {
+  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+  const matcher = new RegExp(pattern.source, flags);
+  let match: RegExpExecArray | null;
+  while ((match = matcher.exec(text)) !== null) {
+    if (temporalRankAt(text, match.index, match.index + match[0].length) > 0) return true;
+    if (match[0].length === 0) matcher.lastIndex += 1;
+  }
+  return false;
 }
 
 function buildComposedTrainingRiskResponse(

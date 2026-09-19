@@ -56,21 +56,27 @@ export function DanteAgentInteractive() {
   const [isTyping, setIsTyping] = useState(true);
 
   useEffect(() => {
-    setDisplayedText("");
-    setIsTyping(true);
-    let index = 0;
+    let timer: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      setDisplayedText("");
+      setIsTyping(true);
+      let index = 0;
 
-    const timer = setInterval(() => {
-      if (index < targetText.length) {
-        setDisplayedText(targetText.slice(0, index + 1));
-        index++;
-      } else {
-        setIsTyping(false);
-        clearInterval(timer);
-      }
-    }, 22);
+      timer = window.setInterval(() => {
+        if (index < targetText.length) {
+          setDisplayedText(targetText.slice(0, index + 1));
+          index++;
+        } else {
+          setIsTyping(false);
+          if (timer !== undefined) window.clearInterval(timer);
+        }
+      }, 22);
+    });
 
-    return () => clearInterval(timer);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (timer !== undefined) window.clearInterval(timer);
+    };
   }, [targetText]);
 
   // Determine current Dante head/body tilt based on hover or selection

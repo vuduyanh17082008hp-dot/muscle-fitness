@@ -21,6 +21,37 @@ import { LOCAL_EXERCISE_LIBRARY } from "@/lib/workouts/exercise-library";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { compareToTargets } from "@/lib/nutrition/food-log/totals";
 import { checkSafety } from "@/lib/dante-core/safety-layer";
+import { buildCurrentStateCoachingResponse, extractCurrentTurnState, formatCurrentStatePrompt } from "@/lib/dante-core/current-turn-state";
+import {
+  assessTurnConfidence,
+  buildConfidenceDeterministicReply,
+  getConfidenceLanguageDirective,
+  type ClaimConfidence,
+} from "@/lib/dante-core/confidence-engine";
+import {
+  buildSocialBoundaryResponse,
+  deriveSocialSessionFromHistory,
+  evaluateSocialBoundary,
+  type SocialEvaluation,
+} from "@/lib/dante-core/social-boundary-router";
+import {
+  buildRiskDeterministicReply,
+  buildRiskPatternAck,
+  deriveObservationsFromHistory,
+  evaluateRiskSignals,
+  getRiskLanguageDirective,
+  observeFromUserMessage,
+  toRiskLogFields,
+  type RiskEvaluationResult,
+} from "@/lib/dante-core/risk-accumulator";
+import {
+  deriveNof1SessionFromHistory,
+  loadActiveNof1Experiment,
+  loadLatestFailedNof1Proposal,
+  processNof1Turn,
+  updateNof1Experiment,
+} from "@/lib/dante-core/nof1-engine";
+import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
 import { resolveCasualControlFlow } from "@/lib/dante-core/casual-intent";
 import { decideDanteLanguage, buildDanteLanguageInstruction, type DanteLanguageDecision } from "@/lib/dante-language";
 import { buildEpistemicPolicyInstruction } from "@/lib/dante-core/epistemics/policy";
@@ -51,6 +82,7 @@ import { classifyKnowledgeBrainRoute } from "@/lib/dante-core/knowledge-brain/ro
 import type { RetrievedKnowledgeChunk } from "@/lib/dante-core/knowledge-brain/types";
 import { isAgentToolIntent } from "@/lib/dante-core/tools/detect-intent";
 import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
+import { guardActionResponse, buildSuggestedWorkoutChangeReply, isWorkoutMutationRequest, resolveActionStatus } from "@/lib/dante-core/tools/action-response-guard";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { createChatStreamResponse, createSingleShotChatStream } from "@/lib/dante-core/chat-stream-protocol";
 import {
@@ -398,6 +430,60 @@ function getRecentUserMessages(body: unknown, limit: number): string[] {
   // First entry is the current message (already captured by
   // getUserMessage) — drop it so callers get only prior turns.
   return userMessages.slice(1, limit + 1);
+}
+
+/**
+ * Prior user turns in chronological order for session-only social streak
+ * reconstruction. Caps length so replay stays cheap; never persists.
+ */
+function getPriorUserMessagesChronological(body: unknown, currentMessage: string, limit = 24): string[] {
+  return getRiskHistoryTurnsChronological(body, currentMessage, limit).map((turn) => turn.content);
+}
+
+/**
+ * Active-chat user turns with optional real timestamps for risk reconstruction.
+ * Never fabricates dates when metadata is missing.
+ */
+function getRiskHistoryTurnsChronological(
+  body: unknown,
+  currentMessage: string,
+  limit = 24,
+): Array<{ content: string; observedAt: string | null }> {
+  if (!isRecord(body)) return [];
+  const requestBody = body as ChatRequestBody;
+  if (!Array.isArray(requestBody.messages)) return [];
+
+  const turns: Array<{ content: string; observedAt: string | null }> = [];
+  for (const item of requestBody.messages) {
+    if (!isRecord(item)) continue;
+    if (item.role !== "user" || typeof item.content !== "string" || !item.content.trim()) continue;
+    const rawTs =
+      (typeof item.createdAt === "string" && item.createdAt) ||
+      (typeof item.timestamp === "string" && item.timestamp) ||
+      (typeof item.observedAt === "string" && item.observedAt) ||
+      null;
+    const observedAt =
+      rawTs && Number.isFinite(Date.parse(rawTs)) ? new Date(rawTs).toISOString() : null;
+    turns.push({ content: item.content.trim(), observedAt });
+  }
+
+  if (
+    turns.length > 0 &&
+    currentMessage &&
+    turns[turns.length - 1].content === currentMessage
+  ) {
+    turns.pop();
+  }
+
+  return turns.slice(-limit);
+}
+
+function clarifyUnconfirmedWorkoutChange(reply: string, userMessage: string, pendingConfirmation: unknown, language: "en" | "vi"): string {
+  if (!isWorkoutMutationRequest(userMessage)) {
+    return reply;
+  }
+  const status = resolveActionStatus({ pendingConfirmation });
+  return guardActionResponse(reply, status, language);
 }
 
 /** Validates the Atlas's selected-muscle hint against the real taxonomy — never trusts the raw client string. */
@@ -3277,6 +3363,10 @@ function buildDantePrompt(
   epistemic?: TurnEpistemicContext,
   recentUserMessages: string[] = [userMessage],
   epistemicNotes: string[] = [],
+  socialEvaluation: SocialEvaluation | null = null,
+  currentTurnState: ReturnType<typeof extractCurrentTurnState> | null = null,
+  confidenceClaims: ClaimConfidence[] = [],
+  riskEvaluation: RiskEvaluationResult | null = null,
 ): string {
   // Budget allocation leaves room for question + final instruction under
   // the configured OpenAI input ceiling. The full DANTE_INSTRUCTIONS alone is
@@ -3385,7 +3475,30 @@ COMMUNICATION STYLE (lightweight — not a psych profile)
 
 ${communicationHints}
 Never let communication style override safety, medical, or evidence rules.
+${
+  socialEvaluation && socialEvaluation.mode !== "NORMAL"
+    ? `
+============================================================
+SOCIAL BOUNDARY (session-only micro-directive)
+============================================================
 
+mode=${socialEvaluation.mode}; target=${socialEvaluation.target}; severity=${socialEvaluation.severity}; streak=${socialEvaluation.derailmentStreak}
+${socialEvaluation.directive}
+This directive does not override safety, tool confirmation, or evidence rules.
+`
+    : ""
+}
+${currentTurnState ? `${formatCurrentStatePrompt(currentTurnState)}\nCURRENT_STATE is authoritative for present-tense decisions. Do not let persisted or historical values overwrite it.` : ""}
+${
+  riskEvaluation
+    ? `\n${getRiskLanguageDirective(riskEvaluation)}\n`
+    : ""
+}
+${
+  confidenceClaims.length > 0
+    ? `\n${getConfidenceLanguageDirective(confidenceClaims)}\n`
+    : ""
+}
 ============================================================
 CLIENT PROFILE
 ============================================================
@@ -3738,6 +3851,19 @@ export async function POST(
         { category: safetyCheck.category },
       );
 
+      // Active N-of-1 must not continue after hard safety — abort durable row if present.
+      try {
+        const active = await loadActiveNof1Experiment(supabase, user.id);
+        if (active) {
+          await updateNof1Experiment(supabase, user.id, active.id, {
+            status: "ABORTED",
+            completedAt: now.toISOString(),
+          });
+        }
+      } catch (error) {
+        console.warn("[DANTE NOF1] safety abort failed:", error);
+      }
+
       return createSingleShotChatStream(safetyCheck.responseOverride, {
         model: "dante-core-safety-layer",
         insight: null,
@@ -3750,9 +3876,301 @@ export async function POST(
       });
     }
 
+    // SAFETY → SOCIAL → CASUAL/FITNESS. Session streak is rebuilt from the
+    // active chat only — never profiles, Phase 2–4 memory, or the DB.
+    const socialSession = deriveSocialSessionFromHistory(
+      getPriorUserMessagesChronological(body, userMessage),
+    );
+    const socialEvaluation = evaluateSocialBoundary(userMessage, {
+      session: socialSession,
+      safetyResult: safetyCheck,
+    });
+
+    // Social-only turns must not fall through to grounding/provider fallbacks.
+    // Hard safety already returned above; this preserves the social directive
+    // deterministically without changing safety or tool authority.
+    if (["PLAYFUL_DEFLECT", "FIRM_BOUNDARY", "HARD_BOUNDARY", "ANTI_MANIPULATION"].includes(socialEvaluation.mode)) {
+      return createSingleShotChatStream(
+        buildSocialBoundaryResponse(socialEvaluation, languageDecision.language === "vi" ? "vi" : "en"),
+        {
+          model: "dante-social-boundary-router",
+          insight: null,
+          sources: [],
+          actions: [],
+          pendingConfirmation: null,
+          toolTraceSummary: [],
+          safetyTriggered: false,
+          safetyCategory: null,
+        },
+      );
+    }
+
+    const currentTurnState = extractCurrentTurnState(userMessage);
+
+    // Predictive Risk Accumulator V1 — deterministic, history-derived.
+    // Reconstructs observations from active-chat user turns only (no DB).
+    // Uses real message timestamps when present; never fabricates spacing.
+    const priorRiskTurns = getRiskHistoryTurnsChronological(body, userMessage);
+    const currentMessageMeta = (() => {
+      if (!isRecord(body)) return null;
+      const requestBody = body as ChatRequestBody;
+      if (!Array.isArray(requestBody.messages)) return null;
+      for (let index = requestBody.messages.length - 1; index >= 0; index -= 1) {
+        const item = requestBody.messages[index];
+        if (!isRecord(item)) continue;
+        if (item.role !== "user" || typeof item.content !== "string") continue;
+        if (item.content.trim() !== userMessage) continue;
+        const rawTs =
+          (typeof item.createdAt === "string" && item.createdAt) ||
+          (typeof item.timestamp === "string" && item.timestamp) ||
+          (typeof item.observedAt === "string" && item.observedAt) ||
+          null;
+        return rawTs && Number.isFinite(Date.parse(rawTs)) ? new Date(rawTs).toISOString() : null;
+      }
+      return null;
+    })();
+    const currentTurnIso = currentMessageMeta ?? now.toISOString();
+    const riskObservations = deriveObservationsFromHistory(
+      [...priorRiskTurns, { content: userMessage, observedAt: currentTurnIso }],
+      { now, currentTurnObservedAt: currentTurnIso },
+    );
+    let riskEvaluation = evaluateRiskSignals(riskObservations, { now });
+    const currentRiskTouch = observeFromUserMessage(userMessage, {
+      observedAt: currentTurnIso,
+      timestampTrusted: true,
+      index: priorRiskTurns.length,
+    });
+
+    // Confidence Assessment Engine V1 — deterministic, claim-specific.
+    // Early pass uses empty verified memory so false-memory / caffeine cases
+    // still calibrate before context load; full pass re-runs after epistemic.
+    const earlyMemoryCheck = checkMemoryClaimProvenance({
+      message: userMessage,
+      verifiedMemory: toVerifiedMemorySnapshot(null),
+    });
+    let confidenceAssessment = assessTurnConfidence({
+      message: userMessage,
+      currentState: currentTurnState,
+      safetyTriggered: false,
+      memoryCheck: earlyMemoryCheck,
+      riskEvaluation,
+    });
+    const lang = languageDecision.language === "vi" ? "vi" : "en";
+
+    // N-of-1 Experiment Proposal Engine V1 — deterministic, consent-gated.
+    // PROPOSED stays ephemeral. ACTIVE is restored from durable storage when present.
+    // Accept → pending write confirmation → persist (never silent write).
+    const durableNof1 = await loadActiveNof1Experiment(supabase, user.id).catch(() => null);
+    const failedNof1 = durableNof1
+      ? null
+      : await loadLatestFailedNof1Proposal(supabase, user.id).catch(() => null);
+    const historyNof1 = deriveNof1SessionFromHistory(priorRiskTurns.map((turn) => turn.content), {
+      now,
+      riskEvaluation,
+      language: lang,
+    });
+    const priorNof1 = durableNof1
+      ? { experiment: durableNof1, lastProposalId: durableNof1.id }
+      : failedNof1
+        ? { experiment: failedNof1, lastProposalId: failedNof1.id }
+        : historyNof1;
+    const hasExistingNof1Lifecycle = Boolean(priorNof1.experiment);
+    const nof1Turn = processNof1Turn({
+      priorSession: priorNof1,
+      message: userMessage,
+      language: lang,
+      safetyTriggered: false,
+      riskEvaluation,
+      now,
+    });
+    let nof1PersistError: string | null = null;
+    if (nof1Turn.persistPatch) {
+      const patchResult = await updateNof1Experiment(
+        supabase,
+        user.id,
+        nof1Turn.persistPatch.experimentId,
+        {
+          status: nof1Turn.persistPatch.status,
+          confounders: nof1Turn.persistPatch.confounders,
+          protocolAdherence: nof1Turn.persistPatch.protocolAdherence,
+          conclusion: nof1Turn.persistPatch.conclusion,
+          completedAt: nof1Turn.persistPatch.completedAt,
+        },
+      ).catch((error: unknown) => {
+        console.warn("[DANTE NOF1] persistPatch failed:", error);
+        nof1PersistError = error instanceof Error ? error.message : "Unable to save experiment state.";
+        return null;
+      });
+      if (patchResult && !patchResult.success) {
+        console.warn("[DANTE NOF1] persistPatch rejected:", patchResult.error);
+        nof1PersistError = patchResult.error;
+      }
+    }
+
+    if (nof1Turn.needsWriteConfirmation && nof1Turn.acceptDraft) {
+      try {
+        const draft = nof1Turn.acceptDraft;
+        const pending = await createPendingAction(
+          supabase,
+          user.id,
+          "accept_nof1_experiment",
+          {
+            hypothesis: draft.hypothesis,
+            rationale: draft.rationale,
+            controlledVariables: draft.controlledVariables,
+            variableUnderTest: draft.variableUnderTest,
+            primaryOutcome: draft.primaryOutcome,
+            secondaryOutcomes: draft.secondaryOutcomes ?? [],
+            experimentWindow: draft.experimentWindow,
+            templateId: draft.templateId ?? null,
+            createdAt: draft.createdAt,
+          },
+          lang === "vi"
+            ? `Xác nhận bắt đầu test N-of-1 ${draft.experimentWindow.durationDays} ngày: ${draft.variableUnderTest}`
+            : `Confirm starting ${draft.experimentWindow.durationDays}-day N-of-1 test: ${draft.variableUnderTest}`,
+          now,
+        );
+        return createSingleShotChatStream(
+          nof1Turn.reply ??
+            (lang === "vi"
+              ? "Cần Confirm để kích hoạt experiment."
+              : "Confirm to activate the experiment."),
+          {
+            model: "dante-nof1-engine",
+            insight: null,
+            sources: [],
+            actions: [],
+            pendingConfirmation: {
+              actionId: pending.actionId,
+              toolName: pending.toolName,
+              summary: pending.summary,
+            },
+            toolTraceSummary: [],
+            safetyTriggered: false,
+            safetyCategory: null,
+          },
+        );
+      } catch (error) {
+        console.warn("[DANTE NOF1] pending accept failed:", error);
+        return createSingleShotChatStream(
+          lang === "vi"
+            ? "Ông đã đồng ý, nhưng mình chưa tạo được bước Confirm lúc này. Thử lại giúp."
+            : "You agreed, but I could not create the confirmation step right now. Please try again.",
+          {
+            model: "dante-nof1-engine",
+            insight: null,
+            sources: [],
+            actions: [],
+            pendingConfirmation: null,
+            toolTraceSummary: [],
+            safetyTriggered: false,
+            safetyCategory: null,
+          },
+        );
+      }
+    }
+
+    if (hasExistingNof1Lifecycle && nof1Turn.reply) {
+      const reply = nof1PersistError
+        ? lang === "vi"
+          ? "Mình đã nhận ra cập nhật cho experiment, nhưng chưa lưu được thay đổi trạng thái. Trạng thái đã lưu trước đó vẫn giữ nguyên; không có kết quả hay confounder nào được ghi giả."
+          : "I recognized the experiment update, but could not save the lifecycle change. The previously stored state remains unchanged; no result or confounder was falsely recorded."
+        : nof1Turn.reply;
+      return createSingleShotChatStream(reply, {
+        model: "dante-nof1-engine",
+        insight: null,
+        sources: [],
+        actions: [],
+        pendingConfirmation: null,
+        toolTraceSummary: [],
+        safetyTriggered: false,
+        safetyCategory: null,
+      });
+    }
+
+    // N-of-1 lifecycle continuity gets first refusal on experiment-relevant turns.
+    // Generic current-state/confidence/risk coaching remains unchanged otherwise.
+    const currentStateResponse = buildCurrentStateCoachingResponse(currentTurnState, lang);
+    if (currentStateResponse) {
+      const patternAck = buildRiskPatternAck(riskEvaluation, lang);
+      const reply = patternAck ? `${patternAck}\n\n${currentStateResponse}` : currentStateResponse;
+      return createSingleShotChatStream(reply, {
+        model: "dante-current-state-coach",
+        insight: null,
+        sources: [],
+        actions: [],
+        pendingConfirmation: null,
+        toolTraceSummary: [],
+        safetyTriggered: false,
+        safetyCategory: null,
+      });
+    }
+
+    const confidenceReply = buildConfidenceDeterministicReply(confidenceAssessment, lang);
+    if (confidenceReply) {
+      return createSingleShotChatStream(confidenceReply, {
+        model: "dante-confidence-engine",
+        insight: null,
+        sources: [],
+        actions: [],
+        pendingConfirmation: null,
+        toolTraceSummary: [],
+        safetyTriggered: false,
+        safetyCategory: null,
+      });
+    }
+
+    const riskReply = buildRiskDeterministicReply(riskEvaluation, lang, {
+      currentTurnResolution: currentRiskTouch.some((item) => item.kind === "SYMPTOM_FREE_RESOLUTION"),
+      currentTurnIrritation: currentRiskTouch.some((item) => item.kind === "IRRITATION"),
+      currentTurnFatigue: currentRiskTouch.some((item) => item.kind === "LOW_RECOVERY"),
+    });
+    if (riskReply) {
+      return createSingleShotChatStream(riskReply, {
+        model: "dante-risk-accumulator",
+        insight: null,
+        sources: [],
+        actions: [],
+        pendingConfirmation: null,
+        toolTraceSummary: [],
+        safetyTriggered: false,
+        safetyCategory: null,
+      });
+    }
+
+    if (nof1Turn.reply) {
+      return createSingleShotChatStream(nof1Turn.reply, {
+        model: "dante-nof1-engine",
+        insight: null,
+        sources: [],
+        actions: [],
+        pendingConfirmation: null,
+        toolTraceSummary: [],
+        safetyTriggered: false,
+        safetyCategory: null,
+      });
+    }
+
+    // Workout-mutation asks that never entered the agent write path still
+    // must not claim a saved change. Status is SUGGESTED: proposal only,
+    // zero unconfirmed writes.
+    if (isWorkoutMutationRequest(userMessage)) {
+      const language = languageDecision.language === "vi" ? "vi" : "en";
+      return createSingleShotChatStream(buildSuggestedWorkoutChangeReply(language), {
+        model: "dante-action-truthfulness",
+        insight: null,
+        sources: [],
+        actions: [],
+        pendingConfirmation: null,
+        toolTraceSummary: [],
+        safetyTriggered: false,
+        safetyCategory: null,
+      });
+    }
+
     // Keep obvious social reactions social. This is deliberately below the
-    // safety gate and above coaching/tool routing; it is turn-local and has
-    // no effect on stored preferences or Phase 3/4 control state.
+    // safety + social gates and above coaching/tool routing; it is turn-local
+    // and has no effect on stored preferences or Phase 3/4 control state.
     const casual = resolveCasualControlFlow(userMessage, languageDecision.language === "vi" ? "vi" : "en");
     if (casual.branch === "CASUAL" && casual.reply) {
       return createSingleShotChatStream(casual.reply, {
@@ -3767,7 +4185,7 @@ export async function POST(
       });
     }
 
-    // Intent classification is deliberately after the safety/casual exits;
+    // Intent classification is deliberately after the safety/social/casual exits;
     // a social turn must never enter normal coaching context assembly.
     const intent = detectIntent(userMessage);
 
@@ -3825,7 +4243,12 @@ export async function POST(
           executedActions: envelope.toolTraceSummary ?? [],
         });
 
-        const verifiedReply = agentVerifier.passed ? envelope.reply : buildFallbackMessage(agentVerifier.outcome);
+        const verifiedReply = clarifyUnconfirmedWorkoutChange(
+          agentVerifier.passed ? envelope.reply : buildFallbackMessage(agentVerifier.outcome),
+          userMessage,
+          envelope.pendingConfirmation,
+          languageDecision.language === "vi" ? "vi" : "en",
+        );
 
         if (!agentVerifier.passed) {
           logToolEvent("DANTE_VERIFIER_FALLBACK", { tool: "agent-loop", stage: "verify" });
@@ -3907,6 +4330,33 @@ export async function POST(
 
     const epistemic = buildTurnEpistemicContext(userMessage, userContext);
 
+    const recoveryBaseline = (() => {
+      const twin = userContext.digitalTwin as
+        | {
+            baselineDeviations?: {
+              recoveryScore?: { baseline: number | null; sampleCount: number };
+            };
+          }
+        | null
+        | undefined;
+      const deviation = twin?.baselineDeviations?.recoveryScore;
+      if (!deviation || deviation.baseline == null || deviation.sampleCount < 5) return null;
+      return { mean: deviation.baseline, sampleSize: deviation.sampleCount };
+    })();
+    if (recoveryBaseline) {
+      riskEvaluation = evaluateRiskSignals(riskObservations, {
+        now,
+        personalRecoveryBaseline: recoveryBaseline,
+      });
+    }
+
+    confidenceAssessment = assessTurnConfidence({
+      message: userMessage,
+      currentState: currentTurnState,
+      safetyTriggered: false,
+      memoryCheck: epistemic.memoryCheck,
+      riskEvaluation,
+    });
     const recentUserMessages = extractRecentUserMessages(body, userMessage);
 
     const prompt =
@@ -3920,6 +4370,12 @@ export async function POST(
         epistemic,
         recentUserMessages,
         epistemicNotes,
+        socialEvaluation,
+        currentTurnState,
+        confidenceAssessment.keepMostlyInvisible ? [] : confidenceAssessment.claims,
+        riskEvaluation.conservativeBias === "NONE" && toRiskLogFields(riskEvaluation).length === 0
+          ? null
+          : riskEvaluation,
       );
 
     /* -----------------------------------------------------
@@ -4015,14 +4471,19 @@ export async function POST(
           logToolEvent("DANTE_VERIFIER_FALLBACK", { tool: "legacy-qa", stage: "verify" });
         }
 
-        const finalReply = epistemic.highRiskEpistemic
-          ? enforceEpistemicReplyBoundaries({
-              reply: result.replyText,
-              memoryCheck: epistemic.memoryCheck,
-              writeAuthorization: epistemic.writeAuthorization,
-              forgetConfounders: epistemic.forgetConfounders,
-            }).reply
-          : result.replyText;
+        const finalReply = clarifyUnconfirmedWorkoutChange(
+          epistemic.highRiskEpistemic
+            ? enforceEpistemicReplyBoundaries({
+                reply: result.replyText,
+                memoryCheck: epistemic.memoryCheck,
+                writeAuthorization: epistemic.writeAuthorization,
+                forgetConfounders: epistemic.forgetConfounders,
+              }).reply
+            : result.replyText,
+          userMessage,
+          null,
+          languageDecision.language === "vi" ? "vi" : "en",
+        );
 
         emit({ type: "delta", text: finalReply });
         emit({

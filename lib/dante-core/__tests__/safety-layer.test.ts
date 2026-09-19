@@ -43,6 +43,53 @@ describe("checkSafety", () => {
     expect(result.category).toBe("neurological_symptoms");
   });
 
+  it.each([
+    "My shoulder is slightly irritated. There is no swelling, no instability, no numbness, and normal movement is fine.",
+    "I have shoulder pain but no numbness.",
+    "Yesterday I had numbness, but today it is gone.",
+    "Yesterday I had numbness, but today I don't.",
+    "I had numbness yesterday but none today.",
+    "I am not numb.",
+    "I am without numbness.",
+    "I don't have numbness.",
+    "I have no tingling.",
+    "I have no weakness.",
+    "I deny numbness.",
+    "I denied numbness.",
+  ])("does not escalate a negated or explicitly resolved symptom: %s", (message) => {
+    const result = checkSafety(message);
+    expect(result.category).not.toBe("neurological_symptoms");
+  });
+
+  it.each([
+    "Hôm nay ngủ 8 tiếng, recovery tốt. Vai phải hơi irritated khi overhead, nhưng không swelling, không instability, không numbness, không weakness.",
+    "không numbness, không weakness, không swelling",
+  ])("does not escalate Vietnamese negated neurological symptoms: %s", (message) => {
+    const result = checkSafety(message);
+    expect(result.category).not.toBe("neurological_symptoms");
+  });
+
+  it("does not convert a current submax/no-PR update into a max-risk stale-state redirect", () => {
+    const result = checkSafety(
+      "Hôm qua tôi ngủ 4h recovery 42. HÔM NAY tôi ngủ 8h và recovery tốt. Vai hơi irritated overhead. Không numbness, không weakness. Tôi muốn bench submax, không PR.",
+    );
+    expect(result.triggered).toBe(false);
+  });
+
+  it.each([
+    "My arm is numb and weak after the set.",
+    "I have numbness in my hand.",
+    "I feel tingling.",
+    "I feel tingling down my arm.",
+    "I have no numbness, but I suddenly lost strength in my right arm.",
+    "I had no numbness before, but now my fingers are numb.",
+    "I don't have tingling anymore, but my arm is now numb.",
+  ])("preserves a current positive neurological symptom: %s", (message) => {
+    const result = checkSafety(message);
+    expect(result.triggered).toBe(true);
+    expect(result.category).toBe("neurological_symptoms");
+  });
+
   it("triggers on a described acute injury", () => {
     const result = checkSafety("I heard a pop in my knee and now I can't put weight on my leg.");
     expect(result.triggered).toBe(true);
@@ -100,6 +147,15 @@ describe("multilingual safety (EN + VI)", () => {
     expect(result.triggered).toBe(true);
     expect(result.category).toBe("fainting_dizziness");
   });
+
+  it.each(["tôi bị tê tay sau khi tập", "tôi bị yếu đột ngột ở tay phải"])(
+    "keeps supported Vietnamese neurological red flags active: %s",
+    (message) => {
+      const result = checkSafety(message);
+      expect(result.triggered).toBe(true);
+      expect(result.category).toBe("neurological_symptoms");
+    },
+  );
 
   it("E — safe Vietnamese fitness message does not false-trigger", () => {
     const result = checkSafety(

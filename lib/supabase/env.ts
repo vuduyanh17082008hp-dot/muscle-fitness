@@ -57,12 +57,30 @@ export function getSupabaseEnvironment(): SupabaseEnvironment {
     )
   }
 
-  if (
-    !url.startsWith("https://") ||
-    !url.includes(".supabase.co")
-  ) {
+  let parsedUrl: URL
+
+  try {
+    parsedUrl = new URL(url)
+  } catch {
     throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL must be a valid Supabase HTTPS project URL.",
+      "NEXT_PUBLIC_SUPABASE_URL must be a valid URL.",
+    )
+  }
+
+  const isHostedSupabase =
+    parsedUrl.protocol === "https:" &&
+    parsedUrl.hostname.endsWith(".supabase.co")
+
+  const isLoopbackSupabase =
+    process.env.NODE_ENV !== "production" &&
+    parsedUrl.protocol === "http:" &&
+    ["127.0.0.1", "localhost", "[::1]"].includes(
+      parsedUrl.hostname,
+    )
+
+  if (!isHostedSupabase && !isLoopbackSupabase) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL must be a Supabase HTTPS project URL, or a loopback HTTP URL outside production.",
     )
   }
 
