@@ -81,24 +81,34 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
       ref={rootRef}
       id="hero"
       data-chapter="hero"
-      className="relative flex min-h-screen items-center overflow-hidden border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)] px-6 pt-28 pb-20 sm:pt-32 sm:pb-24 lg:px-12 lg:py-24"
+      className="relative flex min-h-screen items-center overflow-hidden border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)] px-6 pt-28 pb-20 sm:pt-32 sm:pb-24 lg:px-12 lg:py-28"
     >
       <ParticleCanvas />
 
-      <div className="relative mx-auto grid w-full max-w-7xl items-center gap-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-20 xl:gap-28">
+      {/* Atmospheric glow backdrop */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/4 top-1/3 size-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--mf-brand)]/5 blur-[120px]" />
+        <div className="absolute right-1/4 bottom-1/4 size-[600px] rounded-full bg-violet-600/5 blur-[140px]" />
+      </div>
+
+      <div className="relative mx-auto grid w-full max-w-7xl items-center gap-14 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 xl:gap-24">
         <div className="hero-copy">
-          <h1 className="font-heading text-5xl font-black uppercase leading-[0.92] tracking-[-0.03em] sm:text-6xl lg:text-[5.5vw]">
+          <div className="hero-line mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-brand-soft)] px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--mf-brand)]">
+            <span className="size-1.5 rounded-full bg-[var(--mf-brand)]" />
+            AI-Powered Personal Training System
+          </div>
+
+          <h1 className="font-heading text-5xl font-black uppercase leading-[0.92] tracking-[-0.03em] sm:text-6xl lg:text-[5.2vw]">
             <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-pub-text)]">Train hard.</span></span>
             <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-pub-text-secondary)]">Recover smart.</span></span>
             <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-brand)]">Adapt continuously.</span></span>
           </h1>
 
-          <p className="hero-sub mt-8 max-w-lg text-base leading-7 text-[var(--mf-pub-text-secondary)] sm:text-lg">
-            One system reads your training, recovery and adaptive state — then
-            Dante turns it into the next decision.
+          <p className="hero-sub mt-6 max-w-xl text-base leading-7 text-[var(--mf-pub-text-secondary)] sm:text-lg">
+            Training, recovery, nutrition, and history — integrated into one intelligence system that reasons from your real data, not raw prompts.
           </p>
 
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
             <TransitionLink
               href={routes.signup}
               transitionLabel="Entering the system…"
@@ -108,7 +118,7 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
                 target.style.setProperty("--mx", `${event.clientX - rect.left}px`);
                 target.style.setProperty("--my", `${event.clientY - rect.top}px`);
               }}
-              className={`hero-cta ${styles.radialCta} inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--mf-brand)] px-6 py-4 text-sm font-black uppercase tracking-wider text-[var(--mf-brand-ink)] transition hover:bg-[var(--mf-brand-hover)]`}
+              className={`hero-cta ${styles.radialCta} inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--mf-brand)] px-7 py-4 text-xs font-black uppercase tracking-[0.14em] text-[var(--mf-brand-ink)] transition hover:bg-[var(--mf-brand-hover)]`}
             >
               Enter the system
               <ArrowRight className="size-4" />
@@ -116,14 +126,27 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
 
             <Link
               href={routes.chatbot}
-              className="hero-cta inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white transition hover:border-white/20 hover:bg-white/5"
+              className="hero-cta inline-flex items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/[0.03] px-7 py-4 text-xs font-black uppercase tracking-[0.14em] text-white transition hover:border-white/25 hover:bg-white/8"
             >
               Meet Dante
             </Link>
           </div>
+
+          {/* Micro-feature highlights */}
+          <div className="hero-sub mt-10 flex flex-wrap items-center gap-4 border-t border-white/10 pt-6 text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-400">
+            <span className="flex items-center gap-1.5">
+              <span className="text-[var(--mf-brand)]">✓</span> 100% Personal Baseline
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-[var(--mf-brand)]">✓</span> Evidence-Grounded
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-[var(--mf-brand)]">✓</span> Real-Time Autoregulation
+            </span>
+          </div>
         </div>
 
-        <div className="hero-ecosystem lg:pl-4 xl:pl-8">
+        <div className="hero-ecosystem relative overflow-visible bg-transparent lg:pl-2 xl:pl-6">
           <Ecosystem routes={routes} />
         </div>
       </div>

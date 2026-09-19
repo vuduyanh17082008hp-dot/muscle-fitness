@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import React, {
   useEffect,
   useRef,
   useState,
@@ -18,6 +18,8 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 
 import { DanteRobot } from "@/components/dante/dante-robot";
+import { BiometricFieldCanvas } from "@/components/dante/biometric-field-canvas";
+import hudStyles from "@/components/dante/holographic-telemetry-pod.module.css";
 import {
   DANTE_STATE_LABEL,
   useDantePresence,
@@ -48,50 +50,42 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  /** "Why This?" evidence, when this reply carried a real, deterministic recommendation. Never fabricated by the LLM. */
+  /** Client clock when the user turn was created — optional risk timing. */
+  createdAt?: string;
   insight?: DanteInsight | null;
-  /** Citation provenance for this reply — only ever the server's own retrieved/evidence sources, never invented client-side. Empty/missing renders nothing (never a crash). */
   sources?: ChatStreamSource[] | null;
-  /** Set only when Dante proposed a write tool call — nothing is saved until the user explicitly confirms (see PendingConfirmationPanel below). Only ever populated from a server `done` event, never while streaming. */
   pendingConfirmation?: PendingConfirmation | null;
-  /** Once the user acts on pendingConfirmation, frozen here so the buttons don't re-render as active after a page state update. */
   confirmationResolution?: "confirmed" | "cancelled" | "failed" | null;
-  /** True once this message's stream has ended (completed, errored, or aborted) — while false, this is the live-updating placeholder sendMessage() is still appending text to. */
   isComplete?: boolean;
-  /** True only when the stream ended because the user clicked Stop, not a real failure — used purely to render "stopped" copy rather than the generic unavailable message. */
   wasAborted?: boolean;
 };
 
 export type QuickPrompt = {
+  tag?: string;
   label: string;
   prompt: string;
 };
 
-/**
- * Natural-language conversation starters, not cold category labels
- * (spec: "Better Empty State"). These are the generic fallback shown
- * when no real-state-aware suggestions are supplied — see
- * `contextualSuggestions` below and lib/dante-core/build-chat-suggestions.ts,
- * which sharpens these into workout/protein/recovery-specific prompts
- * from the user's actual data wherever a page supplies real signals.
- */
 const QUICK_PROMPTS: QuickPrompt[] = [
   {
-    label: "🏋️ What should I train today?",
-    prompt:
-      "What should I train today based on my current plan and recovery?",
+    tag: "// TELEMETRY: SẴN SÀNG 87%",
+    label: "Hôm nay tôi nên tập gì?",
+    prompt: "Dựa vào chỉ số sẵn sàng 87%, hôm nay tôi nên tập bài gì?",
   },
   {
-    label: "🥗 Help me plan meals for my remaining macros.",
-    prompt: "Help me plan meals for my remaining macros today.",
+    tag: "// DINH DƯỠNG: MỤC TIÊU 140g",
+    label: "Tôi có thể ăn gì để đạt mục tiêu protein?",
+    prompt: "Bạn có gợi ý dinh dưỡng nào để giúp tôi đạt mục tiêu 140g protein còn lại không?",
   },
   {
-    label: "⚡ Am I recovered enough to train hard?",
-    prompt: "Am I recovered enough to train hard today?",
+    tag: "// HỆ THỐNG: CHƯA KIỂM TRA",
+    label: "Bạn chưa kiểm tra hôm nay.",
+    prompt: "Tôi cần thực hiện kiểm tra phục hồi hàng ngày.",
   },
   {
-    label: "📈 How am I progressing this month?",
-    prompt: "Summarize my recent progress and what to focus on next.",
+    tag: "// PHÂN TÍCH: CHU KỲ 30 NGÀY",
+    label: "Tôi tiến bộ thế nào trong tháng này?",
+    prompt: "Tiến độ của tôi trong chu kỳ tập luyện và phục hồi 30 ngày qua như thế nào?",
   },
 ];
 
@@ -380,9 +374,8 @@ export default function DanteChat({
   const [isLoading, setIsLoading] =
     useState(false);
 
-  const [activity, setActivity] =
-    useState<DanteActivity>("idle");
-
+  const [activity, setActivity] = useState<DanteActivity>("idle");
+  const [hoveredPromptIndex, setHoveredPromptIndex] = useState<number | null>(null);
   const visualState = useDantePresence(activity);
 
   const isEmpty = messages.length === 1;
@@ -511,6 +504,7 @@ export default function DanteChat({
       id: crypto.randomUUID(),
       role: "user",
       content: trimmed,
+      createdAt: new Date().toISOString(),
     };
 
     const assistantId = crypto.randomUUID();
@@ -558,8 +552,13 @@ export default function DanteChat({
                   .map((entry) => ({
                     role: "user" as const,
                     content: entry.content.trim(),
+                    ...(entry.createdAt ? { createdAt: entry.createdAt } : {}),
                   })),
-                { role: "user" as const, content: trimmed },
+                {
+                  role: "user" as const,
+                  content: trimmed,
+                  createdAt: userMessage.createdAt,
+                },
               ].slice(-8),
               ...contextPayload,
             }),
@@ -790,782 +789,463 @@ export default function DanteChat({
   return (
     <div
       className={cn(
-        // Normal-flow flex column: every child below is a sibling in
-        // document flow (status bar → empty-state hero → conversation →
-        // composer). The conversation pane is the ONLY flex-1 child, and
-        // it carries min-h-0 so it actually shrinks to the container's
-        // fixed height instead of growing to fit its content and pushing
-        // the composer out of view.
-        //
-        // The fixed height (and its min-h floor) only applies once
-        // there's a real scrollable conversation to bound (isEmpty
-        // === false). The empty state (hero + composer, no message
-        // history yet) carries no height/min-height at all — it's a
-        // compact intro card, not a conversation pane, so it sizes to
-        // its own (intentionally small) content instead of being
-        // forced up to the conversation view's floor, which used to
-        // leave the card taller than its content needed and made it
-        // dominate the page above Recovery Knowledge Hub.
-        "flex w-full min-h-0 flex-col font-sans",
-        !isEmpty &&
-          (compact
-            ? "h-[min(62dvh,520px)] max-h-[min(62dvh,520px)] min-h-0"
-            : "h-[min(74vh,820px)] min-h-125"),
-        className,
+        "relative flex w-full flex-col font-sans overflow-hidden rounded-[24px] border border-white/6 p-4 sm:p-6 transition-all duration-500",
+        hudStyles.obsidianCanvas,
+        compact
+          ? "h-[min(65dvh,560px)] max-h-[min(65dvh,560px)] min-h-[460px]"
+          : "h-[min(82vh,860px)] min-h-[580px]",
+        className
       )}
     >
+      {/* 2D PROCEDURAL BIOMETRIC FIELD CANVAS (Grid & Micro-Particles) */}
+      <BiometricFieldCanvas />
 
-      {/* ===================================================
-          DANTE STATUS BAR — active conversation only
-      =================================================== */}
+      {/* Ambient Lighting Washes — Persistent in BOTH States */}
+      <div aria-hidden="true" className={`absolute inset-0 pointer-events-none z-0 ${hudStyles.topLimeWash}`} />
+      <div aria-hidden="true" className={`absolute inset-0 pointer-events-none z-0 ${hudStyles.bottomVioletWash}`} />
+      <div aria-hidden="true" className={`absolute inset-0 pointer-events-none z-0 ${hudStyles.leftBlueWash}`} />
 
-      {!isEmpty && (
-        <div
-          className="
-            mb-4
-            flex
-            shrink-0
-            items-center
-            justify-between
-            gap-3
-            rounded-[20px]
-            border
-            border-white/10
-            bg-[#12151c]
-            px-5
-            py-3.5
-          "
-        >
-          <div className="flex items-center gap-3">
-            <DanteRobot
-              state={visualState}
-              size="sm"
-              interactive
-            />
-
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-mf-violet">
-                Dante
-              </p>
-
-              <p className="text-sm font-medium text-white/55">
-                Performance Intelligence
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/40">
-            <span
-              className={cn(
-                "h-2 w-2 rounded-full transition-colors",
-                visualState === "error"
-                  ? "bg-rose-400"
-                  : visualState === "idle"
-                    ? "bg-emerald-400"
-                    : "bg-[var(--mf-violet)]",
-              )}
-            />
-
-            {visualState === "idle" ? "Ready" : visualState}
-          </div>
-        </div>
-      )}
-
-      <span
-        aria-live="polite"
-        className="sr-only"
-      >
+      {/* Screen Reader Accessibility */}
+      <span aria-live="polite" className="sr-only">
         {DANTE_STATE_LABEL[visualState]}
       </span>
 
       {/* ===================================================
-          EMPTY STATE — DANTE INTRODUCTION
+          DANTE SUPERVISOR HEADER (IN-PLACE FLUID MORPH)
       =================================================== */}
+      <div
+        className={cn(
+          "relative z-20 flex shrink-0 items-center transition-all duration-500",
+          isEmpty
+            ? "flex-col items-center justify-center my-3 py-2"
+            : "mb-3 flex-row items-center justify-between rounded-[18px] border border-white/6 bg-[#0e1016]/60 px-4 py-2.5 backdrop-blur-md"
+        )}
+      >
+        {/* Living Mascot Supervisor */}
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              "relative flex items-center justify-center transition-all duration-500",
+              isEmpty ? "p-4 scale-100" : "scale-75 origin-left"
+            )}
+          >
+            {/* Volumetric Cone Light (Active in State 1) */}
+            {isEmpty && (
+              <div aria-hidden="true" className={`absolute -top-2 w-[180px] h-[130px] pointer-events-none ${hudStyles.volumetricCone}`} />
+            )}
 
+            {/* Elliptical Floor Reflection Sheen */}
+            {isEmpty && (
+              <div aria-hidden="true" className={`absolute bottom-1 w-[130px] h-[22px] rounded-full pointer-events-none ${hudStyles.floorSheen}`} />
+            )}
+
+            {/* Concentric SVG Dashed Orbit Rings */}
+            {isEmpty && (
+              <svg
+                viewBox="-300 -140 600 280"
+                className="absolute inset-0 size-full overflow-visible pointer-events-none"
+                aria-hidden="true"
+              >
+                <ellipse
+                  rx="275"
+                  ry="115"
+                  fill="none"
+                  stroke="rgba(212, 255, 0, 0.35)"
+                  strokeWidth="1"
+                  strokeDasharray="4 8"
+                  transform="rotate(-8)"
+                  className={hudStyles.orbitRingCW}
+                />
+                <ellipse
+                  rx="210"
+                  ry="85"
+                  fill="none"
+                  stroke="rgba(212, 255, 0, 0.22)"
+                  strokeWidth="1"
+                  strokeDasharray="2 6"
+                  transform="rotate(12)"
+                  className={hudStyles.orbitRingCCW}
+                />
+              </svg>
+            )}
+
+            {/* Laser Scanline Beam & Mascot Float */}
+            <div className="relative z-10 overflow-hidden py-1">
+              {isEmpty && (
+                <div className={`absolute left-0 right-0 z-20 pointer-events-none ${hudStyles.scanlineBeam}`} />
+              )}
+              <div className={hudStyles.mascotFloat}>
+                <DanteRobot
+                  state={visualState}
+                  size="sm"
+                  interactive
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Morphing Metadata Breadcrumb */}
+          <div className={isEmpty ? "text-center" : "text-left"}>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#D4FF00]">
+              {isEmpty ? "DANTE BIOMETRIC HUD • ONLINE" : "DANTE AI // PERFORMANCE INTELLIGENCE • LIVE"}
+            </p>
+            {isEmpty ? (
+              <h2 className="mt-1 text-xl font-bold tracking-tight text-white md:text-2xl lg:text-3xl">
+                {heroTitle}
+              </h2>
+            ) : (
+              <p className="text-[11px] font-mono text-zinc-400">
+                ACTIVE CONTEXT: TRAINING • RECOVERY • NUTRITION
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Live Status Beacon (when in active chat mode) */}
+        {!isEmpty && (
+          <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+            <span
+              className={cn(
+                "size-2 rounded-full transition-colors",
+                visualState === "error"
+                  ? "bg-rose-400 shadow-[0_0_8px_#f43f5e]"
+                  : visualState === "idle"
+                    ? "bg-[#D4FF00] shadow-[0_0_8px_#D4FF00]"
+                    : "bg-[var(--mf-violet)] shadow-[0_0_8px_var(--mf-violet)] animate-pulse"
+              )}
+            />
+            <span>{visualState === "idle" ? "ONLINE" : visualState}</span>
+          </div>
+        )}
+      </div>
+
+      {/* ===================================================
+          STATE 1: SATELLITE PROMPT ORBIT SYSTEM
+      =================================================== */}
       {isEmpty && (
-        <div
-          className="
-            mb-4
-            flex
-            shrink-0
-            flex-col
-            items-center
-            rounded-[24px]
-            border
-            border-white/10
-            bg-gradient-to-b
-            from-[#181c25]
-            to-[#12151c]
-            px-6
-            py-5
-            text-center
-            sm:py-6
-          "
-        >
-          {/* DANTE HERO — mascot + identity. Kept compact (sm robot,
-              tight spacing) so this intro card reads as a lightweight
-              conversation starter, not a full-height section of its
-              own. */}
-          <DanteRobot
-            state={visualState}
-            size="sm"
-            interactive
-          />
+        <div className="relative z-30 flex-1 w-full max-w-7xl mx-auto grid grid-cols-1 gap-3.5 sm:block sm:h-full my-auto transition-all duration-300">
+          {emptyStatePrompts.slice(0, 4).map((item, index) => {
+            const driftClasses = [
+              hudStyles.satelliteDriftA,
+              hudStyles.satelliteDriftB,
+              hudStyles.satelliteDriftC,
+              hudStyles.satelliteDriftD,
+            ];
+            const driftClass = driftClasses[index % 4];
+            const isHovered = hoveredPromptIndex === index;
+            const isAnyHovered = hoveredPromptIndex !== null;
+            const opacityClass = isAnyHovered && !isHovered ? "opacity-45 scale-[0.98]" : "opacity-100";
 
-          <p className="mt-3 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--mf-violet)]">
-            Dante
-          </p>
+            const spatialPositionClass = [
+              "sm:absolute sm:top-2 sm:left-0 md:left-2 lg:left-6 xl:left-10 sm:max-w-[280px]",
+              "sm:absolute sm:top-2 sm:right-0 md:right-2 lg:right-6 xl:right-10 sm:max-w-[280px]",
+              "sm:absolute sm:bottom-6 sm:left-2 md:left-4 lg:left-10 xl:left-16 sm:max-w-[280px]",
+              "sm:absolute sm:bottom-6 sm:right-2 md:right-4 lg:right-10 xl:right-16 sm:max-w-[280px]",
+            ][index % 4];
 
-          <h2 className="mt-1 text-xl font-bold text-white md:text-2xl">
-            {heroTitle}
-          </h2>
-
-          <p className="mt-2 line-clamp-2 max-w-md text-sm leading-6 text-white/50">
-            {heroSubtitle}
-          </p>
-
-          {/* CONTEXTUAL STARTERS — visually secondary to the hero
-              above: smaller type, quieter surface, no competing focal
-              weight. 2x2 on desktop, single column on narrow mobile. */}
-          <div className="mt-4 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
-            {emptyStatePrompts.map((item) => (
+            return (
               <button
                 key={item.label}
                 type="button"
                 onClick={() => handleQuickPrompt(item.prompt)}
+                onPointerEnter={() => setHoveredPromptIndex(index)}
+                onPointerLeave={() => setHoveredPromptIndex(null)}
                 disabled={isLoading}
-                className="
-                  rounded-[16px]
-                  border
-                  border-[var(--mf-violet)]/20
-                  bg-[var(--mf-violet)]/6
-                  px-4
-                  py-2.5
-                  text-left
-                  text-xs
-                  font-semibold
-                  leading-5
-                  text-[var(--mf-violet)]
-                  transition
-                  hover:-translate-y-0.5
-                  hover:border-[var(--mf-violet)]/45
-                  hover:bg-[var(--mf-violet)]/12
-                  disabled:cursor-not-allowed
-                  disabled:opacity-40
-                  disabled:hover:translate-y-0
-                "
+                className={`relative px-4 py-3.5 text-left transition ${hudStyles.hudCard} ${driftClass} ${spatialPositionClass} ${opacityClass} disabled:cursor-not-allowed disabled:opacity-40`}
               >
-                {item.label}
+                <p className="font-mono text-[9.5px] font-bold uppercase tracking-wider text-[#D4FF00]/90 mb-1">
+                  {item.tag ?? `// TELEMETRY: PROMPT 0${index + 1}`}
+                </p>
+                <p className="text-xs font-semibold leading-5 text-zinc-100">
+                  {item.label}
+                </p>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
 
       {/* ===================================================
-          CHAT WINDOW — only once there's a real conversation beyond
-          the seeded welcome message. In the empty state the hero
-          block above already covers this space (same welcome copy,
-          via heroTitle/heroSubtitle); rendering this too produced a
-          second, near-empty rounded surface directly under it, since
-          a flex-1 min-h-0 pane squeezed toward zero height still paints
-          its own border/padding.
+          STATE 2: ACTIVE CONVERSATION THREAD (HUD GLASS TELEMETRY)
       =================================================== */}
-
       {!isEmpty && (
-      <div
-        ref={chatWindowRef}
-        onScroll={handleChatWindowScroll}
-        className="
-          min-h-0
-          flex-1
-          overflow-y-auto
-          rounded-[24px]
-          border
-          border-white/10
-          bg-[#151922]
-          px-4
-          py-6
-          shadow-2xl
-          shadow-black/30
-          md:px-7
-        "
-      >
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        <div
+          ref={chatWindowRef}
+          onScroll={handleChatWindowScroll}
+          className="relative z-20 flex-1 min-h-0 w-full max-w-3xl mx-auto overflow-y-auto px-2 sm:px-4 py-3 space-y-4"
+        >
+          {messages.map((message) => {
+            const isUser = message.role === "user";
 
-          {messages.map(
-            (message) => {
-              const isUser =
-                message.role ===
-                "user";
-
-              return (
-                <div
-                  key={message.id}
-                  className={cn(
-                    "dante-message-in",
-                    isUser ? "flex justify-end" : "flex justify-start",
-                  )}
-                >
-
-                  {/* =======================================
-                      USER MESSAGE
-                  ======================================= */}
-
-                  {isUser ? (
-                    <div
-                      className="
-                        max-w-[80%]
-                        rounded-3xl
-                        rounded-br-md
-                        bg-mf-surface
-                        border
-                        border-white/10
-                        px-5
-                        py-3.5
-                        text-base
-                        font-medium
-                        leading-7
-                        text-white
-                        shadow-lg
-                        shadow-black/10
-                        md:max-w-[70%]
-                      "
-                    >
-                      <p className="whitespace-pre-wrap">
-                        {message.content}
-                      </p>
-                    </div>
-                  ) : (
-
-                    /* =====================================
-                       DANTE MESSAGE
-                    ===================================== */
-
-                    <div className="flex w-full max-w-[92%] items-start gap-3 md:max-w-[86%]">
-
-                      {/* AVATAR */}
-
-                      <div
-                        className="
-                          mt-1
-                          hidden
-                          h-9
-                          w-9
-                          shrink-0
-                          items-center
-                          justify-center
-                          rounded-xl
-                          border
-                          border-[var(--mf-violet)]/30
-                          bg-[var(--mf-violet)]/10
-                          text-sm
-                          font-bold
-                          text-[var(--mf-violet)]
-                          sm:flex
-                        "
-                      >
+            return (
+              <div
+                key={message.id}
+                className={cn(
+                  "dante-message-in flex w-full",
+                  isUser ? "justify-end" : "justify-start"
+                )}
+              >
+                {isUser ? (
+                  /* User Message: Sleek right-aligned obsidian glass pill */
+                  <div className="max-w-[85%] sm:max-w-[75%] rounded-[16px_16px_4px_16px] border border-[#D4FF00]/25 bg-[#16181e]/85 px-4.5 py-3 text-sm sm:text-base font-medium leading-relaxed text-white shadow-lg backdrop-blur-md">
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  </div>
+                ) : (
+                  /* Dante Message: Left-aligned glass panel */
+                  <div className="flex w-full max-w-[95%] sm:max-w-[90%] flex-col gap-2 rounded-[16px_16px_16px_4px] border border-white/8 bg-[#0e1016]/75 p-4 sm:p-5 shadow-xl backdrop-blur-xl">
+                    {/* Header status pill: [D] icon badge with glowing lime pulse dot */}
+                    <div className="flex items-center gap-2">
+                      <span className="flex size-5 items-center justify-center rounded-md border border-[#D4FF00]/30 bg-[#D4FF00]/10 font-mono text-[10px] font-black text-[#D4FF00]">
                         D
-                      </div>
+                      </span>
+                      <span className="size-1.5 rounded-full bg-[#D4FF00] shadow-[0_0_6px_#D4FF00]" />
+                      <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                        DANTE // INTELLIGENCE COACH
+                      </span>
+                    </div>
 
-                      {/* MESSAGE BODY */}
-
+                    {/* Thinking state with 3 animated equalizer bars */}
+                    {message.content.length === 0 && !message.isComplete ? (
                       <div
-                        className="
-                          w-full
-                          overflow-hidden
-                          rounded-3xl
-                          rounded-tl-md
-                          border
-                          border-white/8
-                          bg-mf-surface-elevated
-                          px-5
-                          py-4
-                          text-base
-                          font-normal
-                          leading-7
-                          text-[#edf0f5]
-                          md:px-6
-                        "
+                        aria-live="polite"
+                        className="flex items-center gap-2.5 py-2 font-mono text-xs font-bold tracking-wider text-[#D4FF00]"
                       >
-
-                        {/* DANTE LABEL */}
-
-                        <div className="mb-4 flex items-center gap-2">
-                          <span className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--mf-violet)]">
-                            Dante
-                          </span>
-
-                          <span className="h-1 w-1 rounded-full bg-white/25" />
-
-                          <span className="text-xs text-white/35">
-                            Intelligence Coach
-                          </span>
+                        <span className="size-1.5 rounded-full bg-[#D4FF00] animate-ping" />
+                        <span>// DANTE ANALYZING BIOMETRICS</span>
+                        <div className="flex items-center gap-0.5 ml-1 select-none" aria-hidden="true">
+                          <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
+                          <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.2s" }} />
+                          <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.4s" }} />
                         </div>
-
-                        {/* =================================
-                            MARKDOWN — while this specific message
-                            has no text yet (the very start of a
-                            stream), show a subtle "thinking" state
-                            in its place instead of an empty bubble.
-                            Once the first delta lands, the growing
-                            answer itself becomes the loading
-                            feedback (no separate indicator).
-                        ================================= */}
-
-                        {message.content.length === 0 && !message.isComplete ? (
-                          <div
-                            aria-live="polite"
-                            className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--mf-violet)]"
-                          >
-                            Dante is thinking…
-                          </div>
-                        ) : (
+                      </div>
+                    ) : (
+                      <div className="prose prose-invert max-w-none text-white/90 text-sm leading-relaxed">
                         <ReactMarkdown
-                          remarkPlugins={[
-                            remarkGfm,
-                          ]}
-                          rehypePlugins={[
-                            rehypeRaw,
-                            rehypeSanitize,
-                          ]}
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeRaw, rehypeSanitize]}
                           components={{
-
-                            /* =============================
-                               PARAGRAPH
-                            ============================= */
-
-                            p({
-                              children,
-                            }) {
+                            p({ children }) {
                               return (
-                                <p className="mb-4 leading-7 text-[#edf0f5] last:mb-0">
+                                <p className="mb-3.5 text-sm sm:text-[15px] leading-relaxed text-[#edf0f5] last:mb-0">
                                   {children}
                                 </p>
                               );
                             },
-
-                            /* =============================
-                               HEADINGS
-                            ============================= */
-
-                            h1({
-                              children,
-                            }) {
+                            h1({ children }) {
                               return (
-                                <h1 className="mb-5 mt-2 text-2xl font-bold tracking-tight text-white">
+                                <h1 className="mb-4 mt-2 text-xl sm:text-2xl font-bold tracking-tight text-white">
                                   {children}
                                 </h1>
                               );
                             },
-
-                            h2({
-                              children,
-                            }) {
+                            h2({ children }) {
                               return (
-                                <h2 className="mb-4 mt-7 text-xl font-semibold tracking-wide text-white">
+                                <h2 className="mb-3 mt-5 text-lg sm:text-xl font-semibold tracking-wide text-white">
                                   {children}
                                 </h2>
                               );
                             },
-
-                            h3({
-                              children,
-                            }) {
+                            h3({ children }) {
                               return (
-                                <h3 className="mb-3 mt-6 text-lg font-semibold text-[var(--mf-violet)]">
+                                <h3 className="mb-2 mt-4 text-base font-semibold text-[#D4FF00]">
                                   {children}
                                 </h3>
                               );
                             },
-
-                            /* =============================
-                               BOLD
-                            ============================= */
-
-                            strong({
-                              children,
-                            }) {
+                            strong({ children }) {
                               return (
                                 <strong className="font-semibold text-white">
                                   {children}
                                 </strong>
                               );
                             },
-
-                            /* =============================
-                               LISTS
-                            ============================= */
-
-                            ul({
-                              children,
-                            }) {
+                            ul({ children }) {
                               return (
-                                <ul className="mb-5 ml-5 list-disc space-y-2 marker:text-[var(--mf-violet)]">
+                                <ul className="mb-4 ml-5 list-disc space-y-1.5 marker:text-[#D4FF00]">
                                   {children}
                                 </ul>
                               );
                             },
-
-                            ol({
-                              children,
-                            }) {
+                            ol({ children }) {
                               return (
-                                <ol className="mb-5 ml-5 list-decimal space-y-2 marker:font-semibold marker:text-[var(--mf-violet)]">
+                                <ol className="mb-4 ml-5 list-decimal space-y-1.5 marker:font-semibold marker:text-[#D4FF00]">
                                   {children}
                                 </ol>
                               );
                             },
-
-                            li({
-                              children,
-                            }) {
+                            li({ children }) {
                               return (
-                                <li className="pl-1 leading-7">
+                                <li className="pl-1 text-sm sm:text-[15px] leading-relaxed">
                                   {children}
                                 </li>
                               );
                             },
-
-                            /* =============================
-                               LINE BREAK
-
-                               THIS FIXES <br>
-                            ============================= */
-
                             br() {
-                              return (
-                                <br className="block content-['']" />
-                              );
+                              return <br className="block content-['']" />;
                             },
-
-                            /* =============================
-                               TABLE
-                            ============================= */
-
-                            table({
-                              children,
-                            }) {
+                            table({ children }) {
                               return (
-                                <div className="my-6 w-full overflow-x-auto rounded-2xl border border-white/10">
-                                  <table className="w-full min-w-175 border-collapse text-left text-sm">
+                                <div className="my-4 w-full overflow-x-auto rounded-xl border border-white/10">
+                                  <table className="w-full min-w-160 border-collapse text-left text-xs sm:text-sm">
                                     {children}
                                   </table>
                                 </div>
                               );
                             },
-
-                            thead({
-                              children,
-                            }) {
+                            thead({ children }) {
                               return (
-                                <thead className="bg-[#191e27]">
+                                <thead className="bg-[#12141a] text-[#D4FF00]">
                                   {children}
                                 </thead>
                               );
                             },
-
-                            tbody({
-                              children,
-                            }) {
+                            tbody({ children }) {
                               return (
                                 <tbody className="divide-y divide-white/8">
                                   {children}
                                 </tbody>
                               );
                             },
-
-                            tr({
-                              children,
-                            }) {
+                            tr({ children }) {
                               return (
                                 <tr className="transition-colors hover:bg-white/4">
                                   {children}
                                 </tr>
                               );
                             },
-
-                            th({
-                              children,
-                            }) {
+                            th({ children }) {
                               return (
-                                <th
-                                  className="
-                                    border-r
-                                    border-white/8
-                                    px-5
-                                    py-4
-                                    text-left
-                                    text-sm
-                                    font-bold
-                                    text-[var(--mf-violet)]
-                                    last:border-r-0
-                                  "
-                                >
+                                <th className="border-r border-white/8 px-4 py-3 text-left font-bold text-[#D4FF00] last:border-r-0">
                                   {children}
                                 </th>
                               );
                             },
-
-                            td({
-                              children,
-                            }) {
+                            td({ children }) {
                               return (
-                                <td
-                                  className="
-                                    border-r
-                                    border-white/8
-                                    px-5
-                                    py-4
-                                    align-top
-                                    text-[15px]
-                                    leading-7
-                                    text-[#e1e5ec]
-                                    last:border-r-0
-                                  "
-                                >
+                                <td className="border-r border-white/8 px-4 py-3 align-top text-[#e1e5ec] last:border-r-0">
                                   {children}
                                 </td>
                               );
                             },
-
-                            /* =============================
-                               BLOCKQUOTE
-                            ============================= */
-
-                            blockquote({
-                              children,
-                            }) {
+                            blockquote({ children }) {
                               return (
-                                <blockquote className="my-5 rounded-r-xl border-l-4 border-[var(--mf-violet)] bg-black/20 px-5 py-4 text-white/75">
+                                <blockquote className="my-4 rounded-r-xl border-l-4 border-[#D4FF00] bg-black/20 px-4 py-3 text-white/75">
                                   {children}
                                 </blockquote>
                               );
                             },
-
-                            /* =============================
-                               INLINE CODE
-                            ============================= */
-
-                            code({
-                              children,
-                            }) {
+                            code({ children }) {
                               return (
-                                <code className="rounded-md bg-black/35 px-1.5 py-1 font-mono text-sm text-[var(--mf-violet)]">
+                                <code className="rounded-md bg-black/35 px-1.5 py-0.5 font-mono text-xs text-[#D4FF00]">
                                   {children}
                                 </code>
                               );
                             },
-
-                            /* =============================
-                               CODE BLOCK
-                            ============================= */
-
-                            pre({
-                              children,
-                            }) {
+                            pre({ children }) {
                               return (
-                                <pre className="my-5 overflow-x-auto rounded-2xl bg-black/45 p-5 font-mono text-sm leading-6">
+                                <pre className="my-4 overflow-x-auto rounded-xl bg-black/45 p-4 font-mono text-xs leading-5">
                                   {children}
                                 </pre>
                               );
                             },
-
-                            /* =============================
-                               HORIZONTAL RULE
-                            ============================= */
-
                             hr() {
-                              return (
-                                <hr className="my-7 border-white/10" />
-                              );
+                              return <hr className="my-5 border-white/10" />;
                             },
                           }}
                         >
                           {message.content}
                         </ReactMarkdown>
-                        )}
-
-                        {message.insight ? (
-                          <DanteInsightPanel insight={message.insight} />
-                        ) : null}
-
-                        {message.sources && message.sources.length > 0 ? (
-                          <DanteSourcesPanel sources={message.sources} />
-                        ) : null}
-
-                        {message.pendingConfirmation ? (
-                          <PendingConfirmationPanel
-                            pendingConfirmation={message.pendingConfirmation}
-                            resolution={message.confirmationResolution}
-                            isBusy={confirmingActionId === message.pendingConfirmation.actionId}
-                            onConfirm={() =>
-                              void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "confirm")
-                            }
-                            onCancel={() =>
-                              void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "cancel")
-                            }
-                          />
-                        ) : null}
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-          )}
+                    )}
 
-          <div
-            ref={
-              messagesEndRef
-            }
-          />
+                    {message.insight ? (
+                      <DanteInsightPanel insight={message.insight} />
+                    ) : null}
+
+                    {message.sources && message.sources.length > 0 ? (
+                      <DanteSourcesPanel sources={message.sources} />
+                    ) : null}
+
+                    {message.pendingConfirmation ? (
+                      <PendingConfirmationPanel
+                        pendingConfirmation={message.pendingConfirmation}
+                        resolution={message.confirmationResolution}
+                        isBusy={confirmingActionId === message.pendingConfirmation.actionId}
+                        onConfirm={() =>
+                          void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "confirm")
+                        }
+                        onCancel={() =>
+                          void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "cancel")
+                        }
+                      />
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <div ref={messagesEndRef} />
         </div>
-      </div>
       )}
 
       {/* ===================================================
-          COMPOSER — a separate sibling section, always the LAST
-          element in this component's own flex column and never
-          absolutely positioned, so it can never overlap the
-          conversation above it or anything rendered below this
-          component by the page (e.g. the DANTE LEARNED module).
-          shrink-0 keeps it from ever being compressed by the
-          conversation pane's flex-1.
+          COMPOSER — Persistent, Pinned at Bottom Center
       =================================================== */}
-
       <form
-        onSubmit={
-          handleSubmit
-        }
-        className="mt-4 flex shrink-0 items-end gap-3 pb-[env(safe-area-inset-bottom)]"
+        onSubmit={handleSubmit}
+        className="relative z-30 mt-3 w-full max-w-3xl mx-auto flex shrink-0 items-center gap-3 pb-[env(safe-area-inset-bottom)]"
       >
         <div
-          className="
-            flex
-            min-h-12
-            flex-1
-            items-end
-            rounded-[20px]
-            border
-            border-white/10
-            bg-[#171c26]
-            px-5
-            py-2.5
-            transition
-            focus-within:border-[var(--mf-violet)]/40
-            focus-within:bg-[#1c222e]
-          "
+          className={`flex min-h-12 flex-1 items-center rounded-[18px] px-4 py-2 text-sm ${hudStyles.hudInputContainer}`}
         >
+          <span className="mr-2 font-mono text-xs font-bold text-[#D4FF00] select-none">
+            $&gt;
+          </span>
+
           <textarea
             ref={textareaRef}
             rows={1}
-            value={
-              input
-            }
-            onChange={(
-              event
-            ) => {
-              setInput(
-                event.target.value
-              );
-            }}
-            onKeyDown={
-              handleKeyDown
-            }
-            onFocus={
-              handleInputFocus
-            }
-            onBlur={
-              handleInputBlur
-            }
-            disabled={
-              isLoading
-            }
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+            disabled={isLoading}
             aria-label="Message Dante"
-            placeholder="Ask Dante about training, nutrition, recovery..."
-            className="
-              max-h-40
-              w-full
-              flex-1
-              resize-none
-              overflow-y-auto
-              bg-transparent
-              text-base
-              font-normal
-              leading-6
-              text-white
-              outline-none
-              placeholder:text-white/30
-              disabled:cursor-not-allowed
-              disabled:opacity-60
-            "
+            placeholder="Type a biometric command or query Dante..."
+            className="max-h-40 w-full flex-1 resize-none border-none bg-transparent font-mono text-xs leading-5 text-white outline-none shadow-none placeholder:text-zinc-500 focus:border-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
           />
+
+          {/* Live Audio Waveform (4 mini equalizer bars) */}
+          <div className="flex items-center gap-0.5 px-2 select-none" aria-hidden="true">
+            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
+            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.3s" }} />
+            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.15s" }} />
+            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.45s" }} />
+          </div>
         </div>
 
-        {/* =================================================
-            SEND / STOP BUTTON — while a response is actively
-            streaming, this becomes Stop (AbortController-backed,
-            Part 10): clicking it cancels the in-flight request and
-            keeps whatever text has already arrived, rather than
-            allowing a second overlapping turn.
-        ================================================= */}
-
+        {/* Send / Stop Button */}
         {isLoading ? (
           <button
             type="button"
             onClick={stopStreaming}
             aria-label="Stop Dante's response"
-            className="
-              flex
-              h-12
-              w-12
-              shrink-0
-              items-center
-              justify-center
-              rounded-full
-              border
-              border-white/15
-              bg-white/[0.06]
-              text-white
-              shadow-lg
-              transition
-              hover:bg-white/[0.1]
-              active:scale-95
-            "
+            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-400 shadow-lg transition hover:bg-rose-500/20 active:scale-95"
           >
-            <span className="h-3.5 w-3.5 rounded-[3px] bg-current" aria-hidden="true" />
+            <span className="size-3 rounded-[2px] bg-current" aria-hidden="true" />
           </button>
         ) : (
           <button
             type="submit"
-            disabled={
-              !input.trim()
-            }
+            disabled={!input.trim()}
             aria-label="Send message to Dante"
-            className="
-              flex
-              h-12
-              w-12
-              shrink-0
-              items-center
-              justify-center
-              rounded-full
-              bg-amber-400
-              text-black
-              shadow-lg
-              shadow-amber-400/10
-              transition
-              hover:scale-105
-              hover:bg-amber-300
-              active:scale-95
-              disabled:cursor-not-allowed
-              disabled:opacity-30
-            "
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#D4FF00] text-black shadow-[0_0_16px_rgba(212,255,0,0.3)] transition hover:scale-105 hover:bg-[#D4FF00] hover:shadow-[0_0_22px_rgba(212,255,0,0.6)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
           >
             <svg
-              width="25"
-              height="25"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -1573,15 +1253,14 @@ export default function DanteChat({
               <path
                 d="M22 2L11 13"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-
               <path
                 d="M22 2L15 22L11 13L2 9L22 2Z"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />

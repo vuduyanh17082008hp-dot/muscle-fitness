@@ -5,7 +5,6 @@ import Link from "next/link";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
 import { ease } from "@/components/experience/motion-home/motion/motionTokens";
 import { DanteRobot } from "@/components/dante/dante-robot";
-import styles from "@/components/experience/motion-home/styles/motion-home.module.css";
 import type {
   DanteViewModel,
   HomepageRoutes,
@@ -76,116 +75,96 @@ export function MuscleIntelligenceScene({
       data-chapter="muscle"
       className="relative overflow-hidden bg-[var(--mf-pub-bg)] px-6 py-24 lg:px-12 lg:py-32"
     >
-      {/* Ambient accents so the section reads full, not empty. */}
+      {/* Ambient accents */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         <div className="absolute left-1/2 top-0 h-px w-2/3 -translate-x-1/2 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-        <svg
-          className="absolute right-[4%] top-1/2 hidden -translate-y-1/2 opacity-40 lg:block"
-          width="640"
-          height="640"
-          viewBox="0 0 640 640"
-          fill="none"
-        >
-          <circle cx="320" cy="320" r="300" stroke="var(--mf-brand-border)" strokeWidth="1" strokeDasharray="2 10" />
-          <circle cx="320" cy="320" r="230" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
-          <path
-            d="M 68 452 A 300 300 0 0 1 452 68"
-            stroke="var(--mf-brand)"
-            strokeOpacity="0.35"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-        </svg>
+        <div className="absolute right-1/4 top-1/2 size-[500px] -translate-y-1/2 rounded-full bg-[var(--mf-brand)]/5 blur-[140px]" />
       </div>
 
-      <div className="relative mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.05fr_0.95fr]">
+      <div className="relative mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1fr_1.1fr] lg:gap-20">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-brand)]">05 · Muscle Intelligence</p>
+          <div className="muscle-fade inline-flex items-center gap-2 rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-brand-soft)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--mf-brand)]">
+            <span className="size-1.5 rounded-full bg-[var(--mf-brand)]" />
+            05 · Muscle Intelligence Atlas
+          </div>
 
           <h2 className="mt-4 font-heading text-5xl font-black uppercase leading-[0.9] tracking-[-0.03em] sm:text-6xl lg:text-7xl">
-            <span className="muscle-line block overflow-hidden"><span className="block">Muscle</span></span>
-            <span className="muscle-line block overflow-hidden"><span className="block text-[var(--mf-brand)]">Intelligence</span></span>
-            <span className="muscle-line block overflow-hidden"><span className="block">System</span></span>
+            <span className="muscle-line block overflow-hidden"><span className="block">See every muscle.</span></span>
+            <span className="muscle-line block overflow-hidden"><span className="block text-[var(--mf-brand)]">Track real exposure.</span></span>
           </h2>
 
-          <p className="muscle-fade mt-6 max-w-md text-base leading-7 text-[var(--mf-pub-text-secondary)]">
-            {muscle.hasLiveData
-              ? "Direct and indirect effective sets, modeled from your own logged training — never a guessed number."
-              : "Illustrative preview — direct and indirect effective sets, modeled from logged training per muscle."}
+          <p className="muscle-fade mt-6 max-w-lg text-base leading-7 text-[var(--mf-pub-text-secondary)]">
+            Explore 3D muscle taxonomy, volume exposure, recovery status, and fatigue distribution modeled from your logged workouts — direct and indirect effective sets per muscle group.
           </p>
 
-          <div className="muscle-fade mt-7 inline-flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
-            <div>
+          <div className="muscle-fade mt-8 flex flex-wrap items-center gap-3">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--mf-pub-text-muted)]">
-                {muscle.focusMuscle}
+                {muscle.focusMuscle} Focus
               </p>
               <p className="mt-1 text-2xl font-black text-[var(--mf-pub-text)]">
-                {muscle.weeklyEffectiveSets} <span className="text-sm font-bold text-[var(--mf-pub-text-muted)]">sets</span>
+                {muscle.weeklyEffectiveSets} <span className="text-sm font-bold text-[var(--mf-pub-text-muted)]">effective sets</span>
               </p>
             </div>
-            <span className="rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-brand-soft)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-[var(--mf-brand)]">
+            <span className="rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-brand-soft)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--mf-brand)]">
               {muscle.changeLabel}
             </span>
           </div>
 
           <Link
             href={routes.muscleIntelligence}
-            className="muscle-fade mt-7 flex w-fit items-center gap-2 text-sm font-black uppercase tracking-[0.12em] text-[var(--mf-brand)] transition hover:text-[var(--mf-brand-hover)]"
+            className="muscle-fade mt-8 inline-flex items-center gap-2 rounded-2xl bg-[var(--mf-brand)] px-6 py-3.5 text-xs font-black uppercase tracking-[0.14em] text-[var(--mf-brand-ink)] transition hover:bg-[var(--mf-brand-hover)]"
           >
-            Open Muscle Intelligence
+            Explore Muscle Atlas
           </Link>
         </div>
 
-        <div className="muscle-dante relative mx-auto grid size-[200px] place-items-center sm:size-[240px] lg:size-[290px]">
-          <div
-            aria-hidden="true"
-            className={`absolute inset-[-15%] rounded-full ${styles.heroOrbHalo}`}
-            style={{
-              background: "radial-gradient(circle, color-mix(in srgb, var(--mf-brand) 22%, transparent) 0%, transparent 70%)",
-              filter: "blur(10px)",
-            }}
-          />
+        {/* Right Side: Flagship Muscle Showcase Display */}
+        <div className="muscle-dante relative mx-auto w-full max-w-[500px]">
+          <div className="rounded-[28px] border border-white/12 bg-gradient-to-b from-[#151923] via-[#0f121a] to-[#080a0f] p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--mf-brand)]">Anatomy Breakdown</p>
+                <h3 className="mt-0.5 text-lg font-black text-white">Target Muscle Distribution</h3>
+              </div>
+              <span className="rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-brand-soft)] px-3 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-[var(--mf-brand)]">
+                Optimal Volume
+              </span>
+            </div>
 
-          <svg viewBox="0 0 200 200" className="absolute inset-0 size-full overflow-visible" aria-hidden="true">
-            <circle
-              cx="100"
-              cy="100"
-              r="96"
-              fill="none"
-              stroke="var(--mf-brand-border)"
-              strokeWidth="1"
-              strokeDasharray="2 8"
-              className={styles.heroOrbRingA}
-              style={{ transformOrigin: "100px 100px" }}
-            />
-            <circle
-              cx="100"
-              cy="100"
-              r="78"
-              fill="none"
-              stroke="rgba(255,255,255,0.08)"
-              strokeWidth="1"
-              className={styles.heroOrbRingC}
-              style={{ transformOrigin: "100px 100px" }}
-            />
-            <path
-              d="M 22 128 A 78 78 0 0 1 128 22"
-              fill="none"
-              stroke="var(--mf-brand)"
-              strokeOpacity="0.4"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              className={styles.heroOrbRingB}
-              style={{ transformOrigin: "100px 100px" }}
-            />
-          </svg>
+            {/* Muscle exposure bars */}
+            <div className="mt-6 space-y-4">
+              {[
+                { name: "Pectoralis Major (Chest)", sets: 16, target: 18, color: "var(--mf-brand)" },
+                { name: "Deltoids (Shoulders)", sets: 14, target: 16, color: "var(--mf-cyan)" },
+                { name: "Triceps Brachii", sets: 12, target: 14, color: "var(--mf-violet)" },
+                { name: "Latissimus Dorsi (Back)", sets: 18, target: 20, color: "var(--mf-brand)" },
+              ].map((m) => (
+                <div key={m.name} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-white">{m.name}</span>
+                    <span className="font-bold" style={{ color: m.color }}>{m.sets} / {m.target} sets</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${(m.sets / m.target) * 100}%`, background: m.color }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
 
-          <DanteRobot size="md" state="idle" interactive ariaLabel="Dante, your adaptive coach" />
-
-          <div className="absolute -bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-violet-400/25 bg-[var(--mf-pub-bg)]/90 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--mf-violet)]">
-            <span className="size-1.5 rounded-full bg-[var(--mf-violet)]" aria-hidden="true" />
-            {dante.statusLabel}
+            {/* Dante Insight Anchor */}
+            <div className="mt-7 flex items-center gap-3 rounded-2xl border border-violet-400/20 bg-violet-400/8 p-4">
+              <DanteRobot size="xs" state="idle" ariaLabel="Dante Mascot" />
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--mf-violet)]">Dante ({dante.statusLabel})</p>
+                <p className="mt-0.5 text-xs font-semibold leading-relaxed text-zinc-300">
+                  Chest recovery at 94%. Optimal window for progressive overload on incline bench today.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

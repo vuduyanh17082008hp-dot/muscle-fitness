@@ -292,6 +292,7 @@ function LoginContent() {
         {/* Login form */}
         <form
           onSubmit={handleEmailLogin}
+          method="post"
           className="mt-7 space-y-6"
         >
           <div>

@@ -42,6 +42,58 @@
   50% { transform: scale(1.09); opacity: 0.65; }
 }
 
+/* ---- 3 independent gyro rings (26s, 36s, 46s unsynchronized rotations) ---- */
+
+.gyroContainer {
+  position: absolute;
+  inset: -85%;
+  z-index: 3;
+  pointer-events: none;
+  perspective: 600px;
+}
+
+.gyroRingA,
+.gyroRingB,
+.gyroRingC {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid rgba(216, 255, 32, 0.35);
+  box-shadow: 0 0 10px rgba(216, 255, 32, 0.15);
+  transform-style: preserve-3d;
+}
+
+.gyroRingA {
+  border-style: dashed;
+  animation: cosmicGyroA 26s linear infinite;
+}
+
+.gyroRingB {
+  border-color: rgba(216, 255, 32, 0.22);
+  animation: cosmicGyroB 36s linear infinite;
+}
+
+.gyroRingC {
+  border-color: rgba(216, 255, 32, 0.45);
+  border-width: 1.5px;
+  animation: cosmicGyroC 46s linear infinite;
+}
+
+@keyframes cosmicGyroA {
+  0% { transform: rotateX(65deg) rotateY(12deg) rotateZ(0deg); }
+  100% { transform: rotateX(65deg) rotateY(12deg) rotateZ(360deg); }
+}
+
+@keyframes cosmicGyroB {
+  0% { transform: rotateX(45deg) rotateY(-28deg) rotateZ(0deg); }
+  100% { transform: rotateX(45deg) rotateY(-28deg) rotateZ(-360deg); }
+}
+
+@keyframes cosmicGyroC {
+  0% { transform: rotateX(75deg) rotateY(42deg) rotateZ(0deg); }
+  100% { transform: rotateX(75deg) rotateY(42deg) rotateZ(360deg); }
+}
+
 /* ---- gravity rings (front/back split for occlusion depth) ---- */
 
 .ringLayer {
@@ -366,3 +418,85 @@
     animation: none !important;
   }
 }
+
+/* ============================================================
+   ECOSYSTEM SATELLITE ORBIT SYSTEM — Single Coplanar Orbit (R=195px)
+   ============================================================ */
+
+.ecosystemRoot {
+  --r: 155px;
+}
+
+@media (min-width: 640px) {
+  .ecosystemRoot {
+    --r: 175px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ecosystemRoot {
+    --r: 195px;
+  }
+}
+
+.unifiedTrack {
+  animation: cosmicOrbitCW 40s linear infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.unifiedCounter {
+  animation: cosmicCounterCW 40s linear infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.signalPulseToCore {
+  animation: cosmicPulseToCore 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform, opacity;
+}
+
+/* Hovering ecosystem pauses track spin smoothly so cards can be easily hovered/clicked */
+.ecosystemRoot:hover .unifiedTrack,
+.ecosystemRoot:hover .unifiedCounter,
+.ecosystemRoot:hover .signalPulseToCore {
+  animation-play-state: paused;
+}
+
+@keyframes cosmicOrbitCW {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes cosmicCounterCW {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes cosmicPulseToCore {
+  0% {
+    transform: translate(var(--tx), var(--ty));
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.95;
+  }
+  85% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(0px, 0px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unifiedTrack,
+  .unifiedCounter,
+  .signalPulseToCore {
+    animation: none !important;
+  }
+}
+
+
+

@@ -21,6 +21,77 @@ export {
   attachKnowledgeSources,
 } from "@/lib/dante-core/explain";
 export { checkSafety, normalizeSafetyText } from "@/lib/dante-core/safety-layer";
+export {
+  buildCurrentStateCoachingResponse,
+  extractCurrentTurnState,
+  formatCurrentStatePrompt,
+} from "@/lib/dante-core/current-turn-state";
+export type { CurrentTurnState } from "@/lib/dante-core/current-turn-state";
+export {
+  assessTurnConfidence,
+  buildConfidenceDeterministicReply,
+  evaluateClaimConfidence,
+  getConfidenceLanguageDirective,
+} from "@/lib/dante-core/confidence-engine";
+export type {
+  ClaimCategory,
+  ClaimConfidence,
+  ConfidenceAssessmentContext,
+  TurnConfidenceAssessment,
+} from "@/lib/dante-core/confidence-engine";
+export type { ConfidenceLevel as ClaimConfidenceLevel } from "@/lib/dante-core/confidence-engine";
+export {
+  buildRiskDeterministicReply,
+  buildRiskPatternAck,
+  deriveObservationsFromHistory,
+  evaluateRiskSignals,
+  getRiskLanguageDirective,
+  normalizeBodyRegion,
+  observeFromUserMessage,
+  toRiskLogFields,
+} from "@/lib/dante-core/risk-accumulator";
+export type {
+  BodyRegion,
+  RiskEvaluationResult,
+  RiskLevel,
+  RiskSignal,
+  RiskSignalType,
+} from "@/lib/dante-core/risk-accumulator";
+export {
+  buildExperimentProposal,
+  buildLearningEvidenceNote,
+  buildNof1AcceptedReply,
+  buildNof1ProposalReply,
+  canTransitionNof1Status,
+  deriveNof1SessionFromHistory,
+  evaluateNof1Eligibility,
+  evaluateNof1Experiment,
+  isDurableNof1Id,
+  processNof1Turn,
+  toNof1LogFields,
+} from "@/lib/dante-core/nof1-engine";
+export type {
+  ExperimentStatus,
+  NOf1Experiment,
+  Nof1EligibilityResult,
+  Nof1Session,
+} from "@/lib/dante-core/nof1-engine";
+export {
+  buildSocialBoundaryResponse,
+  createSocialRouterSession,
+  deriveSocialSessionFromHistory,
+  evaluateSocialBoundary,
+  toSocialRouterLogFields,
+} from "@/lib/dante-core/social-boundary-router";
+export type {
+  SocialEvaluation,
+  SocialMode,
+  SocialRouterLogFields,
+  SocialRouterOptions,
+  SocialRouterSession,
+  SocialResponseLanguage,
+  SocialTarget,
+} from "@/lib/dante-core/social-boundary-router";
 export { validatePremises } from "@/lib/dante-core/premise-validation";
 export {
   verifyFinalResponse,
