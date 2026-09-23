@@ -171,6 +171,156 @@
   animation-delay: 1.9s;
 }
 
+/* ============================================================
+   FIRST REP INTRO — opening viewport only. Isolated `intro*` names so
+   nothing here can reach the hero or any later chapter. Every effect
+   below is decorative: the intro stays fully legible with all of it
+   switched off.
+   ============================================================ */
+
+/* Contained hero-art lighting. Warm amber is the primary wash, the cyan
+   trace is a secondary accent only — lime stays reserved for the CTA /
+   interactive system language. */
+@keyframes introGlowDrift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate3d(0, -1.5%, 0) scale(1.04);
+    opacity: 0.72;
+  }
+}
+
+.introGlowWarm {
+  background: radial-gradient(
+    circle,
+    rgba(196, 122, 48, 0.42),
+    rgba(196, 122, 48, 0.12) 45%,
+    transparent 72%
+  );
+  filter: blur(46px);
+  opacity: 0.55;
+  animation: introGlowDrift 13s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.introGlowCool {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.2), transparent 68%);
+  filter: blur(52px);
+  opacity: 0.4;
+  animation: introGlowDrift 17s ease-in-out infinite reverse;
+  will-change: transform, opacity;
+}
+
+/* Dissolves the artwork's rectangular edges into the near-black page. */
+.introArtMask {
+  -webkit-mask-image: radial-gradient(
+    78% 72% at 50% 46%,
+    #000 58%,
+    rgba(0, 0, 0, 0.35) 82%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    78% 72% at 50% 46%,
+    #000 58%,
+    rgba(0, 0, 0, 0.35) 82%,
+    transparent 100%
+  );
+}
+
+@keyframes introCoreBreathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 1;
+  }
+}
+
+/* Shown only when the intro artwork is unavailable. */
+.introFallbackCore {
+  background:
+    radial-gradient(circle at 42% 34%, rgba(196, 122, 48, 0.32), transparent 66%),
+    radial-gradient(circle at 62% 66%, rgba(56, 189, 248, 0.14), transparent 60%),
+    radial-gradient(circle at 50% 50%, rgba(216, 255, 32, 0.1), transparent 64%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  animation: introCoreBreathe 11s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Ambient motes — transform/opacity only, duration and delay set per
+   element at the call site. */
+@keyframes introMoteDrift {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.5;
+  }
+  85% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate3d(6px, -38px, 0);
+    opacity: 0;
+  }
+}
+
+.introMote {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 9999px;
+  background: rgba(216, 255, 32, 0.6);
+  animation-name: introMoteDrift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes introScrollCue {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(240%);
+    opacity: 0;
+  }
+}
+
+.introScrollCue {
+  animation: introScrollCue 2.8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .introGlowWarm,
+  .introGlowCool,
+  .introFallbackCore,
+  .introMote,
+  .introScrollCue {
+    animation: none;
+  }
+
+  .introMote {
+    opacity: 0.35;
+  }
+
+  .introScrollCue {
+    opacity: 0.6;
+  }
+}
+
 .debugPanel {
   position: fixed;
   bottom: 16px;
