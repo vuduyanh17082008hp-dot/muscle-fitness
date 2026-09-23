@@ -5,12 +5,14 @@ import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { useLenis } from "@/components/experience/motion-home/motion/useLenis";
 import { useSceneDirector } from "@/components/experience/motion-home/motion/useSceneDirector";
-import { ScrollTrigger } from "@/components/experience/motion-home/motion/gsapSetup";
+import { gsap, ScrollTrigger, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
+import { ease } from "@/components/experience/motion-home/motion/motionTokens";
 import { ChapterNav } from "@/components/experience/motion-home/ChapterNav";
 import { GlobalAtmosphere } from "@/components/experience/motion-home/GlobalAtmosphere";
 import { DebugPanel } from "@/components/experience/motion-home/DebugPanel";
 import { CustomCursor } from "@/components/experience/motion-home/interaction/CustomCursor";
 import { PageTransition } from "@/components/experience/motion-home/interaction/PageTransition";
+import { IntroScene } from "@/components/experience/motion-home/sections/IntroScene";
 import { HeroScene } from "@/components/experience/motion-home/sections/HeroScene";
 import { ProblemScene } from "@/components/experience/motion-home/sections/ProblemScene";
 import { AdaptiveTrainingScene } from "@/components/experience/motion-home/sections/AdaptiveTrainingScene";
@@ -27,7 +29,7 @@ import styles from "@/components/experience/motion-home/styles/motion-home.modul
 
 export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewModel }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const [activeChapter, setActiveChapter] = useState<string>("hero");
+  const [activeChapter, setActiveChapter] = useState<string>("intro");
 
   useLenis(true);
   useSceneDirector(rootRef, useCallback((id: string) => setActiveChapter(id), []));
@@ -36,6 +38,38 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
     if (typeof document === "undefined" || !("fonts" in document)) return;
     document.fonts.ready.then(() => ScrollTrigger.refresh());
   }, []);
+
+  // Step one of the intro entrance: the nav settles down before the
+  // intro copy reveals beneath it.
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+
+      mm.add(
+        {
+          reduceMotion: "(prefers-reduced-motion: reduce)",
+          full: "(prefers-reduced-motion: no-preference)",
+        },
+        (context) => {
+          const { reduceMotion } = context.conditions as { reduceMotion: boolean };
+
+          if (reduceMotion) {
+            gsap.set(".site-nav", { opacity: 1, y: 0 });
+            return;
+          }
+
+          gsap.fromTo(
+            ".site-nav",
+            { opacity: 0, y: -18 },
+            { opacity: 1, y: 0, duration: 0.5, ease: ease.precise },
+          );
+        },
+      );
+
+      return () => mm.revert();
+    },
+    { scope: rootRef },
+  );
 
   const { routes } = viewModel;
 
@@ -46,7 +80,7 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
         <CustomCursor />
         <DebugPanel activeChapter={activeChapter} />
 
-        <header className="fixed inset-x-0 top-0 z-50 border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)]/80 backdrop-blur-xl">
+        <header className="site-nav fixed inset-x-0 top-0 z-50 border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)]/80 backdrop-blur-xl">
           <div className="mx-auto flex min-h-14 max-w-7xl items-center justify-between gap-4 px-5 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3">
               <Logo tagline="AI-powered personal training" />
@@ -96,6 +130,7 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
         <ChapterNav activeChapter={activeChapter} />
 
         <main className="relative z-10">
+          <IntroScene routes={routes} />
           <HeroScene routes={routes} />
           <ProblemScene />
           <AdaptiveTrainingScene />

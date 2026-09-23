@@ -87,11 +87,12 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
 
       <div className="relative mx-auto grid w-full max-w-7xl items-center gap-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-20 xl:gap-28">
         <div className="hero-copy">
-          <h1 className="font-heading text-5xl font-black uppercase leading-[0.92] tracking-[-0.03em] sm:text-6xl lg:text-[5.5vw]">
+          {/* h2, not h1: the First Rep intro above is now the page's single h1. */}
+          <h2 className="font-heading text-5xl font-black uppercase leading-[0.92] tracking-[-0.03em] sm:text-6xl lg:text-[5.5vw]">
             <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-pub-text)]">Train hard.</span></span>
             <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-pub-text-secondary)]">Recover smart.</span></span>
             <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-brand)]">Adapt continuously.</span></span>
-          </h1>
+          </h2>
 
           <p className="hero-sub mt-8 max-w-lg text-base leading-7 text-[var(--mf-pub-text-secondary)] sm:text-lg">
             One system reads your training, recovery and adaptive state — then
