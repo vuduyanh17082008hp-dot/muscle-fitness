@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 import { useMotionCapabilities } from "@/components/experience/motion-home/motion/useMotionCapabilities";
 import { DanteRobot, type DanteRobotState } from "@/components/dante/dante-robot";
 import type { DanteViewModel, HomepageRoutes } from "@/components/experience/motion-home/data/homepageViewModel";
@@ -96,7 +96,7 @@ export function DanteScene({ dante, routes }: { dante: DanteViewModel; routes: H
         // "arrives too late" here).
         gsap
           .timeline({
-            scrollTrigger: { trigger: rootRef.current, start: "top 78%", once: true },
+            scrollTrigger: { trigger: rootRef.current, ...enterOnce },
           })
           .fromTo(".dante-heading", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise })
           .fromTo(".dante-input", { opacity: 0 }, { opacity: 1, duration: 0.3, stagger: 0.04, ease: ease.precise }, "-=0.3")
@@ -114,7 +114,7 @@ export function DanteScene({ dante, routes }: { dante: DanteViewModel; routes: H
       ref={rootRef}
       id="dante"
       data-chapter="dante"
-      className="relative overflow-hidden bg-[var(--mf-pub-bg-deep)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative overflow-x-clip bg-[var(--mf-pub-bg-deep)] px-6 py-16 lg:px-12 lg:py-24"
     >
       <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1fr_1fr]">
         <div>

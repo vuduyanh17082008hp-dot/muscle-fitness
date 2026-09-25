@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import Link from "next/link";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 import { LiquidSignalCanvas } from "@/components/experience/motion-home/training/LiquidSignalCanvas";
 import type { HomepageRoutes, TrainingViewModel } from "@/components/experience/motion-home/data/homepageViewModel";
 
@@ -31,11 +31,11 @@ export function TrainingScene({
         }
 
         gsap.timeline({
-          scrollTrigger: { trigger: rootRef.current, start: "top 70%", end: "top 25%", scrub: 0.6 },
+          scrollTrigger: { trigger: rootRef.current, ...enterOnce },
         })
-          .fromTo(".training-heading", { yPercent: 100, opacity: 0 }, { yPercent: 0, opacity: 1, ease: ease.heavy })
-          .fromTo(".training-plate", { opacity: 0, y: 30 }, { opacity: 1, y: 0, ease: ease.precise }, "-=0.4")
-          .fromTo(".training-readout", { opacity: 0, x: 24 }, { opacity: 1, x: 0, ease: ease.precise }, "-=0.3");
+          .fromTo(".training-heading", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: ease.precise })
+          .fromTo(".training-plate", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise }, "-=0.25")
+          .fromTo(".training-readout", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: ease.precise }, "-=0.2");
       });
 
       return () => mm.revert();
@@ -48,13 +48,13 @@ export function TrainingScene({
       ref={rootRef}
       id="training"
       data-chapter="training"
-      className="relative overflow-hidden bg-[var(--mf-pub-bg)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative overflow-x-clip bg-[var(--mf-pub-bg)] px-6 py-16 lg:px-12 lg:py-24"
     >
       <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1fr_0.9fr]">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-brand)]">04 · Train</p>
 
-          <h2 className="training-heading mt-4 overflow-hidden font-heading text-4xl font-black uppercase leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
+          <h2 className="training-heading mt-4 font-heading text-4xl font-black uppercase leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
             <span className="block">
               Train <span className="text-[var(--mf-brand)]">with intent.</span>
             </span>

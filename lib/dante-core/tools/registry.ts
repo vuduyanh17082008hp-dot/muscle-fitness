@@ -19,6 +19,7 @@ import { deleteFoodLogTool } from "@/lib/dante-core/tools/write/delete-food-log"
 import { completeCheckinTool } from "@/lib/dante-core/tools/write/complete-checkin";
 import { scheduleWorkoutTool } from "@/lib/dante-core/tools/write/schedule-workout";
 import { acceptAdaptiveAdjustmentTool } from "@/lib/dante-core/tools/write/accept-adaptive-adjustment";
+import { acceptNof1ExperimentTool } from "@/lib/dante-core/tools/write/accept-nof1-experiment";
 
 /**
  * ONE server-only typed tool registry (Part 2). Every capability
@@ -46,6 +47,7 @@ export const DANTE_TOOLS: AnyDanteTool[] = [
   completeCheckinTool,
   scheduleWorkoutTool,
   acceptAdaptiveAdjustmentTool,
+  acceptNof1ExperimentTool,
 ] as AnyDanteTool[];
 
 const TOOLS_BY_NAME = new Map<string, AnyDanteTool>(DANTE_TOOLS.map((tool) => [tool.name, tool]));

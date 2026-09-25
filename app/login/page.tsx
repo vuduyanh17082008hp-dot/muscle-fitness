@@ -292,6 +292,7 @@ function LoginContent() {
         {/* Login form */}
         <form
           onSubmit={handleEmailLogin}
+          method="post"
           className="mt-7 space-y-6"
         >
           <div>
@@ -448,7 +449,7 @@ function LoginContent() {
           )}
         </button>
 
-        <p className="mt-8 text-center text-sm text-zinc-600">
+        <p className="mt-8 text-center text-sm text-zinc-400">
           New to Muscle Fitness?{" "}
           <Link
             href="/register"

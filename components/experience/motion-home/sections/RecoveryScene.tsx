@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import Link from "next/link";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease, duration, clampVisual } from "@/components/experience/motion-home/motion/motionTokens";
+import { clampVisual, ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 import type {
   HomepageRoutes,
   NutritionViewModel,
@@ -55,9 +55,9 @@ export function RecoveryScene({
 
           gsap
             .timeline({
-              scrollTrigger: { trigger: rootRef.current, start: "top 70%", end: "top 30%", scrub: 0.9 },
+              scrollTrigger: { trigger: rootRef.current, ...enterOnce },
             })
-            .fromTo(".recovery-fade", { opacity: 0, y: 24 }, { opacity: 1, y: 0, stagger: 0.06, ease: ease.soft });
+            .fromTo(".recovery-fade", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45, stagger: 0.06, ease: ease.soft });
 
           if (ringRef.current) {
             gsap.fromTo(
@@ -65,8 +65,9 @@ export function RecoveryScene({
               { strokeDashoffset: RING_CIRCUMFERENCE },
               {
                 strokeDashoffset: dashOffset,
+                duration: 0.5,
                 ease: ease.soft,
-                scrollTrigger: { trigger: rootRef.current, start: "top 65%", end: "top 20%", scrub: 1 },
+                scrollTrigger: { trigger: rootRef.current, ...enterOnce },
               },
             );
           }
@@ -77,20 +78,11 @@ export function RecoveryScene({
             {
               scaleX: proteinRatio,
               transformOrigin: "left center",
+              duration: 0.45,
               ease: ease.soft,
-              scrollTrigger: { trigger: rootRef.current, start: "top 65%", end: "top 20%", scrub: 1 },
+              scrollTrigger: { trigger: rootRef.current, ...enterOnce },
             },
           );
-
-          // One shared breathing rhythm — every calm element pulses together.
-          gsap.to(".recovery-breathe", {
-            scale: 1.03,
-            opacity: 0.92,
-            duration: duration.breathe / 2,
-            ease: ease.breathe,
-            yoyo: true,
-            repeat: -1,
-          });
         },
       );
 
@@ -104,7 +96,7 @@ export function RecoveryScene({
       ref={rootRef}
       id="recovery"
       data-chapter="recovery"
-      className="relative bg-[var(--mf-pub-bg-deep)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative bg-[var(--mf-pub-bg-deep)] px-6 py-16 lg:px-12 lg:py-24"
     >
       <div className="mx-auto max-w-7xl">
         <div className="recovery-fade mx-auto max-w-2xl text-center">

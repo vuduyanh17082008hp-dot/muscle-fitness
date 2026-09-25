@@ -115,6 +115,10 @@ export function ExtensionHydrationGuard() {
   }
 
   return (
+    // Must run before React hydrates so extension-injected attributes
+    // (e.g. bis_skin_checked) cannot mismatch the server HTML.
+    // App Router has no _document; this is the supported equivalent.
+    // eslint-disable-next-line @next/next/no-before-interactive-script-outside-document
     <Script
       id="extension-hydration-guard"
       strategy="beforeInteractive"

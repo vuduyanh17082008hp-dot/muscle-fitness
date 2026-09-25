@@ -52,6 +52,8 @@ export type TurnCommunicationSignals = {
   wantsMotivation: boolean;
   wantsPresence: boolean;
   wantsPlanOnly: boolean;
+  wantsSimpleLanguage: boolean;
+  hideStatistics: boolean;
   metaphorHeavy: boolean;
   noSolution: boolean;
   asksWhy: boolean;
@@ -201,9 +203,17 @@ export function detectTurnCommunicationSignals(message: string): TurnCommunicati
       message,
     );
 
+  const wantsSimpleLanguage =
+    /my english isn['’]?t very good|simple english|explain simply|keep it simple|easy english|no complicated words|tieng anh (?:khong gioi|kem)|noi don gian|giai thich don gian/i.test(
+      message,
+    );
+  const hideStatistics =
+    /don['’]?t give me statistics|do not give me statistics|no (?:numbers|statistics|stats)|hide (?:the )?(?:metrics|statistics|stats)|move all (?:the )?statistics away/i.test(
+      message,
+    );
   const asksWhy = /why|explain|how come|what does .+ mean|giải thích|giai thich|tại sao|tai sao/i.test(
     message,
-  );
+  ) && !wantsSimpleLanguage;
   const asksChallenge = /\b(push me|challenge me|be harder|hold me accountable)\b/i.test(message);
   const asksReflect = /\b(reflect|how do i feel|what am i noticing)\b/i.test(message);
 
@@ -215,6 +225,8 @@ export function detectTurnCommunicationSignals(message: string): TurnCommunicati
     wantsMotivation,
     wantsPresence,
     wantsPlanOnly,
+    wantsSimpleLanguage,
+    hideStatistics,
     metaphorHeavy,
     noSolution,
     asksWhy,
@@ -338,8 +350,11 @@ export function resolveCommunicationStyle(signals: CommunicationSignals): Commun
     brevity = clamp01(Math.min(brevity, 0.35));
     technicalDepth = clamp01(Math.max(technicalDepth, 0.75));
   }
-  if (turn?.wantsBrevity || turn?.wantsPlanOnly) {
+  if (turn?.wantsBrevity || turn?.wantsPlanOnly || turn?.wantsSimpleLanguage) {
     brevity = clamp01(Math.max(brevity, 0.8));
+  }
+  if (turn?.wantsSimpleLanguage) {
+    technicalDepth = clamp01(Math.min(technicalDepth, 0.3));
   }
   if (turn?.wantsDirectness) {
     directness = clamp01(Math.max(directness, 0.85));
@@ -435,7 +450,7 @@ export function buildCommunicationPromptHints(style: CommunicationStyle): string
     style.technicalDepth >= 0.7
       ? "Use precise training terminology where helpful."
       : style.technicalDepth <= 0.4
-        ? "Prefer plain language."
+        ? "Prefer plain language. Short sentences. One action per sentence. No statistics unless asked."
         : "Mix plain language with light technical detail.";
   const motivationHint =
     style.motivationLevel >= 0.7

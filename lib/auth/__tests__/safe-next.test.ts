@@ -9,4 +9,8 @@ describe("getSafeNext", () => {
   it.each(["/onboarding?edit=1", "/training", "/dashboard/workouts?day=2#session"])("preserves authenticated destination %s", (next) => {
     expect(getSafeNext(next)).toBe(next);
   });
+
+  it("maps stale /settings to the canonical dashboard settings page", () => {
+    expect(getSafeNext("/settings")).toBe("/dashboard/settings");
+  });
 });

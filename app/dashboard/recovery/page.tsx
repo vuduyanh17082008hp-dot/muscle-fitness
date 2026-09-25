@@ -5,10 +5,13 @@ import { AlertTriangle, ShieldAlert } from "lucide-react";
 import { requireUser } from "@/lib/auth/guard";
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { buildRecoveryRecommendation } from "@/lib/recovery/recommendation";
+import { buildTodayAdjustment } from "@/lib/recovery/today-adjustment";
+import { loadTodaySession } from "@/lib/training/load-today-session";
 
 import DanteChat from "@/components/dante-chat";
 import { RecoveryScoreCard } from "@/components/recovery/recovery-score-card";
 import { RecoveryCheckinForm } from "@/components/recovery/recovery-checkin-form";
+import { RecoveryAdjustmentPanel } from "@/components/recovery/recovery-adjustment-panel";
 import { TrainingRecoveryCard } from "@/components/recovery/training-recovery-card";
 import { MuscleReadinessPanel } from "@/components/dante/muscle-readiness-panel";
 import { RecoveryTrendsChart } from "@/components/recovery/recovery-trends-chart";
@@ -50,11 +53,19 @@ const RECOVERY_QUICK_PROMPTS = [
 export default async function RecoveryPage() {
   const { supabase, userId } = await requireUser();
 
-  const context = await loadRecoveryContext(supabase, userId);
+  const [context, todaySession] = await Promise.all([
+    loadRecoveryContext(supabase, userId),
+    loadTodaySession(supabase, userId),
+  ]);
   const recommendation = buildRecoveryRecommendation(
     context.todayScoreResult,
     context.trainingLoad,
   );
+  const adjustment = buildTodayAdjustment({
+    userId,
+    recovery: context,
+    session: todaySession,
+  });
 
   const radarInput = await loadRadarContext(supabase, userId);
   const radar = buildRecoveryRadar(radarInput);
@@ -105,6 +116,13 @@ export default async function RecoveryPage() {
       ================================================= */}
 
       <RecoveryCheckinForm existing={context.today} />
+
+      <RecoveryAdjustmentPanel
+        recoveryState={adjustment.recoveryState}
+        insight={adjustment.insight}
+        proposal={adjustment.proposal}
+        hasCheckin={context.today !== null}
+      />
 
       {/* =================================================
           TRAINING x RECOVERY

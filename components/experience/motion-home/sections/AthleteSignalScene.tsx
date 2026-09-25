@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 
 /**
  * Scene 02 — Athlete Signal. Muscle Fitness doesn't start from "AI
@@ -60,7 +60,7 @@ export function AthleteSignalScene() {
           // and the diagram synchronized regardless of scroll speed.
           gsap
             .timeline({
-              scrollTrigger: { trigger: rootRef.current, start: "top 78%", once: true },
+              scrollTrigger: { trigger: rootRef.current, ...enterOnce },
             })
             .fromTo(".signal-heading", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise })
             .fromTo(
@@ -84,63 +84,107 @@ export function AthleteSignalScene() {
       ref={rootRef}
       id="signal"
       data-chapter="signal"
-      className="relative overflow-hidden bg-[var(--mf-pub-bg-deep)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative overflow-x-clip bg-[var(--mf-pub-bg-deep)] px-6 py-16 lg:px-12 lg:py-24"
     >
-      <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1fr_1fr]">
+      {/* Background atmosphere */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute right-1/3 top-1/2 size-[450px] -translate-y-1/2 rounded-full bg-[var(--mf-brand)]/4 blur-[130px]" />
+      </div>
+
+      <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1fr_1.1fr] lg:gap-20">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-brand)]">03 · Signal</p>
+          <div className="signal-heading inline-flex items-center gap-2 rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-brand-soft)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--mf-brand)]">
+            <span className="size-1.5 rounded-full bg-[var(--mf-brand)]" />
+            03 · State Integration
+          </div>
 
           <h2 className="signal-heading mt-4 font-heading text-4xl font-black uppercase leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
-            It starts with <span className="text-[var(--mf-brand)]">you</span>, not a chatbot.
+            It starts with <span className="text-[var(--mf-brand)]">your state</span>, not a chatbot.
           </h2>
 
-          <p className="mt-6 max-w-md text-base leading-7 text-[var(--mf-pub-text-secondary)]">
-            Training, sleep, nutrition, recovery, preferences and history —
-            signals most apps track separately — become one athlete state
-            Muscle Fitness actually reasons from.
+          <p className="mt-6 max-w-lg text-base leading-7 text-[var(--mf-pub-text-secondary)]">
+            Training workload, sleep metrics, nutrition targets, recovery scores, and personal history — signals most apps track separately — become one unified Digital Twin state Muscle Fitness actually reasons from.
           </p>
+
+          <div className="signal-fragment mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {[
+              { label: "Training Workload", status: "Active" },
+              { label: "Sleep Quality", status: "8.2 hrs" },
+              { label: "Nutrition Targets", status: "154g Protein" },
+              { label: "Recovery Index", status: "87 Readiness" },
+              { label: "User Preferences", status: "Hypertrophy" },
+              { label: "Personal History", status: "30-Day Trend" },
+            ].map((sig) => (
+              <div key={sig.label} className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[var(--mf-pub-text-muted)]">{sig.label}</p>
+                <p className="mt-1 text-xs font-bold text-[var(--mf-brand)]">{sig.status}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="relative mx-auto aspect-square w-full max-w-[380px]">
-          <svg viewBox="0 0 300 300" className="absolute inset-0 size-full overflow-visible">
-            {SIGNALS.map((signal) => {
-              const outer = point(signal.angle, 130);
-              const inner = point(signal.angle, 44);
-
-              return (
-                <path
-                  key={signal.label}
-                  className="signal-path"
-                  d={`M ${outer.x},${outer.y} L ${inner.x},${inner.y}`}
-                  fill="none"
-                  stroke="var(--mf-brand)"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  opacity="0.55"
-                />
-              );
-            })}
-          </svg>
-
-          {SIGNALS.map((signal) => {
-            const { x, y } = point(signal.angle, 130);
-            return (
-              <span
-                key={signal.label}
-                className="signal-fragment absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.1em] text-[var(--mf-pub-text-secondary)]"
-                style={{ left: `${(x / 300) * 100}%`, top: `${(y / 300) * 100}%` }}
-              >
-                {signal.label}
+        {/* Right Side: Substantial Product State Graphic Card */}
+        <div className="relative mx-auto w-full max-w-[480px]">
+          <div className="signal-state relative rounded-[28px] border border-white/12 bg-gradient-to-b from-[#141822] via-[#0d1017] to-[#07090e] p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--mf-brand)]">Digital Twin State</p>
+                <h3 className="mt-1 text-lg font-black text-white">Unified Training Engine</h3>
+              </div>
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-400">
+                Live Sync
               </span>
-            );
-          })}
+            </div>
 
-          <div className="signal-state absolute left-1/2 top-1/2 grid size-24 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-pub-bg)] p-2 text-center">
-            <p className="text-[9px] font-black uppercase leading-tight tracking-[0.1em] text-[var(--mf-brand)]">
-              Athlete
-              <br />
-              State
-            </p>
+            <div className="relative my-8 aspect-square w-full max-w-[320px] mx-auto">
+              <svg viewBox="0 0 300 300" className="absolute inset-0 size-full overflow-visible">
+                {SIGNALS.map((signal) => {
+                  const outer = point(signal.angle, 125);
+                  const inner = point(signal.angle, 48);
+
+                  return (
+                    <path
+                      key={signal.label}
+                      className="signal-path"
+                      d={`M ${outer.x},${outer.y} L ${inner.x},${inner.y}`}
+                      fill="none"
+                      stroke="var(--mf-brand)"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      opacity="0.6"
+                    />
+                  );
+                })}
+              </svg>
+
+              {SIGNALS.map((signal) => {
+                const { x, y } = point(signal.angle, 125);
+                return (
+                  <span
+                    key={signal.label}
+                    className="signal-fragment absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15 bg-black/60 px-3 py-1 text-[9.5px] font-black uppercase tracking-[0.12em] text-white shadow-lg backdrop-blur-md"
+                    style={{ left: `${(x / 300) * 100}%`, top: `${(y / 300) * 100}%` }}
+                  >
+                    {signal.label}
+                  </span>
+                );
+              })}
+
+              <div className="signal-state absolute left-1/2 top-1/2 grid size-28 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-[var(--mf-brand)] bg-black p-2 text-center shadow-[0_0_30px_rgba(216,255,32,0.25)]">
+                <p className="text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-[var(--mf-brand)]">
+                  Your
+                  <br />
+                  Training
+                  <br />
+                  State
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-white/10 pt-4 text-[11px] text-zinc-400">
+              <span>Readiness: <strong className="text-white">87 / 100</strong></span>
+              <span>Autoregulation: <strong className="text-[var(--mf-brand)]">Optimal</strong></span>
+            </div>
           </div>
         </div>
       </div>

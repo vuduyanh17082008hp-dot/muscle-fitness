@@ -267,7 +267,7 @@ describe("runDanteAgentTurn", () => {
   });
 
   it("stops after MAX_TOOL_ROUNDS and never loops forever (Test P)", async () => {
-    const callModel = vi.fn((_messages: DanteChatMessage[], _tools: DanteToolSpec[]) => {
+    const callModel = vi.fn(() => {
       const round = callModel.mock.calls.length; // 1-indexed after this call is recorded
       return Promise.resolve(toolCallTurn(String(round), "fake_read", { round }));
     });

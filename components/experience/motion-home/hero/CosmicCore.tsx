@@ -84,6 +84,15 @@ export function CosmicCore() {
       <div aria-hidden="true" className={reducedMotion ? "absolute inset-0 rounded-full opacity-40" : `absolute inset-0 rounded-full ${styles.atmosphereOuter}`} />
       <div aria-hidden="true" className={reducedMotion ? "absolute inset-0 rounded-full opacity-45" : `absolute inset-0 rounded-full ${styles.atmosphereInner}`} />
 
+      {/* 3 Independent Gyro Rings (26s, 36s, 46s unsynchronized rotations) */}
+      {!reducedMotion && (
+        <div aria-hidden="true" className={styles.gyroContainer}>
+          <div className={styles.gyroRingA} />
+          <div className={styles.gyroRingB} />
+          <div className={styles.gyroRingC} />
+        </div>
+      )}
+
       <svg aria-hidden="true" viewBox="0 0 100 100" className={styles.ringLayer}>
         <path d={ellipseArc(48, 20, "top")} className={reducedMotion ? styles.ringPathStatic : styles.ringPathBack} />
       </svg>

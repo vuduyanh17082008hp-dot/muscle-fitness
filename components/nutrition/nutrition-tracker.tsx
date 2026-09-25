@@ -6,6 +6,8 @@ import { ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, UtensilsCrossed } f
 import { TrackFoodModal } from "@/components/nutrition/track-food-modal"
 import { NextMealCard } from "@/components/nutrition/next-meal-card"
 import { EmptyState } from "@/components/dashboard/empty-state"
+import { AnimatedNumber } from "@/components/ui/animated-number"
+import { NutritionResultGlow } from "@/components/nutrition/nutrition-motion"
 import type { ConfirmedFood } from "@/components/nutrition/types"
 import {
   MEAL_TYPES,
@@ -243,12 +245,14 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
         <p className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">{error}</p>
       ) : null}
 
+      <NutritionResultGlow>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MacroCard label="Calories" consumed={comparison.calories.consumed} target={comparison.calories.target} remaining={comparison.calories.remaining} unit="kcal" accent />
         <MacroCard label="Protein" consumed={comparison.protein.consumed} target={comparison.protein.target} remaining={comparison.protein.remaining} unit="g" />
         <MacroCard label="Carbs" consumed={comparison.carbs.consumed} target={comparison.carbs.target} remaining={comparison.carbs.remaining} unit="g" />
         <MacroCard label="Fat" consumed={comparison.fat.consumed} target={comparison.fat.target} remaining={comparison.fat.remaining} unit="g" />
       </div>
+      </NutritionResultGlow>
 
       {isToday ? <NextMealCard refreshKey={nextActionRefreshKey} onLogged={handleAddFood} /> : null}
 
@@ -410,10 +414,12 @@ function MacroCard({
   accent?: boolean
 }) {
   return (
-    <div className={`rounded-2xl border p-5 ${accent ? "border-mf-glass-brand-border bg-mf-glass-brand-soft" : "border-mf-glass-border bg-white/[0.035]"}`}>
+    <div
+      className={`rounded-2xl border p-5 transition duration-200 hover:-translate-y-0.5 hover:border-white/20 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 ${accent ? "border-mf-glass-brand-border bg-mf-glass-brand-soft" : "border-mf-glass-border bg-white/[0.035]"}`}
+    >
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-mf-glass-text-muted">{label}</p>
       <p className={`mt-3 text-2xl font-black ${accent ? "text-mf-glass-brand" : "text-mf-glass-text"}`}>
-        {consumed}
+        <AnimatedNumber value={consumed} />
         <span className="text-base font-semibold text-mf-glass-text-muted"> / {target} {unit}</span>
       </p>
       <p className="mt-2 text-xs text-mf-glass-text-muted">

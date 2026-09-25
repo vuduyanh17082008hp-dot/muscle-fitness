@@ -44,6 +44,15 @@ export const navChapters = [
   { id: "dante", index: "08", label: "Dante" },
 ] as const;
 
+/** One-shot entrance. Never scrub, never pin — scrubbed fromTo
+ *  (opacity 0 / yPercent 100 / clipPath) left full-section layout
+ *  holes because the section occupied document flow while content
+ *  stayed invisible until a long start→end range completed. */
+export const enterOnce = {
+  start: "top 90%",
+  once: true,
+} as const;
+
 /** Clamp any backend-sourced numeric value before it drives a transform/animation. */
 export function clampVisual(value: number, min: number, max: number): number {
   if (Number.isNaN(value)) return min;

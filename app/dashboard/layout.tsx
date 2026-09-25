@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
-import { requireUser } from '@/lib/auth/guard'
+import { requireCompletedOnboarding } from '@/lib/auth/guard'
 
 export const metadata: Metadata = {
   title: 'Client Dashboard | Muscle Fitness',
@@ -19,12 +19,12 @@ export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
   /*
-   * Layout chỉ kiểm tra authentication.
-   *
-   * Onboarding status và profile sẽ được dashboard page
-   * lấy từ RPC get_client_dashboard().
+   * Shared product boundary: authenticated + onboarding complete.
+   * Incomplete profiles never reach /dashboard/* pages.
+   * Unauthenticated users are redirected to login by requireUser
+   * (and by the session proxy before this layout runs).
    */
-  await requireUser()
+  await requireCompletedOnboarding()
 
   return (
     <DashboardShell>

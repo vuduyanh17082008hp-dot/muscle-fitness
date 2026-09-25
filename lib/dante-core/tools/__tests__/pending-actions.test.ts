@@ -24,7 +24,13 @@ const fakeWriteTool = {
   risk: "low" as const,
   requiresConfirmation: true,
   summarize: (input: { amount: number }) => `Do the fake write of ${input.amount}`,
-  execute: vi.fn(async (_context: unknown, input: { amount: number }) => ({ ok: true as const, data: { received: input.amount } })),
+  execute: vi.fn(async (
+    _context: unknown,
+    input: { amount: number },
+  ): Promise<{ ok: true; data: { received: number } } | { ok: false; error: string }> => ({
+    ok: true,
+    data: { received: input.amount },
+  })),
 };
 
 vi.mock("@/lib/dante-core/tools/registry", () => ({
@@ -113,7 +119,7 @@ function createFakeSupabase() {
         return builder;
       },
 
-      select(_columns?: string) {
+      select() {
         const filters: Array<[string, "eq" | "gt", unknown]> = [];
 
         const builder = {
@@ -171,6 +177,32 @@ describe("pending Dante tool actions", () => {
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(false);
     expect(fakeWriteTool.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("a confirmed write failure is retained as failed, never executed", async () => {
+    const supabase = createFakeSupabase();
+    const now = new Date("2026-09-13T10:00:00.000Z");
+    fakeWriteTool.execute.mockResolvedValueOnce({ ok: false, error: "N-of-1 activation save failed." });
+
+    const pending = await createPendingAction(
+      supabase as never,
+      USER_A,
+      "fake_write",
+      { amount: 5 },
+      "Do the fake write of 5",
+      now,
+    );
+    const outcome = await confirmPendingAction(
+      supabase as never,
+      { supabase: supabase as never, userId: USER_A, now },
+      pending.actionId,
+    );
+
+    expect(outcome).toMatchObject({ ok: false, status: "failed" });
+    expect(supabase.rows.find((row) => row.id === pending.actionId)).toMatchObject({
+      status: "failed",
+      result: { error: "N-of-1 activation save failed." },
+    });
   });
 
   it("CANCEL leaves the underlying tool never called (Test H)", async () => {

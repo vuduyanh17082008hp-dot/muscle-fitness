@@ -1,6 +1,31 @@
 import { decideDanteLanguage, type DanteLanguageDecision } from "@/lib/dante-language";
 
-/** Deterministic safety gate. It never diagnoses or delegates safety policy to a provider. */
+/**
+ * Safety Layer (spec Part A §8).
+ *
+ * Dante is a training/nutrition assistant, not a medical professional.
+ * This module runs BEFORE any LLM call and short-circuits to a fixed,
+ * conservative escalation message when a message matches a red-flag
+ * pattern. It deliberately distinguishes ordinary training language
+ * ("my legs are sore", "my shoulder feels tight after bench") from
+ * genuine red flags ("chest pain", "I fainted", "numbness down my
+ * arm") — the goal is to catch real safety cases, not to slap a
+ * warning on every normal question, which would train users to
+ * ignore warnings entirely.
+ *
+ * This is pattern matching over the user's own words, not a
+ * diagnostic system. A miss is possible; when in doubt the patterns
+ * below are written to be a little over-inclusive for the highest-
+ * severity categories (cardiac, neurological, fainting) and more
+ * conservative for the categories where false positives are more
+ * likely (soreness/DOMS language overlapping with "injury" language).
+ *
+ * Multilingual note: English + Vietnamese concept phrases are matched
+ * on the original text and on a diacritic-stripped form so mixed-language
+ * input ("đau ngực when running") still fires. No architecture change —
+ * same RULES list, broader phrase coverage.
+ */
+
 export type SafetyCategory =
   | "chest_pain_cardiac"
   | "fainting_dizziness"
@@ -9,7 +34,9 @@ export type SafetyCategory =
   | "severe_pain"
   | "eating_disorder_indicator"
   | "dangerous_substance"
-  | "self_harm_crisis";
+  | "self_harm_crisis"
+  | "composed_training_risk"
+  | "ambiguous_safety";
 
 export type SafetyResponseMode = "HARD_BLOCK" | "SAFE_REDIRECT";
 export type SupportedSafetyLanguage = "en" | "vi";
@@ -46,10 +73,23 @@ type SafetyRule = {
   category: SafetyCategory;
   responseMode: SafetyResponseMode;
   patterns: RegExp[];
+  matcher?: (message: string) => string | null;
   response: LocalizedCopy | null;
 };
 
-const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury">, LocalizedCopy> = {
+type SymptomConcept = {
+  id: string;
+  patterns: RegExp[];
+};
+
+type SymptomMention = {
+  index: number;
+  matchedPhrase: string;
+  present: boolean;
+  temporalRank: 0 | 1 | 2;
+};
+
+const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury" | "composed_training_risk">, LocalizedCopy> = {
   chest_pain_cardiac: {
     en: "That combination of symptoms can be a medical emergency. If this is happening right now, stop exercising and seek emergency medical care immediately (call your local emergency number). Dante can help with training and nutrition questions, but this isn't something to guess about here — please talk to a doctor or other qualified professional.",
     vi: "Tổ hợp triệu chứng này có thể là tình huống cấp cứu y khoa. Nếu đang xảy ra ngay lúc này, hãy ngừng tập và tìm hỗ trợ y tế khẩn cấp ngay (gọi số cấp cứu tại nơi bạn ở). Dante có thể hỗ trợ về tập luyện và dinh dưỡng, nhưng trường hợp này cần được nhân viên y tế đánh giá thay vì tìm cách tập vòng qua rủi ro.",
@@ -75,59 +115,303 @@ const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury">, L
     vi: "Dante không cung cấp hướng dẫn liều dùng hoặc phối hợp các chất này. Cách làm được yêu cầu có thể mang rủi ro nghiêm trọng, vì vậy hãy trao đổi với nhân viên y tế có chuyên môn. Mình vẫn có thể giúp bạn theo đuổi mục tiêu hình thể hoặc hiệu suất bằng tập luyện, dinh dưỡng, giấc ngủ và recovery.",
   },
   self_harm_crisis: {
-    en: "I'm sorry you're carrying this. Your safety comes before any bench or training question. If you might act on these thoughts now, are in immediate danger, or have already harmed yourself, call your local emergency number or crisis service now. If you are not in immediate danger, please contact someone you trust and a qualified mental-health professional today, and move away from anything you could use to hurt yourself. You do not have to handle this alone.",
-    vi: "Mình rất tiếc vì bạn đang phải chịu đựng điều này. An toàn của bạn quan trọng hơn mọi câu hỏi về bench hay tập luyện. Nếu bạn có thể hành động theo những ý nghĩ này ngay lúc này, đang gặp nguy hiểm tức thời, hoặc đã tự làm hại mình, hãy gọi số cấp cứu hoặc dịch vụ khủng hoảng tại nơi bạn ở ngay. Nếu chưa ở trong nguy hiểm tức thời, hãy liên hệ một người bạn tin tưởng và chuyên gia sức khỏe tâm thần hôm nay, đồng thời tránh xa những thứ bạn có thể dùng để làm hại bản thân. Bạn không cần phải chịu đựng một mình.",
+    en: "I hear both parts of what you wrote: you are saying you want to die, and you are also talking about how much the bench goal is affecting you. Before anything about training, are you thinking about acting on this right now, do you have a plan or means to hurt yourself, or do you feel unable to stay safe? If there may be immediate danger, call your local emergency number or crisis service now, move near someone you trust, and move away from anything you could use to hurt yourself. If it is not immediate, please still contact someone you trust and a qualified mental-health professional today. You do not have to handle this alone.",
+    vi: "Mình nghe thấy cả hai điều: bạn đang nói rằng bạn muốn chết, và bạn vẫn đang nghĩ đến việc tập chân ngày mai. Trước mọi chuyện về tập luyện, ngay lúc này bạn có đang nghĩ đến việc hành động theo điều đó, có kế hoạch hoặc phương tiện làm hại bản thân, hay cảm thấy mình không thể giữ an toàn không? Nếu có nguy hiểm trước mắt, hãy gọi số cấp cứu hoặc dịch vụ khủng hoảng tại nơi bạn ở ngay, đến gần người bạn tin tưởng và tránh xa những thứ có thể dùng để làm hại bản thân. Nếu chưa phải nguy hiểm tức thời, hãy vẫn liên hệ một người bạn tin tưởng và chuyên gia sức khỏe tâm thần hôm nay. Bạn không cần chịu đựng một mình.",
+  },
+  ambiguous_safety: {
+    en: "I want to check what you mean by \"I'm dying.\" Do you mean that figuratively, or are you in immediate danger or thinking about hurting yourself? Please answer that before we talk about training.",
+    vi: "Mình muốn kiểm tra ý bạn khi nói \"mình đang chết\". Bạn đang nói theo nghĩa bóng, hay đang gặp nguy hiểm trước mắt hoặc nghĩ đến việc làm hại bản thân? Hãy trả lời điều đó trước khi mình nói về tập luyện.",
   },
 };
 
-/** Normalize orthography only; this does not infer a diagnosis. */
+/**
+ * Strip Vietnamese (and other) combining marks so "đau ngực" and "dau nguc"
+ * share one concept match path. Does not invent medical meaning — only
+ * normalizes orthography before the same RULES patterns run.
+ */
 export function normalizeSafetyText(message: string): string {
-  return message.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d");
+  return message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    // Vietnamese "đ" / "Đ" are not decomposed by NFD — map explicitly.
+    .replace(/đ/g, "d");
 }
+
+const TEMPORAL_BOUNDARY = /[.!?;,\n]|\b(?:but|however|yet|although|though|nhung|tuy nhien)\b/gi;
+const NEGATION_SCOPE_BOUNDARY = /[.!?;,\n]|\b(?:but|however|yet|although|though|nhung|tuy nhien)\b|\b(?:and\s+)?(?:now|today|currently|suddenly|gio|bay gio|hien tai)\b/gi;
+
+function lastBoundaryEnd(text: string, beforeIndex: number, boundary: RegExp): number {
+  const prefix = text.slice(0, beforeIndex);
+  const matcher = new RegExp(boundary.source, boundary.flags);
+  let end = 0;
+  let match: RegExpExecArray | null;
+  while ((match = matcher.exec(prefix)) !== null) {
+    end = match.index + match[0].length;
+    if (match[0].length === 0) matcher.lastIndex += 1;
+  }
+  return end;
+}
+
+function nextBoundaryStart(text: string, afterIndex: number): number {
+  const suffix = text.slice(afterIndex);
+  const matcher = new RegExp(TEMPORAL_BOUNDARY.source, TEMPORAL_BOUNDARY.flags);
+  const match = matcher.exec(suffix);
+  return match ? afterIndex + match.index : text.length;
+}
+
+function temporalRankAt(text: string, index: number, endIndex: number): 0 | 1 | 2 {
+  const start = lastBoundaryEnd(text, index, TEMPORAL_BOUNDARY);
+  const end = nextBoundaryStart(text, endIndex);
+  const clause = text.slice(start, end);
+  const nearby = text.slice(Math.max(0, index - 40), Math.min(text.length, endIndex + 140));
+  // Explicit correction: "tê tay … nói nhầm / đó là tuần trước" → historical only.
+  if (
+    /(?:noi nham|said (?:it )?wrong|i misspoke|do la (?:tuan|thang) truoc|that was last (?:week|month)|(?:was|were) last (?:week|month))/i.test(nearby)
+  ) {
+    return 0;
+  }
+  if (/\b(?:now|today|currently|at present|hom nay|bay gio|gio|hien tai)\b/i.test(clause)) return 2;
+  if (/\b(?:yesterday|earlier|before|previously|used to|hom qua|ngay hom qua|tuan truoc|thang truoc|last week|last month)\b/i.test(clause)) return 0;
+  return 1;
+}
+
+function hasNearbyNegation(text: string, symptomIndex: number): boolean {
+  const start = lastBoundaryEnd(text, symptomIndex, NEGATION_SCOPE_BOUNDARY);
+  const prefix = text.slice(start, symptomIndex).slice(-80);
+  // "chưa hết / không hết / chưa khỏi đau ngực" = it has NOT gone: the symptom is still present, never negated.
+  if (/\b(?:chua|khong|ko)\s+(?:het|khoi|bot|giam|do|thuyen giam)\s*(?:han\s*)?$/.test(prefix)) return false;
+  // Include list-style Vietnamese negation: "không đau ngực, không chóng mặt"
+  // where a comma may sit between "không" and a later sibling symptom.
+  return /(?:\b(?:no|not|without|never|deny|denies|denied|khong|ko|chang|chua|khoi|het(?!\s+(?:suc|nuoc|minh|cach|y|ca)\b))\b|\b(?:khong|ko)\s+(?:co|bi|cam|thay|bi\s+cam)\b|\b(?:do|does|did)\s+not\s+(?:currently\s+)?(?:have|feel|experience)\b|\b(?:don't|doesn't|didn't)\s+(?:currently\s+)?(?:have|feel|experience)\b)(?:[\s\p{L}',-]{0,48})$/iu.test(prefix);
+}
+
+function hasFollowingResolution(text: string, symptomEnd: number): boolean {
+  const suffix = text.slice(symptomEnd, symptomEnd + 120);
+  // Vietnamese resolution after the symptom: "đau ngực hết rồi / khỏi rồi / biến mất" (but never "hết sức" = very).
+  if (/^\s*(?:da\s+)?(?:het(?!\s+(?:suc|nuoc|minh|cach|y|ca)\b)|khoi|bien mat)(?:\s+(?:roi|han|hoan toan|han roi))?\b/.test(suffix)) return true;
+  return /^\s*(?:(?:is|are|was|were|has|have|had|went|feels?)\s+)?(?:now\s+|currently\s+)?(?:gone|resolved|absent|none|not present|no longer present|went away|khong con)\b/i.test(suffix)
+    || /\b(?:nhung|but|however|yet)\b[^.!?;\n]{0,40}\b(?:gio|now|currently|hom nay)\b[^.!?;\n]{0,40}\b(?:het(?:\s+hoan\s+toan)?|gone|resolved|khong con)\b/i.test(suffix)
+    || /\b(?:gio|now|currently)\b[^.!?;\n]{0,30}\b(?:het(?:\s+hoan\s+toan)?|completely gone|fully resolved)\b/i.test(suffix);
+}
+
+function inferredCurrentAbsence(text: string, afterIndex: number): SymptomMention | null {
+  const suffix = text.slice(afterIndex, afterIndex + 160);
+  // Vietnamese "now none": "hiện tại không đau." / "giờ hết đau rồi" — only when the pain word is not the start of a
+  // DIFFERENT body part ("hiện tại không đau vai"), which would wrongly clear the symptom mentioned before it.
+  const vi = suffix.match(
+    /\b(?:hien tai|bay gio|hom nay|gio)\b[^.!?;\n]{0,30}?\b(?:khong\s+(?:con\s+)?dau(?:\s+nua)?|het\s+dau|khong\s+con(?:\s+nua)?|khoi\s+roi)(?=\s*(?:[.!?;,]|$|\s(?:va|nhung|roi|luon)\b))/,
+  );
+  if (vi && vi.index !== undefined) {
+    return { index: afterIndex + vi.index, matchedPhrase: vi[0], present: false, temporalRank: 2 };
+  }
+  const match = suffix.match(
+    /(?:\b(?:today|now|currently|at present)\b[^.!?;\n]{0,70}\b(?:gone|resolved|absent|none|no longer|khong con|(?:i\s+)?(?:do not|don't)(?:\s+(?:have|feel|experience)(?:\s+(?:it|that|this))?)?)\b|\b(?:none|no longer|khong con)\b[^.!?;\n]{0,30}\b(?:today|now|currently|at present)\b)/i,
+  );
+  if (!match || match.index === undefined) return null;
+  return {
+    index: afterIndex + match.index,
+    matchedPhrase: match[0],
+    present: false,
+    temporalRank: 2,
+  };
+}
+
+/**
+ * Resolve each symptom concept independently so a local denial of one symptom
+ * cannot suppress a different current red flag. Current/today/now statements
+ * outrank historical ones; within the same time frame, the later statement wins.
+ */
+function matchPresentSymptom(message: string, concepts: SymptomConcept[]): string | null {
+  const text = normalizeSafetyText(message);
+
+  for (const concept of concepts) {
+    const mentions: SymptomMention[] = [];
+    const seen = new Set<string>();
+
+    for (const pattern of concept.patterns) {
+      const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+      const matcher = new RegExp(pattern.source, flags);
+      let match: RegExpExecArray | null;
+
+      while ((match = matcher.exec(text)) !== null) {
+        const endIndex = match.index + match[0].length;
+        const key = `${match.index}:${endIndex}`;
+        // A symptom phrase never legitimately spans a clause boundary. Reversed patterns such as "ngực.{0,24}đau"
+        // otherwise pair a symptom in one clause with a pain word in the NEXT one ("đau ngực, hiện tại không đau"),
+        // inheriting that clause's "now" and turning a historical/resolved report into a fresh emergency.
+        // A bare comma alone ("đau, ngực trái") is still one symptom phrase; a comma that crosses into a clause with
+        // its own time/negation cue ("… ngực, hiện tại không đau") is what must not be paired.
+        const spansClause = /[.!?;\n]/.test(match[0])
+          || (match[0].includes(",") && /\b(?:hien tai|bay gio|gio|hom nay|now|currently|today|khong|no|not|het|khoi|nhung|but|however)\b/.test(match[0]));
+        if (!seen.has(key) && !spansClause) {
+          seen.add(key);
+          mentions.push({
+            index: match.index,
+            matchedPhrase: match[0],
+            present:
+              !/^\s*khong\s+te\b/i.test(match[0])
+              && !hasNearbyNegation(text, match.index)
+              && !hasFollowingResolution(text, endIndex),
+            temporalRank: temporalRankAt(text, match.index, endIndex),
+          });
+
+          const absence = inferredCurrentAbsence(text, endIndex);
+          if (absence) mentions.push(absence);
+        }
+        if (match[0].length === 0) matcher.lastIndex += 1;
+      }
+    }
+
+    const resolved = mentions.sort((left, right) =>
+      right.temporalRank - left.temporalRank || right.index - left.index,
+    )[0];
+    // Historical-only mentions (rank 0) must not become a current emergency by themselves.
+    if (resolved?.present && resolved.temporalRank > 0) return resolved.matchedPhrase;
+  }
+
+  return null;
+}
+
+const CHEST_PAIN_SYMPTOMS: SymptomConcept[] = [
+  {
+    id: "chest_pain",
+    patterns: [
+      /\bchest pain\b/i,
+      /\bpain in (?:my |the )?chest\b/i,
+      /\bchest hurts?\b/i,
+      /\bhurts? in (?:my |the )?chest\b/i,
+      /\bmy chest (?:is |feels )?(?:hurt(?:ing)?|aching|tight)\b/i,
+      /\btightness in (?:my |the )?chest\b/i,
+      /đau ngực/i,
+      /dau nguc/i,
+      /đau ở ngực/i,
+      /dau o nguc/i,
+      /ngực.{0,24}đau/i,
+      /nguc.{0,24}dau/i,
+      /đau.{0,24}ngực/i,
+      /dau.{0,24}nguc/i,
+    ],
+  },
+  {
+    id: "breathing_distress",
+    patterns: [
+      /\bcan'?t breathe\b/i,
+      /\bshort(?:ness)? of breath\b/i,
+      /khó thở/i,
+      /kho tho/i,
+      /không thở được/i,
+      /khong tho duoc/i,
+      /toi kho tho/i,
+    ],
+  },
+  {
+    id: "cardiac_rhythm",
+    patterns: [/\bheart (?:is )?racing\b/i, /\birregular heartbeat\b/i],
+  },
+];
+
+const FAINTING_DIZZINESS_SYMPTOMS: SymptomConcept[] = [
+  {
+    id: "fainting",
+    patterns: [
+      /\bfaint(?:ed|ing)?\b/i,
+      /\bpassed out\b/i,
+      /\bblack(?:ed)? out\b/i,
+      /ngất xỉu/i,
+      /ngat xiu/i,
+      /(?<![\p{L}])ngất(?![\p{L}])/iu,
+      /(?<![\p{L}])ngat(?![\p{L}])/iu,
+      /bị ngất/i,
+      /bi ngat/i,
+    ],
+  },
+  {
+    id: "dizziness",
+    patterns: [
+      /\bdizz(?:y|iness)\b/i,
+      /\bsevere(?:ly)? dizzy\b/i,
+      /\broom (?:is|was) spinning\b/i,
+      /chóng mặt/i,
+      /chong mat/i,
+    ],
+  },
+];
+
+const NEUROLOGICAL_SYMPTOMS: SymptomConcept[] = [
+  {
+    id: "numbness",
+    patterns: [
+      /\bnumb(?:ness)?\b/i,
+      /\bcan'?t feel my (?:arm|leg|hand|foot)\b/i,
+      /\bloss of (?:feeling|sensation)\b/i,
+      /te bi/i,
+      /te tay|te chan/i,
+      // Current-absence form ("hiện tại không tê") — must be matchable so negation wins.
+      /\bkhong\s+te\b/i,
+    ],
+  },
+  {
+    id: "tingling",
+    patterns: [/\btingl(?:e|es|ed|ing)\b/i],
+  },
+  {
+    id: "sudden_weakness",
+    patterns: [
+      /\bsudden weakness\b/i,
+      /\bsuddenly (?:became|become|felt|feel|got|get) weak\b/i,
+      /\bsuddenly lost (?:my )?strength\b/i,
+      /yeu dot ngot/i,
+    ],
+  },
+  {
+    id: "slurred_speech",
+    patterns: [/\bslurred speech\b/i],
+  },
+];
 
 const RULES: SafetyRule[] = [
   {
     category: "chest_pain_cardiac",
     responseMode: "HARD_BLOCK",
-    patterns: [
-      /\bchest pain\b/i, /\bpain in my chest\b/i, /\bchest hurts?\b/i,
-      /\bhurts? in (my |the )?chest\b/i, /\bmy chest (is |feels )?(hurt(ing)?|aching|tight)\b/i,
-      /\btightness in (my |the )?chest\b/i, /\bcan'?t breathe\b/i, /\bshort(ness)? of breath\b/i,
-      /\bheart (is )?racing\b/i, /\birregular heartbeat\b/i, /đau ngực/i, /dau nguc/i,
-      /đau ở ngực/i, /dau o nguc/i, /khó thở/i, /kho tho/i, /không thở được/i, /khong tho duoc/i,
-    ],
+    patterns: [],
+    matcher: (message) => matchPresentSymptom(message, CHEST_PAIN_SYMPTOMS),
     response: HARD_BLOCK_RESPONSES.chest_pain_cardiac,
   },
   {
     category: "fainting_dizziness",
     responseMode: "HARD_BLOCK",
-    patterns: [
-      /\bfaint(ed|ing)?\b/i, /\bpassed out\b/i, /\bblack(ed)? out\b/i, /\bsevere(ly)? dizzy\b/i,
-      /\broom (is|was) spinning\b/i, /ngất xỉu/i, /ngat xiu/i, /(?<![\p{L}])ngất(?![\p{L}])/iu,
-      /(?<![\p{L}])ngat(?![\p{L}])/iu, /bị ngất/i, /bi ngat/i, /chóng mặt nghiêm trọng/i,
-      /chong mat nghiem trong/i, /chóng mặt nặng/i, /chong mat nang/i, /chóng mặt dữ/i, /chong mat du/i,
-    ],
+    patterns: [],
+    matcher: (message) => matchPresentSymptom(message, FAINTING_DIZZINESS_SYMPTOMS),
     response: HARD_BLOCK_RESPONSES.fainting_dizziness,
   },
   {
     category: "neurological_symptoms",
     responseMode: "HARD_BLOCK",
-    patterns: [
-      /\bnumbness\b/i, /\btingling down (my )?(arm|leg)\b/i, /\bcan'?t feel my (arm|leg|hand|foot)\b/i,
-      /\bloss of (feeling|sensation)\b/i, /\bsudden weakness\b/i, /\bslurred speech\b/i,
-      /tê bì/i, /te bi/i, /tê tay|tê chân/i, /te tay|te chan/i, /yếu đột ngột/i, /yeu dot ngot/i,
-    ],
+    patterns: [],
+    matcher: (message) => matchPresentSymptom(message, NEUROLOGICAL_SYMPTOMS),
     response: HARD_BLOCK_RESPONSES.neurological_symptoms,
   },
   {
     category: "severe_pain",
     responseMode: "HARD_BLOCK",
     patterns: [
-      /\bsevere pain\b/i, /\bexcruciating\b/i, /\bheard? a pop\b/i, /\bfelt (a |it )?pop\b/i,
+      /\bsevere pain\b/i,
+      /\bexcruciating\b/i,
+      /\bheard? a pop\b/i,
+      /\bfelt (a |it )?pop\b/i,
       /\bcan'?t (put weight on|walk on|move) (my |the )?(leg|arm|knee|shoulder|back)\b/i,
-      /\bsomething (snapped|tore)\b/i, /chấn thương cấp/i, /chan thuong cap/i,
-      /chảy máu nghiêm trọng/i, /chay mau nghiem trong/i, /chảy máu nhiều/i, /chay mau nhieu/i,
-      /chảy máu không cầm/i, /chay mau khong cam/i, /đau dữ dội/i, /dau du doi/i,
+      /\bsomething (snapped|tore)\b/i,
+      /chấn thương cấp/i,
+      /chan thuong cap/i,
+      /chảy máu nghiêm trọng/i,
+      /chay mau nghiem trong/i,
+      /chảy máu nhiều/i,
+      /chay mau nhieu/i,
+      /chảy máu không cầm/i,
+      /chay mau khong cam/i,
+      /đau dữ dội/i,
+      /dau du doi/i,
     ],
     response: HARD_BLOCK_RESPONSES.severe_pain,
   },
@@ -135,9 +419,13 @@ const RULES: SafetyRule[] = [
     category: "possible_injury",
     responseMode: "SAFE_REDIRECT",
     patterns: [
-      /\b(sharp|stabbing) pain\b/i, /\bjoint (is |feels )?unstable\b/i,
-      /\bswelling (that|which)? (won'?t|does'?nt) go down\b/i, /đau nhói/i, /dau nhoi/i,
-      /khớp không ổn định/i, /khop khong on dinh/i,
+      /\b(sharp|stabbing) pain\b/i,
+      /\bjoint (is |feels )?unstable\b/i,
+      /\bswelling (that|which)? (won'?t|does'?nt) go down\b/i,
+      /đau nhói/i,
+      /dau nhoi/i,
+      /khớp không ổn định/i,
+      /khop khong on dinh/i,
       /(?:painkiller|thuốc giảm đau|thuoc giam dau).{0,180}(?:heavy squat|squat nặng|squat nang|tập nặng|tap nang)/i,
       /(?:đầu gối|dau goi|knee).{0,60}(?:bị gì|bi gi|what(?:'s| is) wrong|diagnos)/i,
     ],
@@ -147,8 +435,11 @@ const RULES: SafetyRule[] = [
     category: "eating_disorder_indicator",
     responseMode: "HARD_BLOCK",
     patterns: [
-      /\bpurg(e|ing) after (eating|meals)\b/i, /\bmaking myself throw up\b/i,
-      /\bhaven'?t eaten in \d+ days?\b/i, /\bstarv(e|ing) myself\b/i, /\bafraid to eat\b/i,
+      /\bpurg(e|ing) after (eating|meals)\b/i,
+      /\bmaking myself throw up\b/i,
+      /\bhaven'?t eaten in \d+ days?\b/i,
+      /\bstarv(e|ing) myself\b/i,
+      /\bafraid to eat\b/i,
       /\bbinge and purge\b/i,
     ],
     response: HARD_BLOCK_RESPONSES.eating_disorder_indicator,
@@ -175,6 +466,10 @@ const RULES: SafetyRule[] = [
       /\b(?:end|take) my life\b/i,
       /tôi muốn chết/i,
       /toi muon chet/i,
+      /tao muốn chết/i,
+      /tao muon chet/i,
+      /mình muốn chết/i,
+      /minh muon chet/i,
       /muốn tự tử/i,
       /muon tu tu/i,
       /tự sát/i,
@@ -184,10 +479,21 @@ const RULES: SafetyRule[] = [
     ],
     response: HARD_BLOCK_RESPONSES.self_harm_crisis,
   },
+  {
+    category: "ambiguous_safety",
+    responseMode: "HARD_BLOCK",
+    patterns: [/^\s*i(?:'m| am) dying\s*[.!?]*$/i],
+    response: HARD_BLOCK_RESPONSES.ambiguous_safety,
+  },
 ];
 
 function matchRule(message: string): { rule: SafetyRule; matchedPhrase: string } | null {
   for (const rule of RULES) {
+    if (rule.matcher) {
+      const matchedPhrase = rule.matcher(message);
+      if (matchedPhrase) return { rule, matchedPhrase };
+      continue;
+    }
     for (const pattern of rule.patterns) {
       for (const candidate of [message, normalizeSafetyText(message)]) {
         const match = candidate.match(pattern);
@@ -314,6 +620,65 @@ function buildPossibleInjuryResponse(input: {
   return [decision, why, calibration, alternative, escalation, autonomy].join("\n\n");
 }
 
+function detectComposedTrainingRisk(message: string): { matchedPhrase: string; observations: string[] } | null {
+  const text = normalizeSafetyText(message);
+  const jointIrritation = /(?:shoulder|knee|elbow|hip|ankle|wrist|joint|vai|goi|khop|khuyu|co\s+tay).{0,45}(?:irritat|ache|sore|pain|hurts?|discomfort|dau|kich\s+ung)|(?:irritat|ache|sore|pain|hurts?|discomfort|dau|kich\s+ung).{0,45}(?:shoulder|knee|elbow|hip|ankle|wrist|joint|vai|goi|khop)/i.test(text);
+  const poorRecovery = hasCurrentOrUnmarkedMatch(text, /\brecovery\s*(?:score\s*)?(?:is|was|at|=)?\s*(?:[0-4]\d|50)\b|\b(?:very low|poor|bad) recovery\b/i);
+  const majorSleepLoss = hasCurrentOrUnmarkedMatch(text, /(?:slept|sleeping|sleep|ngu)\s*(?:only\s*)?(?:[0-4](?:[.,]\d+)?|4)\s*(?:hours?|h|gio|tieng)\b/i);
+  const maxAttemptMentioned = /\b(?:pr|pb|personal record|one[- ]rep max|1\s*rm|max(?:imum)? attempt)\b|\b(?:max(?: out)?|record)\b.{0,24}\b(?:bench|squat|deadlift|lift)\b|(?:bench|squat|deadlift).{0,20}(?:1\s*rm|pr|max)|(?:1\s*rm|pr|max).{0,20}(?:bench|squat|duoc\s+khong)/i.test(text);
+  const maxAttempt = maxAttemptMentioned && !/(?:\b(?:no|not|don't|do not|khong|ko|khong muon)\b)[^.!?;\n]{0,28}\b(?:pr|pb|1\s*rm|max(?:imum)?|record)\b/i.test(text);
+  // Any reported joint pain paired with a max/1RM intention blocks the
+  // max attempt; poor recovery or major sleep loss escalates the trace but
+  // is not required to prevent pushing through pain for a test lift.
+  if (!jointIrritation || !maxAttempt) return null;
+  const observations = ["joint_irritation"];
+  if (poorRecovery) observations.push("very_low_recovery");
+  if (majorSleepLoss) observations.push("major_sleep_deprivation");
+  observations.push("max_attempt_intent");
+  return { matchedPhrase: "composed physical-risk signals", observations };
+}
+
+function hasCurrentOrUnmarkedMatch(text: string, pattern: RegExp): boolean {
+  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+  const matcher = new RegExp(pattern.source, flags);
+  let match: RegExpExecArray | null;
+  while ((match = matcher.exec(text)) !== null) {
+    if (temporalRankAt(text, match.index, match.index + match[0].length) > 0) return true;
+    if (match[0].length === 0) matcher.lastIndex += 1;
+  }
+  return false;
+}
+
+function buildComposedTrainingRiskResponse(
+  language: SupportedSafetyLanguage,
+  observations: string[],
+): string {
+  const hasLowRecovery = observations.includes("very_low_recovery");
+  const hasMajorSleepLoss = observations.includes("major_sleep_deprivation");
+
+  if (language === "vi") {
+    const additionalRisks = [
+      hasMajorSleepLoss ? "ngủ rất ít" : null,
+      hasLowRecovery ? "recovery thấp" : null,
+    ].filter((item): item is string => item !== null);
+    const rationale = additionalRisks.length > 0
+      ? `Khớp vai đang bị kích ứng, cùng với ${additionalRisks.join(" và ")}, làm tăng thêm rủi ro của một lần thử mức tạ tối đa.`
+      : "Khớp vai đang bị kích ứng, và một lần thử 1RM là mức gắng sức tối đa; chỉ riêng tổ hợp hiện tại đó đã đủ để không thử max hôm nay.";
+
+    return `Hôm nay đừng thử PR hoặc mức tạ tối đa. ${rationale} Mình không thể chẩn đoán nguyên nhân đau qua chat. Hãy giữ mục tiêu bench dài hạn, còn hôm nay nghỉ hoặc tập một buổi nhẹ hơn/nhóm cơ khác chỉ khi hoàn toàn không gây đau; tránh mọi động tác làm triệu chứng tăng. Nếu đau kéo dài, nặng lên, sưng, mất vững hoặc hạn chế vận động đáng kể, hãy đi khám hoặc gặp physiotherapist.`;
+  }
+
+  const additionalRisks = [
+    hasMajorSleepLoss ? "major sleep loss" : null,
+    hasLowRecovery ? "low recovery" : null,
+  ].filter((item): item is string => item !== null);
+  const rationale = additionalRisks.length > 0
+    ? `The irritated shoulder, together with ${additionalRisks.join(" and ")}, adds risk to a max-effort attempt.`
+    : "The shoulder is currently irritated, and a 1RM is a max-effort attempt; that current combination alone is enough not to max today.";
+
+  return `Do not attempt the PR or a max-effort lift today. ${rationale} I cannot diagnose the cause of the shoulder symptom through chat. Keep the long-term strength goal; today choose rest or a lower-risk session around the irritated joint only if it is completely pain-free, and stop any movement that increases symptoms. Seek medical or physiotherapy assessment if the pain persists, worsens, swells, causes instability, or meaningfully limits movement.`;
+}
+
 function isContextualInjuryFollowUp(message: string, recentMessages: string[]): boolean {
   if (!recentMessages.some((item) => ["possible_injury", "severe_pain"].includes(matchRule(item)?.rule.category ?? ""))) return false;
   const current = normalizeSafetyText(message);
@@ -323,14 +688,11 @@ function isContextualInjuryFollowUp(message: string, recentMessages: string[]): 
 
 export function checkSafety(message: string, options: SafetyCheckOptions = {}): SafetyCheckResult {
   const language = detectSafetyLanguage(message, options);
-  let matched = matchRule(message);
-  if (!matched && isContextualInjuryFollowUp(message, options.recentMessages ?? [])) {
-    const possibleInjury = RULES.find((rule) => rule.category === "possible_injury");
-    if (possibleInjury) matched = { rule: possibleInjury, matchedPhrase: "contextual injury follow-up" };
-  }
 
-  if (!matched) return { triggered: false, category: null, matchedPhrase: null, responseMode: null, language, responseOverride: null, contextTrace: null };
-  if (matched.rule.responseMode === "HARD_BLOCK") {
+  // Explicit medical emergencies and self-harm always outrank training-risk
+  // redirects so the existing safety gate cannot be weakened by composition.
+  let matched = matchRule(message);
+  if (matched?.rule.responseMode === "HARD_BLOCK") {
     return {
       triggered: true,
       category: matched.rule.category,
@@ -348,6 +710,33 @@ export function checkSafety(message: string, options: SafetyCheckOptions = {}): 
       },
     };
   }
+
+  const composedRisk = detectComposedTrainingRisk(message);
+  if (composedRisk) {
+    return {
+      triggered: true,
+      category: "composed_training_risk",
+      matchedPhrase: composedRisk.matchedPhrase,
+      responseMode: "SAFE_REDIRECT",
+      language,
+      responseOverride: buildComposedTrainingRiskResponse(language, composedRisk.observations),
+      contextTrace: {
+        risk: "HIGH",
+        observations: composedRisk.observations,
+        conflicts: ["performance_goal_vs_safety", "joint_irritation_vs_max_attempt"],
+        diagnosticUncertainty: "HIGH",
+        acuteCurrentState: true,
+        chronicTraitWriteAllowed: false,
+      },
+    };
+  }
+
+  if (!matched && isContextualInjuryFollowUp(message, options.recentMessages ?? [])) {
+    const possibleInjury = RULES.find((rule) => rule.category === "possible_injury");
+    if (possibleInjury) matched = { rule: possibleInjury, matchedPhrase: "contextual injury follow-up" };
+  }
+
+  if (!matched) return { triggered: false, category: null, matchedPhrase: null, responseMode: null, language, responseOverride: null, contextTrace: null };
 
   const allMessages = [...(options.recentMessages ?? []), message].join("\n");
   const trace = buildPossibleInjuryTrace(allMessages);

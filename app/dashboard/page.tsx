@@ -97,7 +97,7 @@ export default async function DashboardPage() {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("user_id, full_name, avatar_url, timezone, onboarding_completed")
+    .select("user_id, full_name, avatar_url, timezone")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -105,8 +105,8 @@ export default async function DashboardPage() {
     throw new Error(`Unable to load profile: ${profileError.message}`);
   }
 
-  if (!profile || !profile.onboarding_completed) {
-    redirect("/onboarding");
+  if (!profile) {
+    throw new Error("Unable to load profile.");
   }
 
   const timeZone = profile.timezone || "UTC";
@@ -252,41 +252,36 @@ export default async function DashboardPage() {
         />
 
         {/* =================================================
-            ONE canonical Bento grid — 12 columns at xl (>=1280px).
-            Top row: Today's Plan / Readiness / Nutrition / Dante,
-            each col-span-3 (sums to 12 — no wrap, no dead columns).
-            Lower row: Muscle Intelligence (7) + a Recent Activity /
-            Progress Snapshot stack (5). Mobile order puts Dante
-            ahead of Nutrition (spec); md/xl restore Nutrition-then-
-            Dante to match the approved reference composition.
+            Asymmetric Dashboard Layout — TODAY Hero Region (xl:col-span-8)
+            Dominant primary focus on Today's Plan + Readiness + Dante Intelligence.
+            Nutrition sits in secondary col-span-4.
         ================================================= */}
 
         <div className="mt-5 grid grid-cols-1 gap-3 sm:mt-6 sm:gap-4 md:grid-cols-2 xl:grid-cols-12">
-          <div className="order-1 xl:col-span-3">
-            <TodaysPlanCard todaySession={todaySession} actions={todayPlanActions} timeZone={timeZone} />
-          </div>
-
-          <div className="order-2 xl:col-span-3">
-            <ReadinessCard
-              scoreResult={
-                recoveryContext?.todayScoreResult ?? {
-                  score: null,
-                  status: null,
-                  drivers: [],
-                  missingInputs: [],
-                  baseline: null,
+          {/* PRIMARY TODAY HERO REGION (xl:col-span-8) */}
+          <div className="order-1 flex flex-col gap-3 sm:gap-4 md:col-span-2 xl:col-span-8">
+            <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
+              <TodaysPlanCard todaySession={todaySession} actions={todayPlanActions} timeZone={timeZone} />
+              <ReadinessCard
+                scoreResult={
+                  recoveryContext?.todayScoreResult ?? {
+                    score: null,
+                    status: null,
+                    drivers: [],
+                    missingInputs: [],
+                    baseline: null,
+                  }
                 }
-              }
-              todayCheckin={recoveryContext?.today ?? null}
-              error={readinessForUserResult.status === "rejected"}
-            />
-          </div>
+                todayCheckin={recoveryContext?.today ?? null}
+                error={readinessForUserResult.status === "rejected"}
+              />
+            </div>
 
-          <div className="order-3 md:order-4 xl:col-span-3">
             <DanteCard decision={dailyDecision} narrative={dailyIntelligence?.narrative ?? null} />
           </div>
 
-          <div className="order-4 md:order-3 xl:col-span-3">
+          {/* SECONDARY NUTRITION REGION (xl:col-span-4) */}
+          <div className="order-2 flex flex-col gap-3 sm:gap-4 xl:col-span-4">
             <NutritionCard
               target={nutritionPlan?.target ?? null}
               totals={foodLog.totals}
@@ -301,14 +296,6 @@ export default async function DashboardPage() {
             />
           </div>
 
-          {/* self-start: this stack shares a grid row with Muscle Intelligence
-              (xl:col-span-7 vs xl:col-span-5). Without it, the grid's default
-              align-items:stretch forces this flex column to the taller
-              sibling's height, giving both stacked GlassCards (h-full) a
-              definite height to split via flex-shrink — squeezing Progress
-              Snapshot below its content and clipping it against GlassCard's
-              overflow-hidden. self-start keeps this wrapper's height
-              intrinsic to its own content instead. */}
           <div className="order-6 flex flex-col self-start gap-3 sm:gap-4 md:col-span-2 xl:col-span-5">
             <RecentActivityCard entries={recentActivityEntries} now={now} />
             <ProgressSnapshotCard snapshot={progressSnapshot} />

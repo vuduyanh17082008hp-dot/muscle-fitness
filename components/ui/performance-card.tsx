@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { Card, CardGlow } from "@/components/ui/card";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { cn } from "@/lib/cn";
 
@@ -228,15 +229,13 @@ export function PerformanceCard({
           <>
             {metric ? (
               <div className="flex items-end gap-2">
-                <motion.span
-                  key={String(metric.value)}
-                  initial={reduceMotion ? false : { opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25 }}
-                  className={cn("font-heading text-3xl tracking-[0.02em] sm:text-4xl", titleClassName)}
-                >
-                  {metric.value}
-                </motion.span>
+                <span className={cn("font-heading text-3xl tracking-[0.02em] sm:text-4xl", titleClassName)}>
+                  {typeof metric.value === "number" || /^\s*-?\d/.test(String(metric.value)) ? (
+                    <AnimatedNumber value={metric.value} />
+                  ) : (
+                    metric.value
+                  )}
+                </span>
                 {metric.unit ? (
                   <span className="pb-1 text-sm font-semibold" style={{ color: textMuted }}>
                     {metric.unit}

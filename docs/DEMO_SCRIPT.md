@@ -9,10 +9,9 @@ surfaces. No other step uses fabricated data.
 
 ## Before you start
 
-1. Sign in to a demo account with at least a few weeks of real logged
-   training, nutrition and recovery check-ins (or use a seeded account
-   — a fresh account with no history will still show every feature,
-   just with more "not enough data yet" honesty messages).
+1. Prepare a real demo account using `docs/DEMO_ACCOUNT.md` (completed
+   onboarding plus training, recovery, nutrition and progress history).
+   Never commit that account’s credentials.
 2. As an admin, open `/admin/ai-evaluation` and turn on a demo
    wearable scenario (e.g. "Recovery Warning") for the demo account —
    this is what step 2 shows.

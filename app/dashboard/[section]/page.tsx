@@ -14,10 +14,10 @@ import {
 } from "lucide-react"
 
 import { createClient } from "@/lib/supabase/server"
-import { SectionTabs } from "@/components/dashboard/section-tabs"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { CalendarAgenda } from "@/components/dashboard/calendar-agenda"
 import { PerformanceCard } from "@/components/ui/performance-card"
+import { MotivationPreferenceToggle } from "@/components/motivation/motivation-line"
 import { loadCalendarRange } from "@/lib/daily-plan/load-calendar-range"
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context"
 import { loadTodaySession } from "@/lib/training/load-today-session"
@@ -60,13 +60,6 @@ async function loadAiCoachSuggestions(
   })
 }
 
-const PROGRESS_TABS = [
-  { label: "Overview", href: "/dashboard/progress#overview" },
-  { label: "Strength", href: "/dashboard/training-intelligence" },
-  { label: "Body", href: "/dashboard/progress#body" },
-  { label: "Recovery", href: "/dashboard/recovery" },
-]
-
 type SectionConfig = {
   title: string
   description: string
@@ -85,7 +78,7 @@ const sections: Record<string, SectionConfig> = {
   progress: {
     title: "Progress",
     description:
-      "Current body metrics from your fitness profile.",
+      "Your training journey, consistency, and comparable progress.",
     project: "Progress",
     icon: ChartNoAxesCombined,
   },
@@ -203,8 +196,6 @@ export default async function DashboardSectionPage({
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-1 py-2">
-      {sectionKey === "progress" ? <SectionTabs tabs={PROGRESS_TABS} /> : null}
-
       {/* DanteChat renders its own hero (title/subtitle/quick prompts)
           when the conversation is empty — showing this generic hero
           too would be a redundant second focal point on the same
@@ -236,8 +227,7 @@ export default async function DashboardSectionPage({
         </section>
       ) : null}
 
-      {(sectionKey === "today" ||
-        sectionKey === "progress") && (
+      {sectionKey === "today" && (
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <PerformanceCard glass variant="nutrition" title="Calories" metric={{ value: formatValue(fitness?.calories_target) }} />
           <PerformanceCard glass variant="nutrition" title="Protein" metric={{ value: formatValue(fitness?.protein_target_g, " g") }} />
@@ -246,8 +236,7 @@ export default async function DashboardSectionPage({
         </section>
       )}
 
-      {(sectionKey === "progress" ||
-        sectionKey === "today") && (
+      {sectionKey === "today" && (
         <section id="body" className="scroll-mt-24 rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-6">
           <h2 className="text-lg font-bold text-mf-glass-text">
             Current metrics
@@ -273,6 +262,7 @@ export default async function DashboardSectionPage({
               </span>
             </p>
           </div>
+
         </section>
       )}
 
@@ -286,19 +276,35 @@ export default async function DashboardSectionPage({
       {sectionKey === "settings" && (
         <section className="rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-6">
           <p className="text-sm leading-6 text-mf-glass-text-muted">
-            Update personal details, goals and preferences through
-            onboarding. Onboarding completed:{" "}
+            Update personal details, goals and preferences. Onboarding completed:{" "}
             <span className="text-mf-glass-text">
               {profile?.onboarding_completed ? "Yes" : "No"}
             </span>
           </p>
 
-          <Link
-            href="/onboarding"
-            className="mt-5 inline-flex rounded-xl bg-mf-glass-brand px-5 py-3 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
-          >
-            Edit profile
-          </Link>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              href="/account/edit"
+              className="inline-flex rounded-xl bg-mf-glass-brand px-5 py-3 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+            >
+              Edit profile
+            </Link>
+            <Link
+              href="/account"
+              className="inline-flex rounded-xl border border-mf-glass-border px-5 py-3 text-sm font-semibold text-mf-glass-text transition hover:bg-white/5"
+            >
+              View account
+            </Link>
+            {!profile?.onboarding_completed ? (
+              <Link
+                href="/onboarding"
+                className="inline-flex rounded-xl border border-mf-glass-border px-5 py-3 text-sm font-semibold text-mf-glass-text-muted transition hover:bg-white/5"
+              >
+                Finish onboarding
+              </Link>
+            ) : null}
+          </div>
+          <MotivationPreferenceToggle />
         </section>
       )}
 

@@ -13,6 +13,18 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    files: [
+      "scripts/build-and-concat-video.js",
+      "scripts/generate-background-music.js",
+      "scripts/merge-4min-film-audio.js",
+      "scripts/mix-final-video-audio.js",
+      "scripts/split-video-parts.js",
+    ],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

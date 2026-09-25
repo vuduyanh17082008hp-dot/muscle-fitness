@@ -1,0 +1,143 @@
+/* ============================================================
+   DANTE ANIMATED MASCOT & INTERACTIVE DIALOGUE SYSTEM
+   Pure CSS 60fps GPU acceleration — no React layout thrashing
+   ============================================================ */
+
+.agentContainer {
+  isolation: isolate;
+  perspective: 800px;
+}
+
+.danteFloatWrapper {
+  animation: danteFloat 4s ease-in-out infinite;
+  will-change: transform;
+  transform-style: preserve-3d;
+}
+
+.danteShadow {
+  animation: danteShadow 4s ease-in-out infinite;
+  will-change: transform, opacity;
+  transform-origin: center center;
+}
+
+.danteEyeGlow {
+  filter: drop-shadow(0 0 8px rgba(212, 255, 0, 0.75));
+  transition: filter 0.3s ease, transform 0.3s ease;
+}
+
+.danteEyeGlowActive {
+  filter: drop-shadow(0 0 14px rgba(212, 255, 0, 0.98)) drop-shadow(0 0 4px #ffffff);
+}
+
+.danteEyeBlink {
+  animation: danteBlink 6s infinite;
+  transform-origin: center;
+}
+
+.danteChestPulse {
+  animation: danteChestPulse 3s ease-in-out infinite;
+  will-change: opacity, box-shadow;
+}
+
+@keyframes danteFloat {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) rotate(0.5deg) scale(1.02);
+  }
+}
+
+@keyframes danteShadow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(0.85);
+    opacity: 0.2;
+  }
+}
+
+@keyframes danteBlink {
+  0%, 94%, 98%, 100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes danteChestPulse {
+  0%, 100% {
+    opacity: 0.35;
+    box-shadow: 0 0 10px rgba(212, 255, 0, 0.3);
+  }
+  50% {
+    opacity: 0.85;
+    box-shadow: 0 0 20px rgba(212, 255, 0, 0.7);
+  }
+}
+
+/* Glassmorphic Dialogue Bubble */
+.dialogueBubble {
+  background: rgba(20, 20, 25, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(212, 255, 0, 0.25);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Tail pointing down towards Dante's head */
+.dialogueBubble::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 36px;
+  width: 12px;
+  height: 12px;
+  background: rgba(20, 20, 25, 0.88);
+  border-right: 1px solid rgba(212, 255, 0, 0.25);
+  border-bottom: 1px solid rgba(212, 255, 0, 0.25);
+  transform: rotate(45deg);
+}
+
+.chipButton {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: all 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.chipButton:hover {
+  background: rgba(212, 255, 0, 0.12);
+  border-color: rgba(212, 255, 0, 0.45);
+  color: #d4ff00;
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px rgba(212, 255, 0, 0.15);
+}
+
+.chipButtonActive {
+  background: rgba(212, 255, 0, 0.2);
+  border-color: #d4ff00;
+  color: #d4ff00;
+  box-shadow: 0 0 14px rgba(212, 255, 0, 0.25);
+}
+
+.cursorBlink {
+  animation: cursorBlink 0.8s infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .danteFloatWrapper,
+  .danteShadow,
+  .danteEyeBlink,
+  .danteChestPulse,
+  .cursorBlink {
+    animation: none !important;
+  }
+}

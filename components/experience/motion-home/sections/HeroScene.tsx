@@ -43,32 +43,12 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
           )
           .fromTo(
             ".hero-line",
-            { yPercent: 100, opacity: 0 },
-            { yPercent: 0, opacity: 1, duration: 0.6, ease: ease.heavy, stagger: 0.08 },
+            { y: 16, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.55, ease: ease.heavy, stagger: 0.08 },
             0.05,
           )
-          .fromTo(".hero-sub", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: ease.precise }, "-=0.4")
-          .fromTo(".hero-cta", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise, stagger: 0.06 }, "-=0.25");
-
-        gsap.to(".hero-copy", {
-          yPercent: -12,
-          opacity: 0.2,
-          ease: "none",
-          scrollTrigger: {
-            trigger: rootRef.current,
-            start: "bottom 90%",
-            end: "bottom 20%",
-            scrub: true,
-          },
-        });
-
-        // The ecosystem is a persistent visual identity layer, not a
-        // scroll-reactive element: it plays its one-time entrance
-        // above and then stays fully visible/static regardless of
-        // scroll position. No scrollTrigger-driven opacity/scale here
-        // — that previously made it visibly fade and shrink as the
-        // hero scrolled out, which reads as "disappearing/resetting"
-        // when scrolling back up into it.
+          .fromTo(".hero-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise }, "-=0.35")
+          .fromTo(".hero-cta", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: ease.precise, stagger: 0.06 }, "-=0.25");
       });
 
       return () => mm.revert();
@@ -81,24 +61,35 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
       ref={rootRef}
       id="hero"
       data-chapter="hero"
-      className="relative flex min-h-screen items-center overflow-hidden border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)] px-6 pt-28 pb-20 sm:pt-32 sm:pb-24 lg:px-12 lg:py-24"
+      className="relative flex items-center overflow-x-clip border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)] px-6 pt-24 pb-16 sm:pt-28 sm:pb-20 lg:min-h-[100svh] lg:px-12 lg:py-24"
     >
       <ParticleCanvas />
 
-      <div className="relative mx-auto grid w-full max-w-7xl items-center gap-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-20 xl:gap-28">
+      {/* Atmospheric glow backdrop */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/4 top-1/3 size-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--mf-brand)]/5 blur-[120px]" />
+        <div className="absolute right-1/4 bottom-1/4 size-[600px] rounded-full bg-violet-600/5 blur-[140px]" />
+      </div>
+
+      <div className="relative mx-auto grid w-full max-w-7xl items-center gap-14 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 xl:gap-24">
         <div className="hero-copy">
-          <h1 className="font-heading text-5xl font-black uppercase leading-[0.92] tracking-[-0.03em] sm:text-6xl lg:text-[5.5vw]">
-            <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-pub-text)]">Train hard.</span></span>
-            <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-pub-text-secondary)]">Recover smart.</span></span>
-            <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-brand)]">Adapt continuously.</span></span>
+          <div className="hero-line mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-brand-soft)] px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--mf-brand)]">
+            <span className="size-1.5 rounded-full bg-[var(--mf-brand)]" />
+            AI-Powered Personal Training System
+          </div>
+
+          <h1 className="font-heading text-5xl font-black uppercase leading-[0.92] tracking-[-0.03em] sm:text-6xl lg:text-[5.2vw]">
+            <span className="hero-line block"><span className="block text-[var(--mf-pub-text)]">Train hard.</span></span>
+            <span className="hero-line block"><span className="block text-[var(--mf-pub-text-secondary)]">Recover smart.</span></span>
+            <span className="hero-line block"><span className="block text-[var(--mf-brand)]">Adapt continuously.</span></span>
           </h1>
 
-          <p className="hero-sub mt-8 max-w-lg text-base leading-7 text-[var(--mf-pub-text-secondary)] sm:text-lg">
-            One system reads your training, recovery and adaptive state — then
-            Dante turns it into the next decision.
+          <p className="hero-sub mt-6 max-w-xl text-base leading-7 text-[var(--mf-pub-text-secondary)] sm:text-lg">
+            Muscle Fitness is an AI performance system for lifters and gym-goers who train with intent.
+            Dante, your coach, reads your training, recovery and nutrition — then tells you what to do next from that data.
           </p>
 
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
             <TransitionLink
               href={routes.signup}
               transitionLabel="Entering the system…"
@@ -108,7 +99,7 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
                 target.style.setProperty("--mx", `${event.clientX - rect.left}px`);
                 target.style.setProperty("--my", `${event.clientY - rect.top}px`);
               }}
-              className={`hero-cta ${styles.radialCta} inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--mf-brand)] px-6 py-4 text-sm font-black uppercase tracking-wider text-[var(--mf-brand-ink)] transition hover:bg-[var(--mf-brand-hover)]`}
+              className={`hero-cta ${styles.radialCta} inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--mf-brand)] px-7 py-4 text-xs font-black uppercase tracking-[0.14em] text-[var(--mf-brand-ink)] transition hover:bg-[var(--mf-brand-hover)]`}
             >
               Enter the system
               <ArrowRight className="size-4" />
@@ -116,14 +107,27 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
 
             <Link
               href={routes.chatbot}
-              className="hero-cta inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 px-6 py-4 text-sm font-black uppercase tracking-wider text-white transition hover:border-white/20 hover:bg-white/5"
+              className="hero-cta inline-flex items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/[0.03] px-7 py-4 text-xs font-black uppercase tracking-[0.14em] text-white transition hover:border-white/25 hover:bg-white/8"
             >
               Meet Dante
             </Link>
           </div>
+
+          {/* Micro-feature highlights */}
+          <div className="hero-sub mt-10 flex flex-wrap items-center gap-4 border-t border-white/10 pt-6 text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-400">
+            <span className="flex items-center gap-1.5">
+              <span className="text-[var(--mf-brand)]">✓</span> For lifters who want today&apos;s plan, not a generic split
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-[var(--mf-brand)]">✓</span> Dante coaches from your state, not a prompt
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-[var(--mf-brand)]">✓</span> Training, recovery and nutrition in one system
+            </span>
+          </div>
         </div>
 
-        <div className="hero-ecosystem lg:pl-4 xl:pl-8">
+        <div className="hero-ecosystem relative overflow-visible bg-transparent lg:pl-2 xl:pl-6">
           <Ecosystem routes={routes} />
         </div>
       </div>

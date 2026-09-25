@@ -86,6 +86,16 @@ function createFakeSupabase(options: {
         };
       }
 
+      if (table === "workout_plans") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: null, error: null }),
+            }),
+          }),
+        };
+      }
+
       throw new Error(`Unexpected table in fake supabase: ${table}`);
     },
   };

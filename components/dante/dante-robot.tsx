@@ -244,34 +244,6 @@ function DanteRobotMascot({
     return { y: 0, rotate: appliedTilt };
   }, [state, appliedTilt]);
 
-  const coreGlowAnimate = useMemo(() => {
-    if (reduceMotion) {
-      return { opacity: state === "thinking" || state === "listening" ? 0.55 : 0.35 };
-    }
-
-    if (state === "thinking") {
-      return { opacity: [0.35, 0.7, 0.35], scale: [1, 1.08, 1] };
-    }
-
-    if (state === "listening") {
-      return { opacity: 0.65, scale: 1.08 };
-    }
-
-    if (state === "speaking") {
-      return { opacity: [0.4, 0.6, 0.42, 0.58, 0.4], scale: [1, 1.05, 1, 1.04, 1] };
-    }
-
-    if (state === "success") {
-      return { opacity: 0.85, scale: 1.15 };
-    }
-
-    if (state === "error") {
-      return { opacity: 0.2, scale: 0.92 };
-    }
-
-    return { opacity: [0.3, 0.42, 0.3], scale: [1, 1.03, 1] };
-  }, [state, reduceMotion]);
-
   const eyeScale = getEyeScale(state, blinking);
   const eyeColor = state === "error" ? METAL : ACCENT_SOFT;
   const eyeGlow = state === "error" ? 0.25 : state === "listening" ? 1 : 0.75;
@@ -424,19 +396,64 @@ function DanteRobotMascot({
                 fill="rgba(255,255,255,0.05)"
               />
 
-              {/* CORE EMBLEM */}
+              {/* CIRCUIT TRACES (Skull sides & Shoulders) */}
+              <path
+                d="M58 45 L64 45 L68 55 L68 70"
+                stroke="rgba(168, 85, 247, 0.6)"
+                strokeWidth="1.2"
+                strokeDasharray="4 8"
+                fill="none"
+              >
+                <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="8s" repeatCount="indefinite" />
+              </path>
+              <path
+                d="M142 45 L136 45 L132 55 L132 70"
+                stroke="rgba(168, 85, 247, 0.6)"
+                strokeWidth="1.2"
+                strokeDasharray="4 8"
+                fill="none"
+              >
+                <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="8s" repeatCount="indefinite" />
+              </path>
+              <path
+                d="M66 135 L76 135 L80 142"
+                stroke="rgba(168, 85, 247, 0.5)"
+                strokeWidth="1"
+                strokeDasharray="3 6"
+                fill="none"
+              >
+                <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="8s" repeatCount="indefinite" />
+              </path>
+              <path
+                d="M134 135 L124 135 L120 142"
+                stroke="rgba(168, 85, 247, 0.5)"
+                strokeWidth="1"
+                strokeDasharray="3 6"
+                fill="none"
+              >
+                <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="8s" repeatCount="indefinite" />
+              </path>
+
+              {/* CORE EMBLEM WITH 2.8s DUAL-BEAT HEARTBEAT GLOW */}
               <motion.circle
                 cx="100"
                 cy="162"
                 r="20"
                 fill={`url(#${uid}-glow)`}
                 filter={`url(#${uid}-blur)`}
-                opacity={0.3}
-                animate={coreGlowAnimate}
+                opacity={0.4}
+                animate={
+                  reduceMotion
+                    ? { opacity: 0.35 }
+                    : {
+                        scale: [1, 1.08, 1.02, 1.14, 1],
+                        opacity: [0.35, 0.7, 0.45, 0.85, 0.35],
+                      }
+                }
                 transition={
                   reduceMotion
-                    ? { duration: 0.4 }
-                    : { duration: 2.4, repeat: Infinity, ease: "easeInOut" }
+                    ? undefined
+                    : { duration: 2.8, repeat: Infinity, ease: "easeInOut" }
                 }
               />
               <circle

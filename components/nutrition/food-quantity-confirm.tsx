@@ -44,8 +44,13 @@ export function FoodQuantityConfirm({
     [food.barcode, food.source, food.sourceId],
   )
 
-  const defaultServing: ServingDefinition | null =
-    food.servingSizeGrams && food.servingSizeGrams > 0 ? { name: "serving", grams: food.servingSizeGrams } : null
+  const defaultServing = useMemo<ServingDefinition | null>(
+    () =>
+      food.servingSizeGrams && food.servingSizeGrams > 0
+        ? { name: "serving", grams: food.servingSizeGrams }
+        : null,
+    [food.servingSizeGrams],
+  )
 
   const [savedServings, setSavedServings] = useState<UserFoodServing[]>([])
   const [lastPortion, setLastPortion] = useState<LastPortion | null>(null)

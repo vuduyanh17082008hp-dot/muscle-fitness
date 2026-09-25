@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 import type { AdaptViewModel } from "@/components/experience/motion-home/data/homepageViewModel";
 
 const STAGES = ["Train", "Measure", "Adapt", "Progress"] as const;
@@ -42,7 +42,7 @@ export function AdaptScene({ adapt }: { adapt: AdaptViewModel }) {
         // highlight — never a long wait on empty black space before
         // any path appears.
         const tl = gsap.timeline({
-          scrollTrigger: { trigger: rootRef.current, start: "top 78%", once: true },
+          scrollTrigger: { trigger: rootRef.current, ...enterOnce },
         });
 
         tl.fromTo(".adapt-heading", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise })
@@ -62,7 +62,7 @@ export function AdaptScene({ adapt }: { adapt: AdaptViewModel }) {
       ref={rootRef}
       id="adapt"
       data-chapter="adapt"
-      className="relative bg-[var(--mf-pub-bg)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative bg-[var(--mf-pub-bg)] px-6 py-16 lg:px-12 lg:py-24"
     >
       <div className="mx-auto max-w-7xl">
         <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-brand)]">07 · Adapt</p>

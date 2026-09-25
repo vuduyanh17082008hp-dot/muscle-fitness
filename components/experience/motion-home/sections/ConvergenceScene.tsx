@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Check, ArrowRight } from "lucide-react";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 import { TransitionLink } from "@/components/experience/motion-home/interaction/TransitionLink";
 import type { HomepageRoutes } from "@/components/experience/motion-home/data/homepageViewModel";
 
@@ -52,13 +52,13 @@ export function ConvergenceScene({ routes }: { routes: HomepageRoutes }) {
 
         gsap
           .timeline({
-            scrollTrigger: { trigger: rootRef.current, start: "top 75%", end: "top 30%", scrub: 0.9 },
+            scrollTrigger: { trigger: rootRef.current, ...enterOnce },
           })
-          .fromTo(".converge-fade", { opacity: 0, y: 24 }, { opacity: 1, y: 0, stagger: 0.1, ease: ease.soft })
-          .to(loopRef.current, { strokeDashoffset: 0, ease: ease.precise }, "<")
-          .fromTo(".loop-node", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, stagger: 0.08, ease: ease.precise }, "-=0.8")
-          .fromTo(".loop-label", { opacity: 0 }, { opacity: 1, stagger: 0.08, ease: ease.precise }, "-=0.6")
-          .to(borderRef.current, { strokeDashoffset: 0, ease: ease.precise }, "-=0.3");
+          .fromTo(".converge-fade", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45, stagger: 0.08, ease: ease.soft })
+          .to(loopRef.current, { strokeDashoffset: 0, duration: 0.5, ease: ease.precise }, "<")
+          .fromTo(".loop-node", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.35, stagger: 0.06, ease: ease.precise }, "-=0.25")
+          .fromTo(".loop-label", { opacity: 0 }, { opacity: 1, duration: 0.3, stagger: 0.05, ease: ease.precise }, "-=0.2")
+          .to(borderRef.current, { strokeDashoffset: 0, duration: 0.5, ease: ease.precise }, "-=0.2");
 
         // The loop never stops — a slow standing rotation once it has drawn in, echoing "closed system."
         gsap.to(loopRef.current, {
@@ -80,7 +80,7 @@ export function ConvergenceScene({ routes }: { routes: HomepageRoutes }) {
       ref={rootRef}
       id="converge"
       data-chapter="converge"
-      className="relative bg-[var(--mf-pub-bg)] px-6 py-28 lg:px-12 lg:py-36"
+      className="relative bg-[var(--mf-pub-bg)] px-6 py-16 lg:px-12 lg:py-24"
     >
       <div className="mx-auto max-w-4xl text-center">
         <div className="converge-fade relative mx-auto mb-10 size-48 sm:mb-12 sm:size-56">

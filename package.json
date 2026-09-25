@@ -11,7 +11,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run type-check && npm run lint && npm test",
-    "dante:ingest-knowledge": "tsx scripts/ingest-dante-knowledge.ts"
+    "dante:ingest-knowledge": "tsx scripts/ingest-dante-knowledge.ts",
+    "demo:seed-local": "tsx scripts/seed-local-demo.ts",
+    "video:preview": "remotion studio video/MuscleFitnessFilm/index.tsx",
+    "video:render": "remotion render video/MuscleFitnessFilm/index.tsx MuscleFitnessFilm output/muscle-fitness-competition-film.mp4",
+    "video:render:subtitles": "remotion render video/MuscleFitnessFilm/index.tsx MuscleFitnessFilmSubtitled output/muscle-fitness-competition-film-subtitles.mp4"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",
@@ -76,6 +80,9 @@
     "zustand": "^5.0.7"
   },
   "devDependencies": {
+    "@remotion/cli": "^4.0.527",
+    "@remotion/media-utils": "^4.0.527",
+    "@remotion/shapes": "^4.0.527",
     "@tailwindcss/postcss": "^4.1.12",
     "@types/node": "^22.17.2",
     "@types/react": "^19.1.10",
@@ -83,7 +90,10 @@
     "@types/uuid": "^10.0.0",
     "eslint": "^9.33.0",
     "eslint-config-next": "^16.3.5",
+    "playwright": "^1.63.0",
     "postcss": "^8.5.6",
+    "pptxgenjs": "^4.0.1",
+    "remotion": "^4.0.527",
     "tailwindcss": "^4.1.12",
     "tsx": "^4.23.13",
     "typescript": "^5.9.2",
