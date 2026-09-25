@@ -1,0 +1,68 @@
+import type { LifeWorldPattern } from "@/lib/dante-core/adaptive-coach-v2/lifeworld/types";
+
+export const LIFEWORLD_PATTERNS: LifeWorldPattern[] = [
+  {
+    id: "exam_week_sleep_loss",
+    triggers: ["exam", "finals", "study", "thi", "on thi", "sleep"],
+    context: "Exam periods can temporarily reduce sleep and schedule consistency.",
+    coachingUse: "Keep suggestions short and reduce planning burden.",
+    authority: "STYLE_CONTEXT_ONLY",
+    language: "both",
+  },
+  {
+    id: "shift_work_schedule",
+    triggers: ["night shift", "shift work", "ca dem", "work schedule"],
+    context: "Changing work shifts can make fixed training times impractical.",
+    coachingUse: "Offer flexible windows rather than assuming a fixed routine.",
+    authority: "STYLE_CONTEXT_ONLY",
+    language: "both",
+  },
+  {
+    id: "travel_routine_disruption",
+    triggers: ["travel", "hotel", "flight", "du lich", "cong tac"],
+    context: "Travel may constrain equipment, meals, and sleep.",
+    coachingUse: "Prefer portable options and avoid assuming normal facilities.",
+    authority: "STYLE_CONTEXT_ONLY",
+    language: "both",
+  },
+  {
+    id: "busy_parent_time_pressure",
+    triggers: ["kids", "childcare", "baby", "con", "parent"],
+    context: "Care responsibilities can make long uninterrupted sessions difficult.",
+    coachingUse: "Offer compact choices without treating the pattern as a personal fact.",
+    authority: "STYLE_CONTEXT_ONLY",
+    language: "both",
+  },
+  {
+    id: "social_meal_context",
+    triggers: ["restaurant", "party", "wedding", "an ngoai", "tiec"],
+    context: "Social meals often have uncertain portions and timing.",
+    coachingUse: "Use flexible ranges and avoid false precision.",
+    authority: "STYLE_CONTEXT_ONLY",
+    language: "both",
+  },
+  {
+    id: "return_after_break",
+    triggers: ["back after", "long break", "nghi tap", "returning"],
+    context: "Returning after time away can call for simpler pacing.",
+    coachingUse: "Use conservative language without asserting detraining.",
+    authority: "STYLE_CONTEXT_ONLY",
+    language: "both",
+  },
+  {
+    id: "limited_equipment",
+    triggers: ["dumbbell only", "home gym", "no rack", "it dung cu"],
+    context: "Equipment limits can change which exercise options are practical.",
+    coachingUse: "Prioritize substitutions that fit stated constraints.",
+    authority: "STYLE_CONTEXT_ONLY",
+    language: "both",
+  },
+  {
+    id: "deadline_stress",
+    triggers: ["deadline", "launch", "overtime", "tang ca"],
+    context: "Short-term workload pressure can reduce attention for detailed plans.",
+    coachingUse: "Lead with one actionable next step.",
+    authority: "STYLE_CONTEXT_ONLY",
+    language: "both",
+  },
+];

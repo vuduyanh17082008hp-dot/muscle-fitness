@@ -31,7 +31,10 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeChapter, setActiveChapter] = useState<string>("hero");
 
-  useLenis(true);
+  // Native document flow. Lenis + scrubbed ScrollTrigger left
+  // layout holes (content at opacity 0 while the section still
+  // occupied height) and felt like scroll-jacking on the way back up.
+  useLenis(false);
   useSceneDirector(rootRef, useCallback((id: string) => setActiveChapter(id), []));
 
   useEffect(() => {
@@ -44,7 +47,7 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
 
   return (
     <PageTransition>
-      <div ref={rootRef} className="relative bg-[var(--mf-pub-bg)] text-white">
+      <div ref={rootRef} className="relative overflow-x-hidden bg-[var(--mf-pub-bg)] text-white">
         <GlobalAtmosphere />
         <CustomCursor />
         <DebugPanel activeChapter={activeChapter} />

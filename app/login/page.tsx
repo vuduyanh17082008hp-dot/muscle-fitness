@@ -449,7 +449,7 @@ function LoginContent() {
           )}
         </button>
 
-        <p className="mt-8 text-center text-sm text-zinc-600">
+        <p className="mt-8 text-center text-sm text-zinc-400">
           New to Muscle Fitness?{" "}
           <Link
             href="/register"

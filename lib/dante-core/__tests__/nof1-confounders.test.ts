@@ -41,6 +41,7 @@ describe("nof1 — confounders", () => {
       safetyTriggered: false,
     });
     expect(turn.session.experiment?.status).toBe("CONFOUNDED");
-    expect(turn.reply).toMatch(/CONFOUNDED|not clean|not .*failed/i);
+    expect(turn.reply).toMatch(/not clean|not .*failed|nhiễu|không rút kết luận|will not force a conclusion/i);
+    expect(turn.reply).not.toMatch(/\bCONFOUNDED\b/);
   });
 });

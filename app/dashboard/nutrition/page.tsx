@@ -31,6 +31,7 @@ import { loadFoodLogForDate, resolveLocalToday } from "@/lib/nutrition/food-log/
 import { NutritionSettingsForm } from "./nutrition-settings-form"
 import { BudgetPlanner } from "@/components/nutrition/budget-planner"
 import { NutritionTracker } from "@/components/nutrition/nutrition-tracker"
+import { NutritionSectionReveal, NutritionResultGlow } from "@/components/nutrition/nutrition-motion"
 import { SectionTabs } from "@/components/dashboard/section-tabs"
 import { PerformanceCard } from "@/components/ui/performance-card"
 import { PrimaryButton, SecondaryButton } from "@/components/ui/button"
@@ -43,6 +44,9 @@ const NUTRITION_TABS = [
   { label: "Macros", href: "/dashboard/nutrition#macros" },
   { label: "Insights", href: "/dashboard/ai-coach" },
 ]
+
+const RESULT_CARD_MOTION =
+  "transition duration-200 hover:-translate-y-0.5 hover:border-white/20 active:scale-[0.995] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
 
 /* =========================================================
    SMALL PRESENTATION HELPERS
@@ -191,16 +195,18 @@ export default async function NutritionPlanPage() {
       =================================================== */}
 
       <div id="today" className="scroll-mt-24">
-        <NutritionTracker
-          initialEntries={foodLog.entries}
-          initialDate={localDate}
-          target={{
-            calories: target.calories,
-            protein: target.protein,
-            carbs: target.carbs,
-            fat: target.fat,
-          }}
-        />
+        <NutritionSectionReveal>
+          <NutritionTracker
+            initialEntries={foodLog.entries}
+            initialDate={localDate}
+            target={{
+              calories: target.calories,
+              protein: target.protein,
+              carbs: target.carbs,
+              fat: target.fat,
+            }}
+          />
+        </NutritionSectionReveal>
       </div>
 
       {/* ===================================================
@@ -273,6 +279,7 @@ export default async function NutritionPlanPage() {
           ENERGY MODEL
       =================================================== */}
 
+      <NutritionSectionReveal>
       <section>
         <SectionHeading
           eyebrow="Energy Model"
@@ -280,12 +287,14 @@ export default async function NutritionPlanPage() {
           description="This is a starting maintenance estimate, not a guaranteed number — see Calibration below."
         />
 
+        <NutritionResultGlow>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <PerformanceCard glass variant="nutrition" title="Calories" metric={{ value: target.calories }} />
-          <PerformanceCard glass variant="nutrition" title="Protein" metric={{ value: target.protein, unit: "g" }} />
-          <PerformanceCard glass variant="nutrition" title="Carbohydrates" metric={{ value: target.carbs, unit: "g" }} />
-          <PerformanceCard glass variant="nutrition" title="Fat" metric={{ value: target.fat, unit: "g" }} />
+          <PerformanceCard glass variant="nutrition" title="Calories" metric={{ value: target.calories }} className={RESULT_CARD_MOTION} />
+          <PerformanceCard glass variant="nutrition" title="Protein" metric={{ value: target.protein, unit: "g" }} className={RESULT_CARD_MOTION} />
+          <PerformanceCard glass variant="nutrition" title="Carbohydrates" metric={{ value: target.carbs, unit: "g" }} className={RESULT_CARD_MOTION} />
+          <PerformanceCard glass variant="nutrition" title="Fat" metric={{ value: target.fat, unit: "g" }} className={RESULT_CARD_MOTION} />
         </div>
+        </NutritionResultGlow>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <PerformanceCard glass title="BMR (Mifflin-St Jeor)" metric={{ value: plan.bmr, unit: "kcal" }} />
@@ -315,6 +324,7 @@ export default async function NutritionPlanPage() {
           </div>
         </div>
       </section>
+      </NutritionSectionReveal>
 
       {/* ===================================================
           TRAINING-SPECIFIC NUTRITION
@@ -355,6 +365,7 @@ export default async function NutritionPlanPage() {
           GRAM-BASED MEAL PLAN
       =================================================== */}
 
+      <NutritionSectionReveal>
       <section>
         <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
           <SectionHeading
@@ -375,7 +386,7 @@ export default async function NutritionPlanPage() {
           {plan.meals.map((meal) => (
             <article
               key={meal.id}
-              className="rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-6"
+              className="rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-6 transition duration-200 hover:-translate-y-0.5 hover:border-white/20 active:scale-[0.995] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -450,6 +461,7 @@ export default async function NutritionPlanPage() {
           </p>
         </div>
       </section>
+      </NutritionSectionReveal>
 
       {/* ===================================================
           CALIBRATION

@@ -28,6 +28,9 @@ export type TodaySession = {
   scheduledFor: string | null;
   durationMinutes: number | null;
   sessionState: string | null;
+  workoutPlanId?: string | null;
+  updatedAt?: string | null;
+  planUpdatedAt?: string | null;
   exercises: TodaySessionExercise[];
 };
 
@@ -154,7 +157,7 @@ export async function loadTodaySession(
 
   const { data: sessionRows, error: sessionError } = await supabase
     .from("workout_sessions")
-    .select("id, name, scheduled_for, duration_minutes, session_state")
+    .select("id, name, scheduled_for, duration_minutes, session_state, updated_at, workout_plan_id")
     .eq("user_id", userId)
     .gte("scheduled_for", startIso)
     .lte("scheduled_for", endIso)
@@ -171,7 +174,19 @@ export async function loadTodaySession(
     scheduled_for: string | null;
     duration_minutes: number | null;
     session_state: string | null;
+    updated_at?: string | null;
+    workout_plan_id?: string | null;
   };
+
+  let planUpdatedAt: string | null = null;
+  if (session.workout_plan_id) {
+    const { data: planRow } = await supabase
+      .from("workout_plans")
+      .select("updated_at")
+      .eq("id", session.workout_plan_id)
+      .maybeSingle();
+    planUpdatedAt = (planRow as { updated_at?: string | null } | null)?.updated_at ?? null;
+  }
 
   const { data: exerciseRows, error: exerciseError } = await supabase
     .from("workout_session_exercises")
@@ -219,6 +234,9 @@ export async function loadTodaySession(
     scheduledFor: session.scheduled_for,
     durationMinutes: session.duration_minutes,
     sessionState: session.session_state,
+    workoutPlanId: session.workout_plan_id ?? null,
+    updatedAt: session.updated_at ?? null,
+    planUpdatedAt,
     exercises: rows.map((row) => ({
       sessionExerciseId: row.id,
       exerciseId: row.exercise_id,

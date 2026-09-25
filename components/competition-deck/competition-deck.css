@@ -1,0 +1,162 @@
+/* Competition Deck Custom CSS */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Onest:wght@400;600;700;800;900&display=swap');
+
+.deck-container {
+  font-family: 'Onest', 'Inter', system-ui, -apple-system, sans-serif;
+  color: #F6F7F9;
+  background-color: #050607;
+  overflow: hidden;
+  user-select: none;
+}
+
+.deck-slide-viewport {
+  aspect-ratio: 16 / 9;
+  max-width: 100vw;
+  max-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Typography Utilities */
+.deck-title-hero {
+  font-size: clamp(2.5rem, 5vw, 5.5rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  background: linear-gradient(180deg, #FFFFFF 0%, #E2E8F0 60%, #94A3B8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.deck-title-headline {
+  font-size: clamp(2rem, 3.8vw, 4rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #F6F7F9;
+}
+
+.deck-subhead {
+  font-size: clamp(1rem, 1.6vw, 1.75rem);
+  font-weight: 500;
+  line-height: 1.4;
+  color: #989FAA;
+}
+
+.text-accent-lime {
+  color: #C8FF3D;
+}
+
+.text-accent-blue {
+  color: #59A9FF;
+}
+
+.text-accent-purple {
+  color: #8D7CFF;
+}
+
+.bg-surface-card {
+  background-color: #11151B;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.bg-surface-glass {
+  background: rgba(22, 27, 34, 0.75);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Glow & Ambient Animations */
+@keyframes signalPulse {
+  0%, 100% {
+    opacity: 0.4;
+    filter: drop-shadow(0 0 8px rgba(200, 255, 61, 0.4));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 20px rgba(200, 255, 61, 0.9));
+  }
+}
+
+.animate-signal-pulse {
+  animation: signalPulse 3s ease-in-out infinite;
+}
+
+@keyframes orbitSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-orbit-slow {
+  animation: orbitSpin 40s linear infinite;
+}
+
+.animate-orbit-reverse {
+  animation: orbitSpin 60s linear infinite reverse;
+}
+
+/* Signal Flow Line */
+.performance-signal-path {
+  stroke-dasharray: 12 8;
+  animation: dashOffset 20s linear infinite;
+}
+
+@keyframes dashOffset {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+/* Strict No-Text Mode for AI Video Generation */
+.no-text-mode h1,
+.no-text-mode h2,
+.no-text-mode h3,
+.no-text-mode h4,
+.no-text-mode p,
+.no-text-mode span,
+.no-text-mode text,
+.no-text-mode select,
+.no-text-mode font,
+.no-text-mode .no-print {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+.no-text-mode img {
+  filter: blur(20px) opacity(0.3);
+}
+
+/* Print & Export Media Query */
+@media print {
+  @page {
+    size: 16in 9in;
+    margin: 0;
+  }
+  body, html {
+    background: #050607 !important;
+    color: #F6F7F9 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .deck-container {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .deck-slide-page {
+    page-break-after: always !important;
+    page-break-inside: avoid !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    display: flex !important;
+    position: relative !important;
+  }
+}

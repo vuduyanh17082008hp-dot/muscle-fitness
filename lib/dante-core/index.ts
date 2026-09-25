@@ -252,3 +252,67 @@ export type {
 } from "@/lib/dante-core/verifier";
 export type { DailyIntelligence } from "@/lib/dante-core/daily-intelligence";
 export type { KnowledgeEntry, KnowledgeCategory } from "@/lib/dante-core/knowledge/types";
+
+// Adaptive Coach V2 — structural cognition + natural response plane
+export {
+  interpretUserTurn,
+  evaluateContrastiveSafety,
+  semanticSafetySignals,
+  buildDanteDecision,
+  runAdaptiveCoachTurn,
+  scrubInternalJargon,
+  containsInternalJargon,
+  applyUserCorrection,
+  localizeFailure,
+  interpretAmbiguousHistory,
+  isAssistantGeneratedEvidenceAllowed,
+  retrieveLifeWorldPatterns,
+  evolveFailureCase,
+  eliminateEvolvedCase,
+  scheduleContext,
+  createCapsule,
+} from "@/lib/dante-core/adaptive-coach-v2";
+export type {
+  DanteDecision,
+  DanteContextCapsule,
+  SemanticInterpretation,
+  FailureClass as DanteV2FailureClass,
+} from "@/lib/dante-core/adaptive-coach-v2";
+
+// Phase 1 — Runtime Convergence Foundation
+export {
+  finalizeDanteResponse,
+  applyHardSafetySurfaceContract,
+  emitConvergedSingleShot,
+  finalizeProviderReply,
+  computeResponseFingerprint,
+  normalizeForFingerprint,
+  buildAuthoritativeResponseState,
+  extractCausalTargetFromText,
+  projectClaims,
+} from "@/lib/dante-core/runtime-convergence";
+export type {
+  DanteResponseBranch,
+  DanteRouteMetadata,
+  PersonaContract,
+  SafetySurfaceClass,
+  FinalizerResponseIntent,
+  AuthoritativeResponseState,
+} from "@/lib/dante-core/runtime-convergence";
+
+// Phase 2 — Conversation coherence (overlay on Phase 1)
+export {
+  applyDelta,
+  createInitialState,
+  runCoherenceTurn,
+  prepareCoherenceTurn,
+  finishCoherenceDraft,
+  freezeSnapshot,
+  loadSessionSnapshot,
+} from "@/lib/dante-core/coherence";
+export type {
+  VersionedState,
+  StateDelta,
+  CoherenceTurnResult,
+  ChatHistoryTurn,
+} from "@/lib/dante-core/coherence";

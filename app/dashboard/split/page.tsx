@@ -199,14 +199,21 @@ export default async function TrainingSplitPage() {
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-mf-glass-warning" />
             No saved split configuration was found, so this structure is
             generated from your onboarding training days ({fallbackTrainingDays}
-            /week) using the default auto split. Configure a split in{" "}
+            /week) using the default auto split. Update training days in{" "}
             <Link
-              href="/training"
+              href="/onboarding?edit=1"
               className="text-mf-glass-brand underline decoration-mf-glass-brand/40 underline-offset-4 hover:text-mf-glass-brand-hover"
             >
-              Training Preferences
+              onboarding
             </Link>{" "}
-            to personalise this page.
+            or build a programme from your{" "}
+            <Link
+              href="/dashboard/workouts"
+              className="text-mf-glass-brand underline decoration-mf-glass-brand/40 underline-offset-4 hover:text-mf-glass-brand-hover"
+            >
+              training plan
+            </Link>
+            .
           </p>
         ) : null}
         </div>

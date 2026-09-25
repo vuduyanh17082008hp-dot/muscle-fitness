@@ -43,32 +43,12 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
           )
           .fromTo(
             ".hero-line",
-            { yPercent: 100, opacity: 0 },
-            { yPercent: 0, opacity: 1, duration: 0.6, ease: ease.heavy, stagger: 0.08 },
+            { y: 16, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.55, ease: ease.heavy, stagger: 0.08 },
             0.05,
           )
-          .fromTo(".hero-sub", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: ease.precise }, "-=0.4")
-          .fromTo(".hero-cta", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise, stagger: 0.06 }, "-=0.25");
-
-        gsap.to(".hero-copy", {
-          yPercent: -12,
-          opacity: 0.2,
-          ease: "none",
-          scrollTrigger: {
-            trigger: rootRef.current,
-            start: "bottom 90%",
-            end: "bottom 20%",
-            scrub: true,
-          },
-        });
-
-        // The ecosystem is a persistent visual identity layer, not a
-        // scroll-reactive element: it plays its one-time entrance
-        // above and then stays fully visible/static regardless of
-        // scroll position. No scrollTrigger-driven opacity/scale here
-        // — that previously made it visibly fade and shrink as the
-        // hero scrolled out, which reads as "disappearing/resetting"
-        // when scrolling back up into it.
+          .fromTo(".hero-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise }, "-=0.35")
+          .fromTo(".hero-cta", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: ease.precise, stagger: 0.06 }, "-=0.25");
       });
 
       return () => mm.revert();
@@ -81,7 +61,7 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
       ref={rootRef}
       id="hero"
       data-chapter="hero"
-      className="relative flex min-h-screen items-center overflow-hidden border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)] px-6 pt-28 pb-20 sm:pt-32 sm:pb-24 lg:px-12 lg:py-28"
+      className="relative flex items-center overflow-x-clip border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg)] px-6 pt-24 pb-16 sm:pt-28 sm:pb-20 lg:min-h-[100svh] lg:px-12 lg:py-24"
     >
       <ParticleCanvas />
 
@@ -99,13 +79,14 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
           </div>
 
           <h1 className="font-heading text-5xl font-black uppercase leading-[0.92] tracking-[-0.03em] sm:text-6xl lg:text-[5.2vw]">
-            <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-pub-text)]">Train hard.</span></span>
-            <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-pub-text-secondary)]">Recover smart.</span></span>
-            <span className="hero-line block overflow-hidden"><span className="block text-[var(--mf-brand)]">Adapt continuously.</span></span>
+            <span className="hero-line block"><span className="block text-[var(--mf-pub-text)]">Train hard.</span></span>
+            <span className="hero-line block"><span className="block text-[var(--mf-pub-text-secondary)]">Recover smart.</span></span>
+            <span className="hero-line block"><span className="block text-[var(--mf-brand)]">Adapt continuously.</span></span>
           </h1>
 
           <p className="hero-sub mt-6 max-w-xl text-base leading-7 text-[var(--mf-pub-text-secondary)] sm:text-lg">
-            Training, recovery, nutrition, and history — integrated into one intelligence system that reasons from your real data, not raw prompts.
+            Muscle Fitness is an AI performance system for lifters and gym-goers who train with intent.
+            Dante, your coach, reads your training, recovery and nutrition — then tells you what to do next from that data.
           </p>
 
           <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
@@ -135,13 +116,13 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
           {/* Micro-feature highlights */}
           <div className="hero-sub mt-10 flex flex-wrap items-center gap-4 border-t border-white/10 pt-6 text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-400">
             <span className="flex items-center gap-1.5">
-              <span className="text-[var(--mf-brand)]">✓</span> 100% Personal Baseline
+              <span className="text-[var(--mf-brand)]">✓</span> For lifters who want today&apos;s plan, not a generic split
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-[var(--mf-brand)]">✓</span> Evidence-Grounded
+              <span className="text-[var(--mf-brand)]">✓</span> Dante coaches from your state, not a prompt
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-[var(--mf-brand)]">✓</span> Real-Time Autoregulation
+              <span className="text-[var(--mf-brand)]">✓</span> Training, recovery and nutrition in one system
             </span>
           </div>
         </div>

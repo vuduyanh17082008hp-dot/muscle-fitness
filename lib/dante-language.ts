@@ -54,6 +54,15 @@ const EXPLICIT_VIETNAMESE_REQUEST: RegExp[] = [
 
 /** Precomposed Vietnamese-only vowels (Latin Extended Additional) — this range is not shared with French/Spanish/Portuguese/German, so a match here is a reliable, low-false-positive Vietnamese signal without a language-ID library. */
 const VIETNAMESE_SPECIFIC_VOWELS = /[Ạ-ỹ]/;
+/** ă/ơ/ư are Vietnamese-distinctive letters that live OUTSIDE the range above (Latin Extended-A/B). */
+const VIETNAMESE_DISTINCTIVE_LETTERS = /[ăĂơƠưƯ]/;
+/**
+ * Accented Vietnamese function words. Ordinary Vietnamese ("Cho tôi xem … và bench nên tăng bao nhiêu kg?") is full of
+ * á/à/â/ê/ô, which the range above does not contain — so a sentence with English gym terms mixed in was read as
+ * English and locked the whole session to English. These words carry their tone marks and are not English words.
+ */
+const VIETNAMESE_ACCENTED_WORDS =
+  /(?<![\p{L}])(?:tôi|bạn|của|không|và|nên|được|với|này|những|một|các|có|đang|sẽ|đã|tập|giờ|muốn|hôm nay|bao nhiêu|mấy|thế nào)(?![\p{L}])/iu;
 /** đ/Đ alone is common enough elsewhere (e.g. Croatian) that it's only used together with a common Vietnamese function word, never alone. */
 const VIETNAMESE_DJ = /[đĐ]/;
 const VIETNAMESE_COMMON_WORDS =
@@ -71,8 +80,35 @@ function matchesAny(patterns: RegExp[], text: string): boolean {
  */
 export function looksVietnamese(text: string): boolean {
   if (VIETNAMESE_SPECIFIC_VOWELS.test(text)) return true;
+  if (VIETNAMESE_DISTINCTIVE_LETTERS.test(text)) return true;
+  if (VIETNAMESE_ACCENTED_WORDS.test(text.normalize("NFC"))) return true;
   if (VIETNAMESE_DJ.test(text) && VIETNAMESE_COMMON_WORDS.test(text)) return true;
-  return false;
+  return looksAccentlessVietnamese(text);
+}
+
+/**
+ * Vietnamese typed without diacritics ("tao dang lam bai thu 2 nhe"). Only strongly-Vietnamese function words
+ * count, and at least three DISTINCT ones must appear, so an English sentence with one stray word never matches.
+ */
+const ACCENTLESS_VIETNAMESE_WORDS = new Set([
+  "khong", "toi", "tao", "nhe", "nhung", "duoc", "roi", "cua", "hom", "tuan", "viet", "luu", "giup", "kia",
+  "minh", "nhu", "cung", "voi", "nay", "lam", "bai", "cau", "dung", "doi", "ngon", "thoi", "va", "la", "cho",
+  "may", "noi", "dai", "qua", "ngan", "gon", "nao", "sao", "vay", "cai",
+]);
+const ACCENTLESS_STRONG = new Set([
+  "khong", "toi", "tao", "nhe", "nhung", "duoc", "roi", "cua", "hom", "tuan", "viet", "luu", "giup", "kia", "minh",
+  "nhu", "cung", "nay", "noi", "dai", "qua", "ngan", "gon", "thoi",
+]);
+
+function looksAccentlessVietnamese(text: string): boolean {
+  // Fold first: a short phrase whose only marks are Latin-1 tone marks ("mày nói dài quá") is still Vietnamese.
+  const folded = text.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d");
+  const words = folded.match(/[a-z]+/g);
+  if (!words || words.length < 4) return false;
+  const seen = new Set<string>();
+  for (const word of words) if (ACCENTLESS_VIETNAMESE_WORDS.has(word)) seen.add(word);
+  const strong = [...seen].filter((w) => ACCENTLESS_STRONG.has(w)).length;
+  return seen.size >= 4 && strong >= 3;
 }
 
 export type DecideDanteLanguageInput = {

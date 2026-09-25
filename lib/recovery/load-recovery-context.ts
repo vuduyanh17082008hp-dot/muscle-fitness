@@ -6,8 +6,8 @@ import { localDateTimeParts, resolveUserTimeZone } from "@/lib/training/load-tod
 import { addDaysIso } from "@/lib/nutrition/date-utils"
 import { computeRecoveryScore } from "@/lib/recovery/score"
 import { computeTrainingLoad, type RecentSessionRow } from "@/lib/recovery/training-load"
+import { toCheckinInput } from "@/lib/recovery/recovery-state"
 import type {
-  RecoveryCheckinInput,
   RecoveryCheckinRow,
   RecoveryScoreResult,
   TrainingLoadSummary,
@@ -40,22 +40,6 @@ export type RecoveryContext = {
   averages7Days: RecoveryAverages
   averages30Days: RecoveryAverages
   trainingLoad: TrainingLoadSummary
-}
-
-function toCheckinInput(row: RecoveryCheckinRow | null): RecoveryCheckinInput {
-  return {
-    sleepHours: row?.sleep_hours ?? null,
-    sleepQuality: row?.sleep_quality ?? null,
-    stress: row?.stress ?? null,
-    fatigue: row?.fatigue ?? null,
-    soreness: row?.soreness ?? null,
-    mood: row?.mood ?? null,
-    readiness: row?.readiness ?? null,
-    restingHr: row?.resting_hr ?? null,
-    steps: row?.steps ?? null,
-    painIllness: row?.pain_illness ?? "no",
-    notes: row?.notes ?? null,
-  }
 }
 
 function average(values: Array<number | null>): number | null {
@@ -113,11 +97,13 @@ export async function loadRecoveryContext(
     )
   }
 
-  const checkins: RecoveryCheckinRow[] =
-    (checkinsResponse.data as RecoveryCheckinRow[] | null) ?? []
+  const checkins: RecoveryCheckinRow[] = Array.isArray(checkinsResponse.data)
+    ? (checkinsResponse.data as RecoveryCheckinRow[])
+    : []
 
-  const sessions: RecentSessionRow[] =
-    (sessionsResponse.data as RecentSessionRow[] | null) ?? []
+  const sessions: RecentSessionRow[] = Array.isArray(sessionsResponse.data)
+    ? (sessionsResponse.data as RecentSessionRow[])
+    : []
 
   const today =
     checkins.find((row) => row.checkin_date === localDate) ?? null

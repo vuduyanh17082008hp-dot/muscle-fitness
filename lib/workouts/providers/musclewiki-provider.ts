@@ -17,11 +17,13 @@ export class MuscleWikiProvider implements ExerciseProvider {
     return Boolean(process.env.MUSCLEWIKI_API_KEY);
   }
 
-  async search(_query?: string): Promise<ExerciseRecord[]> {
+  async search(query?: string): Promise<ExerciseRecord[]> {
+    void query;
     return [];
   }
 
-  async getById(_id: string): Promise<ExerciseRecord | null> {
+  async getById(id: string): Promise<ExerciseRecord | null> {
+    void id;
     return null;
   }
 }

@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { Info } from "lucide-react";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 
 /**
  * Scene 02 — Adaptive Training. Replaces the old giant "SYSTEM" watermark
@@ -31,20 +31,20 @@ export function AdaptiveTrainingScene() {
 
           gsap
             .timeline({
-              scrollTrigger: { trigger: rootRef.current, start: "top 70%", end: "top 30%", scrub: 0.6 },
+              scrollTrigger: { trigger: rootRef.current, ...enterOnce },
             })
             .fromTo(
               ".session-line",
-              { yPercent: 100, opacity: 0 },
-              { yPercent: 0, opacity: 1, stagger: 0.1, ease: ease.heavy },
+              { y: 16, opacity: 0 },
+              { y: 0, opacity: 1, duration: 0.5, stagger: 0.08, ease: ease.precise },
             )
             .fromTo(
               ".session-card",
-              { opacity: 0, y: 24, scale: 0.97 },
-              { opacity: 1, y: 0, scale: 1, ease: ease.soft },
-              "-=0.3",
+              { opacity: 0, y: 16, scale: 0.98 },
+              { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: ease.soft },
+              "-=0.25",
             )
-            .fromTo(".session-row", { opacity: 0, x: -12 }, { opacity: 1, x: 0, stagger: 0.08, ease: ease.precise }, "-=0.25");
+            .fromTo(".session-row", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, stagger: 0.06, ease: ease.precise }, "-=0.2");
         },
       );
 
@@ -58,7 +58,7 @@ export function AdaptiveTrainingScene() {
       ref={rootRef}
       id="system"
       data-chapter="system"
-      className="relative overflow-hidden bg-[var(--mf-pub-bg-deep)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative overflow-x-clip bg-[var(--mf-pub-bg-deep)] px-6 py-16 lg:px-12 lg:py-24"
     >
       <div
         aria-hidden="true"
@@ -71,8 +71,8 @@ export function AdaptiveTrainingScene() {
           <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-brand)]">02 · Adaptive Training</p>
 
           <h2 className="mt-4 font-heading text-4xl font-black uppercase leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
-            <span className="session-line block overflow-hidden"><span className="block">Train. Measure.</span></span>
-            <span className="session-line block overflow-hidden"><span className="block text-[var(--mf-brand)]">Adapt.</span></span>
+            <span className="session-line block">Train. Measure.</span>
+            <span className="session-line block text-[var(--mf-brand)]">Adapt.</span>
           </h2>
 
           <p className="mt-6 max-w-md text-base leading-7 text-[var(--mf-pub-text-secondary)]">

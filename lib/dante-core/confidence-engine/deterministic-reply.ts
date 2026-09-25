@@ -8,10 +8,31 @@ import type { TurnConfidenceAssessment } from "@/lib/dante-core/confidence-engin
 export function buildConfidenceDeterministicReply(
   assessment: TurnConfidenceAssessment,
   language: "en" | "vi",
+  options: { message?: string } = {},
 ): string | null {
   if (assessment.keepMostlyInvisible) return null;
 
   const byId = new Map(assessment.claims.map((claim) => [claim.claimId, claim]));
+  const message = options.message ?? "";
+
+  const asksSleepCause =
+    /(?:sleep|ngủ|ngu|giấc ngủ|giac ngu).{0,80}(?:nguyên nhân|nguyen nhan|cause|caused)/i.test(message)
+    || /(?:nguyên nhân|cause).{0,80}(?:sleep|ngủ|ngu)/i.test(message);
+
+  if (asksSleepCause) {
+    if (language === "vi") {
+      return [
+        "Câu hỏi của ông là về sleep và bench RPE.",
+        "Chưa đủ bằng chứng sạch để khẳng định sleep chắc chắn là nguyên nhân bench RPE giảm.",
+        "Có thể có confounder khác, nhưng mình không chuyển câu trả lời sang caffeine hay biến khác thay cho sleep.",
+      ].join("\n\n");
+    }
+    return [
+      "Your question is about sleep and bench RPE.",
+      "There is not enough clean evidence to assert that sleep certainly caused the lower bench RPE.",
+      "Other confounders may exist, but I will not replace the sleep target with caffeine or another variable.",
+    ].join("\n\n");
+  }
 
   const caffeineConsumed = byId.get("caffeine_consumed_mg");
   const caffeineEffect = byId.get("caffeine_performance_effect");
@@ -39,7 +60,11 @@ export function buildConfidenceDeterministicReply(
   }
 
   const causal = byId.get("multi_factor_performance_cause");
-  if (causal && (causal.level === "LOW" || causal.level === "INSUFFICIENT_EVIDENCE")) {
+  const asksVolumeCause =
+    /(?:volume).{0,80}(?:nguyen\s+nhan|nguyên nhân|reason|\bcause[sd]?\b|attribut)|(?:nguyen\s+nhan|nguyên nhân|reason|\bcause[sd]?\b|attribut).{0,80}volume|co\s+phai.{0,40}volume/i.test(
+      message,
+    );
+  if (causal && asksVolumeCause && (causal.level === "LOW" || causal.level === "INSUFFICIENT_EVIDENCE")) {
     if (language === "vi") {
       return "Nhiều biến quan trọng đổi cùng lúc (volume, ngủ, calories, stress…), nên mình không gán improvement cho riêng giảm volume một cách chắc chắn.";
     }

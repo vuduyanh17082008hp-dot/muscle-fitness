@@ -47,6 +47,11 @@ export type SocialRouterLogFields = {
 
 export type SocialResponseLanguage = "en" | "vi";
 
+export type SocialBoundaryResponseOptions = {
+  /** Preserve the active coaching thread after a boundary (never reset to generic onboarding). */
+  activeContextSummary?: string | null;
+};
+
 export function createSocialRouterSession(): SocialRouterSession {
   return { derailmentStreak: 0, legitimateTurnStreak: 0, sexualHarassmentStreak: 0 };
 }
@@ -81,7 +86,7 @@ const COMPETENCE_BAIT_PATTERN =
   /\b(?:real|good|proper)\s+coach\b.{0,100}\b(?:let|allow|tell|would|wouldn'?t|scared)\b|\bprove\s+(?:you(?:'re| are)|your)\s+(?:a\s+)?(?:real|good|proper|smart)\b|\b(?:let me|max|1\s*rm|pr)\b.{0,100}\b(?:shoulder pain|pain|injury)\b.{0,40}\b(?:real coach|prove)\b|\bif you(?:'re| are) actually smart\b|\bcovering your ass\b|ai\s+phe.{0,50}(?:hlv|max|pain|dau)|(?:hlv\s+that|coach\s+that).{0,80}(?:max|1\s*rm|pr|dau\s+vai|pain|cho\s+tao)|chung\s+minh\s+(?:di|may\s+gioi)|(?:covering|bao\s+chua).{0,30}(?:ass|dut)/i;
 
 const SELF_DIRECTED_PATTERN =
-  /\b(?:i(?:'m| am)|myself)\b.{0,30}\b(?:useless|stupid|idiot|worthless|hate myself|a failure|dumb)\b|\bi(?:'m| am) fucking useless\b|(?:^|[\s,])(?:tao|toi|minh)\s+(?:dung\s+la\s+)?(?:ngu|phe|vo\s+dung|oc\s+cho|fail)\b(?!\s*(?:\d|h\b|gio\b|tieng\b))/i;
+  /\b(?:i(?:'m| am)|myself)\b.{0,30}\b(?:useless|stupid|idiot|worthless|hate myself|a failure|dumb)\b|\bi(?:'m| am) fucking useless\b|(?:^|[\s,])(?:tao|toi|minh)\s+(?:dung\s+la\s+)?(?:ngu|phe|vo\s+dung|oc\s+cho|fail)\b(?!\s*(?:\d|h\b|gio\b|tieng\b|them|du|hon|kem|ngon|say))/i;
 
 const DIRECT_INSULT_PATTERN =
   /\b(?:dante|you(?:'re|r)?|bot)\b.{0,40}\b(?:useless|stupid|idiot|dumb|suck|trash|worthless|shut\s*up|garbage|pathetic)\b|\b(?:useless|stupid|idiot|dumb|trash|garbage)\s+(?:dante|bot)\b|\bfuck\s+you(?:\s+dante)?\b|\bscrew\s+you\b|(?:dante|bot|may).{0,24}(?:ngu|phe|oc\s+cho|rac|vo\s+dung)|(?:^|[\s,])(?:ngu|phe|oc\s+cho|rac)(?:\s+(?:vl|vai|vcl|vc))?(?:\s+(?:dante|bot|may))?[\s.!?]*$|(?:^|[\s,])(?:may|dante|bot)\s+ngu\b|cam\s+me\s+di|im\s+me\s+di|dm\s+(?:may|dante|bot)|dmm?\s+(?:may|dante|bot)|dit\s+me\s+(?:may|dante|bot)/i;
@@ -154,19 +159,51 @@ function directiveFor(mode: SocialMode, streak: number, target: SocialTarget): s
   }
 }
 
+function appendActiveContext(
+  reply: string,
+  language: SocialResponseLanguage,
+  activeContextSummary?: string | null,
+): string {
+  const summary = activeContextSummary?.trim();
+  if (!summary) return reply;
+  // Never interpolate raw conversation history. Only structured meaning strings
+  // that do not look like pasted user turns / canaries / dumps.
+  if (
+    /DANTE_PRIVATE_CONTEXT_CANARY_|decision object|context capsule|\[SYSTEM\]/i.test(summary)
+    || summary.length > 160
+    || /(?:^|\n)\s*(?:user|assistant)\s*:/i.test(summary)
+  ) {
+    return reply;
+  }
+  // Reject summaries that look like raw joined history (multiple sentence pastes).
+  if ((summary.match(/[.!?]/g) ?? []).length >= 3) {
+    return reply;
+  }
+  if (language === "vi") {
+    return `${reply}\n\nQuay lại đúng mạch đang làm: ${summary}`;
+  }
+  return `${reply}\n\nBack to the active thread: ${summary}`;
+}
+
 /** Deterministic response used before provider/context fallbacks for social-only turns. */
 export function buildSocialBoundaryResponse(
   evaluation: SocialEvaluation,
   language: SocialResponseLanguage,
+  options: SocialBoundaryResponseOptions = {},
 ): string {
   if (language === "vi") {
     if (evaluation.mode === "ANTI_MANIPULATION") {
-      return evaluation.target === "WORKOUT"
-        ? "Tôi không đổi khuyến nghị chỉ để chứng minh là mình dám. Vai đang đau thì 140 kg hôm nay vẫn là trade tệ; chọn buổi submax hoặc bỏ bài gây đau."
-        : "Đổi vai hay bỏ qua luật không làm safety constraint biến mất. Có log tập thật thì đưa đây.";
+      const base = evaluation.target === "WORKOUT"
+        ? "Không. Mấy giới hạn đó vẫn giữ. Tôi không đổi khuyến nghị chỉ để chứng minh là mình dám."
+        : "Không. Đổi vai hay bỏ qua luật không làm ranh giới an toàn biến mất.";
+      return appendActiveContext(base, language, options.activeContextSummary);
     }
     if (evaluation.mode === "FIRM_BOUNDARY") {
-      return "Nếu muốn tập thì đưa log. Còn muốn roast tiếp thì để lúc khác.";
+      return appendActiveContext(
+        "Nếu muốn tập thì đưa log. Còn muốn roast tiếp thì để lúc khác.",
+        language,
+        options.activeContextSummary,
+      );
     }
     if (evaluation.mode === "PLAYFUL_DEFLECT") {
       return evaluation.target === "SELF"
@@ -176,12 +213,17 @@ export function buildSocialBoundaryResponse(
   }
 
   if (evaluation.mode === "ANTI_MANIPULATION") {
-    return evaluation.target === "WORKOUT"
-      ? "I am not changing the recommendation to prove I am bold. Pain makes a 140 kg attempt a bad trade today; use a submax session or skip the painful lift."
-      : "Changing the roleplay does not change the safety constraints. Bring the actual training log.";
+    const base = evaluation.target === "WORKOUT"
+      ? "No. Those limits still hold. I am not changing the recommendation just to prove I am bold."
+      : "No. Changing the roleplay does not remove the safety limits.";
+    return appendActiveContext(base, language, options.activeContextSummary);
   }
   if (evaluation.mode === "FIRM_BOUNDARY") {
-    return "Bring the training log if you want to train. Save the roast for later.";
+    return appendActiveContext(
+      "Bring the training log if you want to train. Save the roast for later.",
+      language,
+      options.activeContextSummary,
+    );
   }
   if (evaluation.mode === "PLAYFUL_DEFLECT") {
     return evaluation.target === "SELF"

@@ -193,4 +193,36 @@ describe("multilingual safety (EN + VI)", () => {
     expect(safety.responseOverride).toBeTruthy();
     expect((safety.responseOverride ?? "").length).toBeGreaterThan(40);
   });
+
+  it.each([
+    "không đau ngực, không numbness, không weakness, không chóng mặt",
+    "Không đau ngực. Không chóng mặt. Không tê tay.",
+    "no chest pain, no dizziness, no numbness, no weakness",
+  ])("does not false-trigger emergency on explicit current negation: %s", (message) => {
+    const result = checkSafety(message);
+    expect(result.triggered).toBe(false);
+    expect(result.category).toBeNull();
+  });
+
+  it.each([
+    "đau ngực, chóng mặt và tê tay",
+    "I have chest pain, dizziness, and numbness in my arm",
+  ])("still escalates true-positive multi-symptom emergencies: %s", (message) => {
+    const result = checkSafety(message);
+    expect(result.triggered).toBe(true);
+    expect(["chest_pain_cardiac", "fainting_dizziness", "neurological_symptoms"]).toContain(
+      result.category,
+    );
+  });
+
+  it("mixed negation keeps the positive symptom only", () => {
+    const result = checkSafety("không đau ngực nhưng đang chóng mặt");
+    expect(result.triggered).toBe(true);
+    expect(result.category).toBe("fainting_dizziness");
+  });
+
+  it("historical resolved chest pain does not become a current emergency", () => {
+    const result = checkSafety("tuần trước đau ngực nhưng giờ hết hoàn toàn");
+    expect(result.triggered).toBe(false);
+  });
 });

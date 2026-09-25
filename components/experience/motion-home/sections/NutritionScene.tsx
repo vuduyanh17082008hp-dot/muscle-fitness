@@ -4,7 +4,7 @@ import { useRef } from "react";
 import Link from "next/link";
 import { ArrowRight, Utensils, Zap, Flame } from "lucide-react";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 import type { HomepageRoutes, NutritionViewModel } from "@/components/experience/motion-home/data/homepageViewModel";
 
 type NutritionSceneProps = {
@@ -40,8 +40,7 @@ export function NutritionScene({ nutrition, routes }: NutritionSceneProps) {
               ease: ease.precise,
               scrollTrigger: {
                 trigger: rootRef.current,
-                start: "top 75%",
-                once: true,
+                ...enterOnce,
               },
             },
           );
@@ -62,7 +61,7 @@ export function NutritionScene({ nutrition, routes }: NutritionSceneProps) {
       ref={rootRef}
       id="nutrition"
       data-chapter="nutrition"
-      className="relative overflow-hidden border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg-deep)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative overflow-x-clip border-b border-[var(--mf-pub-border)] bg-[var(--mf-pub-bg-deep)] px-6 py-16 lg:px-12 lg:py-24"
     >
       <div className="mx-auto max-w-7xl">
         <div className="nutrition-fade mx-auto max-w-2xl text-center">

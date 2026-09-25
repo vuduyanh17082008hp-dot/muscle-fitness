@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import Link from "next/link";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 import { DanteRobot } from "@/components/dante/dante-robot";
 import type {
   DanteViewModel,
@@ -46,19 +46,19 @@ export function MuscleIntelligenceScene({
 
           gsap
             .timeline({
-              scrollTrigger: { trigger: rootRef.current, start: "top 70%", end: "top 30%", scrub: 0.8 },
+              scrollTrigger: { trigger: rootRef.current, ...enterOnce },
             })
             .fromTo(
               ".muscle-line",
-              { yPercent: 100, opacity: 0 },
-              { yPercent: 0, opacity: 1, stagger: 0.08, ease: ease.heavy },
+              { y: 16, opacity: 0 },
+              { y: 0, opacity: 1, duration: 0.5, stagger: 0.08, ease: ease.precise },
             )
-            .fromTo(".muscle-fade", { opacity: 0, y: 20 }, { opacity: 1, y: 0, stagger: 0.08, ease: ease.soft }, "-=0.3")
+            .fromTo(".muscle-fade", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.06, ease: ease.soft }, "-=0.25")
             .fromTo(
               ".muscle-dante",
-              { opacity: 0, y: 18, scale: 0.9 },
-              { opacity: 1, y: 0, scale: 1, ease: "back.out(1.6)" },
-              "-=0.4",
+              { opacity: 0, y: 12, scale: 0.98 },
+              { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: ease.soft },
+              "-=0.3",
             );
         },
       );
@@ -73,7 +73,7 @@ export function MuscleIntelligenceScene({
       ref={rootRef}
       id="muscle"
       data-chapter="muscle"
-      className="relative overflow-hidden bg-[var(--mf-pub-bg)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative overflow-x-clip bg-[var(--mf-pub-bg)] px-6 py-16 lg:px-12 lg:py-24"
     >
       {/* Ambient accents */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
@@ -89,8 +89,8 @@ export function MuscleIntelligenceScene({
           </div>
 
           <h2 className="mt-4 font-heading text-5xl font-black uppercase leading-[0.9] tracking-[-0.03em] sm:text-6xl lg:text-7xl">
-            <span className="muscle-line block overflow-hidden"><span className="block">See every muscle.</span></span>
-            <span className="muscle-line block overflow-hidden"><span className="block text-[var(--mf-brand)]">Track real exposure.</span></span>
+            <span className="muscle-line block">See every muscle.</span>
+            <span className="muscle-line mt-1 block text-[var(--mf-brand)]">Track real exposure.</span>
           </h2>
 
           <p className="muscle-fade mt-6 max-w-lg text-base leading-7 text-[var(--mf-pub-text-secondary)]">

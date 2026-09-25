@@ -28,38 +28,9 @@ export type RequireCompletedOnboardingResult =
     profile: AuthenticatedProfile
   }
 
-type DashboardRpcPayload = {
-  profile?: {
-    fullName?: string | null
-    onboardingCompleted?: boolean
-  }
-}
-
-type DashboardRpcError = {
-  message: string
-  details?: string | null
-  hint?: string | null
-  code?: string
-}
-
-type DashboardRpcResult = {
-  data: DashboardRpcPayload | null
-  error: DashboardRpcError | null
-}
-
-type DashboardRpcClient = {
-  rpc: (
-    functionName: 'get_client_dashboard',
-  ) => PromiseLike<DashboardRpcResult>
-}
-
 /**
- * Chỉ kiểm tra Supabase Auth.
- *
- * Không query bảng profiles trong function này để tránh:
- * - Sai tên cột user_id hoặc id.
- * - RLS profiles chưa đồng bộ.
- * - Query profile bị lặp lại nhiều lần.
+ * Supabase Auth only. Does not open product routes.
+ * Unauthenticated callers go to login — never to the dashboard.
  */
 export const requireUser = cache(
   async (): Promise<RequireUserResult> => {
@@ -83,11 +54,10 @@ export const requireUser = cache(
 )
 
 /**
- * Function tương thích cho những trang cũ vẫn đang import
- * requireCompletedOnboarding.
+ * Auth + completed onboarding. Used by the shared /dashboard layout
+ * so every product route under /dashboard/* is gated once.
  *
- * Profile được đọc từ get_client_dashboard() thay vì query
- * trực tiếp bảng profiles.
+ * Missing or incomplete profiles go to /onboarding, not the dashboard.
  */
 export const requireCompletedOnboarding = cache(
   async (
@@ -99,24 +69,20 @@ export const requireCompletedOnboarding = cache(
       userId,
     } = await requireUser()
 
-    const dashboardRpcClient =
-      supabase as unknown as DashboardRpcClient
-
     const {
-      data,
+      data: profile,
       error,
-    } = await dashboardRpcClient.rpc(
-      'get_client_dashboard',
-    )
+    } = await supabase
+      .from('profiles')
+      .select('user_id, full_name, onboarding_completed')
+      .eq('user_id', userId)
+      .maybeSingle()
 
     if (error) {
       console.error(
-        'Unable to load dashboard authentication context:',
+        'Unable to load dashboard onboarding context:',
         {
           message: error.message,
-          details: error.details ?? null,
-          hint: error.hint ?? null,
-          code: error.code ?? null,
         },
       )
 
@@ -125,16 +91,9 @@ export const requireCompletedOnboarding = cache(
       )
     }
 
-    const dashboardProfile =
-      data?.profile
-
-    if (
-      dashboardProfile?.onboardingCompleted !== true
-    ) {
+    if (!profile || profile.onboarding_completed !== true) {
       redirect(
-        `/onboarding?next=${encodeURIComponent(
-          nextPath,
-        )}`,
+        `/onboarding?next=${encodeURIComponent(nextPath)}`,
       )
     }
 
@@ -153,7 +112,7 @@ export const requireCompletedOnboarding = cache(
         user_id: userId,
 
         full_name:
-          dashboardProfile.fullName?.trim() ||
+          profile.full_name?.trim() ||
           metadataName?.trim() ||
           null,
 

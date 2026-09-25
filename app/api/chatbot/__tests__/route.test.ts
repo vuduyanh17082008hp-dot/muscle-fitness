@@ -159,10 +159,13 @@ recovery data if today’s state overrides it.`;
     const tablesTouched: string[] = [];
     const writeTablesTouched: string[] = [];
     // Durability restores may SELECT these; they are not workout writes.
+    // dante_coherence_state is the Phase 2 conversation-state row (loaded at request start, upserted with the
+    // turn's VersionedState). It holds no workout data; every other table write below still fails the test.
     const allowedReadTables = new Set([
       "profiles",
       "dante_nof1_experiments",
       "dante_tool_actions",
+      "dante_coherence_state",
     ]);
     vi.mocked(createClient).mockResolvedValue({
       auth: {
@@ -193,10 +196,18 @@ recovery data if today’s state overrides it.`;
         return {
           select: () => query,
           insert: () => {
+            if (table === "dante_coherence_state") return Promise.resolve({ error: null });
             writeTablesTouched.push(table);
             throw new Error(`Unexpected INSERT during unconfirmed workout change: ${table}`);
           },
           update: () => {
+            if (table === "dante_coherence_state") {
+              const chain: unknown = new Proxy(() => chain, {
+                get: (_target, prop) =>
+                  prop === "select" ? async () => ({ data: [{ state_version: 0 }], error: null }) : () => chain,
+              });
+              return chain;
+            }
             writeTablesTouched.push(table);
             throw new Error(`Unexpected UPDATE during unconfirmed workout change: ${table}`);
           },

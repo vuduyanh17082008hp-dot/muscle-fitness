@@ -68,24 +68,24 @@ export type QuickPrompt = {
 
 const QUICK_PROMPTS: QuickPrompt[] = [
   {
-    tag: "// TELEMETRY: SẴN SÀNG 87%",
-    label: "Hôm nay tôi nên tập gì?",
-    prompt: "Dựa vào chỉ số sẵn sàng 87%, hôm nay tôi nên tập bài gì?",
+    tag: "// TRAINING: TODAY",
+    label: "What should I train today?",
+    prompt: "Based on my current readiness, what should I train today?",
   },
   {
-    tag: "// DINH DƯỠNG: MỤC TIÊU 140g",
-    label: "Tôi có thể ăn gì để đạt mục tiêu protein?",
-    prompt: "Bạn có gợi ý dinh dưỡng nào để giúp tôi đạt mục tiêu 140g protein còn lại không?",
+    tag: "// NUTRITION: PROTEIN",
+    label: "How do I hit my protein target?",
+    prompt: "What should I eat to hit my remaining protein target?",
   },
   {
-    tag: "// HỆ THỐNG: CHƯA KIỂM TRA",
-    label: "Bạn chưa kiểm tra hôm nay.",
-    prompt: "Tôi cần thực hiện kiểm tra phục hồi hàng ngày.",
+    tag: "// RECOVERY: CHECK-IN",
+    label: "I haven't checked in today.",
+    prompt: "I still need to do my daily recovery check-in. What should I log?",
   },
   {
-    tag: "// PHÂN TÍCH: CHU KỲ 30 NGÀY",
-    label: "Tôi tiến bộ thế nào trong tháng này?",
-    prompt: "Tiến độ của tôi trong chu kỳ tập luyện và phục hồi 30 ngày qua như thế nào?",
+    tag: "// PROGRESS: 30 DAYS",
+    label: "How did I progress this month?",
+    prompt: "How did my training and recovery progress over the last 30 days?",
   },
 ];
 
@@ -122,9 +122,6 @@ export type DanteChatProps = {
 
 const DEFAULT_WELCOME_MESSAGE =
   "Hi. I'm **Dante**, your Muscle Fitness intelligence coach. Ask me about your training, nutrition, recovery or progress.";
-
-const DEFAULT_HERO_SUBTITLE =
-  "I understand your training profile, nutrition targets and current plan. Ask me about your training, nutrition, recovery or progress.";
 
 const SEVERITY_DOT: Record<string, string> = {
   warning: "bg-rose-400",
@@ -342,7 +339,6 @@ function PendingConfirmationPanel({
 export default function DanteChat({
   welcomeMessage = DEFAULT_WELCOME_MESSAGE,
   heroTitle = "Your AI Performance Coach",
-  heroSubtitle = DEFAULT_HERO_SUBTITLE,
   quickPrompts = QUICK_PROMPTS,
   contextualSuggestions,
   compact = false,
@@ -792,8 +788,8 @@ export default function DanteChat({
         "relative flex w-full flex-col font-sans overflow-hidden rounded-[24px] border border-white/6 p-4 sm:p-6 transition-all duration-500",
         hudStyles.obsidianCanvas,
         compact
-          ? "h-[min(65dvh,560px)] max-h-[min(65dvh,560px)] min-h-[460px]"
-          : "h-[min(82vh,860px)] min-h-[580px]",
+          ? "h-[min(65dvh,560px)] max-h-[min(65dvh,560px)] min-h-[420px]"
+          : "h-[min(82dvh,860px)] min-h-[520px] sm:min-h-[580px]",
         className
       )}
     >
@@ -815,35 +811,40 @@ export default function DanteChat({
       =================================================== */}
       <div
         className={cn(
-          "relative z-20 flex shrink-0 items-center transition-all duration-500",
+          "relative z-20 flex shrink-0 transition-all duration-500",
           isEmpty
-            ? "flex-col items-center justify-center my-3 py-2"
-            : "mb-3 flex-row items-center justify-between rounded-[18px] border border-white/6 bg-[#0e1016]/60 px-4 py-2.5 backdrop-blur-md"
+            ? "flex-col items-center justify-center gap-3 px-1 py-2 text-center"
+            : "mb-3 flex-row items-center justify-between rounded-[18px] border border-white/6 bg-[#0e1016]/60 px-3 py-2 sm:px-4 sm:py-2.5 backdrop-blur-md"
         )}
       >
         {/* Living Mascot Supervisor */}
-        <div className="flex items-center gap-3">
+        <div
+          className={cn(
+            "flex items-center gap-3",
+            isEmpty ? "w-full max-w-md flex-col sm:flex-row sm:justify-center" : "min-w-0 flex-1"
+          )}
+        >
           <div
             className={cn(
-              "relative flex items-center justify-center transition-all duration-500",
-              isEmpty ? "p-4 scale-100" : "scale-75 origin-left"
+              "relative flex shrink-0 items-center justify-center transition-all duration-500",
+              isEmpty ? "p-2 sm:p-4" : "origin-left scale-75"
             )}
           >
             {/* Volumetric Cone Light (Active in State 1) */}
             {isEmpty && (
-              <div aria-hidden="true" className={`absolute -top-2 w-[180px] h-[130px] pointer-events-none ${hudStyles.volumetricCone}`} />
+              <div aria-hidden="true" className={`absolute -top-2 hidden w-[180px] h-[130px] pointer-events-none sm:block ${hudStyles.volumetricCone}`} />
             )}
 
             {/* Elliptical Floor Reflection Sheen */}
             {isEmpty && (
-              <div aria-hidden="true" className={`absolute bottom-1 w-[130px] h-[22px] rounded-full pointer-events-none ${hudStyles.floorSheen}`} />
+              <div aria-hidden="true" className={`absolute bottom-1 hidden w-[130px] h-[22px] rounded-full pointer-events-none sm:block ${hudStyles.floorSheen}`} />
             )}
 
             {/* Concentric SVG Dashed Orbit Rings */}
             {isEmpty && (
               <svg
                 viewBox="-300 -140 600 280"
-                className="absolute inset-0 size-full overflow-visible pointer-events-none"
+                className="pointer-events-none absolute inset-0 hidden size-full overflow-visible sm:block"
                 aria-hidden="true"
               >
                 <ellipse
@@ -874,7 +875,7 @@ export default function DanteChat({
               {isEmpty && (
                 <div className={`absolute left-0 right-0 z-20 pointer-events-none ${hudStyles.scanlineBeam}`} />
               )}
-              <div className={hudStyles.mascotFloat}>
+              <div className={cn(hudStyles.mascotFloat, isEmpty && "origin-center max-sm:scale-[0.78]")}>
                 <DanteRobot
                   state={visualState}
                   size="sm"
@@ -885,17 +886,17 @@ export default function DanteChat({
           </div>
 
           {/* Morphing Metadata Breadcrumb */}
-          <div className={isEmpty ? "text-center" : "text-left"}>
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#D4FF00]">
-              {isEmpty ? "DANTE BIOMETRIC HUD • ONLINE" : "DANTE AI // PERFORMANCE INTELLIGENCE • LIVE"}
+          <div className={cn("min-w-0", isEmpty ? "text-center sm:text-left" : "text-left")}>
+            <p className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-[#D4FF00] sm:text-[10px] sm:tracking-[0.2em]">
+              {isEmpty ? "DANTE • ONLINE" : "DANTE • LIVE"}
             </p>
             {isEmpty ? (
-              <h2 className="mt-1 text-xl font-bold tracking-tight text-white md:text-2xl lg:text-3xl">
+              <h2 className="mt-1 text-lg font-bold tracking-tight text-white sm:text-xl md:text-2xl lg:text-3xl">
                 {heroTitle}
               </h2>
             ) : (
-              <p className="text-[11px] font-mono text-zinc-400">
-                ACTIVE CONTEXT: TRAINING • RECOVERY • NUTRITION
+              <p className="truncate text-[11px] font-mono text-zinc-400">
+                TRAINING • RECOVERY • NUTRITION
               </p>
             )}
           </div>
@@ -1011,7 +1012,7 @@ export default function DanteChat({
                         className="flex items-center gap-2.5 py-2 font-mono text-xs font-bold tracking-wider text-[#D4FF00]"
                       >
                         <span className="size-1.5 rounded-full bg-[#D4FF00] animate-ping" />
-                        <span>// DANTE ANALYZING BIOMETRICS</span>
+                        <span>{"// DANTE ANALYZING BIOMETRICS"}</span>
                         <div className="flex items-center gap-0.5 ml-1 select-none" aria-hidden="true">
                           <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
                           <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.2s" }} />
@@ -1212,9 +1213,9 @@ export default function DanteChat({
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}
             disabled={isLoading}
-            aria-label="Message Dante"
-            placeholder="Type a biometric command or query Dante..."
-            className="max-h-40 w-full flex-1 resize-none border-none bg-transparent font-mono text-xs leading-5 text-white outline-none shadow-none placeholder:text-zinc-500 focus:border-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Message to Dante"
+            placeholder="Ask Dante…"
+            className="max-h-40 w-full flex-1 resize-none border-none bg-transparent font-mono text-xs leading-5 text-white outline-none shadow-none placeholder:truncate placeholder:whitespace-nowrap placeholder:text-zinc-500 focus:border-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
           />
 
           {/* Live Audio Waveform (4 mini equalizer bars) */}

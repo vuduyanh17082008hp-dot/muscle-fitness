@@ -244,34 +244,6 @@ function DanteRobotMascot({
     return { y: 0, rotate: appliedTilt };
   }, [state, appliedTilt]);
 
-  const coreGlowAnimate = useMemo(() => {
-    if (reduceMotion) {
-      return { opacity: state === "thinking" || state === "listening" ? 0.55 : 0.35 };
-    }
-
-    if (state === "thinking") {
-      return { opacity: [0.35, 0.7, 0.35], scale: [1, 1.08, 1] };
-    }
-
-    if (state === "listening") {
-      return { opacity: 0.65, scale: 1.08 };
-    }
-
-    if (state === "speaking") {
-      return { opacity: [0.4, 0.6, 0.42, 0.58, 0.4], scale: [1, 1.05, 1, 1.04, 1] };
-    }
-
-    if (state === "success") {
-      return { opacity: 0.85, scale: 1.15 };
-    }
-
-    if (state === "error") {
-      return { opacity: 0.2, scale: 0.92 };
-    }
-
-    return { opacity: [0.3, 0.42, 0.3], scale: [1, 1.03, 1] };
-  }, [state, reduceMotion]);
-
   const eyeScale = getEyeScale(state, blinking);
   const eyeColor = state === "error" ? METAL : ACCENT_SOFT;
   const eyeGlow = state === "error" ? 0.25 : state === "listening" ? 1 : 0.75;

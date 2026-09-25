@@ -14,29 +14,29 @@ type ChipOption = {
 const CHIPS: ChipOption[] = [
   {
     id: "energetic",
-    label: "🔥 Tràn đầy năng lượng",
-    badge: "DANTE AI • ACTIVE MODE",
-    response: "Tuyệt vời! Dante đã tối ưu hóa bài tập hôm nay để đẩy cao hiệu suất tối đa.",
+    label: "Feeling strong",
+    badge: "DANTE • ACTIVE MODE",
+    response: "Got it. Keep today's session at full intent, then protect recovery afterward.",
     tilt: -2.5,
   },
   {
     id: "fatigued",
-    label: "⚡ Hơi mỏi cơ",
-    badge: "DANTE AI • AUTOREGULATING",
-    response: "Ghi nhận! Dante khuyến nghị hạ 10% RPE và tăng cường giãn cơ phục hồi.",
+    label: "Muscles feel tired",
+    badge: "DANTE • AUTOREGULATING",
+    response: "Noted. Lower RPE about 10% and add extra mobility work.",
     tilt: 0,
   },
   {
     id: "rest",
-    label: "🛌 Cần nghỉ ngơi sâu",
-    badge: "DANTE AI • RECOVERY MODE",
-    response: "Hiểu rồi! Dante đã kích hoạt chế độ Active Recovery & tối ưu giấc ngủ đêm nay.",
+    label: "Need deeper rest",
+    badge: "DANTE • RECOVERY MODE",
+    response: "Understood. Shift toward active recovery and protect tonight's sleep.",
     tilt: 2.5,
   },
 ];
 
-const DEFAULT_GREETING = "Hôm nay bạn cảm thấy thế nào? Cơ thể sẵn sàng cho buổi phục hồi tích cực chưa?";
-const DEFAULT_BADGE = "DANTE AI • ONLINE";
+const DEFAULT_GREETING = "How do you feel today? Ready for an active recovery session?";
+const DEFAULT_BADGE = "DANTE • ONLINE";
 
 export function DanteAgentInteractive() {
   const uid = useId().replace(/[:]/g, "");

@@ -21,5 +21,10 @@ export function getSafeNext(
   }
 
   // Training and onboarding are valid destinations; their own routes enforce auth.
+  // /settings is a stale alias — send post-login traffic to the canonical page.
+  if (value === "/settings") {
+    return "/dashboard/settings";
+  }
+
   return value;
 }

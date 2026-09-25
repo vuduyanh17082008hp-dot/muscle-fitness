@@ -63,13 +63,13 @@ function buildPendingAcceptReply(experiment: NOf1Experiment, language: "en" | "v
   if (language === "vi") {
     return [
       `Ông đã đồng ý chạy test ${experiment.experimentWindow.durationDays} ngày.`,
-      "Mình chưa ghi vào storage — hãy Confirm để kích hoạt ACTIVE (tool authority).",
-      `Biến test: ${experiment.variableUnderTest}. Control: ${experiment.controlledVariables.join(", ")}.`,
+      "Mình chưa ghi vào storage — hãy Confirm để kích hoạt test (chưa lưu thì chưa chạy).",
+      `Biến test: ${experiment.variableUnderTest}. Giữ ổn định: ${experiment.controlledVariables.join(", ")}.`,
     ].join("\n\n");
   }
   return [
     `You agreed to the ${experiment.experimentWindow.durationDays}-day test.`,
-    "Nothing is persisted yet — Confirm to activate ACTIVE (tool authority).",
+    "Nothing is persisted yet — Confirm to start the test (it is not running until saved).",
     `Variable under test: ${experiment.variableUnderTest}. Control: ${experiment.controlledVariables.join(", ")}.`,
   ].join("\n\n");
 }

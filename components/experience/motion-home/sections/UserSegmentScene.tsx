@@ -4,7 +4,7 @@ import { useRef } from "react";
 import Link from "next/link";
 import { ArrowRight, Dumbbell, Zap, Target } from "lucide-react";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 import type { HomepageRoutes } from "@/components/experience/motion-home/data/homepageViewModel";
 
 const SEGMENTS = [
@@ -53,7 +53,7 @@ export function UserSegmentScene({ routes }: { routes: HomepageRoutes }) {
 
           gsap
             .timeline({
-              scrollTrigger: { trigger: rootRef.current, start: "top 75%", once: true },
+              scrollTrigger: { trigger: rootRef.current, ...enterOnce },
             })
             .fromTo(".segment-header", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: ease.precise })
             .fromTo(
@@ -75,7 +75,7 @@ export function UserSegmentScene({ routes }: { routes: HomepageRoutes }) {
       ref={rootRef}
       id="audience"
       data-chapter="audience"
-      className="relative overflow-hidden bg-[var(--mf-pub-bg-deep)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative overflow-x-clip bg-[var(--mf-pub-bg-deep)] px-6 py-16 lg:px-12 lg:py-24"
     >
       {/* Background glow */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">

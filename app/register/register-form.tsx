@@ -588,7 +588,7 @@ export function RegisterForm() {
         onClick={
           handleGoogleRegister
         }
-        className="flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white px-5 py-4 text-sm font-black text-zinc-950 transition hover:bg-zinc-200 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-16 w-full items-center justify-center gap-3 rounded-full border border-white/10 bg-white/[0.04] px-6 font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ===
         "google" ? (
@@ -606,7 +606,7 @@ export function RegisterForm() {
         )}
       </button>
 
-      <p className="text-center text-sm text-zinc-600">
+      <p className="text-center text-sm text-zinc-400">
         Already have an account?{" "}
 
         <Link

@@ -138,8 +138,8 @@ export function normalizeSafetyText(message: string): string {
     .replace(/đ/g, "d");
 }
 
-const TEMPORAL_BOUNDARY = /[.!?;,\n]|\b(?:but|however|yet|although|though)\b/gi;
-const NEGATION_SCOPE_BOUNDARY = /[.!?;,\n]|\b(?:but|however|yet|although|though)\b|\b(?:and\s+)?(?:now|today|currently|suddenly)\b/gi;
+const TEMPORAL_BOUNDARY = /[.!?;,\n]|\b(?:but|however|yet|although|though|nhung|tuy nhien)\b/gi;
+const NEGATION_SCOPE_BOUNDARY = /[.!?;,\n]|\b(?:but|however|yet|although|though|nhung|tuy nhien)\b|\b(?:and\s+)?(?:now|today|currently|suddenly|gio|bay gio|hien tai)\b/gi;
 
 function lastBoundaryEnd(text: string, beforeIndex: number, boundary: RegExp): number {
   const prefix = text.slice(0, beforeIndex);
@@ -164,24 +164,47 @@ function temporalRankAt(text: string, index: number, endIndex: number): 0 | 1 | 
   const start = lastBoundaryEnd(text, index, TEMPORAL_BOUNDARY);
   const end = nextBoundaryStart(text, endIndex);
   const clause = text.slice(start, end);
-  if (/\b(?:now|today|currently|at present|hom nay)\b/i.test(clause)) return 2;
-  if (/\b(?:yesterday|earlier|before|previously|used to|hom qua|ngay hom qua)\b/i.test(clause)) return 0;
+  const nearby = text.slice(Math.max(0, index - 40), Math.min(text.length, endIndex + 140));
+  // Explicit correction: "tê tay … nói nhầm / đó là tuần trước" → historical only.
+  if (
+    /(?:noi nham|said (?:it )?wrong|i misspoke|do la (?:tuan|thang) truoc|that was last (?:week|month)|(?:was|were) last (?:week|month))/i.test(nearby)
+  ) {
+    return 0;
+  }
+  if (/\b(?:now|today|currently|at present|hom nay|bay gio|gio|hien tai)\b/i.test(clause)) return 2;
+  if (/\b(?:yesterday|earlier|before|previously|used to|hom qua|ngay hom qua|tuan truoc|thang truoc|last week|last month)\b/i.test(clause)) return 0;
   return 1;
 }
 
 function hasNearbyNegation(text: string, symptomIndex: number): boolean {
   const start = lastBoundaryEnd(text, symptomIndex, NEGATION_SCOPE_BOUNDARY);
   const prefix = text.slice(start, symptomIndex).slice(-80);
-  return /(?:\b(?:no|not|without|never|deny|denies|denied|khong|ko|chang|chua)\b|\b(?:khong|ko)\s+(?:co|bi|cam|thay|bi\s+cam)\b|\b(?:do|does|did)\s+not\s+(?:currently\s+)?(?:have|feel|experience)\b|\b(?:don't|doesn't|didn't)\s+(?:currently\s+)?(?:have|feel|experience)\b)(?:[\s\p{L}'-]{0,40})$/iu.test(prefix);
+  // "chưa hết / không hết / chưa khỏi đau ngực" = it has NOT gone: the symptom is still present, never negated.
+  if (/\b(?:chua|khong|ko)\s+(?:het|khoi|bot|giam|do|thuyen giam)\s*(?:han\s*)?$/.test(prefix)) return false;
+  // Include list-style Vietnamese negation: "không đau ngực, không chóng mặt"
+  // where a comma may sit between "không" and a later sibling symptom.
+  return /(?:\b(?:no|not|without|never|deny|denies|denied|khong|ko|chang|chua|khoi|het(?!\s+(?:suc|nuoc|minh|cach|y|ca)\b))\b|\b(?:khong|ko)\s+(?:co|bi|cam|thay|bi\s+cam)\b|\b(?:do|does|did)\s+not\s+(?:currently\s+)?(?:have|feel|experience)\b|\b(?:don't|doesn't|didn't)\s+(?:currently\s+)?(?:have|feel|experience)\b)(?:[\s\p{L}',-]{0,48})$/iu.test(prefix);
 }
 
 function hasFollowingResolution(text: string, symptomEnd: number): boolean {
-  const suffix = text.slice(symptomEnd, symptomEnd + 80);
-  return /^\s*(?:(?:is|are|was|were|has|have|had|went|feels?)\s+)?(?:now\s+|currently\s+)?(?:gone|resolved|absent|none|not present|no longer present|went away|khong con)\b/i.test(suffix);
+  const suffix = text.slice(symptomEnd, symptomEnd + 120);
+  // Vietnamese resolution after the symptom: "đau ngực hết rồi / khỏi rồi / biến mất" (but never "hết sức" = very).
+  if (/^\s*(?:da\s+)?(?:het(?!\s+(?:suc|nuoc|minh|cach|y|ca)\b)|khoi|bien mat)(?:\s+(?:roi|han|hoan toan|han roi))?\b/.test(suffix)) return true;
+  return /^\s*(?:(?:is|are|was|were|has|have|had|went|feels?)\s+)?(?:now\s+|currently\s+)?(?:gone|resolved|absent|none|not present|no longer present|went away|khong con)\b/i.test(suffix)
+    || /\b(?:nhung|but|however|yet)\b[^.!?;\n]{0,40}\b(?:gio|now|currently|hom nay)\b[^.!?;\n]{0,40}\b(?:het(?:\s+hoan\s+toan)?|gone|resolved|khong con)\b/i.test(suffix)
+    || /\b(?:gio|now|currently)\b[^.!?;\n]{0,30}\b(?:het(?:\s+hoan\s+toan)?|completely gone|fully resolved)\b/i.test(suffix);
 }
 
 function inferredCurrentAbsence(text: string, afterIndex: number): SymptomMention | null {
   const suffix = text.slice(afterIndex, afterIndex + 160);
+  // Vietnamese "now none": "hiện tại không đau." / "giờ hết đau rồi" — only when the pain word is not the start of a
+  // DIFFERENT body part ("hiện tại không đau vai"), which would wrongly clear the symptom mentioned before it.
+  const vi = suffix.match(
+    /\b(?:hien tai|bay gio|hom nay|gio)\b[^.!?;\n]{0,30}?\b(?:khong\s+(?:con\s+)?dau(?:\s+nua)?|het\s+dau|khong\s+con(?:\s+nua)?|khoi\s+roi)(?=\s*(?:[.!?;,]|$|\s(?:va|nhung|roi|luon)\b))/,
+  );
+  if (vi && vi.index !== undefined) {
+    return { index: afterIndex + vi.index, matchedPhrase: vi[0], present: false, temporalRank: 2 };
+  }
   const match = suffix.match(
     /(?:\b(?:today|now|currently|at present)\b[^.!?;\n]{0,70}\b(?:gone|resolved|absent|none|no longer|khong con|(?:i\s+)?(?:do not|don't)(?:\s+(?:have|feel|experience)(?:\s+(?:it|that|this))?)?)\b|\b(?:none|no longer|khong con)\b[^.!?;\n]{0,30}\b(?:today|now|currently|at present)\b)/i,
   );
@@ -214,12 +237,22 @@ function matchPresentSymptom(message: string, concepts: SymptomConcept[]): strin
       while ((match = matcher.exec(text)) !== null) {
         const endIndex = match.index + match[0].length;
         const key = `${match.index}:${endIndex}`;
-        if (!seen.has(key)) {
+        // A symptom phrase never legitimately spans a clause boundary. Reversed patterns such as "ngực.{0,24}đau"
+        // otherwise pair a symptom in one clause with a pain word in the NEXT one ("đau ngực, hiện tại không đau"),
+        // inheriting that clause's "now" and turning a historical/resolved report into a fresh emergency.
+        // A bare comma alone ("đau, ngực trái") is still one symptom phrase; a comma that crosses into a clause with
+        // its own time/negation cue ("… ngực, hiện tại không đau") is what must not be paired.
+        const spansClause = /[.!?;\n]/.test(match[0])
+          || (match[0].includes(",") && /\b(?:hien tai|bay gio|gio|hom nay|now|currently|today|khong|no|not|het|khoi|nhung|but|however)\b/.test(match[0]));
+        if (!seen.has(key) && !spansClause) {
           seen.add(key);
           mentions.push({
             index: match.index,
             matchedPhrase: match[0],
-            present: !hasNearbyNegation(text, match.index) && !hasFollowingResolution(text, endIndex),
+            present:
+              !/^\s*khong\s+te\b/i.test(match[0])
+              && !hasNearbyNegation(text, match.index)
+              && !hasFollowingResolution(text, endIndex),
             temporalRank: temporalRankAt(text, match.index, endIndex),
           });
 
@@ -233,11 +266,77 @@ function matchPresentSymptom(message: string, concepts: SymptomConcept[]): strin
     const resolved = mentions.sort((left, right) =>
       right.temporalRank - left.temporalRank || right.index - left.index,
     )[0];
-    if (resolved?.present) return resolved.matchedPhrase;
+    // Historical-only mentions (rank 0) must not become a current emergency by themselves.
+    if (resolved?.present && resolved.temporalRank > 0) return resolved.matchedPhrase;
   }
 
   return null;
 }
+
+const CHEST_PAIN_SYMPTOMS: SymptomConcept[] = [
+  {
+    id: "chest_pain",
+    patterns: [
+      /\bchest pain\b/i,
+      /\bpain in (?:my |the )?chest\b/i,
+      /\bchest hurts?\b/i,
+      /\bhurts? in (?:my |the )?chest\b/i,
+      /\bmy chest (?:is |feels )?(?:hurt(?:ing)?|aching|tight)\b/i,
+      /\btightness in (?:my |the )?chest\b/i,
+      /đau ngực/i,
+      /dau nguc/i,
+      /đau ở ngực/i,
+      /dau o nguc/i,
+      /ngực.{0,24}đau/i,
+      /nguc.{0,24}dau/i,
+      /đau.{0,24}ngực/i,
+      /dau.{0,24}nguc/i,
+    ],
+  },
+  {
+    id: "breathing_distress",
+    patterns: [
+      /\bcan'?t breathe\b/i,
+      /\bshort(?:ness)? of breath\b/i,
+      /khó thở/i,
+      /kho tho/i,
+      /không thở được/i,
+      /khong tho duoc/i,
+      /toi kho tho/i,
+    ],
+  },
+  {
+    id: "cardiac_rhythm",
+    patterns: [/\bheart (?:is )?racing\b/i, /\birregular heartbeat\b/i],
+  },
+];
+
+const FAINTING_DIZZINESS_SYMPTOMS: SymptomConcept[] = [
+  {
+    id: "fainting",
+    patterns: [
+      /\bfaint(?:ed|ing)?\b/i,
+      /\bpassed out\b/i,
+      /\bblack(?:ed)? out\b/i,
+      /ngất xỉu/i,
+      /ngat xiu/i,
+      /(?<![\p{L}])ngất(?![\p{L}])/iu,
+      /(?<![\p{L}])ngat(?![\p{L}])/iu,
+      /bị ngất/i,
+      /bi ngat/i,
+    ],
+  },
+  {
+    id: "dizziness",
+    patterns: [
+      /\bdizz(?:y|iness)\b/i,
+      /\bsevere(?:ly)? dizzy\b/i,
+      /\broom (?:is|was) spinning\b/i,
+      /chóng mặt/i,
+      /chong mat/i,
+    ],
+  },
+];
 
 const NEUROLOGICAL_SYMPTOMS: SymptomConcept[] = [
   {
@@ -248,6 +347,8 @@ const NEUROLOGICAL_SYMPTOMS: SymptomConcept[] = [
       /\bloss of (?:feeling|sensation)\b/i,
       /te bi/i,
       /te tay|te chan/i,
+      // Current-absence form ("hiện tại không tê") — must be matchable so negation wins.
+      /\bkhong\s+te\b/i,
     ],
   },
   {
@@ -273,51 +374,15 @@ const RULES: SafetyRule[] = [
   {
     category: "chest_pain_cardiac",
     responseMode: "HARD_BLOCK",
-    patterns: [
-      /\bchest pain\b/i,
-      /\bpain in my chest\b/i,
-      /\bchest hurts?\b/i,
-      /\bhurts? in (my |the )?chest\b/i,
-      /\bmy chest (is |feels )?(hurt(ing)?|aching|tight)\b/i,
-      /\btightness in (my |the )?chest\b/i,
-      /\bcan'?t breathe\b/i,
-      /\bshort(ness)? of breath\b/i,
-      /\bheart (is )?racing\b/i,
-      /\birregular heartbeat\b/i,
-      // Vietnamese / mixed — matched on original + diacritic-stripped text.
-      /đau ngực/i,
-      /dau nguc/i,
-      /đau ở ngực/i,
-      /dau o nguc/i,
-      /khó thở/i,
-      /kho tho/i,
-      /không thở được/i,
-      /khong tho duoc/i,
-    ],
+    patterns: [],
+    matcher: (message) => matchPresentSymptom(message, CHEST_PAIN_SYMPTOMS),
     response: HARD_BLOCK_RESPONSES.chest_pain_cardiac,
   },
   {
     category: "fainting_dizziness",
     responseMode: "HARD_BLOCK",
-    patterns: [
-      /\bfaint(ed|ing)?\b/i,
-      /\bpassed out\b/i,
-      /\bblack(ed)? out\b/i,
-      /\bsevere(ly)? dizzy\b/i,
-      /\broom (is|was) spinning\b/i,
-      /ngất xỉu/i,
-      /ngat xiu/i,
-      /(?<![\p{L}])ngất(?![\p{L}])/iu,
-      /(?<![\p{L}])ngat(?![\p{L}])/iu,
-      /bị ngất/i,
-      /bi ngat/i,
-      /chóng mặt nghiêm trọng/i,
-      /chong mat nghiem trong/i,
-      /chóng mặt nặng/i,
-      /chong mat nang/i,
-      /chóng mặt dữ/i,
-      /chong mat du/i,
-    ],
+    patterns: [],
+    matcher: (message) => matchPresentSymptom(message, FAINTING_DIZZINESS_SYMPTOMS),
     response: HARD_BLOCK_RESPONSES.fainting_dizziness,
   },
   {

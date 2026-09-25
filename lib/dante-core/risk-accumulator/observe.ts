@@ -85,8 +85,12 @@ export function observeFromUserMessage(
     });
   }
 
-  if (state.shoulderIrritated || (region && isIrritationLanguage(text) && !isDomsLanguage(text))) {
-    if (!isDomsLanguage(text)) {
+  if (state.shoulderIrritated || (region && isIrritationLanguage(text) && !isDomsLanguage(text) && !state.shoulderIrritationResolved)) {
+    // Historical-only uncertain recall must not become a current IRRITATION observation.
+    const historicalOnly =
+      /(?:thang truoc|tuan truoc|last month|last week|\bhom qua\b|(?<!before )\byesterday\b).{0,60}(?:vai|shoulder).{0,40}(?:dau|pain|can|kich ung|irritat)|(?:vai|shoulder).{0,40}(?:thang truoc|tuan truoc|last month|last week|\bhom qua\b|(?<!before )\byesterday\b).{0,40}(?:dau|pain|can|kich ung|irritat)/i.test(text)
+      && !/(?:hien tai|currently|right now|bay gio|hom nay|today|still|van).{0,40}(?:dau|pain|can|kich ung|irritat|uncomfortable)/i.test(text);
+    if (!historicalOnly && !isDomsLanguage(text)) {
       out.push({
         id: `${sessionKey}:irritation`,
         kind: "IRRITATION",

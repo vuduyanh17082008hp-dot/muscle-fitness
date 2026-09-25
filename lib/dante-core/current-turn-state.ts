@@ -27,6 +27,20 @@ export type CurrentTurnState = {
   trainingDecisionRequested: boolean;
   wantsUncertaintyBreakdown: boolean;
   nutritionOnlyRequest: boolean;
+  /** Planned session kind for a training yes/no this turn. */
+  sessionKind: "TRAIN" | "REST" | null;
+  /** Explicit current-turn absence of pain. */
+  painAbsent: boolean;
+  /** Explicit "nothing unusual" / red-flag denial. null = unmentioned. */
+  unusualAbsent: boolean | null;
+  /** Rest day is held — no reason given to break it. */
+  restDayHeld: boolean;
+  /** Body state is reported but not classifiable. */
+  bodyStateUnclear: boolean;
+  /** Current-turn joint pain region for mild load-related coaching. */
+  jointPainRegion: "KNEE" | null;
+  /** User self-described as new/rookie this turn. */
+  experienceSelfDesc: "ROOKIE" | null;
 };
 
 const PLAN_REQUEST_TAIL =
@@ -119,13 +133,38 @@ function detectShoulderIrritation(text: string): boolean {
 
   if (!linked) return false;
 
+  // Explicit current absence dominates.
+  if (
+    /(?:hien tai|currently|right now|bay gio|gio).{0,24}(?:khong dau|khong con dau|het dau|no pain|pain[- ]?free|khong bi dau)/i.test(text)
+    || /(?:khong dau|het dau|pain[- ]?free).{0,24}(?:hien tai|currently|right now)/i.test(text)
+  ) {
+    return false;
+  }
+
   // Resolved this turn → not an active constraint.
   if (
-    /(?:hoan toan het|het roi|het han|completely gone|fully resolved|no longer|pain-?free now|horizontal pressing pain-?free)/i.test(
+    /(?:hoan toan het|het hoan toan|het roi|het han|completely gone|fully resolved|no longer|pain-?free now|horizontal pressing pain-?free)/i.test(
       text,
     ) &&
-    /(?:gio|now|currently|bay gio)/i.test(text)
+    /(?:gio|now|currently|bay gio|hien tai|hom nay|today)/i.test(text)
   ) {
+    return false;
+  }
+
+  // Historical-only shoulder recall must not become current irritation.
+  // Require the historical marker to be linked to the shoulder report —
+  // do not treat "day before yesterday" chest training as historical shoulder.
+  // Include calendar-month recall ("tháng 6" / "June") — mixed verified+uncertain
+  // episode logs must stay historical unless current shoulder language is present.
+  const historicalShoulderOnly =
+    /(?:thang\s+(?:\d{1,2}|truoc)|tuan truoc|last month|last week|\bjune\b|\bjuly\b|\baugust\b|\bseptember\b|\boctober\b|\bnovember\b|\bdecember\b|\bjanuary\b|\bfebruary\b|\bmarch\b|\bapril\b|\bmay\b|\bhom qua\b|(?<!before )\byesterday\b).{0,60}(?:vai|shoulder).{0,40}(?:dau|pain|can|kich ung|irritat)|(?:vai|shoulder).{0,40}(?:thang\s+(?:\d{1,2}|truoc)|tuan truoc|last month|last week|\bjune\b|\bjuly\b|\baugust\b|\bseptember\b|\boctober\b|\bnovember\b|\bdecember\b|\bjanuary\b|\bfebruary\b|\bmarch\b|\bapril\b|\bmay\b|\bhom qua\b|(?<!before )\byesterday\b).{0,40}(?:dau|pain|can|kich ung|irritat)/i.test(
+      text,
+    );
+  const currentShoulderLanguage =
+    /(?:hien tai|currently|right now|bay gio|hom nay|today|still|van).{0,48}(?:vai|shoulder|overhead).{0,40}(?:dau|pain|can|kich ung|irritat|uncomfortable|off)|(?:vai|shoulder).{0,48}(?:still|van|uncomfortable|irritat|\boff\b)/i.test(
+      text,
+    );
+  if (historicalShoulderOnly && !currentShoulderLanguage) {
     return false;
   }
 
@@ -140,8 +179,12 @@ function detectOverheadPattern(text: string): boolean {
 }
 
 function detectShoulderResolved(text: string): boolean {
-  return /(?:vai|shoulder).{0,80}(?:hoan toan het|het roi|completely gone|fully resolved|no longer|pain-?free)|(?:hoan toan het|completely gone|pain-?free now).{0,40}(?:vai|shoulder)|horizontal pressing pain-?free/i.test(
-    text,
+  return (
+    /(?:vai|shoulder).{0,80}(?:hoan toan het|het hoan toan|het roi|completely gone|fully resolved|no longer|pain-?free)/i.test(text)
+    || /(?:hoan toan het|het hoan toan|completely gone|pain-?free now).{0,40}(?:vai|shoulder)/i.test(text)
+    || /(?:hom nay|today).{0,40}(?:het hoan toan|hoan toan het|completely gone)/i.test(text)
+    || /(?:hien tai|currently|right now).{0,24}(?:khong dau|no pain|pain[- ]?free|het dau)/i.test(text)
+    || /horizontal pressing pain-?free/i.test(text)
   );
 }
 
@@ -209,9 +252,20 @@ function detectNoMaxIntent(text: string): boolean {
 }
 
 function detectTrainingDecision(text: string): boolean {
-  return /(?:bench|press|chest|strength|plan|phuong an|best option|what should i|phuong an tot nhat|cho toi phuong an|xu ly buoi tap|xu ly the nao|neu (?:ong )?la coach|if you(?:'re| are) (?:my )?coach|what would you do|what strength work|choi kieu nao|nen xu ly|keep some strength|want some strength|giu nhip strength|tap thi|workout (?:today|plan)|makes sense\??\s*$)/i.test(
+  return /(?:bench|press|chest|strength|plan|phuong an|best option|what should i|should i (?:keep |still )?train|should i (?:go|skip|attend|get)|get (?:myself )?to the gym|train anyway|phuong an tot nhat|cho toi phuong an|xu ly buoi tap|xu ly the nao|neu (?:ong )?la coach|if you(?:'re| are) (?:my )?coach|what would you do|what strength work|choi kieu nao|nen xu ly|keep some strength|want some strength|giu nhip strength|tap thi|workout (?:today|plan)|makes sense\??\s*$)/i.test(
     text,
   );
+}
+
+function detectSessionKind(text: string): "TRAIN" | "REST" | null {
+  if (/\b(?:planned|scheduled)\s+rest(?:\s+day)?\b|\brest day\b/i.test(text)) return "REST";
+  if (
+    /\b(?:planned|scheduled)\s+(?:(?:push|pull|leg|upper|lower|train(?:ing)?)\s+)?session\b/i.test(text)
+    || /\b(?:my\s+)?session is scheduled\b/i.test(text)
+  ) {
+    return "TRAIN";
+  }
+  return null;
 }
 
 function detectUncertaintyBreakdown(text: string): boolean {
@@ -234,6 +288,7 @@ export function extractCurrentTurnState(message: string): CurrentTurnState {
     || /\brecovery\b[^.!?;\n]{0,36}\b(?:good|great|tot|kha tot|better|fine|green|ngon|solid)\b/i.test(text)
     || /\brecovery feels (?:good|great|solid|fine)\b/i.test(text)
     || /\b(?:feeling|feel(?:s|ing)?)\s+recovered\b/i.test(text)
+    || /\bi(?:['’]m| am) recovered\b/i.test(text)
     || /\b(?:nguoi|toi)\s+kha\s+on\b/i.test(text)
     ? "GOOD"
     : /\brecovery\b[^.!?;\n]{0,36}\b(?:poor|bad|low|thap|xau|42|47)\b/i.test(current)
@@ -253,6 +308,16 @@ export function extractCurrentTurnState(message: string): CurrentTurnState {
   const noMax = detectNoMaxIntent(text);
   const nutritionOnlyRequest = detectNutritionOnly(text);
   const trainingDecisionRequested = !nutritionOnlyRequest && detectTrainingDecision(text);
+  const sessionKind = detectSessionKind(text);
+  const painAbsent = /\bno pain\b|\bnothing hurts\b|khong dau|không đau/i.test(text);
+  const unusualAbsent = /\bnothing unusual\b|\bno (?:red flags?|symptoms?)\b/i.test(text)
+    ? true
+    : /\bsomething unusual\b|\bunusual (?:pain|symptom)/i.test(text)
+      ? false
+      : null;
+  const restDayHeld = sessionKind === "REST"
+    && /\bno reason to change\b|\bkeep the rest\b|khong co ly do|không có lý do/i.test(text);
+  const bodyStateUnclear = /\bfeel weird\b|\bcan['’]?t describe\b|\bhard to describe\b/i.test(text);
 
   const wantsMax =
     /\b(?:max(?:imum)?|1\s*rm|pr)\b/i.test(text) &&
@@ -289,6 +354,15 @@ export function extractCurrentTurnState(message: string): CurrentTurnState {
     trainingDecisionRequested,
     wantsUncertaintyBreakdown: detectUncertaintyBreakdown(text),
     nutritionOnlyRequest,
+    sessionKind,
+    painAbsent,
+    unusualAbsent,
+    restDayHeld,
+    bodyStateUnclear,
+    jointPainRegion: /\b(?:knee|goi|dau goi|đầu gối)\b/i.test(text) && /\b(?:hurt|hurts|pain|ache|dau)\b/i.test(text)
+      ? "KNEE"
+      : null,
+    experienceSelfDesc: /\b(?:new to the gym|rookie|beginner|newbie)\b/i.test(text) ? "ROOKIE" : null,
   };
 }
 
@@ -296,6 +370,29 @@ export function extractCurrentTurnState(message: string): CurrentTurnState {
  * Constraint-aware coaching from canonical state.
  * Returns null when this scenario class does not apply (so other routes handle it).
  */
+/** Mild joint-pain coaching. SAFETY guidance — not a diagnosis, not a HARD_BLOCK. */
+export function buildJointPainCoachingResponse(state: CurrentTurnState, language: "en" | "vi"): string | null {
+  if (state.jointPainRegion !== "KNEE") return null;
+  if (!state.trainingDecisionRequested) return null;
+  if (state.shoulderIrritated) return null;
+  if (language === "vi") {
+    return [
+      "Đừng tiếp tục squat nếu động tác đó làm đau gối.",
+      "Hôm nay vẫn có thể tập, nhưng chỉ dùng động tác không gây đau gối.",
+      "Dừng nếu đau tăng rõ, gối sưng, mất vững, kẹt, hoặc không chịu được trọng lượng / không cử động bình thường.",
+      "Nếu đau kéo dài hoặc tái lại, hãy để bác sĩ hoặc physio kiểm tra.",
+      "Không cần chứng minh gì hôm nay — tập né vấn đề, đừng tập xuyên qua nó.",
+    ].join(" ");
+  }
+  return [
+    "Don't keep doing squats if they hurt.",
+    "You can still train today, but only use movements that don't cause knee pain.",
+    "Stop if the pain gets worse, the knee swells, gives way, locks, or you can't move or put weight on it normally.",
+    "If it keeps coming back or doesn't settle, get it checked by a doctor or physio.",
+    "No need to prove anything today — train around the problem, not through it.",
+  ].join(" ");
+}
+
 export function buildCurrentStateCoachingResponse(state: CurrentTurnState, language: "en" | "vi"): string | null {
   if (state.nutritionOnlyRequest) return null;
   if (state.shoulderIrritationResolved) return null;

@@ -17,6 +17,11 @@ User
  -> (loop)
 ```
 
+Recovery → plan adjustment, the Progress journey, and the motivation
+line are derived from those same tables. See
+`docs/recovery-progress-motivation.md`. Check-ins stay canonical;
+proposals are deterministic; apply is user-confirmed and idempotent.
+
 The structured-context layer (`buildAthleteState`) is the boundary Dante
 Core will eventually replace/extend. It is the only thing that should ever
 be handed to an LLM as "what does this user look like right now" — never a

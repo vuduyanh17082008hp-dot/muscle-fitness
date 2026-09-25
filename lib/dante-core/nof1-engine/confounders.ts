@@ -6,7 +6,12 @@ const CONFOUNDER_MARKERS: Array<{ id: string; pattern: RegExp }> = [
   {
     id: "calorie_change",
     pattern:
-      /(?:calories?\s*(?:\+|plus|up|tang|increased|increase)|(?:increased|increase[sd]?)\s+calories?|tang\s+calories?|\+?\s*700|calorie\s+change)/i,
+      /(?:calories?\s*(?:\+|plus|up|tang|doi|changed?|increased?|increase)|(?:increased?|increase[sd]?|doi|tang)\s+calories?|tang\s+calories?|\+?\s*700|calorie\s+change)/i,
+  },
+  {
+    id: "training_volume_change",
+    pattern:
+      /(?:volume\s*(?:doi|changed?|tang|giam|up|down)|(?:doi|changed?|tang|giam)\s+volume|training\s+volume\s+change)/i,
   },
   { id: "program_change", pattern: /(?:new\s+(?:split|program)|doi\s+giao\s+an|training\s+split\s+moi|new\s+training\s+split)/i },
   // Short VI token "om" must be word-bounded — otherwise it matches English "complete"/"outcome".

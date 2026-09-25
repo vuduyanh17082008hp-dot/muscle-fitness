@@ -166,7 +166,8 @@ describe("nof1 — route integration", () => {
     const { text } = await postMessages([
       "Hôm qua tôi đi nhậu và hôm nay lại tăng calories khá nhiều.",
     ]);
-    expect(text).toMatch(/CONFOUNDED|chưa sạch|not clean/i);
+    expect(text).toMatch(/nhiễu|chưa sạch|not clean|không rút kết luận|will not force a conclusion/i);
+    expect(text).not.toMatch(/\bCONFOUNDED\b/);
   });
 
   it("LIVE CASE 4 — clean outcome supports with MODERATE, not proof", async () => {
@@ -174,7 +175,8 @@ describe("nof1 — route integration", () => {
     const { text } = await postMessages([
       "Kết thúc test rồi. RPE giảm từ khoảng 8.5 xuống 7, reps tăng nhẹ, volume giữ gần như cũ, sleep tốt hơn.",
     ]);
-    expect(text).toMatch(/SUPPORTS|MODERATE/i);
+    expect(text).toMatch(/nghiêng về giả thuyết|leans toward|MODERATE/i);
+    expect(text).not.toMatch(/\bSUPPORTS\b/);
     expect(text).not.toMatch(/statistically significant|\bproved\b/i);
     expect(text).toMatch(/không phải kết luận nhân quả|not causal certainty/i);
   });
@@ -197,7 +199,8 @@ describe("nof1 — route integration", () => {
   it("cross-session restore: durable ACTIVE drives coaching without prior chat", async () => {
     vi.mocked(loadActiveNof1Experiment).mockResolvedValue({ ...durableActive });
     const { text } = await postMessages(["What is my experiment tracking?"]);
-    expect(text).toMatch(/ACTIVE/i);
+    expect(text).toMatch(/underway|đang chạy|tracking|theo dõi/i);
+    expect(text).not.toMatch(/\bACTIVE\b/);
     expect(text).toMatch(/sleep duration|training volume|RPE/i);
   });
 
@@ -209,7 +212,7 @@ describe("nof1 — route integration", () => {
       activationError: "PGRST205",
     });
     const { text } = await postMessages(["Experiment của tôi đang theo dõi cái gì?"]);
-    expect(text).toMatch(/not activated|chưa ACTIVE|save failed|lưu thất bại/i);
+    expect(text).toMatch(/not activated|chưa chạy|save failed|lưu thất bại/i);
     expect(text).toMatch(/sleep duration|training volume|RPE/i);
     expect(createPendingAction).not.toHaveBeenCalled();
   });
@@ -244,7 +247,7 @@ describe("nof1 — route integration", () => {
       activationError: "PGRST205",
     });
     const { text } = await postMessages(["I went drinking and calories increased 700."]);
-    expect(text).toMatch(/never became ACTIVE|chưa từng ACTIVE/i);
+    expect(text).toMatch(/never became active|chưa từng chạy|never became ACTIVE|chưa từng ACTIVE/i);
     expect(updateNof1Experiment).not.toHaveBeenCalled();
   });
 
@@ -254,7 +257,8 @@ describe("nof1 — route integration", () => {
       "Hôm qua tôi đi nhậu và hôm nay calories tăng thêm khoảng 700.",
     ]);
     expect(events).toContainEqual(expect.objectContaining({ type: "done", model: "dante-nof1-engine" }));
-    expect(text).toMatch(/CONFOUNDED|not clean|chưa sạch/i);
+    expect(text).toMatch(/nhiễu|not clean|chưa sạch|không rút kết luận/i);
+    expect(text).not.toMatch(/\bCONFOUNDED\b/);
     expect(updateNof1Experiment).toHaveBeenCalledWith(
       expect.anything(),
       USER_ID,
@@ -276,8 +280,8 @@ describe("nof1 — route integration", () => {
     const { text } = await postMessages([
       "Kết thúc test rồi. RPE giảm từ 8.5 xuống 7, reps tăng nhẹ, volume gần như giữ nguyên, sleep tốt hơn.",
     ]);
-    expect(text).toMatch(/INCONCLUSIVE/i);
-    expect(text).not.toMatch(/SUPPORTS giả thuyết|result: SUPPORTS/i);
+    expect(text).toMatch(/chưa đủ để nghiêng|inconclusive/i);
+    expect(text).not.toMatch(/\bSUPPORTS\b|SUPPORTS giả thuyết|result: SUPPORTS/i);
     expect(updateNof1Experiment).toHaveBeenCalledWith(
       expect.anything(),
       USER_ID,

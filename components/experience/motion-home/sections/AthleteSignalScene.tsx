@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
-import { ease } from "@/components/experience/motion-home/motion/motionTokens";
+import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 
 /**
  * Scene 02 — Athlete Signal. Muscle Fitness doesn't start from "AI
@@ -60,7 +60,7 @@ export function AthleteSignalScene() {
           // and the diagram synchronized regardless of scroll speed.
           gsap
             .timeline({
-              scrollTrigger: { trigger: rootRef.current, start: "top 78%", once: true },
+              scrollTrigger: { trigger: rootRef.current, ...enterOnce },
             })
             .fromTo(".signal-heading", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise })
             .fromTo(
@@ -84,7 +84,7 @@ export function AthleteSignalScene() {
       ref={rootRef}
       id="signal"
       data-chapter="signal"
-      className="relative overflow-hidden bg-[var(--mf-pub-bg-deep)] px-6 py-24 lg:px-12 lg:py-32"
+      className="relative overflow-x-clip bg-[var(--mf-pub-bg-deep)] px-6 py-16 lg:px-12 lg:py-24"
     >
       {/* Background atmosphere */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">

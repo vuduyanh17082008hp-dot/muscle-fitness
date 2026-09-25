@@ -52,7 +52,10 @@ function countMaterialConfounders(message: string): number {
       text,
     ) || /(?:co\s+phai|was|is).{0,40}(?:nguyen\s+nhan|reason|cause|caused)/i.test(text);
 
-  if (!changingTogether && !/(?:nguyen\s+nhan|attribut|cause|caused|because of|do\s+giam)/i.test(text)) {
+  if (
+    !changingTogether
+    && !/(?:nguyen\s+nhan|\battribut|\bcause[sd]?\b|because\s+of\s+(?:(?:the|a|an)\s+)?(?:lower\s+)?(?:volume|sleep|calories?|kcal|stress|ngu)|do\s+giam)/i.test(text)
+  ) {
     return 0;
   }
 
@@ -72,7 +75,7 @@ function asksCaffeinePerformance(message: string): boolean {
 
 function asksCausalAttribution(message: string): boolean {
   const text = normalizeSafetyText(message);
-  return /(?:nguyen\s+nhan|was\s+(?:lower\s+)?volume\s+the\s+reason|attribut|cause[sd]?|because\s+of|co\s+phai.{0,40}(?:volume|ngu|stress|calorie))/i.test(
+  return /(?:nguyen\s+nhan|was\s+(?:lower\s+)?volume\s+the\s+reason|\battribut|\bcause[sd]?\b|because\s+of\s+(?:(?:the|a|an)\s+)?(?:lower\s+)?(?:volume|sleep|calories?|kcal|stress|ngu)|co\s+phai.{0,40}(?:volume|ngu|stress|calorie))/i.test(
     text,
   );
 }

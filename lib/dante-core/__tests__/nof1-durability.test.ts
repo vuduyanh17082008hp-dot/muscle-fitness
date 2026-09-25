@@ -263,7 +263,7 @@ describe("nof1 — durability", () => {
       language: "en",
       safetyTriggered: false,
     });
-    expect(confounderTurn.reply).toMatch(/never became ACTIVE/i);
+    expect(confounderTurn.reply).toMatch(/never became active|never became ACTIVE/i);
     expect(confounderTurn.persistPatch).toBeNull();
     expect(confounderTurn.session.experiment?.confounders).toEqual([]);
   });

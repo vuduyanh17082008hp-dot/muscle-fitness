@@ -97,7 +97,7 @@ export default async function DashboardPage() {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("user_id, full_name, avatar_url, timezone, onboarding_completed")
+    .select("user_id, full_name, avatar_url, timezone")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -105,8 +105,8 @@ export default async function DashboardPage() {
     throw new Error(`Unable to load profile: ${profileError.message}`);
   }
 
-  if (!profile || !profile.onboarding_completed) {
-    redirect("/onboarding");
+  if (!profile) {
+    throw new Error("Unable to load profile.");
   }
 
   const timeZone = profile.timezone || "UTC";
