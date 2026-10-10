@@ -1,0 +1,472 @@
+{
+ "this bowl has zero bite, everything's soft": {
+  "promptHash": "481fb5673e7b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 946
+ },
+ "I want it smoother, less dry.": {
+  "promptHash": "27dda5142584",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[\"creamy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 967
+ },
+ "something I can actually chew on, not just slurp": {
+  "promptHash": "bdc434c94640",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[\"chewy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 949
+ },
+ "how do I make a small portion look and feel like a big plate": {
+  "promptHash": "e14564a776d5",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"meal_density\",\"meal_composition\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 903
+ },
+ "đồ ăn mềm hết trơn, muốn có chút giòn giòn": {
+  "promptHash": "8bbcb493242b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[\"crunchy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 830
+ },
+ "sauce is thin and watery, want it richer in the mouth without loads of cream": {
+  "promptHash": "9ba645abf50e",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"sauces\"],\"goal\":null,\"sensory\":[\"creamy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 918
+ },
+ "this chicken tastes like cardboard": {
+  "promptHash": "e8c0bcfe9264",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"fried_chicken\"]}",
+  "ms": 875
+ },
+ "I want it to have a kick": {
+  "promptHash": "2cab5e0c3da4",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1073
+ },
+ "it tastes under-seasoned, when should I add the salt": {
+  "promptHash": "27c6890612d9",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 975
+ },
+ "herb ideas to make a plain chicken breast less sad": {
+  "promptHash": "752accda3eba",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"fried_chicken\"]}",
+  "ms": 1040
+ },
+ "big pour of a mild sauce or a little of a strong one?": {
+  "promptHash": "228fbe9a671b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"sauces\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 863
+ },
+ "món này nhạt nhẽo quá, muốn vị đậm đà hơn": {
+  "promptHash": "66b218c40dae",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1471
+ },
+ "dry rub or drowning it in sauce, which keeps it lighter": {
+  "promptHash": "b6893a8dd40c",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"keep_identity\",\"calorie_drivers\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 869
+ },
+ "can I just have a normal bowl of cereal and measure it?": {
+  "promptHash": "fe012ccd783e",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 809
+ },
+ "thèm ăn ngũ cốc socola quá": {
+  "promptHash": "101920e2e506",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 861
+ },
+ "need ice cream after this week, no lie": {
+  "promptHash": "e14f7050822f",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[\"craving_understanding\"],\"goal\":null,\"sensory\":[\"creamy\",\"sweet\"],\"cuisine\":[],\"food\":[\"ice_cream\"]}",
+  "ms": 1129
+ },
+ "can I have a proper small bowl of real ice cream on a cut": {
+  "promptHash": "37a97032d677",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"food_flexibility\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"ice_cream\"]}",
+  "ms": 901
+ },
+ "is protein ice cream actually the same as the real thing?": {
+  "promptHash": "d126c5bd30b6",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"estimate_confidence\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"ice_cream\"]}",
+  "ms": 853
+ },
+ "muốn ăn một ly kem nhỏ sau bữa tối, được không?": {
+  "promptHash": "99164be737f6",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"ice_cream\"]}",
+  "ms": 915
+ },
+ "kinda want Milo cereal but trying to be good": {
+  "promptHash": "92448d430c29",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 910
+ },
+ "use the cereal as a topping instead of the whole bowl?": {
+  "promptHash": "a5f36b416368",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"substitution\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 954
+ },
+ "KFC tonight but I'm in a deficit, how do I not wreck it": {
+  "promptHash": "ffb300400141",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"indulgent_meal\",\"meal_composition\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"fried_chicken\"]}",
+  "ms": 854
+ },
+ "what makes fried chicken so calorie heavy anyway": {
+  "promptHash": "7db0e0769580",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"calorie_drivers\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"fried_chicken\"]}",
+  "ms": 898
+ },
+ "my oven chicken always comes out dry and tasteless": {
+  "promptHash": "b25beabdb9b5",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"cooking_method\",\"flavor_texture\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 861
+ },
+ "gà rán air fryer có giòn được không?": {
+  "promptHash": "41d41ba66c8f",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"keep_identity\",\"cooking_method\"],\"goal\":null,\"sensory\":[\"crunchy\"],\"cuisine\":[],\"food\":[\"fried_chicken\"]}",
+  "ms": 983
+ },
+ "fried chicken keeps blowing my calorie budget, any way to keep it in": {
+  "promptHash": "ba5069d3e545",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"calorie_drivers\",\"keep_identity\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"fried_chicken\"]}",
+  "ms": 984
+ },
+ "the drink and the fries are where it goes wrong, right?": {
+  "promptHash": "12367f22d604",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"calorie_drivers\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"fries\"]}",
+  "ms": 841
+ },
+ "what makes a takeaway burger meal so heavy": {
+  "promptHash": "7c4ad071e723",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"calorie_drivers\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"fast_food\"]}",
+  "ms": 867
+ },
+ "đi ăn McDonald's thì nên gọi gì cho đỡ béo": {
+  "promptHash": "943b32e3f858",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"fast_food\"]}",
+  "ms": 853
+ },
+ "cereal leaves me starving by 10am, fix?": {
+  "promptHash": "da39cbb9d197",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"satiety\",\"meal_density\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 863
+ },
+ "want a breakfast that still feels like cereal but packs more protein": {
+  "promptHash": "6f944696b6ce",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"protein\",\"meal_composition\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 845
+ },
+ "turn my usual burger order into something that fits a cut without losing the burger": {
+  "promptHash": "aff1ad8182c4",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"keep_identity\",\"meal_composition\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"fast_food\"]}",
+  "ms": 901
+ },
+ "lighter breading ideas for chicken tenders": {
+  "promptHash": "08c503a374d5",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"meal_composition\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"fried_chicken\"]}",
+  "ms": 875
+ },
+ "grabbing a combo at the counter, which part do I cut first": {
+  "promptHash": "dabbae67d959",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 965
+ },
+ "turned my cereal into yoghurt mush and it's not cereal anymore lol": {
+  "promptHash": "39e3d3b75f56",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 924
+ },
+ "tối nay ăn bún chả, làm sao cho nhẹ bụng hơn": {
+  "promptHash": "8d0c9a977be6",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"meal_density\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 858
+ },
+ "bánh xèo giòn mà nhiều dầu quá, có version nào lighter không": {
+  "promptHash": "ae99069a7f61",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"keep_identity\"],\"goal\":null,\"sensory\":[\"crunchy\"],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 905
+ },
+ "chicken rice: steamed or roasted?": {
+  "promptHash": "4e079c06bd7a",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 832
+ },
+ "economy rice, how do I pick my dishes": {
+  "promptHash": "4bd67fd1a5a9",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"singapore_hawker\"],\"food\":[]}",
+  "ms": 1309
+ },
+ "kopitiam breakfast that won't sink my cut": {
+  "promptHash": "0c2751cc3af7",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"meal_composition\",\"indulgent_meal\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[\"singapore_hawker\"],\"food\":[]}",
+  "ms": 1009
+ },
+ "fish soup or yong tau foo, which is lighter?": {
+  "promptHash": "a896993bbad5",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"meal_density\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"singapore_hawker\"],\"food\":[]}",
+  "ms": 818
+ },
+ "mee goreng hay char kway teow, cái nào đỡ dầu hơn": {
+  "promptHash": "1b53476c1c93",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 813
+ },
+ "pho or laksa for dinner?": {
+  "promptHash": "0722d2ede8a3",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\",\"singapore_hawker\"],\"food\":[]}",
+  "ms": 852
+ },
+ "char kway teow seems so oily, is every stall like that": {
+  "promptHash": "3349da6cc0e4",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"singapore_hawker\"],\"food\":[]}",
+  "ms": 827
+ },
+ "sambal and gravy on everything, how do I keep that in check at the stalls": {
+  "promptHash": "72158bbd3350",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"indulgent_meal\",\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 2129
+ },
+ "near office got a food centre, usually what's lighter to order": {
+  "promptHash": "9ac6fb571c2f",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 989
+ },
+ "what actually matters most when trying to lose fat": {
+  "promptHash": "bc77db51ed36",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"energy_balance\",\"satiety\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1043
+ },
+ "lost weight but feel like I'm losing muscle too, what do I change food-wise": {
+  "promptHash": "1f3a6fe28998",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"protein\",\"satiety\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 891
+ },
+ "ate a whole pizza last night, should I fast today to make up for it": {
+  "promptHash": "165ddf5e366d",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"indulgent_meal\",\"adherence\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 887
+ },
+ "which change gives the most bang for buck on a cut": {
+  "promptHash": "b8f8d6fef0d9",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"energy_balance\",\"adherence\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1029
+ },
+ "đang giảm mỡ thì ăn tối sao cho no lâu": {
+  "promptHash": "e7db7dbfaa4b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"satiety\",\"meal_timing\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 902
+ },
+ "what goes into a balanced meal, generally": {
+  "promptHash": "1224c440c7b2",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"meal_composition\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 991
+ },
+ "can't eat enough to grow, I'm always full": {
+  "promptHash": "54966b4e9b1c",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"satiety\",\"meal_density\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 918
+ },
+ "is one big protein dinner enough or should I spread it out": {
+  "promptHash": "2970511133a2",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"protein\",\"meal_timing\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 918
+ },
+ "what should I eat before lifting": {
+  "promptHash": "846b2986395b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"meal_timing\",\"carbohydrate\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 955
+ },
+ "my gains stalled, is it a food thing?": {
+  "promptHash": "b5cb4754aa29",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"adherence\",\"protein\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 886
+ },
+ "đang bulk mà lười ăn quá, có mẹo gì không": {
+  "promptHash": "0094c471fc57",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"adherence\",\"meal_density\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 865
+ },
+ "lean bulk keeps falling apart cause I hate the food": {
+  "promptHash": "f0617dce6960",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"coaching\",\"topics\":[\"adherence\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 889
+ },
+ "I know it's not the best pick but I really want the burger": {
+  "promptHash": "b12bdb843dd9",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[\"craving_understanding\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"fast_food\"]}",
+  "ms": 1053
+ },
+ "I guessed my lunch portion, how off could the numbers be": {
+  "promptHash": "6424e6987b78",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"estimate_confidence\",\"portion_estimates\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 990
+ },
+ "do I need protein at every single meal": {
+  "promptHash": "7844e8b11515",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"protein\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 843
+ },
+ "are there foods I should never eat": {
+  "promptHash": "db481d553bcc",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"food_flexibility\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 964
+ },
+ "which of these two meals has more protein?": {
+  "promptHash": "2f36439a7130",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"protein\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 890
+ },
+ "xóa trứng ra khỏi món": {
+  "promptHash": "6228369fbff3",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 842
+ },
+ "ghi lại bữa trưa giúp mình": {
+  "promptHash": "f5a6291700db",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 935
+ },
+ "đang bulk, mỗi bữa cần bao nhiêu protein?": {
+  "promptHash": "37907f950644",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"protein\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 949
+ },
+ "rice and noodles while bulking: friend or foe?": {
+  "promptHash": "085d03b9f9a9",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"carbohydrate\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 953
+ },
+ "crushed cereal as the coating, good shout?": {
+  "promptHash": "7d0d0f02ce62",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"preferred_foods\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 962
+ },
+ "eating it slowly from a bowl instead of straight from the tub": {
+  "promptHash": "2df9cc188aa4",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"coaching\",\"topics\":[\"adherence\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1372
+ },
+ "pho with fewer noodles and more beef but the same broth": {
+  "promptHash": "bbfadf4bd981",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"keep_identity\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 1025
+ },
+ "curry noodles: is it the gravy or the noodles doing the damage": {
+  "promptHash": "4a0caa076248",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"calorie_drivers\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 939
+ },
+ "does the milk count for much or is it mostly the cereal": {
+  "promptHash": "ba9c1dc855fb",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"estimate_confidence\",\"portion_estimates\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 1028
+ },
+ "the chicken rice auntie asked if I wanted less rice, does it make much difference": {
+  "promptHash": "1c92c51c44a7",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"portion_estimates\",\"calorie_drivers\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 1225
+ },
+ "my rice bowl lunch needs something, not sure what": {
+  "promptHash": "6c33cb078419",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 879
+ },
+ "what can i throw on top so its not all mush": {
+  "promptHash": "f21836c53bab",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 887
+ },
+ "how do i make my smoothie thicker and more luscious": {
+  "promptHash": "16455118014e",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[\"creamy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 1049
+ },
+ "coffee in my protein shake makes it way too bitter": {
+  "promptHash": "20e173bbca1c",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[\"bitter\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 966
+ },
+ "thinking pho or bun bo hue tonight, how do I keep it light-ish": {
+  "promptHash": "7cf7e9faf919",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"meal_composition\",\"indulgent_meal\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 927
+ },
+ "com tam with grilled pork, decent choice?": {
+  "promptHash": "8770de1ff32f",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 1155
+ },
+ "should I trust an app's estimate or the brand's own label": {
+  "promptHash": "b0840db993a0",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"estimate_confidence\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1072
+ },
+ "why do you keep giving me ranges instead of one number": {
+  "promptHash": "5857e685470e",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 2330
+ },
+ "protein content of the tuna?": {
+  "promptHash": "6a70d303c26f",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"protein\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 861
+ },
+ "which option did I pick?": {
+  "promptHash": "d7d098f30c61",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 788
+ },
+ "greek yoghurt is disgusting to me": {
+  "promptHash": "9b371139129f",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1156
+ },
+ "remind me my carb goal for today": {
+  "promptHash": "c5f923bc55b8",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 825
+ },
+ "brine or yoghurt marinade so the breast doesn't dry out": {
+  "promptHash": "af06afa681d1",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"keep_identity\",\"cooking_method\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 908
+ },
+ "lemon or vinegar first, before reaching for more salt?": {
+  "promptHash": "e6d08ce98a45",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 928
+ },
+ "protein spread over the day, or one big shake after the gym?": {
+  "promptHash": "c0f466de49d9",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"protein\",\"meal_timing\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 906
+ },
+ "season in layers or all at the end?": {
+  "promptHash": "4ada19cfed5d",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1121
+ },
+ "lemongrass grilled pork or the fried spring rolls": {
+  "promptHash": "34aec94e7461",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"dish_patterns\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[\"fried_chicken\"]}",
+  "ms": 998
+ },
+ "is that number from a database or your guess?": {
+  "promptHash": "798cd5882355",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 792
+ },
+ "the portion looked tiny on the plate": {
+  "promptHash": "47b0c89bc2bb",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"portion_estimates\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 933
+ },
+ "sotong kangkong with extra sambal belacan, steady or not": {
+  "promptHash": "d239c8d78f17",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"singapore_hawker\"],\"food\":[]}",
+  "ms": 930
+ },
+ "garlic, ginger, lemongrass: how do I use them so it smells amazing": {
+  "promptHash": "8750084bda57",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1105
+ }
+}

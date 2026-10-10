@@ -424,18 +424,30 @@
    ============================================================ */
 
 .ecosystemRoot {
-  --r: 155px;
+  --r: 111px;
 }
 
 @media (min-width: 640px) {
   .ecosystemRoot {
-    --r: 175px;
+    --r: 139px;
+  }
+}
+
+@media (min-width: 768px) {
+  .ecosystemRoot {
+    --r: 174px;
   }
 }
 
 @media (min-width: 1024px) {
   .ecosystemRoot {
-    --r: 195px;
+    --r: 202px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .ecosystemRoot {
+    --r: 223px;
   }
 }
 

@@ -1,6 +1,6 @@
 /**
  * Local-only smoke: Confirm → ACTIVE via persistAcceptedNof1Experiment
- * against muscle-fitness-nof1-local (Docker). Skips if local API down.
+ * against muscle-fitness-nof1-local (Docker). Opt-in via NOF1_LOCAL_E2E=1; skips if local API down.
  *
  * Uses Supabase local demo JWT keys (not production). Never targets remote.
  */
@@ -68,7 +68,8 @@ const acceptInput = {
   templateId: "SLEEP_VS_VOLUME" as const,
 };
 
-describe("nof1 — local supabase persistence smoke", () => {
+// Opt-in: targets its own NOF1 local stack (:54321), unrelated to the MF stack — set NOF1_LOCAL_E2E=1.
+describe.skipIf(process.env.NOF1_LOCAL_E2E !== "1")("nof1 — local supabase persistence smoke", () => {
   it("Confirm → ACTIVE, restore, confound, isolate across users", async () => {
     if (!(await localReachable())) {
       console.warn("[skip] local Supabase API not reachable at", LOCAL_URL);

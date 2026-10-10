@@ -22,10 +22,23 @@ type FakeSessionRow = {
   session_state: string | null;
 };
 
+type FakeSessionExerciseRow = {
+  id: string;
+  exercise_id: string;
+  display_name: string;
+  target_sets: number;
+  target_rep_min: number;
+  target_rep_max: number;
+  rest_seconds: number;
+  is_skipped: boolean;
+};
+
 function createFakeSupabase(options: {
   timezoneByUser?: Map<string, string>;
   sessions: FakeSessionRow[];
+  exercises?: FakeSessionExerciseRow[];
   onProfilesQuery?: () => void;
+  onExerciseSelect?: (columns: string) => void;
 }) {
   const timezoneByUser = options.timezoneByUser ?? new Map<string, string>();
   const sessions = options.sessions;
@@ -78,9 +91,26 @@ function createFakeSupabase(options: {
 
       if (table === "workout_session_exercises") {
         return {
-          select: () => ({
+          select: (columns: string) => {
+            options.onExerciseSelect?.(columns);
+            return {
             eq: () => ({
-              order: async () => ({ data: [], error: null }),
+                order: async () => ({ data: options.exercises ?? [], error: null }),
+            }),
+            };
+          },
+        };
+      }
+
+      if (table === "exercise_library") {
+        return {
+          select: () => ({
+            in: async () => ({
+              data: (options.exercises ?? []).map((row) => ({
+                id: row.exercise_id,
+                primary_muscle: null,
+              })),
+              error: null,
             }),
           }),
         };
@@ -274,6 +304,52 @@ describe("loadTodaySession", () => {
 
     expect(result?.id).toBe("session-today");
     expect(profilesQueries).toBe(0);
+  });
+
+  it("maps canonical session-exercise columns into application fields", async () => {
+    let selectedColumns = "";
+    const supabase = createFakeSupabase({
+      timezoneByUser: new Map([[USER_A, "UTC"]]),
+      sessions: [{
+        user_id: USER_A,
+        id: "session-today",
+        name: "Push Day",
+        scheduled_for: "2026-09-13T09:00:00.000Z",
+        duration_minutes: 60,
+        session_state: "not_started",
+      }],
+      exercises: [{
+        id: "session-exercise-1",
+        exercise_id: "exercise-1",
+        display_name: "Bench Press",
+        target_sets: 3,
+        target_rep_min: 5,
+        target_rep_max: 7,
+        rest_seconds: 90,
+        is_skipped: true,
+      }],
+      onExerciseSelect: (columns) => {
+        selectedColumns = columns;
+      },
+    });
+
+    const result = await loadTodaySession(
+      supabase as never,
+      USER_A,
+      new Date("2026-09-13T05:00:00.000Z"),
+    );
+
+    expect(selectedColumns).toContain("display_name");
+    expect(selectedColumns).toContain("target_rep_min");
+    expect(selectedColumns).toContain("target_rep_max");
+    expect(selectedColumns).not.toMatch(/\bexercise_name\b|\brep_min\b|\brep_max\b/);
+    expect(result?.exercises[0]).toMatchObject({
+      exerciseName: "Bench Press",
+      targetSets: 3,
+      repMin: 5,
+      repMax: 7,
+      isSkipped: true,
+    });
   });
 });
 

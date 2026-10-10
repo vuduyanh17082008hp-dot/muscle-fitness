@@ -150,6 +150,10 @@ export default async function DashboardSectionPage({
     notFound()
   }
 
+  if (sectionKey === "check-in" || sectionKey === "messages") {
+    redirect("/dashboard")
+  }
+
   const Icon = section.icon
   const supabase = await createClient()
 
@@ -169,7 +173,7 @@ export default async function DashboardSectionPage({
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("full_name, onboarding_completed")
+      .select("full_name, onboarding_completed, timezone")
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase
@@ -332,7 +336,7 @@ export default async function DashboardSectionPage({
 
       {sectionKey === "calendar" && (
         calendarDays && calendarDays.some((day) => day.actions.length > 0) ? (
-          <CalendarAgenda days={calendarDays} />
+          <CalendarAgenda days={calendarDays} timeZone={profile?.timezone || "UTC"} />
         ) : (
           <EmptyState
             glass

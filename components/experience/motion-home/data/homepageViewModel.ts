@@ -103,7 +103,7 @@ export const FALLBACK_VIEW_MODEL: MotionHomepageViewModel = {
   recovery: {
     hasLiveScore: false,
     readiness: 72,
-    status: "Ready",
+    status: "Good",
     sleepHours: 7.5,
   },
   nutrition: {
@@ -125,7 +125,7 @@ export const FALLBACK_VIEW_MODEL: MotionHomepageViewModel = {
   },
   dante: {
     available: true,
-    statusLabel: "Dante Core · Online",
+    statusLabel: "Illustrative Dante preview",
   },
   routes: HOMEPAGE_ROUTES,
 };

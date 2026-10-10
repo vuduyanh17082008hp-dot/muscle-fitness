@@ -22,6 +22,7 @@ type EditableComponent = {
   confidence: number;
   per100g: { calories: number; protein: number; carbs: number; fat: number };
   included: boolean;
+  idempotencyKey: string;
 };
 
 type HawkerLensPanelProps = {
@@ -96,6 +97,7 @@ export function HawkerLensPanel({
           name: c.name,
           grams: c.estimatedGrams,
           confidence: c.confidence,
+          idempotencyKey: crypto.randomUUID(),
           per100g: {
             calories: (c.calories.estimate / c.estimatedGrams) * 100,
             protein: (c.protein.estimate / c.estimatedGrams) * 100,
@@ -145,6 +147,7 @@ export function HawkerLensPanel({
             grams: c.grams,
             per100g: c.per100g,
             confidence: c.confidence,
+            idempotencyKey: c.idempotencyKey,
           })),
         }),
       });

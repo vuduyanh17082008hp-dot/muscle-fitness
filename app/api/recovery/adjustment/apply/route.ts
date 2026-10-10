@@ -2,47 +2,24 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { createClient } from "@/lib/supabase/server"
+import { createRecoveryAdminClient } from "@/lib/supabase/admin"
 import { applyErrorMessage, applyWorkoutAdjustment } from "@/lib/recovery/apply-proposal"
-import { createSupabaseMutationStore, createSupabaseSessionWriter } from "@/lib/recovery/supabase-apply"
+import {
+  createSupabaseCanonicalCommit,
+  createSupabaseMutationStore,
+  createSupabaseProposalStore,
+  createSupabaseSessionWriter,
+} from "@/lib/recovery/supabase-apply"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const prescriptionSchema = z.object({
-  targetSets: z.number().nullable(),
-  repMin: z.number().nullable(),
-  repMax: z.number().nullable(),
-  isSkipped: z.boolean(),
-})
-
-const proposalSchema = z.object({
-  proposalId: z.string(),
-  subjectRef: z.string(),
-  workoutRef: z.string(),
-  planVersionRef: z.string(),
-  recoveryStateRef: z.string(),
-  safetyEvaluationRef: z.string(),
-  createdAtRef: z.string(),
-  expiresAtRef: z.string().optional(),
-  status: z.enum(["NO_CHANGE", "MINOR_ADJUSTMENT", "MODERATE_ADJUSTMENT", "REST_RECOMMENDED"]),
-  decisionState: z.enum(["RESOLVED", "CONDITIONAL", "INSUFFICIENT_INFORMATION"]),
-  evidenceRefs: z.array(z.string()),
-  changes: z.array(
-    z.object({
-      changeId: z.string(),
-      exerciseId: z.string().optional(),
-      sessionExerciseId: z.string().optional(),
-      exerciseName: z.string(),
-      action: z.enum(["KEEP", "REDUCE_SETS", "REDUCE_LOAD", "REDUCE_RPE", "REPLACE", "REMOVE", "REST"]),
-      before: prescriptionSchema.optional(),
-      after: prescriptionSchema.optional(),
-      reasonCode: z.string().optional(),
-      reasonDisplay: z.string().optional(),
-      evidenceRefs: z.array(z.string()),
-      constraintRefs: z.array(z.string()).optional(),
-    }),
-  ),
-})
+const applyRequestSchema = z
+  .object({
+    proposalId: z.string().min(1),
+    confirm: z.literal(true),
+  })
+  .strict()
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -54,6 +31,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: applyErrorMessage("UNAUTHENTICATED") }, { status: 401 })
   }
 
+  let admin
+  try {
+    admin = createRecoveryAdminClient()
+  } catch {
+    return NextResponse.json({ error: applyErrorMessage("APPLY_FAILED") }, { status: 500 })
+  }
+
   let body: unknown
   try {
     body = await request.json()
@@ -61,21 +45,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 })
   }
 
-  const parsed = z.object({ proposal: proposalSchema }).safeParse(body)
+  const parsed = applyRequestSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid adjustment proposal." }, { status: 400 })
+    return NextResponse.json({ error: "Invalid adjustment confirmation." }, { status: 400 })
   }
 
   const result = await applyWorkoutAdjustment({
     actorUserId: user.id,
-    proposal: parsed.data.proposal,
+    proposalId: parsed.data.proposalId,
     sessions: createSupabaseSessionWriter(supabase),
     mutations: createSupabaseMutationStore(supabase),
+    proposals: createSupabaseProposalStore(admin),
+    commit: createSupabaseCanonicalCommit(admin),
   })
 
   if (!result.ok) {
     const status =
-      result.error === "FORBIDDEN" ? 403 : result.error === "UNAUTHENTICATED" ? 401 : 409
+      result.error === "FORBIDDEN"
+        ? 403
+        : result.error === "UNAUTHENTICATED"
+          ? 401
+          : result.error === "PROPOSAL_NOT_FOUND" || result.error === "NOT_FOUND"
+            ? 404
+            : 409
     return NextResponse.json({ error: result.message, code: result.error }, { status })
   }
 

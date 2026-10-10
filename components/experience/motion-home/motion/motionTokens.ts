@@ -29,7 +29,7 @@ export const duration = {
  * Recovery -> Adapt -> Dante -> Convergence. This only drives the
  * right-side scroll progress rail (ChapterNav) — it is NOT the site's
  * main navigation (see MotionHomepage's header, which is a plain
- * product nav: Dashboard/Train/Nutrition/Progress/Dante). Convergence
+ * product nav: Dashboard/Training/Nutrition/Progress/Dante). Convergence
  * is a closing CTA, not a nav destination, so it has no entry here.
  */
 export const navChapters = [
@@ -40,8 +40,9 @@ export const navChapters = [
   { id: "training", index: "04", label: "Train" },
   { id: "muscle", index: "05", label: "Muscle" },
   { id: "recovery", index: "06", label: "Recover" },
-  { id: "adapt", index: "07", label: "Adapt" },
-  { id: "dante", index: "08", label: "Dante" },
+  { id: "nutrition", index: "07", label: "Nutrition" },
+  { id: "adapt", index: "08", label: "Adapt" },
+  { id: "dante", index: "09", label: "Dante" },
 ] as const;
 
 /** One-shot entrance. Never scrub, never pin — scrubbed fromTo

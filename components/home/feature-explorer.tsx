@@ -41,7 +41,7 @@ const EXPLORER_ITEMS: ExplorerItem[] = [
     text: "Adaptive splits and progression that react to your real performance and recovery — not a fixed template.",
     preview: "Bench Press · BUILD · +2.5kg this week",
     cta: "Explore Training",
-    href: "/training",
+    href: "/dashboard/workouts",
   },
   {
     key: "nutrition",
@@ -68,7 +68,7 @@ const EXPLORER_ITEMS: ExplorerItem[] = [
     text: "The AI layer that reads your whole athlete context and turns it into one practical next action.",
     preview: "\"Why this?\" evidence on every recommendation",
     cta: "Ask Dante",
-    href: "/chatbot",
+    href: "/dashboard/ai-coach",
   },
   {
     key: "progress",

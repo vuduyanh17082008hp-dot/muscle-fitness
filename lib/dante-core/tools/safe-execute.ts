@@ -23,6 +23,7 @@ export async function safeExecuteTool<TInput, TOutput>(
   try {
     return (await tool.execute(context, input)) as ToolExecuteResult<TOutput>;
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Unexpected tool error." };
+    console.error("[DANTE TOOL ERROR]", tool.name, error instanceof Error ? error.message : error);
+    return { ok: false, error: "Unexpected tool error." };
   }
 }

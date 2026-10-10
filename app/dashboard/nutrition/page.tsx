@@ -30,6 +30,7 @@ import { loadFoodLogForDate, resolveLocalToday } from "@/lib/nutrition/food-log/
 
 import { NutritionSettingsForm } from "./nutrition-settings-form"
 import { BudgetPlanner } from "@/components/nutrition/budget-planner"
+import { NutritionCoachPanel } from "@/components/nutrition/coach/nutrition-coach-panel"
 import { NutritionTracker } from "@/components/nutrition/nutrition-tracker"
 import { NutritionSectionReveal, NutritionResultGlow } from "@/components/nutrition/nutrition-motion"
 import { SectionTabs } from "@/components/dashboard/section-tabs"
@@ -40,6 +41,7 @@ export const dynamic = "force-dynamic"
 
 const NUTRITION_TABS = [
   { label: "Today", href: "/dashboard/nutrition#today" },
+  { label: "Coach", href: "/dashboard/nutrition#coach" },
   { label: "Plan", href: "/dashboard/nutrition#plan" },
   { label: "Macros", href: "/dashboard/nutrition#macros" },
   { label: "Insights", href: "/dashboard/ai-coach" },
@@ -187,7 +189,7 @@ export default async function NutritionPlanPage() {
   const foodLog = await loadFoodLogForDate(supabase, user.id, localDate)
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 pb-16">
+    <div className="mx-auto max-w-6xl space-y-10 overflow-x-clip pb-16">
       <SectionTabs tabs={NUTRITION_TABS} />
 
       {/* ===================================================
@@ -208,6 +210,14 @@ export default async function NutritionPlanPage() {
           />
         </NutritionSectionReveal>
       </div>
+
+      {/* ===================================================
+          NUTRITION COACH — macro-constrained meal & craving optimizer
+      =================================================== */}
+
+      <NutritionSectionReveal>
+        <NutritionCoachPanel />
+      </NutritionSectionReveal>
 
       {/* ===================================================
           HEADER

@@ -17,6 +17,7 @@ export default defineConfig({
     // dedicated tests colocated with the route, without moving any
     // existing lib/ test.
     include: ["lib/**/*.test.ts", "app/**/*.test.ts"],
+    setupFiles: ["./test/setup.ts"],
     environment: "node",
   },
 });

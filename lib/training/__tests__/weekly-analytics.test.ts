@@ -59,4 +59,25 @@ describe("computeWeeklyMuscleAnalytics", () => {
 
     expect(result.size).toBe(0);
   });
+
+  it("uses the profile timezone at the Monday week boundary", () => {
+    const instant = "2026-10-04T16:30:00.000Z"; // Monday 00:30 in Singapore
+    const sets = [
+      { exerciseId: BENCH, setType: "working" as const, completed: true, sessionId: "s1", completedAt: instant },
+    ];
+
+    const singapore = computeWeeklyMuscleAnalytics(sets, CONTRIBUTIONS, {
+      now: new Date(instant),
+      timeZone: "Asia/Singapore",
+    });
+    const utc = computeWeeklyMuscleAnalytics(sets, CONTRIBUTIONS, {
+      now: new Date(instant),
+      timeZone: "UTC",
+    });
+
+    expect(singapore.get("chest")?.currentWeek.totalEffectiveSets).toBe(1);
+    expect(utc.get("chest")?.currentWeek.totalEffectiveSets).toBe(1);
+    expect(singapore.get("chest")?.lastTrainedDate).toBe("2026-10-05");
+    expect(utc.get("chest")?.lastTrainedDate).toBe("2026-10-04");
+  });
 });

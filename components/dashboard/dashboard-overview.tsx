@@ -390,9 +390,9 @@ export function DashboardOverview({
             <EmptyState
               icon={CalendarClock}
               title="No workout scheduled today"
-              description="This card will populate from workout_sessions when Project 09 creates your training plan."
+              description="Build or activate a training plan to schedule your next session."
               href="/dashboard/workouts"
-              action="Open workouts"
+              action="Open training"
             />
           )}
         </article>
@@ -649,23 +649,11 @@ export function DashboardOverview({
                 }
               </p>
 
-              <Link
-                href="/dashboard/messages"
-                className="mt-4 inline-flex text-xs font-bold text-blue-300 hover:text-blue-200"
-              >
-                Open messages
-              </Link>
             </div>
           ) : (
-            <EmptyState
-              icon={
-                MessageSquareText
-              }
-              title="No coach message yet"
-              description="The latest coach or system message will appear here once one is sent."
-              href="/dashboard/messages"
-              action="Open messages"
-            />
+            <div className="mt-5 rounded-2xl border border-white/[0.08] bg-black/20 p-4 text-sm leading-6 text-zinc-400">
+              Your latest coach guidance will appear here when available.
+            </div>
           )}
         </article>
 
@@ -686,7 +674,7 @@ export function DashboardOverview({
             </h2>
 
             <p className="mt-3 max-w-xl text-sm leading-6 text-violet-100/60">
-              The shortcut is ready for Project 13, where tool calling will read authenticated client context instead of guessing.
+              Dante uses your authenticated training, nutrition, recovery and progress context to answer.
             </p>
 
             <Link

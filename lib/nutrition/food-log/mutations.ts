@@ -2,12 +2,17 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { isValidDateIso } from "@/lib/nutrition/date-utils"
+import { isSupportedFoodLogWriteDate } from "@/lib/nutrition/date-utils"
 import { scaleMacrosToGrams } from "@/lib/nutrition/food-log-calculator"
 import type { NormalizedFoodMacros } from "@/lib/nutrition/food-data/types"
 import type { EstimationConfidence, FoodLogSource, MealType } from "./types"
+import { isIdempotencyKey } from "./idempotency-key"
 import { mapFoodLogRow, resolveLocalToday, type FoodLogRow } from "./load-food-log-context"
 import { emitEvent } from "@/lib/events/emit"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
+
+const FOOD_LOG_SELECT =
+  "id, log_date, meal_type, food_name, brand, source, source_id, barcode, quantity_grams, serving_name, servings_consumed, calories, protein_g, carbs_g, fat_g, fiber_g, is_estimated, estimation_confidence, estimation_reason, estimated_from, created_at"
 
 export type CreateFoodLogInput = {
   mealType: MealType
@@ -32,11 +37,21 @@ export type CreateFoodLogInput = {
   estimatedFrom?: string | null
 
   logDate?: string
+
+  /** Client-generated request key. Scoped to user_id; never used for ownership. */
+  idempotencyKey?: string
+
+  /**
+   * A claimed (confirmed) Dante pending action. When set, the insert and the
+   * action's transition to 'executed' happen in ONE transaction
+   * (finalize_food_log_action); the action id is the idempotency key.
+   */
+  finalizeActionId?: string
 }
 
 export type MutationResult<T> =
   | { success: true; data: T }
-  | { success: false; error: string }
+  | { success: false; error: string; status?: 400 | 500 }
 
 export async function createFoodLog(
   supabase: SupabaseClient,
@@ -44,60 +59,72 @@ export async function createFoodLog(
   input: CreateFoodLogInput,
 ): Promise<MutationResult<ReturnType<typeof mapFoodLogRow>>> {
   if (!input.foodName.trim()) {
-    return { success: false, error: "Food name is required." }
+    return { success: false, error: "Food name is required.", status: 400 }
   }
 
   if (!Number.isFinite(input.quantityGrams) || input.quantityGrams <= 0) {
-    return { success: false, error: "Quantity must be a positive number of grams." }
+    return { success: false, error: "Quantity must be a positive number of grams.", status: 400 }
   }
 
   const macros = [input.per100g.calories, input.per100g.protein, input.per100g.carbs, input.per100g.fat]
   const optionalMacros = [input.per100g.fiber, input.per100g.sugar, input.per100g.sodiumMg]
   if (macros.some((value) => !Number.isFinite(value) || value < 0) ||
       optionalMacros.some((value) => value != null && (!Number.isFinite(value) || value < 0))) {
-    return { success: false, error: "Nutrients must be finite, non-negative numbers." }
+    return { success: false, error: "Nutrients must be finite, non-negative numbers.", status: 400 }
   }
-  if (input.logDate !== undefined && !isValidDateIso(input.logDate)) {
-    return { success: false, error: "Invalid calendar date." }
+
+  const idempotencyKey = input.finalizeActionId ?? input.idempotencyKey ?? crypto.randomUUID()
+  if (!isIdempotencyKey(idempotencyKey)) {
+    return { success: false, error: "Invalid idempotency key.", status: 400 }
+  }
+
+  const localToday = await resolveLocalToday(supabase, userId)
+  const logDate = input.logDate ?? localToday
+  if (!isSupportedFoodLogWriteDate(logDate, localToday)) {
+    return { success: false, error: "Food can only be logged for today.", status: 400 }
   }
   const scaled = scaleMacrosToGrams(input.per100g, input.quantityGrams)
   if (Object.values(scaled).some((value) => value !== null && !Number.isFinite(value))) {
-    return { success: false, error: "Nutrient totals are out of range." }
+    return { success: false, error: "Nutrient totals are out of range.", status: 400 }
   }
-  const logDate = input.logDate ?? (await resolveLocalToday(supabase, userId))
 
-  const { data, error } = await supabase
-    .from("food_logs")
-    .insert({
-      user_id: userId,
-      log_date: logDate,
-      meal_type: input.mealType,
-      food_name: input.foodName.trim(),
-      brand: input.brand ?? null,
-      source: input.source,
-      source_id: input.sourceId ?? null,
-      barcode: input.barcode ?? null,
-      quantity_grams: input.quantityGrams,
-      serving_name: input.servingName ?? null,
-      servings_consumed: input.servingsConsumed ?? null,
-      calories: scaled.calories,
-      protein_g: scaled.protein,
-      carbs_g: scaled.carbs,
-      fat_g: scaled.fat,
-      fiber_g: scaled.fiber,
-      is_estimated: input.isEstimated ?? false,
-      estimation_confidence: input.estimationConfidence ?? null,
-      estimation_reason: input.estimationReason ?? null,
-      estimated_from: input.estimatedFrom ?? null,
-    })
-    .select(
-      "id, log_date, meal_type, food_name, brand, source, source_id, barcode, quantity_grams, serving_name, servings_consumed, calories, protein_g, carbs_g, fat_g, fiber_g, is_estimated, estimation_confidence, estimation_reason, estimated_from, created_at",
-    )
-    .single()
+  const row = {
+    user_id: userId,
+    log_date: logDate,
+    meal_type: input.mealType,
+    food_name: input.foodName.trim(),
+    brand: input.brand ?? null,
+    source: input.source,
+    source_id: input.sourceId ?? null,
+    barcode: input.barcode ?? null,
+    quantity_grams: input.quantityGrams,
+    serving_name: input.servingName ?? null,
+    servings_consumed: input.servingsConsumed ?? null,
+    calories: scaled.calories,
+    protein_g: scaled.protein,
+    carbs_g: scaled.carbs,
+    fat_g: scaled.fat,
+    fiber_g: scaled.fiber,
+    is_estimated: input.isEstimated ?? false,
+    estimation_confidence: input.estimationConfidence ?? null,
+    estimation_reason: input.estimationReason ?? null,
+    estimated_from: input.estimatedFrom ?? null,
+    idempotency_key: idempotencyKey,
+  }
+
+  const { data, error } = input.finalizeActionId
+    ? // service-role only RPC; userId is the session-derived identity from the calling route
+        await createSupabaseAdminClient().rpc("finalize_food_log_action", { p_action_id: input.finalizeActionId, p_user_id: userId, p_row: row })
+    : await supabase.from("food_logs").insert(row).select(FOOD_LOG_SELECT).single()
+
+  if (error?.code === "23505") {
+    const existing = await loadFoodLogByIdempotencyKey(supabase, userId, idempotencyKey)
+    if (existing) return { success: true, data: existing }
+  }
 
   if (error || !data) {
     if (error) console.error("[FOOD LOG] createFoodLog failed:", error.message)
-    return { success: false, error: "Nutrition data couldn't be saved. Please try again." }
+    return { success: false, error: "Nutrition data couldn't be saved. Please try again.", status: 500 }
   }
 
   const savedEntry = mapFoodLogRow(data as FoodLogRow)
@@ -114,6 +141,21 @@ export async function createFoodLog(
   })
 
   return { success: true, data: savedEntry }
+}
+
+async function loadFoodLogByIdempotencyKey(
+  supabase: SupabaseClient,
+  userId: string,
+  idempotencyKey: string,
+): Promise<ReturnType<typeof mapFoodLogRow> | null> {
+  const { data } = await supabase
+    .from("food_logs")
+    .select(FOOD_LOG_SELECT)
+    .eq("user_id", userId)
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle()
+
+  return data ? mapFoodLogRow(data as FoodLogRow) : null
 }
 
 export type UpdateFoodLogQuantityInput = {
@@ -184,9 +226,7 @@ export async function updateFoodLogQuantity(
     })
     .eq("id", input.id)
     .eq("user_id", userId)
-    .select(
-      "id, log_date, meal_type, food_name, brand, source, source_id, barcode, quantity_grams, serving_name, servings_consumed, calories, protein_g, carbs_g, fat_g, fiber_g, is_estimated, estimation_confidence, estimation_reason, estimated_from, created_at",
-    )
+    .select(FOOD_LOG_SELECT)
     .single()
 
   if (error || !data) {

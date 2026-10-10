@@ -16,7 +16,10 @@ vi.mock("next/server", async (importOriginal) => {
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/athlete-state/build-athlete-state", () => ({ buildAthleteState: vi.fn() }));
 vi.mock("@/lib/training/load-training-context", () => ({ loadTrainingContext: vi.fn() }));
-vi.mock("@/lib/training/load-today-session", () => ({ loadTodaySession: vi.fn() }));
+vi.mock("@/lib/training/load-today-session", () => ({
+  loadTodaySession: vi.fn(),
+  resolveUserTimeZone: vi.fn(async () => "UTC"),
+}));
 vi.mock("@/lib/dante-core/daily-decision-engine", () => ({ buildDailyDecision: vi.fn() }));
 vi.mock("@/lib/dante-core/adaptive-program-engine", () => ({ buildAdaptiveProgram: vi.fn() }));
 vi.mock("@/lib/dante-core/program-adaptation-log", () => ({ logProgramAdaptations: vi.fn() }));

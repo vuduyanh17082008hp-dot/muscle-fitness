@@ -65,7 +65,7 @@ export function NutritionScene({ nutrition, routes }: NutritionSceneProps) {
     >
       <div className="mx-auto max-w-7xl">
         <div className="nutrition-fade mx-auto max-w-2xl text-center">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-brand)]">06 · Fuel & Nutrition</p>
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-brand)]">07 · Nutrition</p>
 
           <h2 className="mt-4 font-heading text-4xl font-black uppercase leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
             What powers <span className="text-[var(--mf-brand)]">your work</span>.

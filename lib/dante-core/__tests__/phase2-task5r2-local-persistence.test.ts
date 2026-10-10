@@ -1,9 +1,9 @@
 /**
  * Task 5R2 §10 — OPT-IN persistence / restart / user-isolation check against the LOCAL Docker Supabase stack
- * (project `muscle-fitness-nof1-local`, 127.0.0.1:54321) with the REAL `createSupabaseCoherenceStore`, RLS and CAS.
+ * with the REAL `createSupabaseCoherenceStore`, RLS and CAS.
  * Skipped unless LOCAL_SUPABASE=1, and it refuses any URL that is not loopback — the hosted project is never touched.
  *
- *   LOCAL_SUPABASE=1 npx vitest run lib/dante-core/__tests__/phase2-task5r2-local-persistence.test.ts
+ *   LOCAL_SUPABASE=1 SUPABASE_LOCAL_URL=http://127.0.0.1:54321 npx vitest run lib/dante-core/__tests__/phase2-task5r2-local-persistence.test.ts
  *
  * What it proves about 5R2: authority metadata (ResponseBlock source/authority/renderStatus/degradeReason) is
  * response-ephemeral and never reaches the durable row; durable expression state, supersession, TURN-scope and
@@ -19,7 +19,7 @@ import { createSupabaseCoherenceStore } from "@/lib/dante-core/coherence/supabas
 import type { CoherenceTurnResult } from "@/lib/dante-core/coherence/types";
 
 const enabled = process.env.LOCAL_SUPABASE === "1";
-const URL_LOCAL = "http://127.0.0.1:54321";
+const URL_LOCAL = process.env.SUPABASE_LOCAL_URL ?? "http://127.0.0.1:54321";
 // the well-known local-dev JWT secret of `supabase start`; an anon token minted from it is only valid for this local stack
 const LOCAL_JWT_SECRET = "super-secret-jwt-token-with-at-least-32-characters-long";
 

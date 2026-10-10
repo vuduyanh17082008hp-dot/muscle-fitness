@@ -27,6 +27,12 @@ import {
 } from "@/components/dante/dante-presence";
 import { cn } from "@/lib/utils";
 import { FORM_COACH_HANDOFF_KEY } from "@/lib/form-coach/handoff";
+import {
+  DANTE_SESSION_EXPIRED_MESSAGE,
+  DANTE_UNAVAILABLE_MESSAGE,
+  danteHttpFailureCopy,
+  isDanteRateLimitedMessage,
+} from "@/lib/dante-chat-http-error";
 import type { DanteInsight } from "@/lib/dante-core/insight";
 import {
   parseChatStreamChunk,
@@ -68,22 +74,22 @@ export type QuickPrompt = {
 
 const QUICK_PROMPTS: QuickPrompt[] = [
   {
-    tag: "// TRAINING: TODAY",
+    tag: "Today's training",
     label: "What should I train today?",
     prompt: "Based on my current readiness, what should I train today?",
   },
   {
-    tag: "// NUTRITION: PROTEIN",
+    tag: "Nutrition target",
     label: "How do I hit my protein target?",
     prompt: "What should I eat to hit my remaining protein target?",
   },
   {
-    tag: "// RECOVERY: CHECK-IN",
+    tag: "Recovery check-in",
     label: "I haven't checked in today.",
     prompt: "I still need to do my daily recovery check-in. What should I log?",
   },
   {
-    tag: "// PROGRESS: 30 DAYS",
+    tag: "30-day trajectory",
     label: "How did I progress this month?",
     prompt: "How did my training and recovery progress over the last 30 days?",
   },
@@ -103,8 +109,7 @@ export type DanteChatProps = {
    * Suggestions") — built server-side from the caller's own already-
    * loaded data via lib/dante-core/build-chat-suggestions.ts. When
    * provided, these replace `quickPrompts` in the empty state. Omit
-   * on pages with no per-user signal (e.g. the public /chatbot page)
-   * to fall back to the generic starters.
+   * when there is no per-user signal to fall back to the generic starters.
    */
   contextualSuggestions?: DanteInsight[];
   compact?: boolean;
@@ -338,7 +343,7 @@ function PendingConfirmationPanel({
 
 export default function DanteChat({
   welcomeMessage = DEFAULT_WELCOME_MESSAGE,
-  heroTitle = "Your AI Performance Coach",
+  heroTitle = "Dante, Your Performance Coach",
   quickPrompts = QUICK_PROMPTS,
   contextualSuggestions,
   compact = false,
@@ -471,8 +476,7 @@ export default function DanteChat({
   // did would be a false claim. What IS always true: a failed chat
   // turn never mutates logged data (that only happens via explicit
   // confirmed write tools), so this states that instead.
-  const UNAVAILABLE_MESSAGE =
-    "Dante couldn't complete that response.\n\nYour logged data has not been changed.";
+  const UNAVAILABLE_MESSAGE = DANTE_UNAVAILABLE_MESSAGE;
 
   function updateStreamingMessage(
     messageId: string,
@@ -565,18 +569,15 @@ export default function DanteChat({
       );
 
       if (!response.ok || !response.body) {
-        let serverError: string | undefined;
-
-        try {
-          const errorBody = (await response.json()) as { error?: string };
-          serverError = errorBody.error;
-        } catch {
-          // Body wasn't JSON (or the stream already started) — fall back to a generic message below.
-        }
-
-        throw new Error(
-          serverError ?? `Request failed with status ${response.status}.`
-        );
+        const retryAfterHeader = Number(response.headers.get("Retry-After"));
+        const payload = await response.json().catch(() => null) as
+          | { retryAfterSeconds?: unknown }
+          | null;
+        const retryAfterSeconds =
+          typeof payload?.retryAfterSeconds === "number"
+            ? payload.retryAfterSeconds
+            : retryAfterHeader;
+        throw new Error(danteHttpFailureCopy(response.status, retryAfterSeconds));
       }
 
       const reader = response.body.getReader();
@@ -665,11 +666,18 @@ export default function DanteChat({
        * to the console above for debugging. An abort keeps whatever
        * text already streamed in rather than replacing it.
        */
+      const failureCopy =
+        error instanceof Error &&
+        (error.message === DANTE_SESSION_EXPIRED_MESSAGE ||
+          isDanteRateLimitedMessage(error.message))
+          ? error.message
+          : UNAVAILABLE_MESSAGE;
+
       updateStreamingMessage(assistantId, (message) => ({
         ...message,
         content: wasAborted
           ? resolveAbortedContent(message.content)
-          : message.content || UNAVAILABLE_MESSAGE,
+          : message.content || failureCopy,
         isComplete: true,
         wasAborted,
       }));
@@ -1195,10 +1203,10 @@ export default function DanteChat({
       =================================================== */}
       <form
         onSubmit={handleSubmit}
-        className="relative z-30 mt-3 w-full max-w-3xl mx-auto flex shrink-0 items-center gap-3 pb-[env(safe-area-inset-bottom)]"
+        className="relative z-30 mt-3 w-full min-w-0 max-w-3xl mx-auto flex shrink-0 items-center gap-2 sm:gap-3 pb-[env(safe-area-inset-bottom)]"
       >
         <div
-          className={`flex min-h-12 flex-1 items-center rounded-[18px] px-4 py-2 text-sm ${hudStyles.hudInputContainer}`}
+          className={`flex min-h-12 min-w-0 flex-1 items-center rounded-[18px] px-3 py-2 text-sm sm:px-4 ${hudStyles.hudInputContainer}`}
         >
           <span className="mr-2 font-mono text-xs font-bold text-[#D4FF00] select-none">
             $&gt;
@@ -1215,11 +1223,11 @@ export default function DanteChat({
             disabled={isLoading}
             aria-label="Message to Dante"
             placeholder="Ask Dante…"
-            className="max-h-40 w-full flex-1 resize-none border-none bg-transparent font-mono text-xs leading-5 text-white outline-none shadow-none placeholder:truncate placeholder:whitespace-nowrap placeholder:text-zinc-500 focus:border-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
+            className="max-h-40 min-w-0 w-full flex-1 resize-none border-none bg-transparent font-mono text-xs leading-5 text-white outline-none shadow-none placeholder:truncate placeholder:whitespace-nowrap placeholder:text-zinc-500 focus:border-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
           />
 
           {/* Live Audio Waveform (4 mini equalizer bars) */}
-          <div className="flex items-center gap-0.5 px-2 select-none" aria-hidden="true">
+          <div className="hidden items-center gap-0.5 px-2 select-none sm:flex" aria-hidden="true">
             <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
             <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.3s" }} />
             <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.15s" }} />

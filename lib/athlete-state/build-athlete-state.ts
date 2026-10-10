@@ -89,9 +89,10 @@ function pickPerformanceTrendForMuscle(
 export async function buildAthleteState(
   supabase: SupabaseClient,
   userId: string,
-  options: { now?: Date; timeZoneOffsetMinutes?: number } = {},
+  options: { now?: Date; timeZoneOffsetMinutes?: number; timeZone?: string | null } = {},
 ): Promise<AthleteState> {
   const now = options.now ?? new Date();
+  const timezone = await resolveUserTimeZone(supabase, userId, options.timeZone);
 
   const [
     trainingContext,
@@ -101,11 +102,11 @@ export async function buildAthleteState(
     setVisionContext,
     latestFoodLogResponse,
     demoSettings,
-    timezone,
   ] = await Promise.all([
       loadTrainingContext(supabase, userId, {
         now,
         timeZoneOffsetMinutes: options.timeZoneOffsetMinutes,
+        timeZone: timezone,
       }),
       loadNutritionContext(supabase, userId),
       loadRecoveryContext(supabase, userId).catch((error: unknown) => {
@@ -128,7 +129,6 @@ export async function buildAthleteState(
         .limit(1)
         .maybeSingle(),
       loadDemoSettings(supabase, userId),
-      resolveUserTimeZone(supabase, userId),
     ]);
 
   const fitnessProfile = (fitnessProfileResponse.data as FitnessProfileRow | null) ?? null;

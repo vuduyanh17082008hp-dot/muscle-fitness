@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { Barcode, MapPin, Plus, Search, Sparkles, X } from "lucide-react"
 
@@ -31,11 +31,17 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
   const [manualPrefillName, setManualPrefillName] = useState<string | undefined>(undefined)
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
+  const confirmLock = useRef(false)
+  const pendingKey = useRef<string | null>(null)
+  const pendingKeys = useRef<string[] | null>(null)
 
   function reset() {
     setMode("menu")
     setScannedFood(null)
     setManualPrefillName(undefined)
+    pendingKey.current = null
+    pendingKeys.current = null
+    confirmLock.current = false
   }
 
   function handleOpenChange(next: boolean) {
@@ -44,11 +50,16 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
   }
 
   async function handleConfirm(food: ConfirmedFood) {
+    if (confirmLock.current) return
+    confirmLock.current = true
+    pendingKey.current ??= food.idempotencyKey ?? crypto.randomUUID()
     setSaving(true)
-    const success = await onAddFood(food)
+    const success = await onAddFood({ ...food, idempotencyKey: pendingKey.current })
     setSaving(false)
+    confirmLock.current = false
 
     if (success) {
+      pendingKey.current = null
       setSavedFlash(true)
       setTimeout(() => {
         setSavedFlash(false)
@@ -58,11 +69,18 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
   }
 
   async function handleConfirmMultiple(foods: ConfirmedFood[]) {
+    if (confirmLock.current) return
+    confirmLock.current = true
+    pendingKeys.current ??= foods.map((food) => food.idempotencyKey ?? crypto.randomUUID())
     setSaving(true)
-    const success = await onAddFoods(foods)
+    const success = await onAddFoods(
+      foods.map((food, index) => ({ ...food, idempotencyKey: pendingKeys.current![index] })),
+    )
     setSaving(false)
+    confirmLock.current = false
 
     if (success) {
+      pendingKeys.current = null
       setSavedFlash(true)
       setTimeout(() => {
         setSavedFlash(false)

@@ -369,6 +369,12 @@ export type Database = {
         | 'recomposition'
         | 'maintain'
         | 'improve_fitness'
+        | 'lean_bulk'
+        | 'fat_loss'
+        | 'muscle_gain'
+        | 'body_recomposition'
+        | 'maintenance'
+        | 'performance'
 
       gender_type:
         | 'male'

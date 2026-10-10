@@ -16,11 +16,16 @@ import {
   Mail,
 } from "lucide-react";
 
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
+
 import { getSafeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/brand/logo";
 
 type LoadingType = "email" | "google" | null;
+
+const AUTH_SERVICE_UNREACHABLE_MESSAGE =
+  "Unable to connect to the authentication service. Please try again.";
 
 function getLoginErrorMessage(message: string): string {
   const normalizedMessage = message.toLowerCase();
@@ -126,23 +131,26 @@ function LoginContent() {
       });
 
       if (signInError) {
-        console.error("Supabase login error:", {
+        // console.error would raise the Next.js dev overlay for an expected, recoverable failure.
+        console.warn("Supabase login error:", {
           name: signInError.name,
           message: signInError.message,
           status: signInError.status,
         });
 
         setError(
-          getLoginErrorMessage(signInError.message),
+          isAuthRetryableFetchError(signInError)
+            ? AUTH_SERVICE_UNREACHABLE_MESSAGE
+            : getLoginErrorMessage(signInError.message),
         );
 
         return;
       }
 
       if (!data.user || !data.session) {
-        console.error(
+        console.warn(
           "Login succeeded but session was missing:",
-          data,
+          { hasUser: Boolean(data.user), hasSession: Boolean(data.session) },
         );
 
         setError(
@@ -155,10 +163,15 @@ function LoginContent() {
       router.replace(redirectTo);
       router.refresh();
     } catch (unknownError) {
-      console.error(
-        "Unexpected login error:",
-        unknownError,
-      );
+      console.warn("Unexpected login error:", {
+        name: unknownError instanceof Error ? unknownError.name : typeof unknownError,
+        message: unknownError instanceof Error ? unknownError.message : undefined,
+      });
+
+      if (isAuthRetryableFetchError(unknownError) || unknownError instanceof TypeError) {
+        setError(AUTH_SERVICE_UNREACHABLE_MESSAGE);
+        return;
+      }
 
       const message =
         unknownError instanceof Error

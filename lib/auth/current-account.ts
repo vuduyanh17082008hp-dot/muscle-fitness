@@ -9,6 +9,7 @@ export type AccountProfile = {
   username: string | null
   avatar_url: string | null
   phone: string | null
+  timezone: string
   provider: string | null
   last_login_at: string | null
   created_at: string | null
@@ -88,6 +89,7 @@ async function loadCurrentAccount(): Promise<CurrentAccount | null> {
         username,
         avatar_url,
         phone,
+        timezone,
         provider,
         last_login_at,
         created_at,
@@ -166,6 +168,7 @@ async function loadCurrentAccount(): Promise<CurrentAccount | null> {
       readString(databaseProfile?.avatar_url) ??
       fallbackAvatar,
     phone: readString(databaseProfile?.phone),
+    timezone: readString(databaseProfile?.timezone) ?? "UTC",
     provider:
       readString(databaseProfile?.provider) ??
       readString(user.app_metadata?.provider) ??

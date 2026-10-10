@@ -336,9 +336,7 @@ export default async function AccountPage({
               <InformationItem
                 icon={<MapPin size={18} />}
                 label="Timezone"
-                value={displayValue(
-                  fitnessProfile?.timezone ?? "Asia/Singapore"
-                )}
+                value={displayValue(profile.timezone)}
               />
             </div>
           </section>

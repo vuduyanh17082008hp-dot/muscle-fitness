@@ -3,7 +3,7 @@ import { after, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
-import { loadTodaySession } from "@/lib/training/load-today-session";
+import { loadTodaySession, resolveUserTimeZone } from "@/lib/training/load-today-session";
 import { buildDailyDecision } from "@/lib/dante-core/daily-decision-engine";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { logProgramAdaptations } from "@/lib/dante-core/program-adaptation-log";
@@ -23,6 +23,7 @@ export const dynamic = "force-dynamic";
  * never from a second, independent source of truth.
  */
 export async function GET(request: Request) {
+  void request;
   const supabase = await createClient();
 
   const {
@@ -34,16 +35,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const url = new URL(request.url);
-  const offsetParam = url.searchParams.get("timeZoneOffsetMinutes");
-  const timeZoneOffsetMinutes = offsetParam !== null ? Number(offsetParam) : 0;
-  const normalizedOffset = Number.isFinite(timeZoneOffsetMinutes) ? timeZoneOffsetMinutes : 0;
-
   try {
+    const now = new Date();
+    const timeZone = await resolveUserTimeZone(supabase, user.id);
     const [athleteState, trainingContext, todaySession] = await Promise.all([
-      buildAthleteState(supabase, user.id, { timeZoneOffsetMinutes: normalizedOffset }),
-      loadTrainingContext(supabase, user.id, { timeZoneOffsetMinutes: normalizedOffset }),
-      loadTodaySession(supabase, user.id),
+      buildAthleteState(supabase, user.id, { now, timeZone }),
+      loadTrainingContext(supabase, user.id, { now, timeZone }),
+      loadTodaySession(supabase, user.id, now, timeZone),
     ]);
 
     const { decision, proposedActions } = buildDailyDecision(

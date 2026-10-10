@@ -54,7 +54,11 @@ export const logFoodTool: DanteTool<LogFoodInput, LogFoodToolOutput> = {
   },
 
   async execute(context, input) {
-    const { supabase, userId } = context;
+    const { supabase, userId, actionId } = context;
+
+    if (!actionId) {
+      return { ok: false, error: "A confirmed Dante action is required to log food." };
+    }
 
     const isEstimate = input.source === "ai_estimate";
 
@@ -66,6 +70,8 @@ export const logFoodTool: DanteTool<LogFoodInput, LogFoodToolOutput> = {
       sourceId: input.sourceId ?? null,
       per100g: input.per100g,
       quantityGrams: input.quantityGrams,
+      idempotencyKey: actionId,
+      finalizeActionId: actionId,
       isEstimated: isEstimate,
       estimationConfidence: isEstimate ? "medium" : null,
       estimationReason: isEstimate ? "Estimated by Dante from general nutrition knowledge, not a matched database record." : null,

@@ -16,6 +16,7 @@ import {
 
 export type NutritionContext = {
   plan: NutritionPlan | null
+  fitnessGoal: string | null
   estimatedFields: string[]
   missingRequiredFields: string[]
   overrides: {
@@ -138,6 +139,7 @@ export async function loadNutritionContext(
       fitnessProfile: (fitnessResponse.data ?? null) as RawFitnessProfileRow,
       preferences,
     })
+  const fitnessProfile = (fitnessResponse.data ?? null) as RawFitnessProfileRow
 
   const rawBudget = preferences?.weekly_food_budget
   const weeklyFoodBudgetSgd =
@@ -147,6 +149,7 @@ export async function loadNutritionContext(
 
   return {
     plan: input ? buildNutritionPlan(input) : null,
+    fitnessGoal: fitnessProfile?.goal ?? null,
     estimatedFields,
     missingRequiredFields,
     overrides,

@@ -298,6 +298,7 @@
   gap: 30px;
 
   border: 1px solid var(--white);
+  border-radius: 16px;
 
   background: var(--white);
   color: #050505;
@@ -1297,6 +1298,7 @@
   padding: 0 24px;
 
   border: 1px solid var(--border);
+  border-radius: 14px;
 
   background:
     rgba(255, 255, 255, 0.015);
@@ -1393,7 +1395,22 @@
   }
 
   .nav {
+    gap: 0;
+  }
+
+  .nav a {
     display: none;
+  }
+
+  .nav a:first-child,
+  .nav a:last-child {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0 14px;
+    color: var(--white);
   }
 
   .hero,
@@ -1407,9 +1424,9 @@
   .calculatorHeading h2,
   .generatedHeader h2 {
     font-size:
-      clamp(49px, 14vw, 76px);
+      clamp(40px, 12vw, 58px);
 
-    letter-spacing: -4px;
+    letter-spacing: -3px;
   }
 
   .heroStats,

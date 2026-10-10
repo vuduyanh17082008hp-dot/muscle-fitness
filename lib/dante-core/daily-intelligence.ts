@@ -7,6 +7,29 @@ import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { callDanteLlm } from "@/lib/dante-core/llm-client";
 import type { AppEventType } from "@/lib/events/types";
+import {
+  localDateTimeParts,
+  localDayRangeUtc,
+  resolveUserTimeZone,
+} from "@/lib/training/load-today-session";
+
+export type DailyIntelligenceClock = {
+  now?: Date;
+  timeZoneOverride?: string | null;
+};
+
+/**
+ * Profile-local calendar day + UTC session range.
+ * Delegates to load-today-session helpers — no second date math.
+ */
+export function resolveDailyIntelligenceDay(
+  now: Date,
+  timeZone: string,
+): { localDate: string; startIso: string; endIso: string } {
+  const { localDate } = localDateTimeParts(now, timeZone);
+  const { startIso, endIso } = localDayRangeUtc(now, timeZone);
+  return { localDate, startIso, endIso };
+}
 
 /**
  * Dante Daily Intelligence (spec Part B §15).
@@ -28,10 +51,6 @@ export type DailyIntelligence = {
   generatedAt: string;
 };
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function round(value: number): number {
   return Math.round(value);
 }
@@ -39,16 +58,14 @@ function round(value: number): number {
 async function resolveTrainingFocus(
   supabase: SupabaseClient,
   userId: string,
+  range: { startIso: string; endIso: string },
 ): Promise<string | null> {
-  const startOfDay = `${todayIso()}T00:00:00.000Z`;
-  const endOfDay = `${todayIso()}T23:59:59.999Z`;
-
   const { data, error } = await supabase
     .from("workout_sessions")
     .select("name, scheduled_for, completed_at")
     .eq("user_id", userId)
-    .gte("scheduled_for", startOfDay)
-    .lte("scheduled_for", endOfDay)
+    .gte("scheduled_for", range.startIso)
+    .lte("scheduled_for", range.endIso)
     .order("scheduled_for", { ascending: true })
     .limit(1);
 
@@ -130,16 +147,21 @@ Reply with ONLY the sentence, nothing else.`;
 export async function buildDailyIntelligence(
   supabase: SupabaseClient,
   userId: string,
+  clock: DailyIntelligenceClock = {},
 ): Promise<DailyIntelligence> {
+  const now = clock.now ?? new Date();
+  const timeZone = await resolveUserTimeZone(supabase, userId, clock.timeZoneOverride);
+  const day = resolveDailyIntelligenceDay(now, timeZone);
+
   const [{ readiness, recoveryContext }, trainingFocus, nutritionAdherencePercent] =
     await Promise.all([
       loadReadinessForUser(supabase, userId),
-      resolveTrainingFocus(supabase, userId),
+      resolveTrainingFocus(supabase, userId, day),
       resolveNutritionAdherence(supabase, userId),
     ]);
 
   const base = {
-    summaryDate: todayIso(),
+    summaryDate: day.localDate,
     readinessScore: readiness.readinessScore,
     trainingFocus,
     nutritionAdherencePercent,
@@ -148,7 +170,7 @@ export async function buildDailyIntelligence(
 
   const narrative = await generateNarrative(base);
 
-  return { ...base, narrative, generatedAt: new Date().toISOString() };
+  return { ...base, narrative, generatedAt: now.toISOString() };
 }
 
 /**
@@ -162,8 +184,9 @@ export async function recomputeDailyIntelligence(
   supabase: SupabaseClient,
   userId: string,
   triggeredBy: AppEventType | "initial_load",
+  clock: DailyIntelligenceClock = {},
 ): Promise<DailyIntelligence> {
-  const intelligence = await buildDailyIntelligence(supabase, userId);
+  const intelligence = await buildDailyIntelligence(supabase, userId, clock);
 
   const { error } = await supabase.from("dante_daily_intelligence").upsert(
     {
@@ -196,14 +219,19 @@ export async function recomputeDailyIntelligence(
 export async function getOrBuildDailyIntelligence(
   supabase: SupabaseClient,
   userId: string,
+  clock: DailyIntelligenceClock = {},
 ): Promise<DailyIntelligence> {
+  const now = clock.now ?? new Date();
+  const timeZone = await resolveUserTimeZone(supabase, userId, clock.timeZoneOverride);
+  const { localDate } = resolveDailyIntelligenceDay(now, timeZone);
+
   const { data } = await supabase
     .from("dante_daily_intelligence")
     .select(
       "summary_date, readiness_score, training_focus, nutrition_adherence_percent, recovery_status, narrative, generated_at",
     )
     .eq("user_id", userId)
-    .eq("summary_date", todayIso())
+    .eq("summary_date", localDate)
     .maybeSingle();
 
   if (data) {
@@ -218,5 +246,8 @@ export async function getOrBuildDailyIntelligence(
     };
   }
 
-  return recomputeDailyIntelligence(supabase, userId, "initial_load");
+  return recomputeDailyIntelligence(supabase, userId, "initial_load", {
+    now,
+    timeZoneOverride: timeZone,
+  });
 }

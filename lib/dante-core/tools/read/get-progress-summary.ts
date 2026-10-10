@@ -32,7 +32,9 @@ export const getProgressSummaryTool: DanteTool<Record<string, never>, ProgressSu
   async execute(context) {
     const { supabase, userId } = context;
 
-    const athleteState = await cached(context, "athleteState", () => buildAthleteState(supabase, userId)).catch(() => null);
+    const athleteState = await cached(context, "athleteState", () =>
+      buildAthleteState(supabase, userId, { timeZone: context.timezone ?? "UTC" }),
+    ).catch(() => null);
 
     if (!athleteState || !athleteState.training.hasAnyLoggedData) {
       return { ok: true, data: { hasLoggedTrainingData: false, dataWindow: null, biggestIncreases: [], biggestDecreases: [] } };

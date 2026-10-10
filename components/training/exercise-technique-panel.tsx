@@ -61,7 +61,7 @@ export function ExerciseTechniquePanel({ exercise }: { exercise: ExerciseLibrary
             <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-mf-glass-border bg-mf-glass-bg-deep px-4 py-6 text-center">
               <Sparkles className="size-5 text-mf-glass-text-muted" />
               <p className="text-xs font-semibold text-mf-glass-text-secondary">
-                Technique animation coming soon
+                Technique animation unavailable
               </p>
               <p className="text-[11px] leading-5 text-mf-glass-text-muted">
                 We only publish an animation once its motion data has been verified.

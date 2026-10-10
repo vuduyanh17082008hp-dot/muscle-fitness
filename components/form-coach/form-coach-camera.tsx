@@ -386,7 +386,7 @@ export function FormCoachCamera() {
       // Ignore storage failures — worst case Dante just won't have the summary preloaded.
     }
 
-    router.push("/chatbot")
+    router.push("/dashboard/ai-coach")
   }
 
   useEffect(() => {

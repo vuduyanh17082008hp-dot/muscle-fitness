@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 
+const SESSION_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 type RouteContext = {
   params: Promise<{
     id: string;
@@ -26,6 +29,13 @@ export async function GET(
     );
   }
 
+  if (!SESSION_ID_RE.test(id)) {
+    return NextResponse.json(
+      { error: "Invalid session id." },
+      { status: 400 },
+    );
+  }
+
   const { data, error } = await supabase
     .from("workout_sessions")
     .select("*")
@@ -34,9 +44,10 @@ export async function GET(
     .maybeSingle();
 
   if (error) {
+    console.error("[SESSIONS] load failed:", error.code ?? "unknown");
     return NextResponse.json(
-      { error: error.message },
-      { status: 400 },
+      { error: "Unable to load workout session." },
+      { status: 500 },
     );
   }
 

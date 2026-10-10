@@ -169,7 +169,9 @@ export async function runDanteAgentTurn(
       return { reply: "I wasn't able to determine what to check — could you rephrase that?", toolTraceSummary };
     }
 
-    const tool = getDanteTool(call.name);
+    // Specialist-coach tools resolve by name for confirmation, but are never model-selectable here.
+    const registered = getDanteTool(call.name);
+    const tool = registered && DANTE_TOOLS.includes(registered) ? registered : undefined;
 
     if (!tool) {
       messages.push(assistantToolCallMessage(call), toolResultMessage(call, { error: `Unknown tool "${call.name}".` }));

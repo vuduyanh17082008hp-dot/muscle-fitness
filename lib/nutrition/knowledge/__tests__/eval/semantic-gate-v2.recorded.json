@@ -1,0 +1,292 @@
+{
+ "Can we give this more bite?": {
+  "promptHash": "d95885442d42",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1001
+ },
+ "This tastes kind of flat.": {
+  "promptHash": "945b4f7d8e4b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 826
+ },
+ "This is missing something.": {
+  "promptHash": "a3f403316f0f",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 932
+ },
+ "I want something that feels more satisfying.": {
+  "promptHash": "97bfe376c4ee",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"satiety\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 914
+ },
+ "ice cream is calling my name": {
+  "promptHash": "4a775054284e",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[\"craving_understanding\"],\"goal\":null,\"sensory\":[\"creamy\",\"sweet\"],\"cuisine\":[],\"food\":[\"ice_cream\"]}",
+  "ms": 1247
+ },
+ "Bring on the pho tonight.": {
+  "promptHash": "6df203ca76d3",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 914
+ },
+ "Banh mi or bun cha for dinner, thoughts?": {
+  "promptHash": "507f75643ffc",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 996
+ },
+ "How do I make a burger less of a calorie bomb?": {
+  "promptHash": "67ed8a6f56fa",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"calorie_drivers\",\"meal_composition\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"fast_food\"]}",
+  "ms": 1117
+ },
+ "Drive-thru dinner but I'm in a deficit.": {
+  "promptHash": "475efda8c2eb",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"energy_balance\",\"eating_out\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"fast_food\"]}",
+  "ms": 1065
+ },
+ "How do I eat enough to gain muscle?": {
+  "promptHash": "e0e349642582",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"meal_density\",\"protein\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 921
+ },
+ "How should I handle protein in a deficit?": {
+  "promptHash": "0aa3a50800ed",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"protein\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 849
+ },
+ "How do I stop feeling like I failed after pizza night?": {
+  "promptHash": "66ad71a7879e",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"coaching\",\"topics\":[\"coaching_tone\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 866
+ },
+ "I keep bingeing at night.": {
+  "promptHash": "a4467282f557",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"coaching\",\"topics\":[\"adherence\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 913
+ },
+ "It needs more tang.": {
+  "promptHash": "ae94a2643b65",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 912
+ },
+ "I want it chewier.": {
+  "promptHash": "e8f21daaf9dc",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[\"chewy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 855
+ },
+ "Fresh herb ideas to brighten up this dish?": {
+  "promptHash": "43dc057a87bd",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1856
+ },
+ "After a huge dinner out, how do I get back on track?": {
+  "promptHash": "252ae1c6a9de",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"indulgent_meal\",\"adherence\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 978
+ },
+ "How do I order at a drive-thru without wrecking my macros?": {
+  "promptHash": "a8f19ad2c34d",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"food_flexibility\",\"eating_out\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"fast_food\"]}",
+  "ms": 904
+ },
+ "What's a smarter way to eat cereal?": {
+  "promptHash": "ebcf39c38e15",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"meal_composition\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 923
+ },
+ "My meal prep feels dull, how do I make it exciting?": {
+  "promptHash": "f335d12f00ac",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 854
+ },
+ "pho tonite but staying lean": {
+  "promptHash": "44a197b70e74",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"meal_composition\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 1774
+ },
+ "Why is satiety so hard on a cut? I'm always hungry.": {
+  "promptHash": "b92ad4cda870",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"satiety\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1017
+ },
+ "Can I keep real ice cream in my plan?": {
+  "promptHash": "d48fbbd2ca1c",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"preferred_foods\",\"food_flexibility\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"ice_cream\"]}",
+  "ms": 1387
+ },
+ "How do I make my cereal bowl more filling without ruining it?": {
+  "promptHash": "5c1c5c528843",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"satiety\",\"meal_density\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 1059
+ },
+ "Tôi muốn ăn món Việt tối nay.": {
+  "promptHash": "02498474264e",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 1130
+ },
+ "Thèm kem quá.": {
+  "promptHash": "4a803ae5e6a9",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[],\"goal\":null,\"sensory\":[\"creamy\",\"sweet\"],\"cuisine\":[],\"food\":[\"ice_cream\"]}",
+  "ms": 1138
+ },
+ "Món này nhạt quá, thêm vị gì đây?": {
+  "promptHash": "93ad655c4ba1",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 864
+ },
+ "Còn bao nhiêu calo hôm nay?": {
+  "promptHash": "f54628f2080e",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 879
+ },
+ "Xoá cơm đi.": {
+  "promptHash": "feef64f1e177",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 808
+ },
+ "I want more snap in this.": {
+  "promptHash": "01b47c93d75b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[\"crunchy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 1099
+ },
+ "It feels kinda one-note, lacks depth.": {
+  "promptHash": "28a9af1be960",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 794
+ },
+ "Honestly the mouthfeel is dull.": {
+  "promptHash": "f201dcc19c76",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1016
+ },
+ "Something velvety would hit the spot.": {
+  "promptHash": "7536fb3ef987",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[\"creamy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 852
+ },
+ "It needs to taste sharper and brighter.": {
+  "promptHash": "ccfd7a62fca4",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1207
+ },
+ "Thinking laksa or Hainanese chicken rice tonight.": {
+  "promptHash": "0b1b66dbca7e",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\",\"singapore_hawker\"],\"food\":[]}",
+  "ms": 903
+ },
+ "I could murder some wings right now.": {
+  "promptHash": "4f043e8da54c",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[\"craving_understanding\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 921
+ },
+ "Is it realistic to put on size without feeling stuffed?": {
+  "promptHash": "8b5dd879d271",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"satiety\",\"meal_density\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 949
+ },
+ "Rough day, ate way too much, feeling pretty rubbish.": {
+  "promptHash": "d3ebb540c129",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"coaching\",\"topics\":[\"adherence\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1026
+ },
+ "Give me protein tips when I'm trying to shed fat.": {
+  "promptHash": "4fbacf5dc3cc",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"protein\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 924
+ },
+ "Which noodle bowl at the stalls is the lighter pick?": {
+  "promptHash": "d7f9c8001923",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"cuisine\",\"topics\":[\"eating_out\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 918
+ },
+ "Is a surplus meant to feel like a chore?": {
+  "promptHash": "653bafe61a61",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"adherence\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1747
+ },
+ "Làm sao cho món này giòn hơn?": {
+  "promptHash": "b91c5ca10c51",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[\"crunchy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 934
+ },
+ "Tôi thèm cereal ngọt quá.": {
+  "promptHash": "8bf013fb2f2b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[],\"goal\":null,\"sensory\":[\"sweet\"],\"cuisine\":[],\"food\":[\"cereal\"]}",
+  "ms": 971
+ },
+ "Take the sauce out.": {
+  "promptHash": "b1c037fbfb03",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 989
+ },
+ "Cảm ơn nhé.": {
+  "promptHash": "84427e4ee816",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 809
+ },
+ "I want more bite and crispness.": {
+  "promptHash": "b2cd50bd060e",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[\"crunchy\"],\"cuisine\":[],\"food\":[]}",
+  "ms": 1109
+ },
+ "Trying to lose weight but I really want a cheeseburger.": {
+  "promptHash": "3a16c325f110",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"craving\",\"topics\":[],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 877
+ },
+ "My food tastes flat, it needs to pop more.": {
+  "promptHash": "3fc68fd4002b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1013
+ },
+ "I overate yesterday and feel awful about it.": {
+  "promptHash": "18ffa90407b7",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"coaching\",\"topics\":[\"adherence\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 904
+ },
+ "Deep-fried wings: any way to enjoy them in a deficit?": {
+  "promptHash": "24fa3878cb77",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"calorie_drivers\",\"indulgent_meal\"],\"goal\":\"fat_loss\",\"sensory\":[],\"cuisine\":[],\"food\":[\"fried_chicken\"]}",
+  "ms": 1806
+ },
+ "Is there a smart way to add more salt to the dish?": {
+  "promptHash": "d01faaaa15d2",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 925
+ },
+ "How consistent should my protein be across the day on a bulk?": {
+  "promptHash": "77ddb640bcb5",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"goal_strategy\",\"topics\":[\"protein\"],\"goal\":\"muscle_gain\",\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 917
+ },
+ "These greens are really bitter, how do I fix that?": {
+  "promptHash": "f9b432f8da98",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"seasoning\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 923
+ },
+ "How do I mix textures in one bowl so it's not one-dimensional?": {
+  "promptHash": "74832120051b",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"flavor_texture\",\"topics\":[\"texture_contrast\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 883
+ },
+ "wat r my macros rn": {
+  "promptHash": "8d6e55edd213",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 932
+ },
+ "How trustworthy are calorie counts on menus?": {
+  "promptHash": "96f44b7d7dd2",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"general_nutrition\",\"topics\":[\"estimate_confidence\"],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 909
+ },
+ "What's my calorie goal?": {
+  "promptHash": "2beaaf9b003a",
+  "reply": "{\"needsKnowledge\":false,\"category\":\"none\",\"topics\":[],\"goal\":null,\"sensory\":[],\"cuisine\":[],\"food\":[]}",
+  "ms": 1034
+ },
+ "Pho but make it fit my macros.": {
+  "promptHash": "52182f4da2b9",
+  "reply": "{\"needsKnowledge\":true,\"category\":\"food_makeover\",\"topics\":[\"meal_composition\"],\"goal\":null,\"sensory\":[],\"cuisine\":[\"vietnamese\"],\"food\":[]}",
+  "ms": 991
+ }
+}

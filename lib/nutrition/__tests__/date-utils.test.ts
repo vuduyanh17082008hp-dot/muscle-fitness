@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { addDaysIso, todayIso } from "@/lib/nutrition/date-utils"
+import { addDaysIso, isSupportedFoodLogViewDate, isSupportedFoodLogWriteDate, todayIso } from "@/lib/nutrition/date-utils"
+import { localDateTimeParts } from "@/lib/training/load-today-session"
 
 describe("todayIso", () => {
   const originalTz = process.env.TZ
@@ -41,5 +42,23 @@ describe("addDaysIso", () => {
   it("adds days to a calendar date independent of timezone (pure date arithmetic, not an instant)", () => {
     expect(addDaysIso("2026-09-14", -1)).toBe("2026-09-13")
     expect(addDaysIso("2026-09-14", 1)).toBe("2026-09-15")
+  })
+})
+
+describe("food log date window", () => {
+  it("writes only on profile-local today, including the Singapore UTC-midnight boundary", () => {
+    const localToday = localDateTimeParts(new Date("2026-10-06T16:30:00.000Z"), "Asia/Singapore").localDate
+    expect(localToday).toBe("2026-10-07")
+    expect(isSupportedFoodLogWriteDate("2026-10-07", localToday)).toBe(true)
+    expect(isSupportedFoodLogWriteDate("2026-10-06", localToday)).toBe(false)
+    expect(isSupportedFoodLogWriteDate("2099-01-01", localToday)).toBe(false)
+    expect(isSupportedFoodLogWriteDate("2020-01-01", localToday)).toBe(false)
+    expect(isSupportedFoodLogWriteDate("2026-02-30", localToday)).toBe(false)
+  })
+
+  it("lets history view any past day but not a future day", () => {
+    expect(isSupportedFoodLogViewDate("2024-02-29", "2026-09-15")).toBe(true)
+    expect(isSupportedFoodLogViewDate("2026-09-15", "2026-09-15")).toBe(true)
+    expect(isSupportedFoodLogViewDate("2026-09-16", "2026-09-15")).toBe(false)
   })
 })

@@ -637,7 +637,7 @@ export default async function WorkoutHistoryPage() {
     const candidate:
       DerivedPersonalRecord = {
       exerciseName:
-        sessionExercise.exercise_name,
+        sessionExercise.display_name,
 
       weightKg,
       repetitions,
@@ -655,7 +655,7 @@ export default async function WorkoutHistoryPage() {
 
     const currentRecord =
       recordByExercise.get(
-        sessionExercise.exercise_name,
+        sessionExercise.display_name,
       );
 
     if (
@@ -664,7 +664,7 @@ export default async function WorkoutHistoryPage() {
         currentRecord.estimatedOneRepMax
     ) {
       recordByExercise.set(
-        sessionExercise.exercise_name,
+        sessionExercise.display_name,
         candidate,
       );
     }
@@ -1224,7 +1224,7 @@ function WorkoutHistoryCard({
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-black text-zinc-200">
                               {
-                                exercise.exercise_name
+                                exercise.display_name
                               }
                             </p>
 
@@ -1245,11 +1245,11 @@ function WorkoutHistoryCard({
                             }{" "}
                             sets ·{" "}
                             {
-                              exercise.rep_min
+                              exercise.target_rep_min
                             }
                             –
                             {
-                              exercise.rep_max
+                              exercise.target_rep_max
                             }{" "}
                             target reps
                             {exercise.target_rir !==

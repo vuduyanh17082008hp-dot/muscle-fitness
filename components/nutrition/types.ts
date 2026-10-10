@@ -23,4 +23,7 @@ export type ConfirmedFood = {
   estimationConfidence?: EstimationConfidence | null
   estimationReason?: string | null
   estimatedFrom?: string | null
+
+  /** Stable per-submit key. Server is authoritative; this only identifies the request. */
+  idempotencyKey?: string
 }

@@ -65,7 +65,7 @@ export function AdaptScene({ adapt }: { adapt: AdaptViewModel }) {
       className="relative bg-[var(--mf-pub-bg)] px-6 py-16 lg:px-12 lg:py-24"
     >
       <div className="mx-auto max-w-7xl">
-        <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-brand)]">07 · Adapt</p>
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-brand)]">08 · Adapt</p>
 
         <h2 className="adapt-heading mt-4 max-w-3xl font-heading text-4xl font-black uppercase leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
           Train. Measure. <span className="text-[var(--mf-brand)]">Adapt.</span> Progress.

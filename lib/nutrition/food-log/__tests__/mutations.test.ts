@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
  * Create / edit / delete (spec Part "10. TESTS") for the food_logs
@@ -10,7 +10,19 @@ vi.mock("@/lib/events/emit", () => ({
   emitEvent: vi.fn().mockResolvedValue(undefined),
 }))
 
+import { emitEvent } from "@/lib/events/emit"
 import { createFoodLog, deleteFoodLog, updateFoodLogQuantity } from "@/lib/nutrition/food-log/mutations"
+
+const KEY_A = "11111111-1111-4111-8111-111111111111"
+const KEY_B = "22222222-2222-4222-8222-222222222222"
+
+const CHICKEN = {
+  mealType: "lunch" as const,
+  foodName: "Chicken Breast — cooked",
+  source: "local" as const,
+  per100g: { calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+  quantityGrams: 150,
+}
 
 type Row = {
   id: string
@@ -34,10 +46,11 @@ type Row = {
   estimation_confidence: string | null
   estimation_reason: string | null
   estimated_from: string | null
+  idempotency_key: string | null
   created_at: string
 }
 
-function createFakeSupabase() {
+function createFakeSupabase(timezone = "UTC") {
   const rows = new Map<string, Row>()
   let nextId = 1
 
@@ -52,7 +65,7 @@ function createFakeSupabase() {
         return {
           select: () => ({
             eq: () => ({
-              maybeSingle: async () => ({ data: { timezone: "UTC" }, error: null }),
+              maybeSingle: async () => ({ data: { timezone }, error: null }),
             }),
           }),
         }
@@ -64,6 +77,14 @@ function createFakeSupabase() {
         insert: (values: Partial<Row>) => ({
           select: () => ({
             single: async () => {
+              const key = values.idempotency_key ?? null
+              if (key) {
+                for (const existing of rows.values()) {
+                  if (existing.user_id === values.user_id && existing.idempotency_key === key) {
+                    return { data: null, error: { message: "duplicate key", code: "23505" } }
+                  }
+                }
+              }
               const id = `row-${nextId++}`
               const row: Row = {
                 id,
@@ -87,6 +108,7 @@ function createFakeSupabase() {
                 estimation_confidence: values.estimation_confidence ?? null,
                 estimation_reason: values.estimation_reason ?? null,
                 estimated_from: values.estimated_from ?? null,
+                idempotency_key: key,
                 created_at: new Date().toISOString(),
               }
               rows.set(id, row)
@@ -123,19 +145,34 @@ function createFakeSupabase() {
           }),
         }),
 
-        select: () => ({
-          eq: (_c1: string, id: string) => ({
-            eq: (_c2: string, userId: string) => ({
-              single: async () => {
-                const existing = rows.get(id)
-                if (!existing || existing.user_id !== userId) {
-                  return { data: null, error: { message: "not found" } }
-                }
-                return { data: existing, error: null }
-              },
-            }),
-          }),
-        }),
+        select: () => {
+          const filters: Record<string, string> = {}
+          const chain = {
+            eq(column: string, value: string) {
+              filters[column] = value
+              return chain
+            },
+            async single() {
+              const match = find()
+              if (!match) return { data: null, error: { message: "not found" } }
+              return { data: match, error: null }
+            },
+            async maybeSingle() {
+              return { data: find(), error: null }
+            },
+          }
+          function find() {
+            return [...rows.values()].find((row) =>
+              Object.entries(filters).every(([column, value]) => {
+                if (column === "id") return row.id === value
+                if (column === "user_id") return row.user_id === value
+                if (column === "idempotency_key") return row.idempotency_key === value
+                return true
+              }),
+            )
+          }
+          return chain
+        },
       }
     },
   }
@@ -342,3 +379,113 @@ it("does not zero nutrient totals when editing a corrupt zero-gram row", async (
   expect(result.success).toBe(false);
   expect(rows.get(row.id)?.calories).toBe(100);
 });
+
+describe("createFoodLog request idempotency", () => {
+  it("replays the same user + key without inserting or emitting again", async () => {
+    const { client, rows } = createFakeSupabase()
+
+    const first = await createFoodLog(client as never, USER_ID, { ...CHICKEN, idempotencyKey: KEY_A })
+    const second = await createFoodLog(client as never, USER_ID, { ...CHICKEN, idempotencyKey: KEY_A })
+
+    expect(first.success).toBe(true)
+    expect(second.success).toBe(true)
+    if (first.success && second.success) {
+      expect(second.data.id).toBe(first.data.id)
+      expect(second.data.calories).toBe(first.data.calories)
+    }
+    expect(rows.size).toBe(1)
+    expect(emitEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it("allows the same food twice when the keys differ", async () => {
+    const { client, rows } = createFakeSupabase()
+
+    const first = await createFoodLog(client as never, USER_ID, { ...CHICKEN, idempotencyKey: KEY_A })
+    const second = await createFoodLog(client as never, USER_ID, { ...CHICKEN, idempotencyKey: KEY_B })
+
+    expect(first.success && second.success).toBe(true)
+    expect(rows.size).toBe(2)
+    const calories = [...rows.values()].reduce((sum, row) => sum + Number(row.calories), 0)
+    expect(calories).toBe(495)
+  })
+
+  it("scopes uniqueness to the authenticated user", async () => {
+    const { client, rows } = createFakeSupabase()
+
+    const first = await createFoodLog(client as never, USER_ID, { ...CHICKEN, idempotencyKey: KEY_A })
+    const second = await createFoodLog(client as never, "user-2", { ...CHICKEN, idempotencyKey: KEY_A })
+
+    expect(first.success && second.success).toBe(true)
+    if (first.success && second.success) {
+      expect(second.data.id).not.toBe(first.data.id)
+    }
+    expect(rows.size).toBe(2)
+  })
+
+  it("rejects a malformed idempotency key", async () => {
+    const { client, rows } = createFakeSupabase()
+
+    const result = await createFoodLog(client as never, USER_ID, {
+      ...CHICKEN,
+      idempotencyKey: "not-a-uuid",
+    })
+
+    expect(result).toMatchObject({ success: false, status: 400 })
+    expect(rows.size).toBe(0)
+  })
+})
+
+describe("createFoodLog write-date window", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("accepts the profile-local today around Singapore UTC midnight", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-10-06T16:30:00.000Z"))
+    const { client } = createFakeSupabase("Asia/Singapore")
+
+    const result = await createFoodLog(client as never, USER_ID, {
+      ...CHICKEN,
+      logDate: "2026-10-07",
+      idempotencyKey: KEY_A,
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it("rejects the UTC date when it is not the profile-local today", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-10-06T16:30:00.000Z"))
+    const { client, rows } = createFakeSupabase("Asia/Singapore")
+
+    const result = await createFoodLog(client as never, USER_ID, {
+      ...CHICKEN,
+      logDate: "2026-10-06",
+      idempotencyKey: KEY_A,
+    })
+
+    expect(result).toMatchObject({ success: false, status: 400 })
+    expect(rows.size).toBe(0)
+  })
+
+  it("rejects a far-future write date", async () => {
+    const { client } = createFakeSupabase()
+    const result = await createFoodLog(client as never, USER_ID, {
+      ...CHICKEN,
+      logDate: "2099-01-01",
+      idempotencyKey: KEY_A,
+    })
+    expect(result).toMatchObject({ success: false, status: 400 })
+  })
+
+  it("rejects a historical write date", async () => {
+    const { client } = createFakeSupabase()
+    const result = await createFoodLog(client as never, USER_ID, {
+      ...CHICKEN,
+      logDate: "2020-01-01",
+      idempotencyKey: KEY_A,
+    })
+    expect(result).toMatchObject({ success: false, status: 400 })
+  })
+})

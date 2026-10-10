@@ -80,9 +80,12 @@ function baseAthleteState(overrides: Partial<AthleteState["recovery"]> = {}): At
 function lastSession(overrides: Partial<LastSessionForExercise> = {}): LastSessionForExercise {
   return {
     sessionExerciseId: "session-exercise-1",
+    displayName: "Bench Press",
+    targetSets: 3,
     targetRepMin: 6,
     targetRepMax: 8,
     targetRir: 2,
+    targetRpe: 8,
     completedAt: "2026-09-10T00:00:00.000Z",
     sets: [
       { weightKg: 80, reps: 8, rir: 2, completed: true },

@@ -85,7 +85,7 @@ export function nextMilestone(journey: ProgressJourney): NextMilestone | null {
 export function heatmapInsight(days: ConsistencyDay[]): HeatmapInsight {
   const trainingDays = days.filter((day) => day.status === "TRAINING_COMPLETE").length
   const missedDays = days.filter((day) => day.status === "MISSED").length
-  const restDays = days.filter((day) => day.status === "RECOVERY_COMPLETE").length
+  const restDays = days.filter((day) => day.status === "NO_REQUIREMENT").length
   const missed = days.filter((day) => day.status === "MISSED")
   let note: string | null = null
   if (missed.length >= 3) {

@@ -59,40 +59,31 @@
      --mf-pub-text is primary copy (headlines, metrics); -secondary is
      body/supporting copy (must stay comfortably readable); -muted is
      metadata/captions only (timestamps, disclosures, chrome labels). */
-  --mf-pub-bg: #050505;
-  --mf-pub-bg-deep: #09090a;
-  --mf-pub-surface: #101112;
-  --mf-pub-surface-elevated: #151719;
-  --mf-pub-surface-hover: #1a1c1e;
+  --mf-pub-bg: #0a0d14;
+  --mf-pub-bg-deep: #0d111a;
+  --mf-pub-surface: #121620;
+  --mf-pub-surface-elevated: #181d2a;
+  --mf-pub-surface-hover: #1f2535;
   --mf-pub-text: #f7f8fa;
-  --mf-pub-text-secondary: #a1a6ae;
-  --mf-pub-text-muted: #777d86;
+  --mf-pub-text-secondary: #a8b0bd;
+  --mf-pub-text-muted: #838b98;
   --mf-pub-border: rgba(255, 255, 255, 0.08);
   --mf-pub-border-strong: rgba(255, 255, 255, 0.14);
 
   /* ---- Performance Glass — the authenticated Client Dashboard's own
      scope (app/dashboard/page.tsx + components/dashboard/dashboard-shell.tsx).
-     Literal values match --mf-pub-* exactly (one canonical dark-graphite
-     system), aliased under a dashboard-specific name so components read
-     a token that describes THEIR surface rather than borrowing the
-     public-marketing name. Brand lime / Dante violet / analytics cyan
-     / warning / danger all reuse the SAME tokens the rest of the app
-     already defines above — nothing is redefined twice. ---- */
-  --mf-glass-bg: var(--mf-pub-bg);
-  --mf-glass-bg-deep: var(--mf-pub-bg-deep);
-  --mf-glass-surface: var(--mf-pub-surface);
-  --mf-glass-elevated: var(--mf-pub-surface-elevated);
-  --mf-glass-hover: var(--mf-pub-surface-hover);
-  --mf-glass-text: var(--mf-pub-text);
-  --mf-glass-text-secondary: var(--mf-pub-text-secondary);
-  /* Deliberately its own literal, not aliased to --mf-pub-text-muted:
-     that shared value (#777d86) measures ~4.5:1 on the dashboard's card
-     surfaces — right at the WCAG floor and visibly low-contrast for the
-     small (10-11px) metadata labels used throughout. Scoped to the
-     dashboard only so public marketing/privacy/terms are untouched. */
-  --mf-glass-text-muted: #868c96;
-  --mf-glass-border: var(--mf-pub-border);
-  --mf-glass-border-strong: var(--mf-pub-border-strong);
+     Calm adaptive graphite canvas with excellent contrast. Brand lime is reserved
+     for primary CTAs/active indicators, Dante is quiet violet. ---- */
+  --mf-glass-bg: #0a0d14;
+  --mf-glass-bg-deep: #0d111a;
+  --mf-glass-surface: #121620;
+  --mf-glass-elevated: #181d2a;
+  --mf-glass-hover: #1f2535;
+  --mf-glass-text: #f7f8fa;
+  --mf-glass-text-secondary: #a8b0bd;
+  --mf-glass-text-muted: #959da9;
+  --mf-glass-border: rgba(255, 255, 255, 0.08);
+  --mf-glass-border-strong: rgba(255, 255, 255, 0.14);
 
   --mf-glass-brand: var(--mf-brand);
   --mf-glass-brand-hover: var(--mf-brand-hover);

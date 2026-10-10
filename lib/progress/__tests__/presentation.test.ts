@@ -13,7 +13,7 @@ import {
   weeklyRhythm,
 } from "@/lib/progress/presentation"
 import { buildProgressJourney } from "@/lib/progress/aggregator"
-import { localDateOfSession } from "@/lib/progress/streak"
+import { computeStreaks, localDateOfSession } from "@/lib/progress/streak"
 import { MOTIVATION_BANK, resolveProgressMotivation, selectMotivationLine } from "@/lib/motivation"
 import type { BuildProgressJourneyInput, ProgressJourney } from "@/lib/progress/types"
 
@@ -116,6 +116,36 @@ describe("heatmap", () => {
     )
     expect(window).toHaveLength(84)
     expect(window.filter((day) => day.status === "TRAINING_COMPLETE")).toHaveLength(1)
+  })
+
+  it("counts NO_REQUIREMENT as rest, not recovery check-ins or planned recovery days", () => {
+    const insight = heatmapInsight([
+      { date: "2026-08-01", status: "NO_REQUIREMENT", countsTowardStreak: true, evidenceRefs: [] },
+      { date: "2026-08-02", status: "NO_REQUIREMENT", countsTowardStreak: true, evidenceRefs: [] },
+      { date: "2026-08-03", status: "RECOVERY_COMPLETE", countsTowardStreak: true, evidenceRefs: ["rest"] },
+    ])
+    expect(insight.restDays).toBe(2)
+    expect(insight.trainingDays).toBe(0)
+    expect(insight.missedDays).toBe(0)
+  })
+
+  it("does not count a recovery check-in as a rest day", () => {
+    const insight = heatmapInsight([
+      { date: "2026-08-04", status: "CHECKIN_COMPLETE", countsTowardStreak: true, evidenceRefs: ["checkin"] },
+    ])
+    expect(insight.restDays).toBe(0)
+  })
+})
+
+describe("streak semantics", () => {
+  it("skips NO_REQUIREMENT and still counts planned recovery toward the streak", () => {
+    const streaks = computeStreaks([
+      { date: "2026-08-01", status: "TRAINING_COMPLETE", countsTowardStreak: true, evidenceRefs: [] },
+      { date: "2026-08-02", status: "NO_REQUIREMENT", countsTowardStreak: true, evidenceRefs: [] },
+      { date: "2026-08-03", status: "RECOVERY_COMPLETE", countsTowardStreak: true, evidenceRefs: [] },
+      { date: "2026-08-04", status: "TRAINING_COMPLETE", countsTowardStreak: true, evidenceRefs: [] },
+    ])
+    expect(streaks).toEqual({ currentStreak: 3, longestStreak: 3 })
   })
 })
 

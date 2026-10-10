@@ -42,3 +42,16 @@ export function isValidDateIso(value: string): boolean {
   const date = new Date(`${value}T00:00:00.000Z`)
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
+
+/**
+ * Product write rule: the tracker only offers add/edit on local today
+ * (`isToday` gates Track Food / Next Meal / row edits; date input max=today).
+ */
+export function isSupportedFoodLogWriteDate(logDate: string, localToday: string): boolean {
+  return isValidDateIso(logDate) && logDate === localToday
+}
+
+/** Product view rule: date picker allows any past day, not future days. */
+export function isSupportedFoodLogViewDate(date: string, localToday: string): boolean {
+  return isValidDateIso(date) && date <= localToday
+}

@@ -185,6 +185,7 @@ export async function saveProfileAction(
         full_name: fullName,
         username,
         phone,
+        timezone,
         updated_at: now,
       },
       {

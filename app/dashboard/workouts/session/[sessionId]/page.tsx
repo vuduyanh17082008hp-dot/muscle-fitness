@@ -429,16 +429,6 @@ export default async function WorkoutSessionPage({
                   training volume.
                 </p>
               </div>
-
-              <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                <p className="text-xs font-black uppercase tracking-wider text-zinc-600">
-                  Session ID
-                </p>
-
-                <p className="mt-2 max-w-64 break-all font-mono text-xs text-zinc-400">
-                  {session.id}
-                </p>
-              </div>
             </div>
           </div>
         </header>
@@ -652,7 +642,7 @@ function SessionExerciseCard({
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <h3 className="text-xl font-black">
-                  {exercise.exercise_name}
+                  {exercise.display_name}
                 </h3>
 
                 {exercise.is_skipped ? (
@@ -664,8 +654,8 @@ function SessionExerciseCard({
 
               <p className="mt-2 text-xs leading-6 text-zinc-600">
                 {exercise.target_sets} sets ·{" "}
-                {exercise.rep_min}–
-                {exercise.rep_max} reps ·{" "}
+                {exercise.target_rep_min}–
+                {exercise.target_rep_max} reps ·{" "}
                 {exercise.rest_seconds}s rest
                 {exercise.target_rir !== null
                   ? ` · Target RIR ${exercise.target_rir}`
@@ -709,73 +699,101 @@ function SessionExerciseCard({
             </p>
           )
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] border-separate border-spacing-y-2">
-              <thead>
-                <tr className="text-left text-[10px] font-black uppercase tracking-wider text-zinc-600">
-                  <th className="px-4 py-2">
-                    Set
-                  </th>
+          <div>
+            {/* Mobile View: Stacked touch-friendly set cards */}
+            <div className="flex flex-col gap-2.5 sm:hidden">
+              {exercise.sets.map((set) => (
+                <div
+                  key={set.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-xs font-black">
+                      #{set.set_number}
+                    </span>
+                    <div>
+                      <p className="text-sm font-bold text-white">
+                        {set.weight_kg !== null ? `${set.weight_kg} kg` : "Bodyweight"}{" "}
+                        <span className="text-zinc-500">×</span> {set.reps ?? "—"} reps
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        {set.rir !== null ? `RIR ${set.rir}` : "Target effort"}
+                      </p>
+                    </div>
+                  </div>
 
-                  <th className="px-4 py-2">
-                    Weight
-                  </th>
+                  <div className="shrink-0">
+                    {set.completed ? (
+                      <span className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300">
+                        <CheckCircle2 className="size-4" />
+                        Done
+                      </span>
+                    ) : (
+                      <span className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-zinc-400">
+                        <Gauge className="size-4" />
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
 
-                  <th className="px-4 py-2">
-                    Reps
-                  </th>
-
-                  <th className="px-4 py-2">
-                    RIR
-                  </th>
-
-                  <th className="px-4 py-2">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {exercise.sets.map((set) => (
-                  <tr
-                    key={set.id}
-                    className="bg-white/[0.025] text-sm text-zinc-300"
-                  >
-                    <td className="rounded-l-xl px-4 py-3 font-black">
-                      {set.set_number}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {set.weight_kg !== null
-                        ? `${set.weight_kg} kg`
-                        : "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {set.reps ?? "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {set.rir ?? "—"}
-                    </td>
-
-                    <td className="rounded-r-xl px-4 py-3">
-                      {set.completed ? (
-                        <span className="inline-flex items-center gap-2 text-emerald-300">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Completed
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2 text-zinc-600">
-                          <Gauge className="h-4 w-4" />
-                          Pending
-                        </span>
-                      )}
-                    </td>
+            {/* Desktop / Tablet View: Structured Data Table */}
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full min-w-[620px] border-separate border-spacing-y-2">
+                <thead>
+                  <tr className="text-left text-[10px] font-black uppercase tracking-wider text-zinc-600">
+                    <th className="px-4 py-2">Set</th>
+                    <th className="px-4 py-2">Weight</th>
+                    <th className="px-4 py-2">Reps</th>
+                    <th className="px-4 py-2">RIR</th>
+                    <th className="px-4 py-2">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody>
+                  {exercise.sets.map((set) => (
+                    <tr
+                      key={set.id}
+                      className="bg-white/[0.025] text-sm text-zinc-300"
+                    >
+                      <td className="rounded-l-xl px-4 py-3 font-black">
+                        {set.set_number}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {set.weight_kg !== null
+                          ? `${set.weight_kg} kg`
+                          : "—"}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {set.reps ?? "—"}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {set.rir ?? "—"}
+                      </td>
+
+                      <td className="rounded-r-xl px-4 py-3">
+                        {set.completed ? (
+                          <span className="inline-flex items-center gap-2 text-emerald-300">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Completed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2 text-zinc-600">
+                            <Gauge className="h-4 w-4" />
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

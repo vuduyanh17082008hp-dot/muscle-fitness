@@ -42,12 +42,13 @@ function round(value: number, decimals = 2): number {
 export function computePersonalBaseline(
   sets: DatedExerciseSetLog[],
   contributionsByExercise: Map<string, ExerciseMuscleContribution[]>,
-  options: { now?: Date; timeZoneOffsetMinutes?: number } = {},
+  options: { now?: Date; timeZoneOffsetMinutes?: number; timeZone?: string } = {},
 ): Map<CanonicalMuscle, PersonalBaseline> {
   const timeZoneOffsetMinutes = options.timeZoneOffsetMinutes ?? 0;
+  const timeZone = options.timeZone;
   const now = options.now ?? new Date();
 
-  const thisWeekStart = currentWeekStart(now, timeZoneOffsetMinutes);
+  const thisWeekStart = currentWeekStart(now, timeZoneOffsetMinutes, timeZone);
   const thisWeekKey = weekKey(thisWeekStart);
 
   const breakdownByWeek = new Map<
@@ -58,7 +59,7 @@ export function computePersonalBaseline(
   const byWeek = new Map<string, DatedExerciseSetLog[]>();
 
   for (const set of sets) {
-    const localDate = toLocalDate(set.completedAt, timeZoneOffsetMinutes);
+    const localDate = toLocalDate(set.completedAt, timeZoneOffsetMinutes, timeZone);
     const key = weekKey(startOfWeekMonday(localDate));
 
     if (key === thisWeekKey) {

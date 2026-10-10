@@ -40,7 +40,7 @@ export const siteConfig: SiteConfig = {
           "Solution",
 
         href:
-          "/#solution",
+          "/#system",
       },
 
       {
@@ -48,7 +48,7 @@ export const siteConfig: SiteConfig = {
           "Dante",
 
         href:
-          "/chatbot",
+          "/dashboard/ai-coach",
       },
 
       {
@@ -56,7 +56,7 @@ export const siteConfig: SiteConfig = {
           "Training",
 
         href:
-          "/training",
+          "/dashboard/workouts",
       },
 
       {

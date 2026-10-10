@@ -6,7 +6,11 @@ import { requireUser } from "@/lib/auth/guard";
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { buildRecoveryRecommendation } from "@/lib/recovery/recommendation";
 import { buildTodayAdjustment } from "@/lib/recovery/today-adjustment";
-import { loadTodaySession } from "@/lib/training/load-today-session";
+import {
+  loadTodaySession,
+  localDateTimeParts,
+  resolveUserTimeZone,
+} from "@/lib/training/load-today-session";
 
 import DanteChat from "@/components/dante-chat";
 import { RecoveryScoreCard } from "@/components/recovery/recovery-score-card";
@@ -16,10 +20,13 @@ import { TrainingRecoveryCard } from "@/components/recovery/training-recovery-ca
 import { MuscleReadinessPanel } from "@/components/dante/muscle-readiness-panel";
 import { RecoveryTrendsChart } from "@/components/recovery/recovery-trends-chart";
 import { RecoveryKnowledgeHub } from "@/components/recovery/recovery-knowledge-hub";
-import { PageVisual } from "@/components/visual/page-visual";
+import { persistWorkoutProposal } from "@/lib/recovery/supabase-apply";
+import { createRecoveryAdminClient } from "@/lib/supabase/admin";
+import { proposalMutatesWorkout } from "@/lib/recovery/proposal";
 import { loadRadarContext } from "@/lib/health-radar/load-radar-context";
 import { buildRecoveryRadar } from "@/lib/health-radar/recovery-radar-engine";
 import { DecisionCard } from "@/components/dante/decision-card";
+import { PageVisual } from "@/components/visual/page-visual";
 
 export const dynamic = "force-dynamic";
 
@@ -52,10 +59,13 @@ const RECOVERY_QUICK_PROMPTS = [
 
 export default async function RecoveryPage() {
   const { supabase, userId } = await requireUser();
+  const now = new Date();
+  const timezone = await resolveUserTimeZone(supabase, userId);
+  const localDate = localDateTimeParts(now, timezone).localDate;
 
   const [context, todaySession] = await Promise.all([
     loadRecoveryContext(supabase, userId),
-    loadTodaySession(supabase, userId),
+    loadTodaySession(supabase, userId, now, timezone),
   ]);
   const recommendation = buildRecoveryRecommendation(
     context.todayScoreResult,
@@ -66,6 +76,19 @@ export default async function RecoveryPage() {
     recovery: context,
     session: todaySession,
   });
+  let proposalReady = true;
+  if (proposalMutatesWorkout(adjustment.proposal)) {
+    try {
+      const stored = await persistWorkoutProposal(createRecoveryAdminClient(), adjustment.proposal);
+      if (!stored.ok) {
+        proposalReady = false;
+        console.error("[RECOVERY PROPOSAL] dashboard persist failed");
+      }
+    } catch {
+      proposalReady = false;
+      console.error("[RECOVERY PROPOSAL] dashboard persist failed");
+    }
+  }
 
   const radarInput = await loadRadarContext(supabase, userId);
   const radar = buildRecoveryRadar(radarInput);
@@ -122,6 +145,8 @@ export default async function RecoveryPage() {
         insight={adjustment.insight}
         proposal={adjustment.proposal}
         hasCheckin={context.today !== null}
+        localDate={localDate}
+        proposalReady={proposalReady}
       />
 
       {/* =================================================
@@ -158,7 +183,7 @@ export default async function RecoveryPage() {
 
         <DanteChat
           compact
-          heroTitle="Your Recovery Coach"
+          heroTitle="Dante for Recovery"
           heroSubtitle="I can see today's recovery score, your last 7 days of trends and your recent training load. Ask me anything about sleep, stress, soreness or when to back off."
           welcomeMessage="Hi. I'm **Dante**. I can see today's recovery score, your 7-day trend and your recent training load — ask me what's driving it or whether to adjust today's session."
           quickPrompts={RECOVERY_QUICK_PROMPTS}

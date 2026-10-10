@@ -158,12 +158,16 @@ async function loadPersonalRecords(
 
     const { data: exerciseRows, error } = await supabase
       .from("workout_session_exercises")
-      .select("id, exercise_id, exercise_name")
+      .select("id, exercise_id, display_name")
       .in("workout_session_id", completedIds)
     if (error) return []
 
     const sessionExercises =
-      (exerciseRows as Array<{ id: string; exercise_id: string | null; exercise_name: string | null }> | null) ?? []
+      (exerciseRows as Array<{
+        id: string
+        exercise_id: string | null
+        display_name: string | null
+      }> | null) ?? []
     if (sessionExercises.length === 0) return []
 
     const { data: setRows, error: setError } = await supabase
@@ -190,7 +194,7 @@ async function loadPersonalRecords(
       if (!parent?.exercise_id || !e1rm || !row.completed_at) continue
       points.push({
         exerciseId: parent.exercise_id,
-        exerciseName: parent.exercise_name ?? "Exercise",
+        exerciseName: parent.display_name ?? "Exercise",
         date: row.completed_at.slice(0, 10),
         estimated1RmKg: e1rm,
       })

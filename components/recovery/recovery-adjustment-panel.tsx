@@ -34,11 +34,15 @@ export function RecoveryAdjustmentPanel({
   insight,
   proposal,
   hasCheckin,
+  localDate,
+  proposalReady = true,
 }: {
   recoveryState: RecoveryState;
   insight: string;
   proposal: WorkoutAdjustmentProposal;
   hasCheckin: boolean;
+  localDate: string;
+  proposalReady?: boolean;
 }) {
   const router = useRouter();
   const titleId = useId();
@@ -50,7 +54,7 @@ export function RecoveryAdjustmentPanel({
 
   if (!hasCheckin) return null;
 
-  const canAdjust = proposalMutatesWorkout(proposal);
+  const canAdjust = proposalReady && proposalMutatesWorkout(proposal);
   const readiness = recoveryState.digest.status ?? recoveryState.digest.readiness;
 
   async function apply() {
@@ -60,7 +64,7 @@ export function RecoveryAdjustmentPanel({
       const response = await fetch("/api/recovery/adjustment/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proposal }),
+        body: JSON.stringify({ proposalId: proposal.proposalId, confirm: true }),
       });
       const data = (await response.json()) as { error?: string; alreadyApplied?: boolean };
       if (!response.ok) {
@@ -131,6 +135,7 @@ export function RecoveryAdjustmentPanel({
       ) : null}
 
       <MotivationLine
+        localDate={localDate}
         contexts={
           applied
             ? ["PLAN_ADJUSTED"]

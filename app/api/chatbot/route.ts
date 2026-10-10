@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { checkDanteRateLimit } from "@/lib/chatbot-rate-limit";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import {
   TRAINING_MODE_LABELS,
@@ -57,6 +58,7 @@ import {
   updateNof1Experiment,
 } from "@/lib/dante-core/nof1-engine";
 import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
+import { getCoachMode, handleNutritionCoachChat } from "@/lib/nutrition/coach/chat";
 import { resolveCasualControlFlow } from "@/lib/dante-core/casual-intent";
 import { decideDanteLanguage, buildDanteLanguageInstruction, type DanteLanguageDecision } from "@/lib/dante-language";
 import { buildEpistemicPolicyInstruction } from "@/lib/dante-core/epistemics/policy";
@@ -1190,7 +1192,7 @@ async function loadUserContext(
         return null;
       }),
 
-      buildAthleteState(supabase, userId).catch((error: unknown) => {
+      buildAthleteState(supabase, userId, { now, timeZone: timezone ?? "UTC" }).catch((error: unknown) => {
         console.warn("[DANTE TRAINING INTELLIGENCE]", error);
         return null;
       }),
@@ -1207,7 +1209,7 @@ async function loadUserContext(
         return null;
       }),
 
-      loadTrainingContext(supabase, userId).catch((error: unknown) => {
+      loadTrainingContext(supabase, userId, { now, timeZone: timezone ?? "UTC" }).catch((error: unknown) => {
         console.warn("[DANTE ADAPTIVE TRAINING]", error);
         return null;
       }),
@@ -3891,7 +3893,84 @@ export async function POST(
 ) {
   try {
     /* -----------------------------------------------------
-       PARSE
+       AUTH — anonymous requests never touch rate-limit storage.
+    ----------------------------------------------------- */
+
+    const supabase =
+      await createClient();
+
+    const {
+      data: {
+        user,
+      },
+      error:
+        authError,
+    } =
+      await supabase.auth.getUser();
+
+    if (
+      authError ||
+      !user
+    ) {
+      return Response.json(
+        {
+          ok: false,
+
+          error:
+            "You must be logged in to use Dante.",
+        },
+        {
+          status: 401,
+        },
+      );
+    }
+
+    /* -----------------------------------------------------
+       APPLICATION RATE LIMIT — accepted requests consume quota
+       before body validation. This keeps ordering deterministic and
+       prevents direct authenticated abuse from reaching Dante.
+    ----------------------------------------------------- */
+
+    let rateLimit;
+    try {
+      rateLimit = await checkDanteRateLimit(user.id);
+    } catch {
+      return Response.json(
+        {
+          ok: false,
+          code: "RATE_LIMIT_UNAVAILABLE",
+          message: "Dante is temporarily unavailable. Please try again shortly.",
+        },
+        {
+          status: 503,
+        },
+      );
+    }
+
+    if (!rateLimit.allowed) {
+      console.warn("[DANTE APP RATE LIMIT] request blocked", {
+        userId: user.id,
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      });
+
+      return Response.json(
+        {
+          ok: false,
+          code: "RATE_LIMITED",
+          message: "Dante is receiving too many requests. Please try again shortly.",
+          retryAfterSeconds: rateLimit.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfterSeconds),
+          },
+        },
+      );
+    }
+
+    /* -----------------------------------------------------
+       PARSE / VALIDATE
     ----------------------------------------------------- */
 
     let body:
@@ -3912,6 +3991,17 @@ export async function POST(
           status: 400,
         },
       );
+    }
+
+    /* -----------------------------------------------------
+       COACH MODE — omitted/"dante" keeps the Dante pipeline below
+       untouched. "nutrition" hands off to the Nutrition Coach AFTER
+       auth + the shared application rate limit above, so both coaches
+       draw from the same per-user quota.
+    ----------------------------------------------------- */
+
+    if (getCoachMode(body) === "nutrition") {
+      return await handleNutritionCoachChat({ supabase, userId: user.id, body });
     }
 
     const userMessage =
@@ -3954,39 +4044,6 @@ export async function POST(
         },
         {
           status: 400,
-        },
-      );
-    }
-
-    /* -----------------------------------------------------
-       AUTH
-    ----------------------------------------------------- */
-
-    const supabase =
-      await createClient();
-
-    const {
-      data: {
-        user,
-      },
-      error:
-        authError,
-    } =
-      await supabase.auth.getUser();
-
-    if (
-      authError ||
-      !user
-    ) {
-      return Response.json(
-        {
-          ok: false,
-
-          error:
-            "You must be logged in to use Dante.",
-        },
-        {
-          status: 401,
         },
       );
     }

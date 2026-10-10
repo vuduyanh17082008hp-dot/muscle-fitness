@@ -3,6 +3,9 @@
 import { useRef } from "react";
 import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSetup";
 import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
+import type {
+  MotionHomepageViewModel,
+} from "@/components/experience/motion-home/data/homepageViewModel";
 
 /**
  * Scene 02 — Athlete Signal. Muscle Fitness doesn't start from "AI
@@ -24,8 +27,9 @@ function point(angleDeg: number, radius: number) {
   return { x: 150 + radius * Math.cos(rad), y: 150 + radius * Math.sin(rad) };
 }
 
-export function AthleteSignalScene() {
+export function AthleteSignalScene({ viewModel }: { viewModel: MotionHomepageViewModel }) {
   const rootRef = useRef<HTMLElement>(null);
+  const proteinTarget = viewModel.nutrition.proteinTargetG;
 
   useGSAP(
     () => {
@@ -109,9 +113,9 @@ export function AthleteSignalScene() {
           <div className="signal-fragment mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {[
               { label: "Training Workload", status: "Active" },
-              { label: "Sleep Quality", status: "8.2 hrs" },
-              { label: "Nutrition Targets", status: "154g Protein" },
-              { label: "Recovery Index", status: "87 Readiness" },
+              { label: "Sleep Quality", status: viewModel.recovery.sleepHours === null ? "Not logged" : `${viewModel.recovery.sleepHours} hrs` },
+              { label: "Nutrition Targets", status: proteinTarget === null ? "Not set" : `${proteinTarget}g Protein` },
+              { label: "Recovery Index", status: `${viewModel.recovery.readiness} Readiness` },
               { label: "User Preferences", status: "Hypertrophy" },
               { label: "Personal History", status: "30-Day Trend" },
             ].map((sig) => (
@@ -132,7 +136,7 @@ export function AthleteSignalScene() {
                 <h3 className="mt-1 text-lg font-black text-white">Unified Training Engine</h3>
               </div>
               <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-400">
-                Live Sync
+                {viewModel.mode === "anonymous" ? "Illustrative" : "Live data"}
               </span>
             </div>
 
@@ -182,8 +186,8 @@ export function AthleteSignalScene() {
             </div>
 
             <div className="flex items-center justify-between border-t border-white/10 pt-4 text-[11px] text-zinc-400">
-              <span>Readiness: <strong className="text-white">87 / 100</strong></span>
-              <span>Autoregulation: <strong className="text-[var(--mf-brand)]">Optimal</strong></span>
+              <span>Readiness: <strong className="text-white">{viewModel.recovery.readiness} / 100</strong></span>
+              <span>Status: <strong className="text-[var(--mf-brand)]">{viewModel.recovery.status}</strong></span>
             </div>
           </div>
         </div>

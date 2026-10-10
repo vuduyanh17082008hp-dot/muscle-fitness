@@ -15,6 +15,7 @@ grant usage on schema private to authenticated;
 
 create type public.app_role as enum (
   'user',
+  'client',
   'coach',
   'admin'
 );
@@ -399,6 +400,28 @@ as $$
   );
 $$;
 
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select private.is_admin();
+$$;
+
+create or replace function public.is_assigned_coach(
+  p_client_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select private.is_assigned_coach(p_client_id);
+$$;
+
 revoke all
 on function private.is_admin()
 from public;
@@ -413,6 +436,22 @@ to authenticated;
 
 grant execute
 on function private.is_assigned_coach(uuid)
+to authenticated;
+
+revoke all
+on function public.is_admin()
+from public;
+
+revoke all
+on function public.is_assigned_coach(uuid)
+from public;
+
+grant execute
+on function public.is_admin()
+to authenticated;
+
+grant execute
+on function public.is_assigned_coach(uuid)
 to authenticated;
 
 -- =========================================================

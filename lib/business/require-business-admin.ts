@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,12 +13,17 @@ export type BusinessAdminContext = {
   role: BusinessAdminRole;
 };
 
-export async function requireBusinessAdmin(): Promise<BusinessAdminContext> {
-  const supabase = await createClient();
+export type ResolveBusinessAdminResult =
+  | { ok: true; context: BusinessAdminContext }
+  | { ok: false; status: 401 | 403 };
 
-  // ============================================================
-  // 1. AUTH USER
-  // ============================================================
+/**
+ * Canonical business-admin check: Supabase session, then
+ * businesses.owner_id, then business_staff owner/admin.
+ * Pages redirect; API routes return 401/403 JSON.
+ */
+export async function resolveBusinessAdmin(): Promise<ResolveBusinessAdminResult> {
+  const supabase = await createClient();
 
   const {
     data: { user },
@@ -25,12 +31,8 @@ export async function requireBusinessAdmin(): Promise<BusinessAdminContext> {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    redirect("/admin/login");
+    return { ok: false, status: 401 };
   }
-
-  // ============================================================
-  // 2. CHECK BUSINESS OWNER
-  // ============================================================
 
   const {
     data: ownedBusinesses,
@@ -48,17 +50,16 @@ export async function requireBusinessAdmin(): Promise<BusinessAdminContext> {
     const business = ownedBusinesses[0];
 
     return {
-      userId: user.id,
-      businessId: business.id,
-      businessName: business.name,
-      businessSlug: business.slug,
-      role: "owner",
+      ok: true,
+      context: {
+        userId: user.id,
+        businessId: business.id,
+        businessName: business.name,
+        businessSlug: business.slug,
+        role: "owner",
+      },
     };
   }
-
-  // ============================================================
-  // 3. CHECK BUSINESS_STAFF ADMIN
-  // ============================================================
 
   const {
     data: adminRows,
@@ -71,14 +72,10 @@ export async function requireBusinessAdmin(): Promise<BusinessAdminContext> {
     .limit(1);
 
   if (staffError || !adminRows?.length) {
-    redirect("/unauthorized");
+    return { ok: false, status: 403 };
   }
 
   const staff = adminRows[0];
-
-  // ============================================================
-  // 4. LOAD BUSINESS
-  // ============================================================
 
   const {
     data: businesses,
@@ -90,16 +87,49 @@ export async function requireBusinessAdmin(): Promise<BusinessAdminContext> {
     .limit(1);
 
   if (businessError || !businesses?.length) {
-    redirect("/unauthorized");
+    return { ok: false, status: 403 };
   }
 
   const business = businesses[0];
 
   return {
-    userId: user.id,
-    businessId: business.id,
-    businessName: business.name,
-    businessSlug: business.slug,
-    role: staff.role === "owner" ? "owner" : "admin",
+    ok: true,
+    context: {
+      userId: user.id,
+      businessId: business.id,
+      businessName: business.name,
+      businessSlug: business.slug,
+      role: staff.role === "owner" ? "owner" : "admin",
+    },
   };
+}
+
+export async function requireBusinessAdmin(): Promise<BusinessAdminContext> {
+  const result = await resolveBusinessAdmin();
+
+  if (!result.ok) {
+    redirect(result.status === 401 ? "/admin/login" : "/unauthorized");
+  }
+
+  return result.context;
+}
+
+export async function requireBusinessAdminApi(): Promise<
+  { ok: true; context: BusinessAdminContext } | { ok: false; response: NextResponse }
+> {
+  const result = await resolveBusinessAdmin();
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error: result.status === 401 ? "Unauthorized" : "Forbidden",
+        },
+        { status: result.status },
+      ),
+    };
+  }
+
+  return { ok: true, context: result.context };
 }

@@ -89,8 +89,7 @@ export default async function EditAccountPage() {
               null,
 
             timezone:
-              fitnessProfile?.timezone ??
-              "Asia/Singapore",
+              profile.timezone,
 
             goal:
               fitnessProfile?.goal ?? "",

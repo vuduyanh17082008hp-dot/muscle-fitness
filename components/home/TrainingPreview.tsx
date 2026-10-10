@@ -3,6 +3,7 @@ import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import Image from "next/image";
 
 const TrainingPreview = () => {
   const ref = useRef(null);
@@ -23,7 +24,7 @@ const TrainingPreview = () => {
             Structured programs, video guides, and progressive overload principles – everything you need to build muscle and confidence.
           </p>
           <Link
-            href="/training"
+            href="/dashboard/workouts"
             className="inline-flex items-center gap-2 text-gold font-semibold hover:underline"
           >
             EXPLORE COURSES <ArrowRight className="w-4 h-4" />
@@ -35,9 +36,12 @@ const TrainingPreview = () => {
           transition={{ duration: 0.8, delay: 0.2 }}
           className="bg-black/40 rounded-lg p-4 border border-white/5"
         >
-          <img
+          <Image
             src="/images/training-preview.jpg" // Replace with real image
             alt="Training preview"
+            width={1200}
+            height={675}
+            sizes="(min-width: 768px) 50vw, 100vw"
             className="rounded w-full"
           />
         </motion.div>
