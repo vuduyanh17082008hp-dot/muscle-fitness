@@ -27,7 +27,12 @@ export default async function EditAccountPage() {
   const {
     profile,
     fitnessProfile,
+    readStatus,
   } = account
+
+  const readFailed =
+    readStatus.profile === "error" ||
+    readStatus.fitness === "error"
 
   return (
     <main className="min-h-screen bg-mf-bg px-4 py-6 text-white sm:px-6 lg:px-8">
@@ -59,6 +64,16 @@ export default async function EditAccountPage() {
           </div>
         </header>
 
+        {readFailed ? (
+          <div
+            role="alert"
+            className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-300"
+          >
+            We couldn&apos;t load your profile right now. Editing is
+            disabled so your details aren&apos;t overwritten with
+            blanks — please refresh the page to try again.
+          </div>
+        ) : (
         <ProfileForm
           initialData={{
             email:
@@ -74,11 +89,10 @@ export default async function EditAccountPage() {
               profile.phone ?? "",
 
             dateOfBirth:
-              fitnessProfile?.date_of_birth ??
-              "",
+              profile.date_of_birth ?? "",
 
             gender:
-              fitnessProfile?.gender ?? "",
+              profile.gender ?? "",
 
             heightCm:
               fitnessProfile?.height_cm ??
@@ -95,6 +109,7 @@ export default async function EditAccountPage() {
               fitnessProfile?.goal ?? "",
           }}
         />
+        )}
       </div>
     </main>
   )

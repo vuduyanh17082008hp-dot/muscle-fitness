@@ -40,6 +40,7 @@ import {
 
 import { Logo } from "@/components/brand/logo";
 import { FloatingDante } from "@/components/dashboard/floating-dante";
+import { QuickCapture } from "@/components/dashboard/quick-capture";
 
 /* =========================================================
    TYPES
@@ -500,7 +501,7 @@ export function DashboardShell({
           MAIN
       =================================================== */}
 
-      <main className="min-h-screen pb-20 lg:pb-0 lg:pl-72">
+      <main className="min-h-screen pb-28 lg:pb-10 lg:pl-72">
         <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">
           {
             children
@@ -515,12 +516,19 @@ export function DashboardShell({
       <MobileBottomNav pathname={pathname} hash={hash} />
 
       {/* ===================================================
-          FLOATING DANTE — persistent, calm entry point across
-          every authenticated Client OS page (spec: "Global
-          Floating Dante"). See components/dashboard/floating-dante.tsx.
+          FLOATING CONTROLS (PF-02) — Centralized floating layout
+          for Floating Dante and Quick Capture (+).
+          Positioned above MobileBottomNav on mobile/tablet,
+          and anchored in the bottom-right corner on desktop.
       =================================================== */}
 
-      <FloatingDante />
+      <aside
+        aria-label="Floating quick actions"
+        className="pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] right-4 z-40 flex flex-col-reverse items-center gap-3 lg:bottom-6 lg:right-6"
+      >
+        <FloatingDante />
+        <QuickCapture />
+      </aside>
     </div>
   );
 }

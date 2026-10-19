@@ -15,6 +15,7 @@
  *   INV-14 PRESERVATION        14 meaningful obligations are 14 obligations until each has a disposition.
  */
 
+import { detectExplicitLanguageRequest } from "@/lib/intelligence/performance-core/conversation-control";
 import {
   DISPOSED,
   extractTurnObligations,
@@ -65,8 +66,8 @@ const MEMORY_BOUNDARY =
   /\b(?:dung|khong|ko|dont|don't|do not|no need|khoi|stop|never|chua)\s+(?:can\s+|co\s+)?(?:luu|save|ghi(?:\s+nho)?|persist|store|nho|remember|log)\b.{0,32}\b(?:memory|tri\s*nho|bo\s*nho|remember|ghi\s*nho)\b|\b(?:memory|tri\s*nho|bo\s*nho)\b.{0,24}\b(?:dung|khong|ko|don't|do not)\s+(?:luu|save|ghi)\b|\b(?:dung|khong|ko|don't|do not)\s+(?:luu|save|ghi)\b.{0,20}\b(?:memory|tri\s*nho|cai\s*nay|dieu\s*nay|chuyen\s*nay)\b/;
 const LANGUAGE_KEEP =
   /\b(?:dung|khong|ko|dont|don't|do not|no need|khoi|stop)\s+(?:can\s+|co\s+)?(?:doi|chuyen|switch|change|swap)\s+(?:sang\s+)?(?:ngon\s*ngu|language|tieng)\b|\b(?:giu|keep|stay|stick)\b.{0,24}\b(?:tieng\s*viet|vietnamese|ngon\s*ngu)\b|\b(?:english|tieng\s*anh)\b.{0,24}\b(?:chi\s*la|only|just)\s*(?:vi\s*du|example|vd)\b/;
-const LANGUAGE_SWITCH_EN = /\b(?:tra\s*loi|reply|answer|respond|noi)\b.{0,16}\b(?:bang\s+)?(?:tieng\s*anh|english)\b|\benglish\s+please\b/;
-const LANGUAGE_SWITCH_VI = /\b(?:tra\s*loi|reply|answer|respond|noi)\b.{0,16}\b(?:bang\s+)?(?:tieng\s*viet|vietnamese)\b/;
+/** ICH-1: explicit language switches come from the shared conversation-control detector. */
+const explicitLanguageOf = (text: string) => detectExplicitLanguageRequest(text)?.language ?? null;
 
 const INTERROGATIVE =
   /\b(?:nao|gi|sao|bao nhieu|bao lau|may (?:ngay|lan|tieng|set|rep|buoi|tuan|thang|phut|gio)|khi nao|luc nao|the nao|tai sao|vi sao|co nen|nen (?:lam|tap|an|nghi|ngu|chon|dung|tang|giam|bat dau)|duoc khong|co duoc|dung khong|phai khong|hay khong|hay la|what|why|how|when|which|where|who|whether|should|can i|could i|do i|does|is it|are there)\b/;
@@ -296,11 +297,11 @@ export function buildObligationLedger(
     if (LANGUAGE_KEEP.test(t)) {
       attach(make("obl_language", "LANGUAGE_PREFERENCE", { reason: "keep_current_language", kind: "keep" }), [seg.index]);
       typed = true;
-    } else if (LANGUAGE_SWITCH_EN.test(t) || LANGUAGE_SWITCH_VI.test(t)) {
+    } else if (explicitLanguageOf(t)) {
       attach(
         make("obl_language", "LANGUAGE_PREFERENCE", {
           reason: "explicit_language_switch",
-          kind: LANGUAGE_SWITCH_EN.test(t) ? "switch_en" : "switch_vi",
+          kind: explicitLanguageOf(t) === "EN" ? "switch_en" : "switch_vi",
         }),
         [seg.index],
       );

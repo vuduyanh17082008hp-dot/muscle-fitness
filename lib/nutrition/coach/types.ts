@@ -75,6 +75,10 @@ export type MealConstraints = {
   /** User-declared absolute ceiling ("under 500") => hard constraint. */
   calorieCeilingStrict: boolean
   calorieCeilingSource: "context" | "user"
+  /**
+   * PER-MEAL protein goal for the optimizer (context source: remaining daily protein clamped to 20-60g).
+   * NOT the daily target — that is `ContextSnapshot.proteinTarget` (canonical). Never read this as a daily figure.
+   */
   proteinTarget: number | null
   proteinTargetSource: "context" | "user"
   maxPriceSgd: number | null
@@ -95,6 +99,14 @@ export type CoachContext = {
   snapshot: ContextSnapshot
   guards: ProfileGuards
   cookingAbility: string | null
+  /** AI-R1E.2: read-only cross-coach (Dante) context. Absent = exactly the pre-R1E.2 behaviour. Never a nutrition fact. */
+  coordination?: import("@/lib/intelligence/gemma-consumer").GemmaCoordination
+  /**
+   * ICH-1: the shared Performance Intelligence brief for this turn (canonical knowledge + evidence strength, need policy,
+   * safety posture, conversation control). Absent on exits that never reach a model. `numbers` are the figures printed in
+   * the brief's canonical claims: sourced knowledge, so a reply may quote them; every personal number still comes from CONTEXT.
+   */
+  intelligence?: { brief: import("@/lib/intelligence/performance-core").IntelligenceBrief; numbers: number[] }
 }
 
 export type ViolationTier = "hard" | "medium" | "soft"

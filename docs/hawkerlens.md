@@ -36,15 +36,14 @@ computes a nutrition number itself.
 
 ## Model (spec §5)
 
-**A general-purpose vision-language model (the same Groq vision model
-already configured for Photo Estimate via `GROQ_VISION_MODEL`), constrained
+**A general-purpose OpenAI vision-language model, constrained
 by a closed-set prompt to the 10 MVP dishes** — not a fine-tuned classifier.
 
 | Consideration | Why a VLM + prompt, not a fine-tuned model |
 |---|---|
 | Dataset | No labeled Singapore-hawker-food image dataset or training pipeline exists in this project. |
 | Training approach | None — this is prompt engineering over an existing general vision model, not model training. |
-| Licensing | Inherits whatever Groq's hosted vision model's terms are (already accepted for Photo Estimate) — no new licensing surface. |
+| Licensing | Uses the configured OpenAI vision model under its applicable terms. |
 | Limitations | A VLM has no guarantee of consistent accuracy on a closed set the way a properly fine-tuned classifier trained on real examples would. It is the practical, honest MVP choice given no training data exists — replace with a lightweight fine-tuned classifier once real labeled photos exist (the confirmation flow below is what would generate that data). |
 
 This is a **deliberately separate** function/prompt from

@@ -197,7 +197,7 @@ export function validateMeal(items: DraftItem[], constraints: MealConstraints): 
       tier: "medium",
       requested: constraints.proteinTarget,
       actual: totals.protein,
-      message: `This version falls ${Math.round(constraints.proteinTarget - totals.protein)}g short of your ${Math.round(constraints.proteinTarget)}g protein target.`,
+      message: `This version falls ${Math.round(constraints.proteinTarget - totals.protein)}g short of this meal's ${Math.round(constraints.proteinTarget)}g protein target.`,
     })
   }
 

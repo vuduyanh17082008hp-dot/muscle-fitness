@@ -151,12 +151,12 @@ describe("SC-06 address stays stable", () => {
   it("does not bounce between address forms: 'bro' usage neither creates an address nor gets echoed", () => {
     const first = turn("hey bro, should I deload?", null, { phase1Draft: "Yes bro, deload this week." });
     expect(first.address).toBe("neutral");
-    expect(first.response).not.toMatch(/bro|sir/i);
+    expect(first.response).not.toMatch(/\bbro\b|\bsir\b/i);
     expect(first.response).toMatch(/deload this week/i);
     const second = turn("and frequency?", first.state, { phase1Draft: "Keep frequency. Cut intensity." });
     expect(second.address).toBe("neutral");
     expect(second.state.address.value).toBe("unresolved");
-    expect(second.response).not.toMatch(/bro|sir/i);
+    expect(second.response).not.toMatch(/\bbro\b|\bsir\b/i);
   });
 });
 

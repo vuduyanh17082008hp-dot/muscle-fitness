@@ -518,6 +518,14 @@ export default async function WorkoutsPage() {
                 <ArrowRight className="size-4" />
               </Link>
             </PrimaryButton>
+          ) : activePlan ? (
+            // An active plan's days start from the plan page; offering to build a new plan here would bury it.
+            <PrimaryButton size="lg" asChild>
+              <Link href={`/dashboard/workouts/plans/${activePlan.id}`}>
+                Start from your plan
+                <ArrowRight className="size-4" />
+              </Link>
+            </PrimaryButton>
           ) : (
             <PrimaryButton size="lg" asChild>
               <Link href={`/dashboard/workouts/plans/new?preset=${recommended}`}>

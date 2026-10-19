@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Loader2, Sparkles } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { PrimaryButton, SecondaryButton } from "@/components/ui/button"
 import type { DraftOp, SwapWarning } from "@/lib/nutrition/coach/draft"
@@ -11,6 +12,7 @@ import type { FollowUpState, StructuredBlock } from "@/lib/nutrition/coach/follo
 import { QUICK_ACTIONS } from "@/lib/nutrition/coach/quick-actions"
 import type { ActiveMealDraft, ContextSnapshot, CravingKey, MealDraftHistoryItem } from "@/lib/nutrition/coach/types"
 import { MEAL_TYPE_LABEL, MEAL_TYPES, type MealType } from "@/lib/nutrition/food-log/types"
+import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT } from "@/lib/coach-context-event"
 
 import { MealDraftCard } from "./meal-draft-card"
 import {
@@ -82,13 +84,19 @@ type CoachResponse = {
   closest?: ActiveMealDraft
   drafts?: ActiveMealDraft[]
   context?: ContextSnapshot
+  blockedIngredientIds?: string[]
   outcome?: { applied: boolean; message: string; warnings: SwapWarning[]; proposal: ActiveMealDraft | null }
 }
 
 export function NutritionCoachPanel() {
+  const router = useRouter()
   const [context, setContext] = useState<ContextSnapshot | null>(null)
   const [draft, setDraft] = useState<ActiveMealDraft | null>(null)
   const [suggestions, setSuggestions] = useState<ActiveMealDraft[]>([])
+  const [blockedIds, setBlockedIds] = useState<string[]>([])
+  // True from the moment a coach turn starts until the server re-derives the cards: a turn may carry a new restriction,
+  // so cards fetched before it are never shown as eligible in the meantime.
+  const [suggestionsStale, setSuggestionsStale] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [skipped, setSkipped] = useState<string[]>([])
   const [proposal, setProposal] = useState<Proposal | null>(null)
@@ -107,19 +115,41 @@ export function NutritionCoachPanel() {
   const draftBeforeLog = useRef<ActiveMealDraft | null>(null)
   const chatEnd = useRef<HTMLLIElement | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const [ctx, suggest] = await Promise.all([postJson<CoachResponse>("/api/nutrition/coach", { action: "context" }), postJson<CoachResponse>("/api/nutrition/coach", { action: "suggest" })])
-      if (cancelled) return
-      setMealType(defaultMealType())
-      if (ctx.json.context) setContext(ctx.json.context)
-      if (suggest.json.drafts) setSuggestions(suggest.json.drafts)
-    })()
-    return () => {
-      cancelled = true
-    }
+  /**
+   * Suggestion cards are re-derived on the server from the CURRENT safety context (stored + chat-disclosed allergies), so they
+   * refresh after any coach turn that may have changed it. A failed refresh clears the cards: a card fetched before a new
+   * restriction must never stay on screen looking eligible.
+   */
+  const refreshSuggestions = useCallback(async () => {
+    const [ctx, suggest] = await Promise.all([
+      postJson<CoachResponse>("/api/nutrition/coach", { action: "context" }).catch(() => null),
+      postJson<CoachResponse>("/api/nutrition/coach", { action: "suggest" }).catch(() => null),
+    ])
+    if (ctx?.json.context) setContext(ctx.json.context)
+    setBlockedIds(ctx?.json.blockedIngredientIds ?? [])
+    setSuggestions(suggest?.json.drafts ?? [])
+    setSuggestionsStale(false)
   }, [])
+
+  useEffect(() => {
+    // Meal type follows the viewer's clock, so it is set after hydration (as before), once the first load settles.
+    void (async () => {
+      await refreshSuggestions()
+      setMealType(defaultMealType())
+    })()
+    // After a coach turn the server-rendered plan / budget sections re-render too (they read the same safety context).
+    const onCoachTurn = () => {
+      router.refresh()
+      void refreshSuggestions()
+    }
+    const onTurnStarted = () => setSuggestionsStale(true)
+    window.addEventListener(COACH_CONTEXT_CHANGED_EVENT, onCoachTurn)
+    window.addEventListener(COACH_TURN_STARTED_EVENT, onTurnStarted)
+    return () => {
+      window.removeEventListener(COACH_CONTEXT_CHANGED_EVENT, onCoachTurn)
+      window.removeEventListener(COACH_TURN_STARTED_EVENT, onTurnStarted)
+    }
+  }, [refreshSuggestions, router])
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView?.({ block: "nearest" })
@@ -224,7 +254,10 @@ export function NutritionCoachPanel() {
       const { json } = await postJson<{ ok: boolean; error?: string; code?: string }>("/api/dante/tools/confirm", { actionId: pending.actionId, intent })
       if (intent === "confirm" && json.ok) {
         setDraft({ ...draft, status: "LOGGED" })
-        setNotice("Logged. Your Today totals update when you refresh the page.")
+        setNotice("Logged — today's totals are updated.")
+        // Server-rendered totals (food log, dashboard cards) and this panel's remaining macros re-read the new row.
+        router.refresh()
+        void refreshSuggestions()
       } else {
         const before = draftBeforeLog.current ?? { ...draft, status: "DRAFT" as const }
         setDraft(json.code === "ACTION_STALE" ? { ...before, status: "STALE_CONTEXT", acknowledgedContextVersion: null } : before)
@@ -244,6 +277,7 @@ export function NutritionCoachPanel() {
     const message = text.trim()
     if (!message || busy) return
     setChat((previous) => [...previous, { role: "user", text: message }])
+    setSuggestionsStale(true)
     setInput("")
     setHints([])
     setBusy(true)
@@ -262,7 +296,7 @@ export function NutritionCoachPanel() {
         conversation?: ConversationState
         structuredBlocks?: StructuredBlock[]
         followUpHints?: string[]
-      }>("/api/chatbot", { message, coachMode: "nutrition", activeDraft: active, selectedFoods: selected, conversation: { ...conv, recentMessages } })
+      }>("/api/chatbot", { message, coachMode: "nutrition", activeDraft: active, selectedFoods: selected, conversation: { ...conv, recentMessages, priorUserTurns: chat.filter((turn) => turn.role === "user").map((turn) => turn.text.slice(0, 400)).slice(-20) } })
       const reply = json.reply ?? (status === 429 ? "I'm getting a lot of requests — please try again in a moment." : (json.message ?? json.error ?? "I couldn't answer that right now."))
       setChat((previous) => [...previous, { role: "coach", text: reply, ...(json.structuredBlocks?.length ? { blocks: json.structuredBlocks } : {}) }])
       setHints(json.followUpHints ?? [])
@@ -290,6 +324,8 @@ export function NutritionCoachPanel() {
     } finally {
       setTyping(null)
       setBusy(false)
+      router.refresh()
+      void refreshSuggestions()
     }
   }
 
@@ -396,7 +432,7 @@ export function NutritionCoachPanel() {
             <fieldset key={group.role}>
               <legend className="text-xs font-semibold uppercase tracking-wide text-mf-glass-text-muted">{group.label}</legend>
               <div className="mt-2 flex flex-wrap gap-2">
-                {COACH_INGREDIENTS.filter((i) => i.role === group.role).map((i) => {
+                {COACH_INGREDIENTS.filter((i) => i.role === group.role && !blockedIds.includes(i.id)).map((i) => {
                   const on = selected.includes(i.id)
                   return (
                     <button key={i.id} type="button" aria-pressed={on} onClick={() => toggleFood(i.id)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${on ? "border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand" : "border-mf-glass-border bg-white/5 text-mf-glass-text-secondary hover:border-white/20"}`}>
@@ -414,7 +450,12 @@ export function NutritionCoachPanel() {
       </div>
 
       {/* SUGGESTED FOR YOU */}
-      {suggestions.length > 0 ? (
+      {suggestions.length > 0 && suggestionsStale ? (
+        <div className={card} aria-live="polite">
+          <p className={eyebrow}>Suggested For You</p>
+          <p className="mt-3 text-sm text-mf-glass-text-muted">Updating suggestions for what you just told the coach…</p>
+        </div>
+      ) : suggestions.length > 0 ? (
         <div className={card}>
           <p className={eyebrow}>Suggested For You</p>
           <ul className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -450,6 +491,7 @@ export function NutritionCoachPanel() {
             draft={draft}
             proposal={proposal}
             skippedSuggestions={skipped}
+            blockedIngredientIds={blockedIds}
             busy={busy}
             onOp={(op) => void edit(op)}
             onSkipSuggestion={(id) => setSkipped((previous) => [...previous, id])}

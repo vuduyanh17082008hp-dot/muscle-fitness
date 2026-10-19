@@ -37,6 +37,10 @@ const RESOLVED_PATTERNS: RegExp[] = [
   /\b(?:fully |completely )?(?:resolved|gone|cleared up|went away)\b(?!\s*\?)/,
   /\b(?:i'?m|im) (?:fine|ok|okay|good|all good)\b|\btoi on roi\b|\bon roi\b|\bbinh thuong roi\b|\bkhoe roi\b|\ball clear\b/,
   /\b(?:bac si|doctor|physician|gp)\b.{0,24}\b(?:noi|bao|said|says|cleared|confirmed)\b.{0,20}\b(?:on|binh thuong|fine|ok|okay|nothing|cleared)\b/,
+  // H0 (USER_CORRECTION): a retraction — the symptom is not what they meant ("I meant my chest muscles are sore, no chest
+  // pain"). The user corrects the report itself; a fresh red flag in the same message still wins in advanceSafetyPhase.
+  new RegExp(`\\b(?:i meant|i mean|meant|actually|sorry|correction|not what i meant|y (?:toi|minh|tao|em) la|thuc ra|nham)\\b[^.!?\\n]{0,80}\\b(?:no|not|khong)\\s+(?:real\\s+|actual\\s+|any\\s+)?${SYMPTOM}`),
+  new RegExp(`\\b(?:no|not|khong)\\s+${SYMPTOM}\\b[^.!?\\n]{0,60}\\b(?:just|only|chi|thoi)\\b`),
 ];
 const IMPROVING = /\b(?:do|nhe|bot|giam)\s+(?:hon|nhieu|roi|bot|dan|han)\b|\bdo (?:nhieu |hon )?roi\b|\bbetter\b|\bimproved\b|\bimproving\b|\beasing\b|\bless (?:pain|dizzy|tight|numb)\b|\bnhe hon\b|\bgiam (?:bot|nhieu)\b/;
 

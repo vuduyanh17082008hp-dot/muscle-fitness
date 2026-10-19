@@ -109,7 +109,8 @@ describe("Phase 2.5a through the real route", () => {
       await post(message);
     }
     expect(provider.classifierPrompts).toHaveLength(0);
-  });
+    // Six full route turns: a timing budget, not a behaviour assertion (it timed out at ~5.2 s under the full parallel suite).
+  }, 20_000);
 
   it("a normal provider turn exposes the persona trace and the style plan reaches the provider prompt", async () => {
     provider.text = "Add 2.5kg only if last week was clean at RPE 7.";

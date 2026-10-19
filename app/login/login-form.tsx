@@ -2,6 +2,7 @@
 
 import {
   useState,
+  useSyncExternalStore,
   type FormEvent,
 } from "react"
 import Link from "next/link"
@@ -152,6 +153,8 @@ export function LoginForm({
   }
 
   const disabled = pending !== null
+  // Until hydration the submit handler isn't attached; a click then would post the raw form and reload with no message.
+  const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false)
 
   return (
     <div>
@@ -236,7 +239,7 @@ export function LoginForm({
 
         <button
           type="submit"
-          disabled={disabled}
+          disabled={disabled || !hydrated}
           className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-orange-500 px-4 text-sm font-black uppercase tracking-[0.12em] text-black transition hover:bg-orange-400 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending === "email" ? (

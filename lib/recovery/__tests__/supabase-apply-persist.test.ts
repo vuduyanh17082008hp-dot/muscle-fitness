@@ -4,17 +4,19 @@ import { applyWorkoutAdjustment, createMemoryMutationStore } from "@/lib/recover
 import {
   createSupabaseCanonicalCommit,
   createSupabaseProposalStore,
+  createSupabaseSessionWriter,
   persistWorkoutProposal,
 } from "@/lib/recovery/supabase-apply"
 import {
   getRecoveryProposalSecret,
   signRecoveryProposal,
 } from "@/lib/recovery/proposal-issuance"
-import type { WorkoutAdjustmentProposal } from "@/lib/recovery/proposal"
+import { buildPlanVersionRef, type WorkoutAdjustmentProposal } from "@/lib/recovery/proposal"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 
 const SECRET = "test-recovery-proposal-secret-key"
+const noAppliedAdjustment = { select: () => ({ eq: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }) }) }
 
 function proposal(overrides: Partial<WorkoutAdjustmentProposal> = {}): WorkoutAdjustmentProposal {
   return {
@@ -303,7 +305,7 @@ describe("createSupabaseCanonicalCommit", () => {
       from: () => ({
         select: () => ({
           eq: () => ({
-            eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
+            eq: () => ({ maybeSingle: async () => ({ data: null, error: null }), limit: async () => ({ data: [], error: null }) }),
             maybeSingle: async () => ({ data: null, error: null }),
           }),
         }),
@@ -339,6 +341,7 @@ describe("createSupabaseCanonicalCommit", () => {
   it("maps a transactional STALE_PLAN without treating it as applied", async () => {
     const commit = createSupabaseCanonicalCommit({
       rpc: async () => ({ data: null, error: { message: "STALE_PLAN" } }),
+      from: () => noAppliedAdjustment,
     } as never)
     const issued = proposal()
     const result = await commit.commit({
@@ -388,5 +391,47 @@ describe("createSupabaseCanonicalCommit", () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("FORBIDDEN")
     expect(rpc).not.toHaveBeenCalled()
+  })
+})
+
+describe("one adjustment per session (hackathon repair F-02)", () => {
+  it("refuses a second, different proposal for an already-adjusted session without calling the RPC", async () => {
+    const rpc = vi.fn()
+    const applied = { select: () => ({ eq: () => ({ eq: () => ({ limit: async () => ({ data: [{ proposal_id: "wap_first" }], error: null }) }) }) }) }
+    const commit = createSupabaseCanonicalCommit({ rpc, from: () => applied } as never)
+    const issued = proposal({ proposalId: "wap_second" })
+    const result = await commit.commit({
+      userId: "user-a",
+      proposal: issued,
+      session: { id: "session-1", userId: "user-a", name: "Today", scheduledFor: null, durationMinutes: null, sessionState: "not_started", workoutPlanId: "plan-1", updatedAt: null, planUpdatedAt: null, exercises: [] },
+      changes: issued.changes,
+      now: new Date("2026-09-25T03:00:00.000Z"),
+    })
+    expect(result).toMatchObject({ ok: false, error: "ALREADY_APPLIED" })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+})
+
+describe("apply-side session version (hackathon repair F-02)", () => {
+  it("loads the plan's updated_at, so the version ref matches the one the proposal was issued against", async () => {
+    const rows: Record<string, unknown> = {
+      workout_sessions: { id: "session-1", user_id: "user-a", name: "Upper", scheduled_for: null, duration_minutes: 70, session_state: "not_started", updated_at: "2026-10-18T12:23:32.498907+00:00", workout_plan_id: "plan-1" },
+      workout_plans: { updated_at: "2026-10-18T12:23:29.838485+00:00" },
+      workout_session_exercises: [{ id: "se-bench", exercise_id: "ex", display_name: "Bench", target_sets: 3, target_rep_min: 6, target_rep_max: 10, rest_seconds: 120, is_skipped: false }],
+    }
+    const client = {
+      from(table: string) {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          order: async () => ({ data: rows[table], error: null }),
+          maybeSingle: async () => ({ data: rows[table], error: null }),
+        }
+        return chain
+      },
+    }
+    const session = await createSupabaseSessionWriter(client as never).loadOwnedSession("user-a", "session-1")
+    expect(session?.planUpdatedAt).toBe("2026-10-18T12:23:29.838485+00:00")
+    expect(buildPlanVersionRef(session!)).toContain("::2026-10-18T12:23:29.838485+00:00::")
   })
 })

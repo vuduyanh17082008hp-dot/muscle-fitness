@@ -5,6 +5,7 @@
 
 import type { ExpressionPlan, ExpressionVerbosity, Familiarity, VersionedState } from "@/lib/dante-core/coherence/types";
 import { activeBoundaries } from "@/lib/dante-core/coherence/reducer";
+import { mapSentencesKeepingLists } from "@/lib/intelligence/performance-core/claim-revision";
 
 export type LanguageComplexity = "DEFAULT" | "SIMPLE";
 export type JargonLevel = "LOW" | "DEFAULT";
@@ -82,14 +83,17 @@ export function resolveAccessibleProfile(input: {
   };
 }
 
+/**
+ * Drops sentences `keep` rejects while keeping the reply's structure: lines stay lines, paragraph breaks stay, and a
+ * list marker whose item was dropped goes with it. (Joining every sentence with " " flattened lists and paragraphs.)
+ */
+function filterSentencesByLine(text: string, keep: (sentence: string) => boolean): string {
+  // List-safe (H0 final closure): an item whose subject sentence is dropped goes whole, never "2. <next sentence>".
+  return mapSentencesKeepingLists(text, (part) => (keep(part.trim()) ? part : null)).replace(/[ \t]{2,}/g, " ");
+}
+
 export function stripHiddenStatistics(text: string): string {
-  return text
-    .split(/(?<=[.!?…])\s+|\n+/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0 && !USER_METRIC.test(part) && !ADVANCED_PROFILE_LEAK.test(part))
-    .join(" ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  return filterSentencesByLine(text, (part) => !USER_METRIC.test(part) && !ADVANCED_PROFILE_LEAK.test(part));
 }
 
 function simplifySentences(text: string): string {
@@ -108,7 +112,8 @@ function simplifySentences(text: string): string {
     })
     .replace(/\b(?:it is (?:important|recommended) (?:that|to)\s+)/gi, "")
     .replace(/\b(?:please note that|it should be noted that)\s+/gi, "")
-    .replace(/\s{2,}/g, " ")
+    // Spaces only: `\s{2,}` turned every paragraph break into a space.
+    .replace(/[ \t]{2,}/g, " ")
     .trim();
 }
 
@@ -120,11 +125,7 @@ export function applyAccessiblePresentation(
   let out = text;
   if (profile.statisticsVisibility === "HIDE") out = stripHiddenStatistics(out);
   if (/\b(?:new to the gym|rookie|beginner|newbie)\b/i.test(message)) {
-    out = out
-      .split(/(?<=[.!?…])\s+|\n+/)
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0 && !ADVANCED_PROFILE_LEAK.test(part))
-      .join(" ");
+    out = filterSentencesByLine(out, (part) => !ADVANCED_PROFILE_LEAK.test(part));
   }
   if (profile.complexity === "SIMPLE" || profile.accessibilityMode === "SIMPLIFIED") {
     out = simplifySentences(out);

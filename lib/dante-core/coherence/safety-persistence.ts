@@ -24,6 +24,7 @@ const EMERGENCY = new Set([
   "chest_pain_cardiac",
   "fainting_dizziness",
   "neurological_symptoms",
+  "medical_red_flag",
   "severe_pain",
   "self_harm_crisis",
   "eating_disorder_indicator",
@@ -31,8 +32,12 @@ const EMERGENCY = new Set([
   "ambiguous_safety",
 ]);
 
-const NUTRITION = /\b(?:eat|eating|food|meal|nutrition|calories|protein|macro|an uong|bua an|ăn uống)\b/i;
+const NUTRITION = /\b(?:eat|eating|food|meal|nutrition|calories|kcal|protein|macro|an uong|bua an|ăn uống|fast(?:ing)?|nhin an)\b/i;
 const MAX_ATTEMPT = /\b(?:max(?: out)?|1\s*rm|pr|pb|personal record)\b/i;
+/** A request to perform training now. Mentioning a lift, a program, or cardio is not enough. */
+const PERFORM_TRAINING = /\b(?:workout|work ?out|give me a (?:session|workout)|train today|tap hom nay|buoi tap|can i (?:train|lift|workout|squat|bench))\b/i;
+/** Current-turn substance talk. It is its own hazard, not a continuation of an older one. */
+const SUBSTANCE = /\b(?:caffeine|caffein|clen(?:buterol)?|yohimbine|steroids?|sarms?|anabolic|dnp|dinitrophenol)\b/i;
 
 function bodyAreaOf(category: string | null, topics: readonly string[]): AffectedBodyArea {
   if (category === "chest_pain_cardiac") return "CHEST";
@@ -53,6 +58,16 @@ function hitsArea(message: string, area: AffectedBodyArea): boolean {
   if (area === "KNEE") return /\b(?:knee|squat|goi|đầu gối)\b/i.test(message);
   if (area === "SHOULDER") return /\b(?:shoulder|overhead|ohp|vai)\b/i.test(message);
   if (area === "CHEST") return /\b(?:chest pain|đau ngực|dau nguc)\b/i.test(message);
+  return false;
+}
+
+/** A different body region means this turn is not the stored hazard. */
+function competingArea(message: string, area: AffectedBodyArea): boolean {
+  const shoulder = /\b(?:shoulder|vai)\b/i.test(message);
+  const knee = /\b(?:knee|goi|đầu gối|dau goi)\b/i.test(message);
+  if (area === "CHEST") return shoulder || knee;
+  if (area === "KNEE") return shoulder;
+  if (area === "SHOULDER") return knee;
   return false;
 }
 
@@ -94,11 +109,16 @@ export function resolvePersistedSafetyApplication(input: {
     payload: { reason: "p21", normalized: input.message },
   }) === "TRAINING";
   const areaHit = hitsArea(input.message, scope.affectedBodyArea);
+  const otherBody = competingArea(input.message, scope.affectedBodyArea);
+  const substance = SUBSTANCE.test(input.message);
 
-  if (emergency && (aboutSymptom || phase === "ESCALATE" || (training && !nutrition))) {
-    return { mode: "DOMINATE", scope };
-  }
+  // A new hazard, a meal question, or assistant feedback does not inherit the old episode.
+  if (substance || otherBody) return { mode: "IGNORE", scope };
   if (nutrition && !areaHit && !aboutSymptom) return { mode: "IGNORE", scope };
+
+  const sameHazard = aboutSymptom || (areaHit && emergency);
+  const performDuringEmergency = emergency && training && !nutrition && PERFORM_TRAINING.test(input.message);
+  if (sameHazard || performDuringEmergency) return { mode: "DOMINATE", scope };
   if (training || aboutSymptom || areaHit) return { mode: "CONSTRAIN", scope };
   return { mode: "IGNORE", scope };
 }

@@ -205,7 +205,7 @@ describe("ingredient substitution", () => {
     const result = applyDraftOp(ctx, d, { type: "swap", from: "chicken_breast", to: "tofu" })
     expect(result.applied).toBe(false)
     expect(result.warnings[0].kind).toBe("PROTEIN_SHORT")
-    expect(result.warnings[0].message).toMatch(/would fall \d+g short of your protein target/)
+    expect(result.warnings[0].message).toMatch(/would fall \d+g short of this meal's protein target/)
     expect(result.warnings[0].actions.map((a) => a.label)).toEqual(["Add protein", "Increase portion", "Find another swap"])
   })
 

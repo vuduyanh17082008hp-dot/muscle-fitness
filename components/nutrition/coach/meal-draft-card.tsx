@@ -43,6 +43,8 @@ type Props = {
   draft: ActiveMealDraft
   proposal: { draft: ActiveMealDraft; warnings: SwapWarning[]; from: string; to: string } | null
   skippedSuggestions: string[]
+  /** Allergens/exclusions from the server's current context: never offered as a swap. */
+  blockedIngredientIds?: string[]
   busy: boolean
   onOp: (op: DraftOp) => void
   onSkipSuggestion: (ingredientId: string) => void
@@ -50,7 +52,7 @@ type Props = {
   onUseAvailable: () => void
 }
 
-export function MealDraftCard({ draft, proposal, skippedSuggestions, busy, onOp, onSkipSuggestion, onDismissProposal, onUseAvailable }: Props) {
+export function MealDraftCard({ draft, proposal, skippedSuggestions, blockedIngredientIds = [], busy, onOp, onSkipSuggestion, onDismissProposal, onUseAvailable }: Props) {
   const locked = draft.status === "CONFIRMED" || draft.status === "LOGGED"
   const disabled = busy || locked
   const suggestions = draft.suggestions.filter((s) => !skippedSuggestions.includes(s.ingredientId))
@@ -93,7 +95,7 @@ export function MealDraftCard({ draft, proposal, skippedSuggestions, busy, onOp,
           <tbody>
             {draft.ingredients.map((item) => {
               const current = COACH_INGREDIENTS.find((i) => i.id === item.ingredientId)
-              const options = COACH_INGREDIENTS.filter((i) => i.role === current?.role && i.id !== item.ingredientId && !draft.ingredients.some((d) => d.ingredientId === i.id))
+              const options = COACH_INGREDIENTS.filter((i) => i.role === current?.role && i.id !== item.ingredientId && !blockedIngredientIds.includes(i.id) && !draft.ingredients.some((d) => d.ingredientId === i.id))
               return (
                 <tr key={item.ingredientId} className="border-b border-white/5 last:border-0">
                   <td className="py-2 text-mf-glass-text-secondary">

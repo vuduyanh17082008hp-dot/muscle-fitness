@@ -9,7 +9,7 @@ authority: mf_curated
 confidence: curated
 risk: low
 locale: global
-updatedAt: 2026-10-09
+updatedAt: 2026-10-11
 ---
 
 # Flavor Hacks
@@ -21,7 +21,7 @@ Improve enjoyment of food without relying on calorie-dense ingredients. Flavour 
 Lemon, lime, vinegar, pickles, and fermented elements brighten food and make smaller amounts of fat or salt taste more satisfying. If a dish tastes flat, try acid before adding oil or sugar.
 
 ## Salt
-Salt amplifies other flavours. Season in layers and at the end. Users with a medical reason to limit salt need their own professional guidance; do not override it.
+Salt (sodium) amplifies other flavours. Season in layers and at the end, and remember that soy sauce, fish sauce, stock and other concentrated sauces are where much of the sodium in a dish sits. Users with a medical reason to limit salt need their own professional guidance; do not override it.
 
 ## Sweetness
 Fruit, a small measured amount of the real sweetener, or sweet aromatics (cinnamon, vanilla) can carry sweetness. Sweetness expectations are partly habit; a measured portion of the real thing is a valid choice.

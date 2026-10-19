@@ -21,6 +21,7 @@ import { POST } from "@/app/api/chatbot/route"
 import { callOpenAiWithFallback } from "@/lib/dante-core/openai/client"
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
+import { getCanonicalNutritionTargets } from "@/lib/nutrition/targets"
 import { createClient } from "@/lib/supabase/server"
 
 const USER = "00000000-0000-4000-8000-00000000000b"
@@ -33,7 +34,8 @@ let gateReply: string | Error | null = '{"needsKnowledge":true,"category":"flavo
 
 const prompts = () => vi.mocked(callOpenAiWithFallback).mock.calls.map((c) => c[0] as string)
 const gateCalls = () => prompts().filter((p) => p.includes(GATE_MARK))
-const otherCalls = () => prompts().filter((p) => !p.includes(GATE_MARK))
+// N1.6.4: the orchestration planner is its own (separately tested) call; these tests pin the gate + answer policy beneath it.
+const otherCalls = () => prompts().filter((p) => !p.includes(GATE_MARK) && !p.includes("ORCHESTRATION PLANNER"))
 
 function session() {
   let active: Json | null = null
@@ -67,6 +69,7 @@ beforeEach(() => {
   vi.mocked(createClient).mockResolvedValue({ auth: { getUser: async () => ({ data: { user: { id: USER } }, error: null }) }, from: vi.fn() } as never)
   vi.mocked(loadNutritionContext).mockResolvedValue({
     plan: { target: { calories: 2200, protein: 160, carbs: 250, fat: 70, proteinPerKg: 2, carbsPerKg: 3, fatPerKg: 1 }, input: { goal: "fat_loss", allergies: [], excludedFoods: [], foodPreferences: [] } },
+    targets: getCanonicalNutritionTargets({ planTarget: { calories: 2200, protein: 160, carbs: 250, fat: 70 } }),
     fitnessGoal: "fat_loss",
     cookingAbility: null,
   } as never)

@@ -1,6 +1,6 @@
-import type { VerifierFinding, VerifierInput } from "@/lib/dante-core/verifier/types";
+import type { VerifierFact, VerifierFinding, VerifierInput } from "@/lib/dante-core/verifier/types";
 
-const EVIDENCE_LANGUAGE =
+export const EVIDENCE_LANGUAGE =
   /\b(?:research|studies|evidence|science)\s+(?:shows?|suggests?|indicates?|says?)\b|\baccording to (?:research|studies|a study)\b/i;
 
 /**
@@ -66,12 +66,34 @@ export function checkSafetyAdherence(input: VerifierInput): VerifierFinding[] {
 }
 
 /** Invariant 9 support: a value that IS supplied must not be silently changed by the communication layer. */
+/**
+ * A cued fact (H0 final closure): a generic label like "protein" also names targets and g/kg guidelines, so only a mention
+ * whose ±40-char window carries the cue ("logged", "so far"…) states the fact; it is wrong when none of that window's
+ * numbers is the value. Every such mention is checked, not just the first.
+ */
+function cuedValueMismatch(reply: string, normalized: string, fact: VerifierFact): boolean {
+  const lower = reply.toLowerCase();
+  for (let index = lower.indexOf(normalized); index !== -1; index = lower.indexOf(normalized, index + 1)) {
+    const window = reply.slice(Math.max(0, index - 40), index + normalized.length + 40);
+    if (!fact.cue!.test(window)) continue;
+    const numbers = (window.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    if (numbers.length > 0 && !numbers.some((stated) => Math.abs(stated - fact.value) < 0.05 || Math.abs(stated - Math.round(fact.value)) < 0.05)) return true;
+  }
+  return false;
+}
+
 export function checkDeterministicValueMutation(input: VerifierInput): VerifierFinding[] {
   const findings: VerifierFinding[] = [];
   const lowerReply = input.replyText.toLowerCase();
 
   for (const fact of input.knownFacts) {
     const normalized = normalizeLabel(fact.label);
+    if (fact.cue) {
+      if (cuedValueMismatch(input.replyText, normalized, fact)) {
+        findings.push({ code: "deterministic_value_mutation", severity: "blocker", message: `Reply states "${fact.label}" with a number other than the traceable ${fact.value}.` });
+      }
+      continue;
+    }
     const labelIndex = lowerReply.indexOf(normalized);
     if (labelIndex === -1) continue;
 

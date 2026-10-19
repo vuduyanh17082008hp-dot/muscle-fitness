@@ -24,6 +24,7 @@ import {
 } from "./followup"
 import { findIngredientByText, getIngredient, isIngredientBlocked } from "./ingredients"
 import { assessConfidence, totalsFor } from "./macros"
+import { stableId } from "./orchestration/snapshot"
 import { guardedPool } from "./optimizer"
 import type { ActiveMealDraft, CoachContext, DraftItem, MacroTotals, MealConstraints } from "./types"
 
@@ -194,7 +195,8 @@ function readOnly(turn: Extract<TurnResolution, { kind: "follow_up" }>, meal: Me
       return base({
         route: "followup_macros",
         reply: `${meal.name}: ${macroText(macros)}. Macro confidence: ${confidence}.`,
-        blocks: [{ type: "MACRO_SUMMARY", mealName: meal.name, macros, confidence }],
+        // The numbers belong to ONE meal: mealId names it, and calculationId changes whenever its items do (same items => same id).
+        blocks: [{ type: "MACRO_SUMMARY", mealName: meal.name, macros, confidence, mealId: meal.id, calculationId: stableId("calc", [meal.id, mealKey(meal.items)]) }],
         hints: ["ingredients?", "why this one?", "more protein?"],
         patch,
         toolCalls: [{ name: "macro_calculator", ok: true }],

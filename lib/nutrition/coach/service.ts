@@ -1,4 +1,5 @@
 import { buildCravingDraft } from "./craving"
+import { COACH_INGREDIENTS, isIngredientBlocked } from "./ingredients"
 import { applyDraftOp, assembleDraft, contextConstraints, type OpOutcome } from "./draft"
 import { buildFromSelection, buildMeal, type BuildResult, type ScoredCandidate } from "./optimizer"
 import { rehydrateDraft, type ConstraintOverrides, type CoachRequest } from "./schema"
@@ -85,7 +86,7 @@ export function suggestForYou(ctx: CoachContext): { ok: true; drafts: ActiveMeal
 }
 
 export type CoachActionResult =
-  | { ok: true; context: CoachContext["snapshot"] }
+  | { ok: true; context: CoachContext["snapshot"]; blockedIngredientIds: string[] }
   | (DraftResponse & { kind: "draft" })
   | { ok: true; kind: "suggestions"; drafts: ActiveMealDraft[] }
   | { ok: false; kind: "suggestions"; message: string }
@@ -96,7 +97,8 @@ export type CoachActionResult =
 export function runCoachAction(ctx: CoachContext, request: CoachRequest): CoachActionResult {
   switch (request.action) {
     case "context":
-      return { ok: true, context: ctx.snapshot }
+      // Ingredients the user must not be offered as picks or swaps (stored + chat-disclosed allergies, exclusions).
+      return { ok: true, context: ctx.snapshot, blockedIngredientIds: COACH_INGREDIENTS.filter((item) => isIngredientBlocked(item, [...ctx.guards.allergies, ...ctx.guards.excludedFoods])).map((item) => item.id) }
     case "build":
       return { kind: "draft", ...buildNextMeal(ctx, request.mode, request.overrides) }
     case "choose":

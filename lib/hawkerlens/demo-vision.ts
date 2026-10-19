@@ -7,7 +7,7 @@ import type { HawkerVisionResult } from "@/lib/hawkerlens/vision";
  *
  * This is NOT a fallback that silently substitutes fake data for a
  * real photo — analyze.ts only reaches this when the real vision
- * model isn't configured at all (no GROQ_VISION_MODEL/GROQ_API_KEY),
+ * model isn't configured at all (no OpenAI API key),
  * and every result produced from it is stamped `isDemo: true` end to
  * end so the UI can make that unmistakable to the user. It exists so
  * the full pipeline — dish classification → component segmentation →

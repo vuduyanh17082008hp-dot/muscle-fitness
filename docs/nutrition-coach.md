@@ -120,3 +120,45 @@ caveats and rejected experiments: `docs/nutrition-knowledge-eval.md`.
 `app/api/nutrition/coach/__tests__/log.test.ts`, and the opt-in local E2E:
 `NUTRITION_COACH_LOCAL_E2E=1 npx vitest run app/api/nutrition/coach/__tests__/local-e2e.test.ts`
 (loopback Supabase only, default `127.0.0.1:54331`).
+
+## N1.6.4 Phase 2 — adaptive response planning
+
+Pipeline: safety pre-gates → planner-level safety screen (`orchestration/safety.ts`, additive, deterministic) → context lifecycle
+(`lifecycle.ts`: explicit invalidation > turn TTL > server-time TTL) → ONE structured planner call (one reduced retry on
+schema/transient failure) → policy (`plan.ts`, `continuation.ts`, `needs.ts`) → `ToolExecutionPlan` (`toolplan.ts`) → deterministic
+tools (`tools.ts`) → context budget (`budget.ts`) → response (`respond.ts`).
+
+- **Modes:** ANSWER, PROPOSE, CONTINUE, ASK_ONE_QUESTION, CLARIFY, SAFE_REDIRECT, ESCALATE, REFUSE_POLICY. CONTINUE requires a
+  `continuationTarget` resolved from validated context (never from the model); otherwise CLARIFY (context-leaning) or ANSWER.
+- **Decision ownership:** `ToolNeedDecision` is derived first, `ContextNeedDecision` from it; `checkDecisionConsistency` proves they agree.
+- **Context budget:** 4 turns x 300 chars, 2 state sections, retrieval 6 chunks / 5500 chars (the frozen R3-H caps), tools 1500, total 8000.
+  Required context is placed before optional; if it cannot fit, `contextBudgetExceeded` is raised and the existing path answers.
+- **Exactness:** exact numbers come only from deterministic tools (`MacroResultBinding`); replies that contradict them are discarded.
+- **Observability:** in-memory, privacy-safe counters + the `orchestration` debug payload. Nothing is persisted (no new tables).
+- Not in scope (by design): memory/personalization (N1.6.6/N1.7), coaching-policy negotiation (N1.6.5), retrieval changes, DB changes.
+
+### Phase 2 — real-chat regressions (RC-01 … RC-08)
+
+Observed failures in a manual chat, fixed at the root rather than per phrase:
+
+- **One owner of "what the user was shown."** The engine (active draft + `followUp.presentedOptions`) and the coach's own written
+  list could both hold a pending choice, so "option 2" picked the engine's stale meal. `orchestration/provenance.ts::resolveFocusOwner`
+  walks the newest coach turns: a list the engine did not produce (labels + order) hands the turn to the **conversation**; engine
+  follow-ups, draft binding and "give me the recipe" → engine-build step aside. The echoed `conversation.focus` (`owner`, picked `item`)
+  keeps this past the 6-message window and is cleared when the engine produces a new meal, on a topic switch/reset, or on a safety stop.
+- **No active entity without provenance.** `ActiveEntityReference` (`entityId`, `sourceType`, `sourceRef`, `createdTurn`,
+  `lastValidatedTurn`) is derived by evidence priority (explicit pick > pending set > earlier pick > user-named food > echoed focus >
+  active draft > last coach referent) and must re-resolve (`hasProvenance`). Planner-named entities/foods with no support are dropped
+  (`plan.rejectedEntities`); a modification with no entity is not a continuation.
+- **Ambiguity.** "the other one" among ≥2 remaining options is CLARIFY (deterministic question naming the displayed options, no model call).
+- **Selection is not a mutation.** `requiresConfirmation` stays false for PENDING_CHOICE / ACTIVE_MODIFICATION unless the message itself
+  says log/save/apply.
+- **Constraints retained** (`low_prep`, `without:x`, `min_protein:n`, `taste:x`, `diet:x`) across the window and, via `conversation.constraints`
+  (shape-validated, session-only, never persisted), beyond it — until the user lifts them. `replyViolations` gives the model ONE bounded
+  repair when a reply drops a constraint, switches dish, or asks to "confirm the choice"; a second miss falls back to the existing path.
+- **Correction precedence.** `statedBudgetOf` replays the user's own turns: "I meant 620 is what I've eaten" retracts `remaining=620`,
+  records `consumed=620`, forces a deterministic recompute from trusted nutrition state (or one fixed question when none exists), and a
+  reply that revives the retracted figure as "left" is repaired/discarded.
+
+Known limits: option lists/selections are only visible inside the client's 6-message `recentMessages` window except for what `focus` and
+`constraints` echo; constraint extraction is by shape (no/without/avoid X, don't-want-to-cook, at-least-Ng-protein), not an NLU model.

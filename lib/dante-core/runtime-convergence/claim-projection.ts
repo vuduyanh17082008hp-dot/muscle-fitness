@@ -279,18 +279,23 @@ function enforceToolPersistence(text: string, state: AuthoritativeResponseState,
   if (state.actionState == null && !/(?:đã lưu|has been saved|i(?:'ve| have) saved)/i.test(text)) return text;
 
   let out = text;
-  if (/(?:đã lưu|da luu|has been saved|i(?:'ve| have) saved|successfully saved)/i.test(out)) {
+  // "nothing has been saved yet" is already the truth: a negated mention is neither a violation nor rewritten (H0: the
+  // blind rewrite produced "nothing has not been saved yet" on every real proposal once the tool path worked).
+  const negated = (offset: number, whole: string) => /(?:nothing|not|n't|never|no change|chưa|không)[^.!?\n]{0,12}$/iu.test(whole.slice(Math.max(0, offset - 24), offset));
+  const claims = [...out.matchAll(/(?:đã lưu|da luu|has been saved|i(?:'ve| have) saved|successfully saved)/gi)].filter((hit) => !negated(hit.index, out));
+  if (claims.length > 0) {
     violations.push({
       family: "TOOL_PERSISTENCE",
       code: "FALSE_PERSISTENCE",
       message: "Persistence claimed without successful write.",
     });
+    const unlessNegated = (replacement: string) => (match: string, offset: number, whole: string) => (negated(offset, whole) ? match : replacement);
     out = language === "vi"
       ? out
         .replace(/(?:Tôi|Mình|I)\s+đã\s+lưu[^.!?\n]*/gi, "Mình chưa lưu thay đổi này")
-        .replace(/(?:đã lưu|has been saved|successfully saved)/gi, "chưa lưu thay đổi này")
+        .replace(/(?:đã lưu|has been saved|successfully saved)/gi, unlessNegated("chưa lưu thay đổi này"))
       : out.replace(/\bI(?:'ve| have) saved\b/gi, "I have not saved")
-        .replace(/(?:has been saved|successfully saved)/gi, "has not been saved");
+        .replace(/(?:has been saved|successfully saved)/gi, unlessNegated("has not been saved"));
   }
   return out;
 }
@@ -366,7 +371,7 @@ export function projectClaims(input: {
   }
 
   return {
-    text: text.replace(/\s{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim(),
+    text: text.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim(),
     violations,
     repaired: violations.length > 0 || provenance.repairApplied || finalProvenance.repairApplied,
     provenance: finalProvenance,
@@ -383,7 +388,7 @@ export function scrubRawContextLeaks(text: string, canaries: string[] = []): str
     .replace(/DANTE_PRIVATE_CONTEXT_CANARY_[A-Z0-9]+/g, "")
     .replace(/(?:Quay lại đúng mạch đang làm|Back to the active thread):\s*[^\n]+/gi, "")
     .replace(/(?:context capsule|decision object|tool authority|working memory dump|\[SYSTEM\])/gi, "")
-    .replace(/\s{2,}/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
     .trim();
   return out;
 }

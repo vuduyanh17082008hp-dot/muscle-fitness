@@ -9,6 +9,7 @@ const HARD_BLOCK = new Set([
   "chest_pain_cardiac",
   "fainting_dizziness",
   "neurological_symptoms",
+  "medical_red_flag",
   "severe_pain",
   "eating_disorder_indicator",
   "dangerous_substance",

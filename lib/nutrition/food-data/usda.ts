@@ -48,7 +48,30 @@ const NUTRIENT_NUMBERS = {
 } as const
 
 // Raw/basic foods change essentially never — cache them for a long time.
-const RAW_FOOD_REVALIDATE_SECONDS = 60 * 60 * 24 * 30 // 30 days
+// Cached in-process (same pattern as open-food-facts.ts), NOT through Next's `fetch(..., { next: { revalidate } })`:
+// under `next dev` that path hung until our timeout aborted it ("[USDA] search error: AbortError"), silently turning
+// every lookup into a local-fallback miss. Only non-empty results are cached, so a transient failure is never sticky.
+const RAW_FOOD_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30 // 30 days
+const RAW_FOOD_CACHE_MAX_ENTRIES = 300
+const searchCache = new Map<string, { expiresAt: number; value: NormalizedFood[] }>()
+
+function getCachedSearch(key: string): NormalizedFood[] | null {
+  const entry = searchCache.get(key)
+  if (!entry) return null
+  if (entry.expiresAt < Date.now()) {
+    searchCache.delete(key)
+    return null
+  }
+  return entry.value
+}
+
+function setCachedSearch(key: string, value: NormalizedFood[]): void {
+  if (searchCache.size >= RAW_FOOD_CACHE_MAX_ENTRIES) {
+    const oldest = searchCache.keys().next().value
+    if (oldest !== undefined) searchCache.delete(oldest)
+  }
+  searchCache.set(key, { expiresAt: Date.now() + RAW_FOOD_CACHE_TTL_MS, value })
+}
 const SEARCH_TIMEOUT_MS = 6000
 
 function getApiKey(): string | null {
@@ -64,17 +87,8 @@ async function fetchWithTimeout(
   url: string,
   timeoutMs: number,
 ): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-
-  try {
-    return await fetch(url, {
-      signal: controller.signal,
-      next: { revalidate: RAW_FOOD_REVALIDATE_SECONDS },
-    })
-  } finally {
-    clearTimeout(timer)
-  }
+  // H0 WP1: the timeout stays on the request so it bounds the body read too (a cleared timer left `.json()` unbounded).
+  return fetch(url, { signal: AbortSignal.timeout(timeoutMs), cache: "no-store" })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -298,6 +312,9 @@ export async function searchFood(
 
   const preferRawFoodTypes = options.preferRawFoodTypes ?? true
   const limit = Math.min(Math.max(options.limit ?? 5, 1), 20)
+  const cacheKey = `search:${trimmedQuery.toLowerCase()}:${preferRawFoodTypes}:${limit}`
+  const cached = getCachedSearch(cacheKey)
+  if (cached) return cached
 
   const url = new URL(`${USDA_BASE_URL}/foods/search`)
   url.searchParams.set("api_key", apiKey)
@@ -350,6 +367,7 @@ export async function searchFood(
       if (normalized.length >= limit) break
     }
 
+    if (normalized.length > 0) setCachedSearch(cacheKey, normalized)
     return normalized
   } catch (error) {
     console.warn("[USDA] search error:", error)

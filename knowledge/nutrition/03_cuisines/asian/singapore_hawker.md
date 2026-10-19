@@ -10,7 +10,7 @@ authority: mf_curated
 confidence: curated
 risk: moderate
 locale: SG
-updatedAt: 2026-10-09
+updatedAt: 2026-10-11
 ---
 
 # Singapore Hawker Food
@@ -42,7 +42,7 @@ Clear soups with lean protein and vegetables give fullness and volume. Ask for l
 Thick gravies, sweet sauces, and chilli or sambal oil add energy without adding much food. Sauce on the side or a smaller serving is a low-sacrifice change that keeps the flavour.
 
 ## Protein choice
-Within a dish, lean options (steamed or grilled chicken, fish, tofu, egg, lean meat) usually give more protein per unit of energy than fatty or fried cuts. Offer these as choices, not requirements.
+Within a dish, lean options (steamed or grilled chicken, fish, tofu, egg, lean meat) usually give more protein per unit of energy than fatty or fried versions. Offer these as choices, not requirements.
 
 ## Range-based reasoning
 Give an honest range for hawker dishes and name the main assumptions (portion of rice, oil, gravy). Narrow the range only after the user confirms details.

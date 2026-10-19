@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@/database.types.generated";
+import { createClient, createTypedClient } from "@/lib/supabase/server";
 
 /* =========================================================
    SHARED TYPES
@@ -34,6 +35,9 @@ export type CreateWorkoutPlanInput = {
   session_duration_minutes?: number | string;
 
   days?: unknown[];
+
+  /* One key per logical create; makes server-side replay safe. */
+  idempotencyKey?: string | null;
 
   /*
    * Cho phép PlanBuilder gửi thêm các field như:
@@ -756,251 +760,177 @@ export async function createWorkoutPlanAction(
     };
   }
 
-  try {
-    const {
-      supabase,
-      userId,
-    } = await requireUser();
+  /*
+   * Optional idempotency key (one per logical create). Without it the
+   * create is still atomic but makes no replay-protection claim.
+   */
+  const keyResult = uuidSchema
+    .optional()
+    .safeParse(input.idempotencyKey ?? undefined);
 
-    const clientId =
-      parsedPlan.data.clientId ??
-      userId;
+  if (!keyResult.success) {
+    return {
+      success: false,
+      message: "Idempotency key không hợp lệ.",
+    };
+  }
 
-    await assertCanManageClient(
-      supabase,
-      clientId,
+  /*
+   * Validate the whole graph BEFORE touching the database, then hand it
+   * to one RPC (single transaction: plan + days + exercises).
+   */
+  const days: Json[] = [];
+
+  for (
+    let dayIndex = 0;
+    dayIndex < parsedPlan.data.days.length;
+    dayIndex += 1
+  ) {
+    const parsedDay = workoutDaySchema.safeParse(
+      normalizeDayInput(
+        parsedPlan.data.days[dayIndex],
+        dayIndex + 1,
+      ),
     );
 
-    /*
-     * .insert() không tự trả lại row.
-     * Cần .select("id").single() để lấy plan ID.
-     */
-    const {
-      data: createdPlan,
-      error: planError,
-    } = await supabase
-      .from("workout_plans")
-      .insert({
-        client_id: clientId,
-        created_by: userId,
-        name: parsedPlan.data.name,
-        description: emptyToNull(
-          parsedPlan.data.description,
-        ),
-        goal: emptyToNull(
-          parsedPlan.data.goal,
-        ),
-        weeks: parsedPlan.data.weeks,
-        days_per_week:
-          parsedPlan.data.daysPerWeek,
-        session_duration_minutes:
-          parsedPlan.data
-            .sessionDurationMinutes,
-        status: "draft",
-      })
-      .select("id")
-      .single();
-
-    if (
-      planError ||
-      !createdPlan
-    ) {
+    if (!parsedDay.success) {
       return {
         success: false,
-        message: getDatabaseMessage(
-          "Không thể tạo workout plan",
-          planError?.message ??
-            "Không nhận được workout plan ID.",
-        ),
+        message: `Day ${
+          dayIndex + 1
+        }: ${getValidationMessage(parsedDay.error)}`,
       };
     }
 
-    const planId = createdPlan.id;
+    const exercises: Json[] = [];
 
-    /*
-     * Nếu PlanBuilder gửi kèm ngày tập và bài tập,
-     * tạo toàn bộ trong một lần.
-     */
     for (
-      let dayIndex = 0;
-      dayIndex <
-      parsedPlan.data.days.length;
-      dayIndex += 1
+      let exerciseIndex = 0;
+      exerciseIndex < parsedDay.data.exercises.length;
+      exerciseIndex += 1
     ) {
-      const parsedDay =
-        workoutDaySchema.safeParse(
-          normalizeDayInput(
-            parsedPlan.data.days[dayIndex],
-            dayIndex + 1,
+      const parsedExercise =
+        workoutExerciseSchema.safeParse(
+          normalizeExerciseInput(
+            parsedDay.data.exercises[exerciseIndex],
+            exerciseIndex + 1,
           ),
         );
 
-      if (!parsedDay.success) {
-        /*
-         * Xóa plan nếu một ngày tập không hợp lệ.
-         * ON DELETE CASCADE sẽ xóa dữ liệu con.
-         */
-        await supabase
-          .from("workout_plans")
-          .delete()
-          .eq("id", planId);
-
+      if (!parsedExercise.success) {
         return {
           success: false,
-          message: `Day ${
-            dayIndex + 1
+          message: `Day ${dayIndex + 1}, exercise ${
+            exerciseIndex + 1
           }: ${getValidationMessage(
-            parsedDay.error,
+            parsedExercise.error,
           )}`,
         };
       }
 
-      const {
-        data: createdDay,
-        error: dayError,
-      } = await supabase
-        .from("workout_days")
-        .insert({
-          workout_plan_id: planId,
-          day_number:
-            parsedDay.data.dayNumber,
-          name: parsedDay.data.name,
-          focus: emptyToNull(
-            parsedDay.data.focus,
-          ),
-          notes: emptyToNull(
-            parsedDay.data.notes,
-          ),
-          rest_day:
-            parsedDay.data.restDay,
-        })
-        .select("id")
-        .single();
+      exercises.push({
+        exercise_id: parsedExercise.data.exerciseId,
+        exercise_name: parsedExercise.data.exerciseName,
+        exercise_order: parsedExercise.data.exerciseOrder,
+        target_sets: parsedExercise.data.targetSets,
+        rep_min: parsedExercise.data.repMin,
+        rep_max: parsedExercise.data.repMax,
+        rest_seconds: parsedExercise.data.restSeconds,
+        tempo: emptyToNull(parsedExercise.data.tempo),
+        rir: parsedExercise.data.rir ?? null,
+        notes: emptyToNull(parsedExercise.data.notes),
+      });
+    }
 
-      if (
-        dayError ||
-        !createdDay
-      ) {
-        await supabase
-          .from("workout_plans")
-          .delete()
-          .eq("id", planId);
+    days.push({
+      day_number: parsedDay.data.dayNumber,
+      name: parsedDay.data.name,
+      focus: emptyToNull(parsedDay.data.focus),
+      notes: emptyToNull(parsedDay.data.notes),
+      rest_day: parsedDay.data.restDay,
+      exercises,
+    });
+  }
 
+  try {
+    const supabase = await createTypedClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw new Error(
+        "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
+      );
+    }
+
+    /*
+     * Owner/actor are NOT trusted from the client: the RPC derives the
+     * actor from auth.uid() and enforces can_manage_workout_client.
+     */
+    const { data, error } = await supabase.rpc(
+      "create_workout_plan",
+      {
+        p_idempotency_key: keyResult.data,
+        p_payload: {
+          plan: {
+            client_id: parsedPlan.data.clientId ?? null,
+            name: parsedPlan.data.name,
+            description: emptyToNull(
+              parsedPlan.data.description,
+            ),
+            goal: emptyToNull(parsedPlan.data.goal),
+            weeks: parsedPlan.data.weeks,
+            days_per_week: parsedPlan.data.daysPerWeek,
+            session_duration_minutes:
+              parsedPlan.data.sessionDurationMinutes,
+          },
+          days,
+        },
+      },
+    );
+
+    if (error) {
+      if (error.message.includes("IDEMPOTENCY_CONFLICT")) {
         return {
           success: false,
-          message: getDatabaseMessage(
-            `Không thể tạo Day ${
-              dayIndex + 1
-            }`,
-            dayError?.message ??
-              "Không nhận được workout day ID.",
-          ),
+          message:
+            "Yêu cầu này dùng lại một idempotency key với nội dung khác.",
         };
       }
 
-      for (
-        let exerciseIndex = 0;
-        exerciseIndex <
-        parsedDay.data.exercises.length;
-        exerciseIndex += 1
-      ) {
-        const parsedExercise =
-          workoutExerciseSchema.safeParse(
-            normalizeExerciseInput(
-              parsedDay.data.exercises[
-                exerciseIndex
-              ],
-              exerciseIndex + 1,
-            ),
-          );
-
-        if (!parsedExercise.success) {
-          await supabase
-            .from("workout_plans")
-            .delete()
-            .eq("id", planId);
-
-          return {
-            success: false,
-            message: `Day ${
-              dayIndex + 1
-            }, exercise ${
-              exerciseIndex + 1
-            }: ${getValidationMessage(
-              parsedExercise.error,
-            )}`,
-          };
-        }
-
-        const {
-          error: exerciseError,
-        } = await supabase
-          .from("workout_exercises")
-          .insert({
-            workout_day_id:
-              createdDay.id,
-
-            exercise_id:
-              parsedExercise.data
-                .exerciseId,
-
-            exercise_name:
-              parsedExercise.data
-                .exerciseName,
-
-            exercise_order:
-              parsedExercise.data
-                .exerciseOrder,
-
-            target_sets:
-              parsedExercise.data
-                .targetSets,
-
-            rep_min:
-              parsedExercise.data.repMin,
-
-            rep_max:
-              parsedExercise.data.repMax,
-
-            rest_seconds:
-              parsedExercise.data
-                .restSeconds,
-
-            tempo: emptyToNull(
-              parsedExercise.data.tempo,
-            ),
-
-            rir:
-              parsedExercise.data.rir ??
-              null,
-
-            notes: emptyToNull(
-              parsedExercise.data.notes,
-            ),
-          });
-
-        if (exerciseError) {
-          await supabase
-            .from("workout_plans")
-            .delete()
-            .eq("id", planId);
-
-          return {
-            success: false,
-            message: getDatabaseMessage(
-              `Không thể tạo exercise ${
-                exerciseIndex + 1
-              }`,
-              exerciseError.message,
-            ),
-          };
-        }
+      if (error.message.includes("ACTION_FORBIDDEN")) {
+        return {
+          success: false,
+          message:
+            "Bạn không có quyền quản lý workout của người dùng này.",
+        };
       }
+
+      return {
+        success: false,
+        message: getDatabaseMessage(
+          "Không thể tạo workout plan",
+          error.message,
+        ),
+      };
     }
 
-    revalidatePath(
-      "/dashboard/workouts",
-    );
+    const planId =
+      isRecord(data) && typeof data.plan_id === "string"
+        ? data.plan_id
+        : null;
+
+    if (!planId) {
+      return {
+        success: false,
+        message: "Không nhận được workout plan ID.",
+      };
+    }
+
+    revalidatePath("/dashboard/workouts");
 
     return {
       success: true,

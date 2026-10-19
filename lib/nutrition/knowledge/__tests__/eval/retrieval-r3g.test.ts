@@ -38,8 +38,8 @@ describe("R3-G: semantic reranker (DEV candidate, opt-in)", { timeout: 120000 },
   })
 
   it("low-overlap (OOV) query where lexical ties fail: 'shatter on the outside of baked wings' finds crispness only with embeddings", () => {
-    const before = r3Cases(["d4-tx13", "d4-tx06"]), after = run(["d4-tx13", "d4-tx06"])
-    for (const id of ["d4-tx13", "d4-tx06"]) {
+    const before = r3Cases(["d4-tx13", "d4-cu15"]), after = run(["d4-tx13", "d4-cu15"]) // R3-I: d4-tx06 is now found lexically (volume section vocabulary), so d4-cu15 replaces it as the second OOV example
+    for (const id of ["d4-tx13", "d4-cu15"]) {
       expect(before[id].sectionRank).toBeNull()
       expect(after[id].sectionRank).not.toBeNull()
       expect(after[id].sectionRank!).toBeLessThanOrEqual(3)

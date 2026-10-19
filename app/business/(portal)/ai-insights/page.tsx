@@ -60,7 +60,7 @@ export default async function BusinessAIInsightsPage() {
           className="mt-6 min-h-72"
           icon={Bot}
           title="AI analysis will appear here"
-          description="Groq can be connected here to analyse business metrics, member behaviour, engagement and retention patterns."
+          description="OpenAI can be connected here to analyse business metrics, member behaviour, engagement and retention patterns."
         />
       </section>
     </div>

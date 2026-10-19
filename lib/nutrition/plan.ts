@@ -433,12 +433,28 @@ export const SUBSTITUTION_ORDER: Record<FoodCategory, string[]> = {
   vegetable: ["vegetables"],
 }
 
-function isBlocked(foodName: string, blockedTerms: string[]): boolean {
-  const normalized = foodName.toLowerCase()
+/**
+ * Allergy/exclusion terms that name a GROUP, not a food: "fish" must block Salmon and Cod, which a name match never would.
+ * Mirrors the Nutrition Coach's allergen tags (lib/nutrition/coach/ingredients.ts) for this template catalogue.
+ */
+const TERM_FOOD_IDS: Record<string, string[]> = {
+  fish: ["cod", "salmon"], seafood: ["cod", "salmon"], finfish: ["cod", "salmon"],
+  dairy: ["greek_yogurt", "whey_protein"], milk: ["greek_yogurt", "whey_protein"], lactose: ["greek_yogurt", "whey_protein"], whey: ["whey_protein"], yogurt: ["greek_yogurt"],
+  egg: ["eggs"],
+  nut: ["peanut_butter"], peanut: ["peanut_butter"], "tree nut": ["peanut_butter"],
+  gluten: ["wholegrain_bread", "oats"], wheat: ["wholegrain_bread"],
+}
 
-  return blockedTerms.some(
-    (term) => term.trim().length > 0 && normalized.includes(term.trim().toLowerCase()),
-  )
+/** True when an allergy/exclusion term blocks this food, by name or by allergen group. Shared with the budget planner. */
+export function isFoodBlocked(food: Pick<FoodTemplate, "id" | "name">, blockedTerms: string[]): boolean {
+  const normalized = food.name.toLowerCase()
+
+  return blockedTerms.some((raw) => {
+    const term = raw.trim().toLowerCase()
+    if (term.length === 0) return false
+    const singular = term.endsWith("s") && term.length > 3 ? term.slice(0, -1) : term
+    return normalized.includes(term) || (TERM_FOOD_IDS[term] ?? TERM_FOOD_IDS[singular] ?? []).includes(food.id)
+  })
 }
 
 function resolveFoodId(
@@ -447,14 +463,14 @@ function resolveFoodId(
 ): string | null {
   const preferred = findFood(preferredId)
 
-  if (!isBlocked(preferred.name, blockedTerms)) {
+  if (!isFoodBlocked(preferred, blockedTerms)) {
     return preferredId
   }
 
   const alternatives = SUBSTITUTION_ORDER[preferred.category]
 
   const substitute = alternatives.find(
-    (candidateId) => !isBlocked(findFood(candidateId).name, blockedTerms),
+    (candidateId) => !isFoodBlocked(findFood(candidateId), blockedTerms),
   )
 
   return substitute ?? null

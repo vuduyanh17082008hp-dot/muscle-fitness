@@ -39,5 +39,7 @@ export function trainingLoadReadinessCaveat(input: {
     return null;
   }
 
-  return `Training load is currently reported as "${input.trainingLoadState}", but today's recovery check-in is missing. Training load alone does not establish readiness — the readiness picture is incomplete; do not imply "${input.trainingLoadState}" means recovered/ready.`;
+  // H0 cluster E: a missing check-in is a gap, never the answer. It used to become the reply itself ("log your check-in")
+  // for questions it had nothing to do with (pregnancy, "I feel terrible", supplements).
+  return `Only when the user asks whether to train today or how recovered they are: today's recovery check-in is missing, so training load "${input.trainingLoadState}" alone does not establish readiness — say that in one clause and still answer from what is known (how they say they feel, symptoms, recent load). Never make the missing check-in the main point, never imply "${input.trainingLoadState}" means recovered, and do not mention the check-in at all for any other question.`;
 }

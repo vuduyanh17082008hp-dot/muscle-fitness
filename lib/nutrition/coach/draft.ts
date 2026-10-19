@@ -269,7 +269,7 @@ function applySwap(ctx: CoachContext, draft: ActiveMealDraft, op: Extract<DraftO
       } else {
         warnings.push({
           kind: "PROTEIN_SHORT",
-          message: `This version would fall ${Math.round(v.requested - v.actual)}g short of your protein target.`,
+          message: `This version would fall ${Math.round(v.requested - v.actual)}g short of this meal's protein target.`,
           actions: [{ label: "Add protein", fit: "add_protein" }, { label: "Increase portion", fit: "increase_portion" }, { label: "Find another swap", fit: "other_swap" }],
         })
       }

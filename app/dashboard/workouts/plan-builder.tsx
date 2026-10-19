@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -27,6 +28,8 @@ import {
 import type {
   ExerciseLibraryItem,
 } from "@/lib/workouts/exercise-library";
+
+import { fetchLibraryExercises } from "@/lib/workouts/fetch-library-exercises";
 
 import {
   buildSplitDays,
@@ -799,6 +802,10 @@ export default function PlanBuilder({
   ] =
     useState(true);
 
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+
+  const [libraryReloadKey, setLibraryReloadKey] = useState(0);
+
   const [
     search,
     setSearch,
@@ -819,59 +826,44 @@ export default function PlanBuilder({
   ] =
     useState(false);
 
+  /*
+   * One idempotency key per logical save. Kept across a lost response so a
+   * retry is a replay; rotated once the server has answered (success or
+   * rejection), since a rejected request stored nothing.
+   */
+  const idempotencyKeyRef = useRef(
+    crypto.randomUUID(),
+  );
+
   /* =======================================================
      LOAD WGER EXERCISES
   ======================================================= */
 
   useEffect(() => {
-    let active =
-      true;
+    let active = true;
 
-    async function load() {
-      try {
-        const response =
-          await fetch(
-            "/api/workouts/exercises",
-          );
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data =
-          (await response.json()) as {
-            exercises?:
-              ExerciseLibraryItem[];
-          };
-
-        if (active) {
-          setExternalExercises(
-            data.exercises ??
-              [],
-          );
-        }
-      } catch (
-        error
-      ) {
+    fetchLibraryExercises()
+      .then((items) => {
+        if (active) setExternalExercises(items);
+      })
+      .catch((error: unknown) => {
+        // Safe metadata only: no payloads, no user input.
         console.error(
-          "[EXTERNAL EXERCISES]",
-          error,
+          "[EXERCISE LIBRARY]",
+          error instanceof Error ? error.message : "unknown error",
         );
-      } finally {
         if (active) {
-          setExternalLoading(
-            false,
-          );
+          setLibraryError("Couldn't load the exercise library.");
         }
-      }
-    }
-
-    void load();
+      })
+      .finally(() => {
+        if (active) setExternalLoading(false);
+      });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [libraryReloadKey]);
 
   const library =
     useMemo(() => {
@@ -1640,6 +1632,9 @@ export default function PlanBuilder({
     try {
       const result =
         await createWorkoutPlanAction({
+          idempotencyKey:
+            idempotencyKeyRef.current,
+
           clientId,
 
           name:
@@ -1721,6 +1716,9 @@ export default function PlanBuilder({
               }),
             ),
         });
+
+      idempotencyKeyRef.current =
+        crypto.randomUUID();
 
       if (!result.success) {
         throw new Error(
@@ -2450,10 +2448,30 @@ export default function PlanBuilder({
 
           <p className="text-xs text-zinc-600">
             {externalLoading
-              ? "Loading wger…"
-              : `${externalExercises.length} external exercises loaded`}
+              ? "Loading exercise library…"
+              : `${externalExercises.length} library exercises loaded`}
           </p>
         </div>
+
+        {libraryError && (
+          <div
+            role="alert"
+            className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+          >
+            <span>{libraryError} Built-in exercises are still available.</span>
+            <button
+              type="button"
+              onClick={() => {
+                setExternalLoading(true);
+                setLibraryError(null);
+                setLibraryReloadKey((k) => k + 1);
+              }}
+              className="rounded-full border border-amber-400/40 px-3 py-1 text-xs font-bold hover:bg-amber-500/20"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         <div className="relative mt-5">
           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />

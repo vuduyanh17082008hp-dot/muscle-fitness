@@ -1,3 +1,6 @@
+// LEGACY / HAND_WRITTEN overlay, DEPRECATED. Still imported by the workout plan page (history + session pages moved to canonical types in WF-04/05); legacy columns
+// (workout_session_id, duration_seconds, total_volume, ...) that the migration schema does not have.
+// Do not extend. Canonical types: @/database.types.generated. Removal is tracked in docs/database-types.md.
 import type {
   Database as GeneratedDatabase,
 } from "@/database.types";

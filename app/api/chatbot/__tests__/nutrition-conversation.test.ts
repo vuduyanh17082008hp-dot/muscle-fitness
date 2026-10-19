@@ -25,6 +25,7 @@ import { buildCravingDraft } from "@/lib/nutrition/coach/craving"
 import { QUICK_ACTIONS } from "@/lib/nutrition/coach/quick-actions"
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
+import { getCanonicalNutritionTargets } from "@/lib/nutrition/targets"
 import { createClient } from "@/lib/supabase/server"
 
 const USER_A = "00000000-0000-4000-8000-00000000000a"
@@ -46,6 +47,7 @@ function plan(userId: string) {
       target: { calories: isB ? 3000 : 2200, protein: isB ? 200 : 160, carbs: 250, fat: 70, proteinPerKg: 2, carbsPerKg: 3, fatPerKg: 1 },
       input: { goal: "fat_loss", allergies: isB ? ["dairy"] : [], excludedFoods: isB ? [] : ["tofu"], foodPreferences: ["chicken"] },
     },
+    targets: getCanonicalNutritionTargets({ planTarget: { calories: isB ? 3000 : 2200, protein: isB ? 200 : 160, carbs: 250, fat: 70 } }),
     fitnessGoal: "fat_loss",
     cookingAbility: null,
   }

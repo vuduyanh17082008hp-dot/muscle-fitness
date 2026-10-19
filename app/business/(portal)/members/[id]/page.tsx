@@ -524,7 +524,7 @@ export default async function MemberDetailPage({
               </p>
 
               <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-wider text-white/50">
-                Groq AI
+                OpenAI
               </span>
             </div>
 

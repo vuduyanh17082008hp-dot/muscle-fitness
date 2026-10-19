@@ -36,6 +36,7 @@ export function RecoveryAdjustmentPanel({
   hasCheckin,
   localDate,
   proposalReady = true,
+  alreadyApplied = false,
 }: {
   recoveryState: RecoveryState;
   insight: string;
@@ -43,13 +44,15 @@ export function RecoveryAdjustmentPanel({
   hasCheckin: boolean;
   localDate: string;
   proposalReady?: boolean;
+  /** An adjustment to today's session was already applied (workout_mutation_records): never offer a second, stacked cut. */
+  alreadyApplied?: boolean;
 }) {
   const router = useRouter();
   const titleId = useId();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [applied, setApplied] = useState(false);
+  const [applied, setApplied] = useState(alreadyApplied);
   const [kept, setKept] = useState(false);
 
   if (!hasCheckin) return null;
@@ -75,6 +78,8 @@ export function RecoveryAdjustmentPanel({
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to apply today's adjustment.");
+      // The failure message renders on the panel; leaving the dialog open would hide it behind the overlay.
+      setOpen(false);
     } finally {
       setBusy(false);
     }

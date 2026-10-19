@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Database } from "@/types/app-database.types";
+import type { Database } from "@/database.types.generated";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -147,6 +147,41 @@ function formatDuration(seconds: number): string {
   return `${Math.max(minutes, 1)} min`;
 }
 
+// DB stores duration_minutes; the UI formats seconds.
+function durationSeconds(
+  session: WorkoutSession,
+): number {
+  return (session.duration_minutes ?? 0) * 60;
+}
+
+function historyLoadError(
+  step: string,
+  error: { message: string },
+): ReactNode {
+  console.error(
+    `[HISTORY] failed to load ${step}:`,
+    error.message,
+  );
+
+  return (
+    <main className="min-h-screen bg-mf-bg px-4 py-8 text-white sm:px-6 lg:px-10">
+      <div
+        role="alert"
+        className="mx-auto max-w-3xl rounded-3xl border border-red-500/20 bg-red-500/5 px-6 py-12 text-center"
+      >
+        <h1 className="text-xl font-black">
+          Workout history is unavailable
+        </h1>
+
+        <p className="mt-2 text-sm text-zinc-500">
+          We could not load your workout history. Please try
+          again in a moment.
+        </p>
+      </div>
+    </main>
+  );
+}
+
 function formatVolume(value: number): string {
   if (!Number.isFinite(value) || value <= 0) {
     return "0 kg";
@@ -248,9 +283,7 @@ export default async function WorkoutHistoryPage() {
     .limit(100);
 
   if (sessionsError) {
-    throw new Error(
-      `Failed to load workout history: ${sessionsError.message}`,
-    );
+    return historyLoadError("sessions", sessionsError);
   }
 
   const sessions: WorkoutSession[] =
@@ -280,9 +313,7 @@ export default async function WorkoutHistoryPage() {
       });
 
     if (error) {
-      throw new Error(
-        `Failed to load workout exercises: ${error.message}`,
-      );
+      return historyLoadError("exercises", error);
     }
 
     sessionExercises = data ?? [];
@@ -294,22 +325,25 @@ export default async function WorkoutHistoryPage() {
 
   let exerciseSets: ExerciseSet[] = [];
 
-  if (sessionIds.length > 0) {
+  // Canonical relation: sessions -> workout_session_exercises -> exercise_sets
+  // (exercise_sets.session_exercise_id). exercise_sets has no session column.
+  if (sessionExercises.length > 0) {
     const {
       data,
       error,
     } = await supabase
       .from("exercise_sets")
       .select("*")
-      .in("workout_session_id", sessionIds)
+      .in(
+        "session_exercise_id",
+        sessionExercises.map((exercise) => exercise.id),
+      )
       .order("set_number", {
         ascending: true,
       });
 
     if (error) {
-      throw new Error(
-        `Failed to load exercise sets: ${error.message}`,
-      );
+      return historyLoadError("sets", error);
     }
 
     exerciseSets = data ?? [];
@@ -340,9 +374,8 @@ export default async function WorkoutHistoryPage() {
       .in("id", planIds);
 
     if (error) {
-      throw new Error(
-        `Failed to load workout plans: ${error.message}`,
-      );
+      // Secondary lookup: names fall back to "Deleted ..." labels.
+      console.error("[HISTORY] plan lookup failed:", error.message);
     }
 
     plans = data ?? [];
@@ -373,9 +406,7 @@ export default async function WorkoutHistoryPage() {
       .in("id", dayIds);
 
     if (error) {
-      throw new Error(
-        `Failed to load workout days: ${error.message}`,
-      );
+      console.error("[HISTORY] day lookup failed:", error.message);
     }
 
     workoutDays = data ?? [];
@@ -454,25 +485,33 @@ export default async function WorkoutHistoryPage() {
   for (const set of exerciseSets) {
     const currentExerciseSets =
       setsByExercise.get(
-        set.workout_session_exercise_id,
+        set.session_exercise_id,
       ) ?? [];
 
     currentExerciseSets.push(set);
 
     setsByExercise.set(
-      set.workout_session_exercise_id,
+      set.session_exercise_id,
       currentExerciseSets,
     );
 
+    const parentSessionId =
+      sessionExerciseById.get(
+        set.session_exercise_id,
+      )?.workout_session_id;
+
+    if (!parentSessionId) {
+      continue;
+    }
+
     const currentSessionSets =
-      setsBySession.get(
-        set.workout_session_id,
-      ) ?? [];
+      setsBySession.get(parentSessionId) ??
+      [];
 
     currentSessionSets.push(set);
 
     setsBySession.set(
-      set.workout_session_id,
+      parentSessionId,
       currentSessionSets,
     );
   }
@@ -571,8 +610,8 @@ export default async function WorkoutHistoryPage() {
         completionPercentage,
 
         calculatedVolume:
-          Number(session.total_volume) > 0
-            ? Number(session.total_volume)
+          Number(session.total_volume_kg) > 0
+            ? Number(session.total_volume_kg)
             : calculatedVolume,
 
         exercises,
@@ -613,13 +652,14 @@ export default async function WorkoutHistoryPage() {
 
     const sessionExercise =
       sessionExerciseById.get(
-        set.workout_session_exercise_id,
+        set.session_exercise_id,
       );
 
-    const session =
-      sessionById.get(
-        set.workout_session_id,
-      );
+    const session = sessionExercise
+      ? sessionById.get(
+          sessionExercise.workout_session_id,
+        )
+      : undefined;
 
     if (
       !sessionExercise ||
@@ -697,7 +737,7 @@ export default async function WorkoutHistoryPage() {
     historySessions.reduce(
       (total, item) =>
         total +
-        item.session.duration_seconds,
+        durationSeconds(item.session),
       0,
     );
 
@@ -1111,7 +1151,7 @@ function WorkoutHistoryCard({
                   <Clock3 className="h-4 w-4" />
 
                   {formatDuration(
-                    session.duration_seconds,
+                    durationSeconds(session),
                   )}
                 </span>
 

@@ -11,7 +11,7 @@ authority: mf_curated
 confidence: curated
 risk: low
 locale: global
-updatedAt: 2026-10-09
+updatedAt: 2026-10-11
 ---
 
 # Fried Chicken Makeovers
@@ -23,12 +23,12 @@ Keep fried chicken recognisably fried chicken while reducing the calories that m
 The qualities that make fried chicken satisfying are crispy, savoury, salty, spicy, and juicy. Protect these first. A version that is dry or bland will not replace the craving.
 
 ## Main calorie drivers
-The oil absorbed by the coating, the thickness of the breading, skin and fatty cuts, and sauces or dips. Sides and drinks in a combo meal often add more than the chicken itself.
+The oil absorbed by the coating, the thickness of the breading, skin and fattier pieces, and sauces or dips. Sides and drinks in a combo meal often add more than the chicken itself.
 
 ## High-leverage strategies
 - Air fryer or oven to get a crisp coating with far less cooking oil than deep frying.
 - A lighter breading (thin coating, seasoned flour, crushed cereal or crumbs) to keep crunch while reducing absorbed oil.
-- A leaner cut where appropriate, such as breast, or trimmed thigh for juiciness.
+- A leaner piece where appropriate, such as breast, or trimmed thigh for juiciness.
 - High-impact seasoning (salt, pepper, paprika, garlic, chilli, spice rubs) so flavour does not depend on oil.
 - Measured sauce, on the side, instead of a coated dip-by-habit.
 - Brine or yoghurt marinade to keep the meat juicy.
@@ -42,7 +42,7 @@ A thin crumb or crushed crunchy cereal coating for a thick batter; yoghurt-based
 - Keep to what their cookware allows.
 
 ## Common failure modes
-- Over-lean cut that dries out.
+- Over-lean meat that dries out.
 - Under-seasoned coating that tastes of nothing.
 - Oven version that is soggy because the rack or airflow was missing.
 
@@ -51,4 +51,4 @@ A thin crumb or crushed crunchy cereal coating for a thick batter; yoghurt-based
 - Do not state exact calories or macros for a named restaurant item.
 
 ## Suggested tool calls
-Use the food lookup and macro calculator for the chosen cut, coating, and portion, and the brand data tool for any named chain product.
+Use the food lookup and macro calculator for the chosen piece of chicken, coating, and portion, and the brand data tool for any named chain product.

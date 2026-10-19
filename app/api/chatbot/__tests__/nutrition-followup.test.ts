@@ -27,6 +27,7 @@ import { getFollowUpMetrics, resetFollowUpMetrics } from "@/lib/nutrition/coach/
 import { totalsFor } from "@/lib/nutrition/coach/macros"
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
+import { getCanonicalNutritionTargets } from "@/lib/nutrition/targets"
 import { createClient } from "@/lib/supabase/server"
 
 const USER = "00000000-0000-4000-8000-00000000000a"
@@ -43,6 +44,7 @@ const plan = (allergies: string[] = []) => ({
     target: { calories: 2200, protein: 160, carbs: 250, fat: 70, proteinPerKg: 2, carbsPerKg: 3, fatPerKg: 1 },
     input: { goal: "fat_loss", allergies, excludedFoods: [], foodPreferences: [] },
   },
+  targets: getCanonicalNutritionTargets({ planTarget: { calories: 2200, protein: 160, carbs: 250, fat: 70 } }),
   fitnessGoal: "fat_loss",
   cookingAbility: null,
 })
@@ -403,6 +405,8 @@ describe("NEW TOPIC vs the old referent", () => {
     const { s } = await tunaSession()
     vi.mocked(callOpenAiWithFallback)
       .mockResolvedValueOnce({ reply: JSON.stringify({ isFollowUp: false, candidate: null, intent: null, confidence: "HIGH", isNewTopic: true, topicHint: "variety" }), model: "t" })
+      .mockResolvedValueOnce({ reply: "not a plan", model: "t" }) // N1.6.4 planner: malformed ...
+      .mockResolvedValueOnce({ reply: "not a plan", model: "t" }) // ... and its one reduced retry -> existing path
       .mockResolvedValueOnce({ reply: JSON.stringify({ topic: { type: "GENERAL_NUTRITION" }, reply: "Fair — want to try something different tonight?" }), model: "t" })
     const json = await s.say("Tuna is getting boring.")
     expect(json.followUp).toMatchObject({ responseMode: "NEW_TOPIC", viaModel: true })

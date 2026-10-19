@@ -44,6 +44,11 @@ export type VerifierFact = {
   /** Human-readable label as it would appear in prose, e.g. "readiness score", "sleep hours" — matched case-insensitively, camelCase auto-split. */
   label: string;
   value: number;
+  /**
+   * When set, only a mention whose surrounding words match this cue states THIS fact ("protein" consumed vs a protein
+   * target or g/kg guideline), and it is verified if any number near it is the value.
+   */
+  cue?: RegExp;
 };
 
 export type VerifierSafetyState = {

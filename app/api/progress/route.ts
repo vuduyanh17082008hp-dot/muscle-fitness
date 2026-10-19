@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { emitEvent } from "@/lib/events/emit";
 
 export async function GET() {
@@ -21,7 +22,7 @@ export async function GET() {
     await supabase
       .from("fitness_profiles")
       .select(
-        "weight_kg, height_cm, goal, calories_target, protein_target_g, carbs_target_g, fat_target_g",
+        "weight_kg, height_cm, goal",
       )
       .eq("user_id", user.id)
       .maybeSingle();
@@ -33,9 +34,20 @@ export async function GET() {
     );
   }
 
+  // Canonical targets (lib/nutrition/targets.ts). Response keys are unchanged.
+  const targets = (await loadNutritionContext(supabase, user.id).catch(() => null))?.targets ?? null;
+
   return NextResponse.json({
     userId: user.id,
-    fitness,
+    fitness: fitness
+      ? {
+          ...fitness,
+          calories_target: targets?.calories ?? null,
+          protein_target_g: targets?.protein ?? null,
+          carbs_target_g: targets?.carbs ?? null,
+          fat_target_g: targets?.fat ?? null,
+        }
+      : fitness,
     note: "Weight history endpoints will expand as check-in writes are added.",
   });
 }

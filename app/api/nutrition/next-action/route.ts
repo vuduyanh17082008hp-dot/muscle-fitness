@@ -39,7 +39,9 @@ export async function GET() {
       loadFrequentFoods(supabase, user.id),
     ]);
 
-    if (!nutritionContext.plan) {
+    const target = nutritionContext.targets.complete;
+
+    if (!nutritionContext.plan || !target) {
       return NextResponse.json({
         ok: true,
         result: {
@@ -51,7 +53,7 @@ export async function GET() {
       });
     }
 
-    const comparison = compareToTargets(foodLog.totals, nutritionContext.plan.target);
+    const comparison = compareToTargets(foodLog.totals, target);
 
     const excludedTerms = [
       ...nutritionContext.plan.input.allergies,

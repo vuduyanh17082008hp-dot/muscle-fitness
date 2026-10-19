@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { addDaysIso } from "@/lib/nutrition/date-utils"
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
+import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
 import { loadProgressRecords } from "@/lib/progress/load-journey"
 import { buildMuscleFocus } from "@/lib/progress/muscle-focus"
 import {
@@ -46,30 +47,22 @@ async function loadNutritionModel(
   today: string,
 ): Promise<ProgressNutritionModel> {
   try {
-    const [foodLog, fitness] = await Promise.all([
+    // Canonical targets (lib/nutrition/targets.ts) — the same numbers Today,
+    // Dante and Gemma show, not a fitness_profiles column of our own choosing.
+    const [foodLog, { targets }] = await Promise.all([
       loadFoodLogForDate(supabase, userId, today),
-      supabase
-        .from("fitness_profiles")
-        .select("calories_target, protein_target_g, carbs_target_g, fat_target_g")
-        .eq("user_id", userId)
-        .maybeSingle(),
+      loadNutritionContext(supabase, userId),
     ])
-    const targets = fitness.data as {
-      calories_target: number | null
-      protein_target_g: number | null
-      carbs_target_g: number | null
-      fat_target_g: number | null
-    } | null
     const totals = foodLog.totals
     const hasLog = foodLog.entries.length > 0
     return {
       available: hasLog,
       unavailable: foodLog.unavailable === true,
       rings: [
-        { label: "Calories", consumed: totals.calories, target: targets?.calories_target ?? null, unit: "kcal" },
-        { label: "Protein", consumed: totals.protein, target: targets?.protein_target_g ?? null, unit: "g" },
-        { label: "Carbs", consumed: totals.carbs, target: targets?.carbs_target_g ?? null, unit: "g" },
-        { label: "Fat", consumed: totals.fat, target: targets?.fat_target_g ?? null, unit: "g" },
+        { label: "Calories", consumed: totals.calories, target: targets.calories, unit: "kcal" },
+        { label: "Protein", consumed: totals.protein, target: targets.protein, unit: "g" },
+        { label: "Carbs", consumed: totals.carbs, target: targets.carbs, unit: "g" },
+        { label: "Fat", consumed: totals.fat, target: targets.fat, unit: "g" },
       ],
     }
   } catch {

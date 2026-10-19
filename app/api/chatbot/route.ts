@@ -5,8 +5,11 @@ import {
   TRAINING_MODE_LABELS,
   ACTIVITY_LEVEL_LABELS,
   NUTRITION_GOAL_LABELS,
+  buildNutritionPlan,
+  type NutritionInput,
 } from "@/lib/nutrition/plan";
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
+import { guardStaleRecoverySpeech, recoveryScoreForDisplay, recoverySpeech, recoverySpeechOf } from "@/lib/recovery/current-recovery";
 import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import { buildBudgetPlan } from "@/lib/nutrition/budget";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
@@ -61,7 +64,44 @@ import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
 import { getCoachMode, handleNutritionCoachChat } from "@/lib/nutrition/coach/chat";
 import { resolveCasualControlFlow } from "@/lib/dante-core/casual-intent";
 import { decideDanteLanguage, buildDanteLanguageInstruction, type DanteLanguageDecision } from "@/lib/dante-language";
+import { answerShoulderSide } from "@/lib/dante-core/coherence/corrections";
+import { authoritativeLaterality } from "@/lib/dante-core/coherence/gates";
+import { guardCanonicalTargetClaim, readCanonicalCalories } from "@/lib/nutrition/targets";
+import { buildDanteQueryContext, type DanteCurrentRecovery } from "@/lib/intelligence/query-understanding/dante-context";
+import { buildGemmaDeferralReply, dantePassesToGemma, parseUserQuery } from "@/lib/intelligence/query-understanding";
+import { candidateCompleteness } from "@/lib/intelligence/performance-core/candidates";
 import { buildEpistemicPolicyInstruction } from "@/lib/dante-core/epistemics/policy";
+import {
+  acceptIntegrityRetry,
+  activeFacts,
+  clinicallyBounded,
+  applyScopedAnswerIntegrity,
+  buildAnswerTrace,
+  buildContextWorkingSet,
+  buildIntelligenceBrief,
+  checkOutputIntegrity,
+  citedCanonicalSources,
+  enforceSafetyConstraints,
+  getSource,
+  integrityCorrectionBrief,
+  isSupplementTurn,
+  obligationScore,
+  resolveConversationControl,
+  restrictedSubstanceReply,
+  retrievalWarranted,
+  retrievedDocumentRelevant,
+  retrievedPopulation,
+  scopedPromptBlock,
+  settleBrief,
+  type AthleteFacts,
+  type BriefInput,
+  type ConversationControl,
+  type IntelligenceBrief,
+  type StudyPopulation,
+  type SupplementScreenKind,
+} from "@/lib/intelligence/performance-core";
+import { safetyReply, screenSafety, supplementEducationReply } from "@/lib/nutrition/coach/orchestration";
+import { foldText } from "@/lib/dante-core/coherence/understanding";
 import { buildToolAuthorityInstruction } from "@/lib/dante-core/epistemics/tool-authority";
 import { trainingLoadReadinessCaveat } from "@/lib/dante-core/epistemics/classify";
 import {
@@ -79,7 +119,7 @@ import {
   splitReplyParts,
 } from "@/lib/dante-core/reasoning-scope";
 import { DANTE_TOOLS } from "@/lib/dante-core/tools/registry";
-import { verifyFinalResponse, runVerifiedGeneration, buildFallbackMessage } from "@/lib/dante-core/verifier";
+import { verifyFinalResponse, runVerifiedGeneration, buildFallbackMessage, salvageUnsourcedResearchClaims } from "@/lib/dante-core/verifier";
 import { buildKnownFactsFromContext } from "@/lib/dante-core/verifier/known-facts-from-context";
 import {
   buildCommunicationPromptHints,
@@ -89,6 +129,7 @@ import {
   resolveCommunicationStyle,
 } from "@/lib/dante-core/communication-adaptation";
 import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-session";
+import { loadTodayAdjustmentStatus, renderAdjustmentStatusReply, WHY_WORKOUT_CHANGED_ASK } from "@/lib/recovery/adjustment-status";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
@@ -101,14 +142,22 @@ import type { DanteInsight } from "@/lib/dante-core/insight";
 import { retrieveDanteKnowledge } from "@/lib/dante-core/knowledge-brain/retrieve";
 import { classifyKnowledgeBrainRoute } from "@/lib/dante-core/knowledge-brain/route";
 import type { RetrievedKnowledgeChunk } from "@/lib/dante-core/knowledge-brain/types";
-import { isAgentToolIntent } from "@/lib/dante-core/tools/detect-intent";
+import { isAgentToolIntent, isWorkoutPlanAsk } from "@/lib/dante-core/tools/detect-intent";
+import { buildDanteIntelligence, buildEarlyExitSignals, withDisclosedFacts, earlyExitMayPublish, EXPLANATION_REQUEST, extractDanteStateSnapshot, toUserScopeRef, type DanteStateSnapshot, type EarlyExitClass } from "@/lib/intelligence/dante-runtime";
+import type { CoachSignal } from "@/lib/intelligence/coordination";
+import { persistDanteSignals, syncDisclosureSignals } from "@/lib/intelligence/dante-signal-persistence";
+import { loadActiveCoachSignalsForDomain } from "@/lib/intelligence/coach-signal-store";
+import { resolveBodyWeight, withCurrentWeightTargets, withUserStatedWeight, type BodyWeightState, type PlanTargetsAtCurrentWeight } from "@/lib/athlete-state/resolve-body-weight";
+import { pubChemTitleMatches } from "@/lib/dante-core/pubchem-match";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
-import { guardActionResponse, buildSuggestedWorkoutChangeReply, isWorkoutMutationRequest, resolveActionStatus } from "@/lib/dante-core/tools/action-response-guard";
+import { guardActionResponse, buildSuggestedWorkoutChangeReply, isWorkoutMutationRequest, needsTrainingCountClarification, proposalLanguage, resolveActionStatus, trainingCountClarification } from "@/lib/dante-core/tools/action-response-guard";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { createChatStreamResponse } from "@/lib/dante-core/chat-stream-protocol";
 import {
   emitConvergedSingleShot as emitConvergedCore,
   extractCausalTargetFromText,
+  isPerformanceAttributionQuery,
   applyHardSafetySurfaceContract,
   defaultPersonaContract,
   deriveHardSafetyDirective,
@@ -129,22 +178,34 @@ import type { ChatHistoryTurn, CoherenceTurnResult, ExpressionPlan } from "@/lib
 import { buildStyleHint } from "@/lib/dante-core/coherence/expression";
 import { coreConflictGuard } from "@/lib/dante-core/coherence/core-conflict";
 import { freshSafetyObligation, isSafetyScopedCategory, scopeOpenRequests } from "@/lib/dante-core/coherence/safety-scope";
-import { llmCoreConflictClassifier } from "@/lib/dante-core/coherence/core-conflict-llm";
+import { budgetedCoreConflictClassifier } from "@/lib/dante-core/coherence/core-conflict-llm";
 import type { HandledObligation, TurnObligation } from "@/lib/dante-core/runtime-convergence";
 import {
   commitPostTurn,
   persistenceTrace,
+  boundedCoherenceStore,
   prepareTurnWithPersistence,
 } from "@/lib/dante-core/coherence/persistence";
 import { createSupabaseCoherenceStore } from "@/lib/dante-core/coherence/supabase-store";
 import {
   DANTE_MAX_INPUT_TOKENS,
   fitAssembledPromptToBudget,
+  fitInstructionSections,
   fitJsonToTokenBudget,
   fitTextToTokenBudget,
 } from "@/lib/dante-core/openai/prompt-budget";
 import { streamDanteReply } from "@/lib/dante-core/openai/client";
 import { isOpenAiConfigured } from "@/lib/dante-core/openai/config";
+import {
+  boundedDependency,
+  createTurnBudget,
+  RETRIEVAL_PHASE_MS,
+  TURN_DEADLINE_MS,
+  retrievalPhaseStatus,
+  untilAborted,
+  type RetrievalSourceStatus,
+  type TurnBudget,
+} from "@/lib/dante-core/turn-budget";
 import { buildDanteTemporalContext, formatDanteTemporalContext, type DanteTemporalContext } from "@/lib/dante-core/temporal-context";
 import {
   applyForgetConfoundersPressure,
@@ -182,6 +243,8 @@ type ChatRequestBody = {
 type UserContext = {
   profile: unknown;
   fitnessProfile: unknown;
+  /** H0 cluster E: resolved current bodyweight (origin, freshness, date) — see lib/athlete-state/resolve-body-weight.ts. */
+  bodyWeight?: unknown;
   preferences: unknown;
   currentNutritionPlan: unknown;
   recovery: unknown;
@@ -227,6 +290,8 @@ type PubMedArticle = {
   published: string;
   abstract: string;
   url: string;
+  /** Set once the paper is judged relevant to the turn: who it studied. */
+  population?: StudyPopulation;
 };
 
 type UsdaFood = {
@@ -279,7 +344,36 @@ type EuropePmcArticle = {
   published: string;
   abstract: string;
   url: string;
+  population?: StudyPopulation;
 };
+
+/** The message asks for something (a question or a request), not only reports a state. Folded text. */
+// H0 cluster D (folded text): "did my eggs get logged?" is a tool/state question; a statement with no request is a disclosure.
+// "did that save?", "did my eggs get logged?", "was the chicken logged?", "did you log the chicken?" — whether ONE thing got
+// saved. "how much protein have I logged" is a nutrition question, not this.
+const SAVE_STATUS_ASK = /^\s*(?:(?:so|ok|okay|and|hey|wait)[\s,]+)*(?:did|was|were|has|have|is)\s+(?:it|that|this|they|those|you|my\s+[a-z]+(?:\s+[a-z]+)?|the\s+[a-z]+(?:\s+[a-z]+)?)\s+(?:get\s+|been\s+|actually\s+)?(?:log(?:ged)?|save[d]?|record(?:ed)?|add(?:ed)?|go through|went through)\b|\b(?:da|co)\s+(?:ghi|luu)\s+(?:chua|duoc chua|roi chua)\b/;
+// "actually make it 2 eggs", "change it to 3 slices", "đổi thành 2 quả".
+const PENDING_EDIT = /^\s*(?:(?:no|nah|actually|wait|sorry|oops|hmm|ok|okay)[\s,!.]+)*(?:make (?:it|that|them)|change (?:it|that|them) to|(?:only|just))\s+(?:\d+|one|two|three|four|five|six|half|a couple)\b|\b(?:doi|sua)(?: lai)? thanh\s+\d/;
+const LOG_STATUS_ASK =/\b(?:did|was|were|is|has|have)\b[^.?!]{0,30}\b(?:log(?:ged)?|saved|recorded|added|tracked)\b|\b(?:da|co)\s+(?:ghi|luu)\b/;
+const REQUESTS_SOMETHING = /\?|\b(?:what|which|how|should|can|could|would|give|suggest|recommend|plan|make|build|need|want|help|ideas?|tell me|show me|nen|gi|the nao|sao|goi y|cho (?:minh|toi|em))\b/;
+// H0 cluster C (folded text): a confirmation typed into chat, and a request to change the saved profile.
+const CONFIRM_IN_CHAT = /^\s*(?:(?:yes|yep|yeah|ok|okay|sure|y)\b[\s,.!]*)?(?:i\s+)?(?:confirm(?:ed)?|do it|go ahead|save it|log it|xac nhan|dong y)\b[\s.!]*(?:it|please|pls)?[\s.!]*$/;
+// A request, not advice: "should I change my goal?" asks for coaching, "update my profile" asks for a write.
+const PROFILE_UPDATE_ASK = /^(?!\s*(?:should|how|what|why|is|do|does|when|which|would)\b)[^?]*\b(?:update|change|set|edit|save|fix)\s+(?:my\s+)?(?:profile|weight|bodyweight|height|goal|age)\b[^?]*$|\b(?:cap nhat|doi|sua)\s+(?:lai\s+)?(?:ho so|can nang|chieu cao)\b|^[^?]*\buse (?:that|this|it|\d{2,3}(?:\.\d)? ?(?:kg|lbs?)) (?:as (?:my )?(?:current|weight|bodyweight)|from now on|instead)\b[^?]*$/;
+const ASKS_FOR_ANSWER =/\?|(?<![a-z])(?:what|which|how|should i|can i|could i|best|recommend\w*|suggest\w*|alternatives?|instead|nen|gi|the nao|sao)(?![a-z])/;
+
+const POPULATION_ORDER: readonly StudyPopulation[] = ["HUMAN_RELEVANT", "MIXED", "UNKNOWN", "ANIMAL_PRECLINICAL", "IN_VITRO"];
+/** Source-list label: a non-human study is shown as what it is, never as plain support. */
+const POPULATION_LABEL: Partial<Record<StudyPopulation, string>> = {
+  ANIMAL_PRECLINICAL: "preclinical: animal study",
+  IN_VITRO: "preclinical: cell study",
+  MIXED: "human + preclinical",
+  UNKNOWN: "population not stated",
+};
+const literatureType = (type: string, population?: StudyPopulation) =>
+  population && POPULATION_LABEL[population] ? `${type} (${POPULATION_LABEL[population]})` : type;
+/** Retrieved study / health-topic pages (not food databases, not canonical knowledge). */
+const isLiteratureSource = (source: { type: string }) => /^(?:PubMed|Europe PMC|MedlinePlus)\b/.test(source.type);
 
 type MedlinePlusResult = {
   title: string;
@@ -371,6 +465,14 @@ function truncate(
   )}…`;
 }
 
+function wp1Dependencies(budget: TurnBudget): string {
+  return Object.entries(budget.dependencies).map(([name, status]) => `${name}:${status}`).join(",") || "none";
+}
+
+/** H0 WP1: the optional post-turn commit may delay an already-composed reply by at most this (same as signal persistence). */
+const POST_TURN_COMMIT_WAIT_MS = 3000;
+
+
 /* =========================================================
    FETCH WITH TIMEOUT
 ========================================================= */
@@ -380,32 +482,10 @@ async function fetchWithTimeout(
   init: RequestInit = {},
   timeoutMs = 8000,
 ): Promise<Response> {
-  const controller =
-    new AbortController();
-
-  const timer =
-    setTimeout(
-      () => {
-        controller.abort();
-      },
-      timeoutMs,
-    );
-
-  try {
-    return await fetch(
-      url,
-      {
-        ...init,
-
-        signal:
-          controller.signal,
-      },
-    );
-  } finally {
-    clearTimeout(
-      timer,
-    );
-  }
+  // H0 WP1: the timeout must also bound the BODY read (`.json()` / `.text()`): the old cleared-on-headers timer let a
+  // stalled body hold the turn open indefinitely. `init.signal` (retrieval phase / turn) narrows it further.
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return fetch(url, { ...init, signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout });
 }
 
 /* =========================================================
@@ -615,6 +695,55 @@ function includesAny(
     (word) =>
       text.includes(word),
   );
+}
+
+/**
+ * AI-R1D: advisory shared-intelligence pass. Wraps (never replaces) the existing flow; any failure is swallowed so Dante
+ * behaves exactly as before. Result is only logged (enums/counts) — it does not alter the reply or tools. It returns the
+ * validated signals so the post-context caller (and only that caller) can persist them (AI-R1E.1); pre-route returns none.
+ */
+function runDanteIntelligence(args: {
+  phase: "pre-route" | "post-context";
+  userId: string;
+  userMessage: string;
+  intent: Intent;
+  safetyActive: boolean;
+  agentToolIntent: boolean;
+  now: Date;
+  timezone: string | null;
+  state?: DanteStateSnapshot;
+}): CoachSignal[] {
+  try {
+    const text = args.userMessage;
+    const result = buildDanteIntelligence(
+      {
+        runId: `run:${args.now.getTime().toString(36)}`,
+        userScope: toUserScopeRef(args.userId),
+        intent: args.intent,
+        causal: Boolean(extractCausalTargetFromText(text)) || isPerformanceAttributionQuery(text),
+        explanation: EXPLANATION_REQUEST.test(text),
+        agentToolIntent: args.agentToolIntent,
+        safetyActive: args.safetyActive,
+        state: args.state,
+        timezone: args.timezone,
+      },
+      args.now,
+    );
+    if (result.status === "FAILED") {
+      logToolEvent("DANTE_INTELLIGENCE", { stage: args.phase, errorCategory: result.reason });
+      return [];
+    }
+    const o = result.observability;
+    logToolEvent("DANTE_INTELLIGENCE", {
+      stage: args.phase,
+      fields: { ...o, routeClasses: o.routeClasses.join(",") || "NONE" },
+    });
+    return args.phase === "post-context" && result.status === "OK" ? result.signals : [];
+  } catch (error) {
+    // shared intelligence is never a single point of failure — but a swallowed failure must stay visible (category only)
+    logToolEvent("DANTE_INTELLIGENCE", { stage: args.phase, errorCategory: error instanceof Error ? error.name : "unknown" });
+    return [];
+  }
 }
 
 function detectIntent(
@@ -989,15 +1118,46 @@ function summarizeNutritionPlan(
    structured context instead of a database dump.
 ========================================================= */
 
+/** Projects the summarized recovery context (same loader as the Recovery page) into the shape the query layer states as fact. */
+function currentRecoveryFromContext(recovery: unknown): DanteCurrentRecovery | null {
+  const r = recovery as { current?: DanteCurrentRecovery["state"]; today?: { hasCheckin?: boolean; score?: number | null; status?: string | null; lowestDrivers?: string[]; painIllness?: unknown; missingInputs?: string[] }; trainingLoad?: { state?: string | null } } | null | undefined;
+  if (!r?.today) return null;
+  return {
+    hasCheckin: Boolean(r.today.hasCheckin),
+    score: typeof r.today.score === "number" ? r.today.score : null,
+    status: r.today.status ?? null,
+    lowestDrivers: r.today.lowestDrivers,
+    painIllness: r.today.painIllness,
+    trainingLoadState: r.trainingLoad?.state ?? null,
+    missingInputs: r.today.missingInputs,
+    state: r.current ?? null,
+  };
+}
+
 function summarizeRecoveryContext(
   recovery: Awaited<ReturnType<typeof loadRecoveryContext>>,
 ): unknown {
   const { todayScoreResult, averages7Days, trainingLoad } = recovery;
 
+  const status = (recovery.current as { status?: string } | null)?.status ?? null;
   return {
+    // CURRENT / STALE / MISSING for the client's local day, with the date the
+    // score was recorded. When status is STALE the score is an older day's:
+    // `today.score` below stays null and it must never be called today's.
+    current: recovery.current,
+    speech: recoverySpeech(recovery.current).line,
+    // H0 cluster E: freshness decides what the score may decide. A STALE score is history: it never drives today's
+    // train/rest call, and the user's own report about today (CONVERSATION CONTEXT / CURRENT_STATE) outranks it.
+    decisionRule:
+      status === "STALE"
+        ? "The recovery score is from an earlier day: cite it only with its date, as history. It must not decide today's training. Decide today from today's check-in if one exists, otherwise from how the user says they feel today and any symptoms; if neither is known, say today's readiness is unknown and give a cautious, useful plan."
+        : status === "MISSING" || status === null
+          ? "No recovery score exists for today. Do not invent one and do not make its absence the answer: decide from how the user says they feel and any symptoms."
+          : "Today's score is current. Explain it; never adjust it. If the user says it is wrong or feels different, acknowledge their report, say the score comes from the check-in inputs (they can redo the check-in), and weigh how they feel today rather than insisting on the number.",
+
     today: {
       hasCheckin: recovery.today !== null,
-      score: todayScoreResult.score,
+      score: recoveryScoreForDisplay(recovery.current, todayScoreResult.score),
       status:
         todayScoreResult.status !== null
           ? RECOVERY_STATUS_LABEL[todayScoreResult.status]
@@ -1061,10 +1221,21 @@ function summarizeTodayFoodLog(
     return { available: false, note: "Food log unavailable. Do not infer consumed or remaining nutrients." };
   }
 
+  const foodsLoggedToday = foodLog.entries.slice(-8).map((entry) =>
+    entry.servingName && entry.servingsConsumed
+      ? `${entry.foodName} (${entry.servingsConsumed} ${entry.servingName}${entry.servingsConsumed === 1 ? "" : "s"} / ${entry.quantityGrams} g)`
+      : `${entry.foodName} (${entry.quantityGrams} g)`,
+  );
+
   if (!target) {
+    // H0 final closure: no target hides only the comparison — what was actually logged is still the truth
+    // ("did my eggs get logged?" after a confirmed write must not read as "no record").
     return {
       hasTarget: false,
       note: "No nutrition plan target is available yet — complete onboarding to set targets.",
+      date: foodLog.date,
+      itemsLoggedToday: foodLog.entries.length,
+      foodsLoggedToday,
     };
   }
 
@@ -1078,11 +1249,7 @@ function summarizeTodayFoodLog(
     carbs: comparison.carbs,
     fat: comparison.fat,
     itemsLoggedToday: foodLog.entries.length,
-    foodsLoggedToday: foodLog.entries.slice(-8).map((entry) =>
-      entry.servingName && entry.servingsConsumed
-        ? `${entry.foodName} (${entry.servingsConsumed} ${entry.servingName}${entry.servingsConsumed === 1 ? "" : "s"} / ${entry.quantityGrams} g)`
-        : `${entry.foodName} (${entry.quantityGrams} g)`,
-    ),
+    foodsLoggedToday,
   };
 }
 
@@ -1129,7 +1296,7 @@ async function loadUserContext(
   timezone: string | null,
   selectedMuscle: CanonicalMuscle | null = null,
   selectedExercise: { name: string; primaryMuscle: CanonicalMuscle | null } | null = null,
-): Promise<{ context: UserContext; chatInsight: DanteInsight | null; epistemicNotes: string[] }> {
+): Promise<{ context: UserContext; chatInsight: DanteInsight | null; epistemicNotes: string[]; planInput?: NutritionInput | null }> {
   const supabase =
     await createClient();
 
@@ -1147,6 +1314,7 @@ async function loadUserContext(
     memory,
     todaySession,
     trainingContext,
+    weighInRows,
   ] =
     await Promise.all([
       // Only the one field actually used below — never a raw `select("*")`
@@ -1213,6 +1381,13 @@ async function loadUserContext(
         console.warn("[DANTE ADAPTIVE TRAINING]", error);
         return null;
       }),
+
+      // H0 cluster E: the latest dated weigh-ins, so a fresh measurement outranks the static profile weight.
+      // Fail-open: an async wrapper so even a synchronous client error becomes "no weigh-ins", never a failed context load.
+      (async () => {
+        const { data } = await supabase.from("body_weight_entries").select("logged_on, weight_kg").eq("user_id", userId).order("logged_on", { ascending: false }).limit(3);
+        return (Array.isArray(data) ? data : []) as Array<{ logged_on: string; weight_kg: number | string }>;
+      })().catch(() => [] as Array<{ logged_on: string; weight_kg: number | string }>),
     ]);
 
   if (
@@ -1248,7 +1423,7 @@ async function loadUserContext(
   const dailyPlanActions = buildTodayPlan({
     todaySession,
     hasCheckinToday: recoveryContext ? recoveryContext.today !== null : false,
-    proteinTargetG: nutritionContext.plan?.target.protein ?? null,
+    proteinTargetG: nutritionContext.targets.protein,
     proteinLoggedG: todayFoodLog.totals.protein,
   });
 
@@ -1300,7 +1475,7 @@ async function loadUserContext(
   if (!chatInsight && intent.nutrition) {
     chatInsight = buildNutritionInsight({
       hasTarget: nutritionContext.plan !== null,
-      proteinTargetG: nutritionContext.plan?.target.protein ?? null,
+      proteinTargetG: nutritionContext.targets.protein,
       proteinConsumedG: todayFoodLog.totals.protein,
     });
   }
@@ -1320,12 +1495,20 @@ async function loadUserContext(
           trainingFrequency: athleteState.profile.trainingFrequency,
           sessionDurationMinutes: athleteState.profile.sessionDurationMinutes,
           heightCm: athleteState.profile.heightCm,
-          weightKg: athleteState.profile.weightKg,
           priorityMuscles: athleteState.profile.priorityMuscles,
           availableEquipment: athleteState.profile.availableEquipment,
           physicalLimitations: athleteState.profile.physicalLimitations,
         }
       : null,
+
+    // H0 cluster E: THE bodyweight to use, with origin / freshness / date kept separate. The undated profile field lives only
+    // here (H1-WEIGHT: a second copy in fitnessProfile competed with a chat correction), next to dated weigh-ins; the route
+    // adds a chat correction on top.
+    bodyWeight: resolveBodyWeight({
+      weighIns: weighInRows.map((row) => ({ kg: Number(row.weight_kg), date: row.logged_on })),
+      profileKg: athleteState?.profile.weightKg ?? null,
+      now,
+    }),
 
     preferences: preferencesRow
       ? {
@@ -1367,14 +1550,7 @@ async function loadUserContext(
 
     todayFoodLog: summarizeTodayFoodLog(
       todayFoodLog,
-      nutritionContext.plan
-        ? {
-            calories: nutritionContext.plan.target.calories,
-            protein: nutritionContext.plan.target.protein,
-            carbs: nutritionContext.plan.target.carbs,
-            fat: nutritionContext.plan.target.fat,
-          }
-        : null,
+      nutritionContext.plan ? nutritionContext.targets.complete : null,
     ),
 
     dailyPlan: dailyPlanActions.map((action) => ({
@@ -1399,7 +1575,7 @@ async function loadUserContext(
     epistemicNotes.push(loadReadinessCaveat);
   }
 
-  return { context, chatInsight, epistemicNotes };
+  return { context, chatInsight, epistemicNotes, planInput: nutritionContext.plan?.input ?? null };
 }
 
 /* =========================================================
@@ -1422,6 +1598,7 @@ function getNcbiParams() {
 
 async function searchPubMed(
   message: string,
+  signal?: AbortSignal,
 ): Promise<PubMedArticle[]> {
   try {
     const {
@@ -1488,12 +1665,13 @@ async function searchPubMed(
         searchUrl.toString(),
         {
           cache: "no-store",
+          signal,
         },
         7000,
       );
 
     if (!searchResponse.ok) {
-      return [];
+      throw new Error(`pubmed esearch http_${searchResponse.status}`);
     }
 
     const searchJson =
@@ -1508,7 +1686,7 @@ async function searchPubMed(
         searchJson.esearchresult.idlist,
       )
     ) {
-      return [];
+      throw new Error("pubmed esearch malformed");
     }
 
     const ids =
@@ -1576,12 +1754,13 @@ async function searchPubMed(
         fetchUrl.toString(),
         {
           cache: "no-store",
+          signal,
         },
         7000,
       );
 
     if (!fetchResponse.ok) {
-      return [];
+      throw new Error(`pubmed efetch http_${fetchResponse.status}`);
     }
 
     const xml =
@@ -1692,7 +1871,8 @@ async function searchPubMed(
       error,
     );
 
-    return [];
+    // A search that did not finish is FAILED, never an empty result (getEvidence records it).
+    throw error;
   }
 }
 
@@ -1706,6 +1886,7 @@ async function searchPubMed(
 
 async function searchEuropePmc(
   message: string,
+  signal?: AbortSignal,
 ): Promise<EuropePmcArticle[]> {
   try {
     const url =
@@ -1738,12 +1919,13 @@ async function searchEuropePmc(
         url.toString(),
         {
           cache: "no-store",
+          signal,
         },
         7000,
       );
 
     if (!response.ok) {
-      return [];
+      throw new Error(`europepmc http_${response.status}`);
     }
 
     const data =
@@ -1754,7 +1936,7 @@ async function searchEuropePmc(
       !isRecord(data.resultList) ||
       !Array.isArray(data.resultList.result)
     ) {
-      return [];
+      throw new Error("europepmc malformed");
     }
 
     return data.resultList.result
@@ -1810,7 +1992,7 @@ async function searchEuropePmc(
       error,
     );
 
-    return [];
+    throw error;
   }
 }
 
@@ -1824,6 +2006,7 @@ async function searchEuropePmc(
 
 async function searchMedlinePlus(
   message: string,
+  signal?: AbortSignal,
 ): Promise<MedlinePlusResult[]> {
   try {
     const url =
@@ -1851,12 +2034,13 @@ async function searchMedlinePlus(
         url.toString(),
         {
           cache: "no-store",
+          signal,
         },
         7000,
       );
 
     if (!response.ok) {
-      return [];
+      throw new Error(`medlineplus http_${response.status}`);
     }
 
     const xml =
@@ -1911,7 +2095,7 @@ async function searchMedlinePlus(
       error,
     );
 
-    return [];
+    throw error;
   }
 }
 
@@ -1960,6 +2144,7 @@ function nutrientValue(
 
 async function searchUsda(
   message: string,
+  signal?: AbortSignal,
 ): Promise<UsdaFood[]> {
   const apiKey =
     process.env.USDA_FDC_API_KEY?.trim();
@@ -1997,12 +2182,17 @@ async function searchUsda(
         url.toString(),
         {
           cache: "no-store",
+          signal,
         },
         7000,
       );
 
-    if (!response.ok) {
+    // H0 WP1: 404 is this source's "no match"; any other non-2xx is a dependency FAILURE, never an empty success.
+    if (response.status === 404) {
       return [];
+    }
+    if (!response.ok) {
+      throw new Error(`USDA HTTP ${response.status}`);
     }
 
     const data =
@@ -2014,7 +2204,7 @@ async function searchUsda(
         data.foods,
       )
     ) {
-      return [];
+      throw new Error("USDA malformed response");
     }
 
     return data.foods
@@ -2116,7 +2306,8 @@ async function searchUsda(
       error,
     );
 
-    return [];
+    // Network failure, malformed body or timeout (TimeoutError kept): the retrieval owner classifies it.
+    throw error;
   }
 }
 
@@ -2126,6 +2317,7 @@ async function searchUsda(
 
 async function searchOpenFoodFacts(
   message: string,
+  signal?: AbortSignal,
 ): Promise<
   OpenFoodFactsProduct[]
 > {
@@ -2188,12 +2380,17 @@ async function searchOpenFoodFacts(
           },
 
           cache: "no-store",
+          signal,
         },
         7000,
       );
 
-    if (!response.ok) {
+    // H0 WP1: 404 is this source's "no match"; any other non-2xx is a dependency FAILURE, never an empty success.
+    if (response.status === 404) {
       return [];
+    }
+    if (!response.ok) {
+      throw new Error(`OPEN FOOD FACTS HTTP ${response.status}`);
     }
 
     const data =
@@ -2205,7 +2402,7 @@ async function searchOpenFoodFacts(
         data.products,
       )
     ) {
-      return [];
+      throw new Error("OPEN FOOD FACTS malformed response");
     }
 
     return data.products
@@ -2304,7 +2501,8 @@ async function searchOpenFoodFacts(
       error,
     );
 
-    return [];
+    // Network failure, malformed body or timeout (TimeoutError kept): the retrieval owner classifies it.
+    throw error;
   }
 }
 
@@ -2314,6 +2512,7 @@ async function searchOpenFoodFacts(
 
 async function searchPubChem(
   compound: string | null,
+  signal?: AbortSignal,
 ): Promise<PubChemResult | null> {
   if (!compound) {
     return null;
@@ -2330,12 +2529,17 @@ async function searchPubChem(
         url,
         {
           cache: "no-store",
+          signal,
         },
         7000,
       );
 
-    if (!response.ok) {
+    // H0 WP1: 404 is this source's "no match"; any other non-2xx is a dependency FAILURE, never an empty success.
+    if (response.status === 404) {
       return null;
+    }
+    if (!response.ok) {
+      throw new Error(`PUBCHEM HTTP ${response.status}`);
     }
 
     const data =
@@ -2350,7 +2554,7 @@ async function searchPubChem(
         data.PropertyTable.Properties,
       )
     ) {
-      return null;
+      throw new Error("PUBCHEM malformed response");
     }
 
     const first =
@@ -2366,6 +2570,12 @@ async function searchPubChem(
       );
 
     if (cid === null) {
+      return null;
+    }
+
+    // H0 cluster F (entity resolution): a name lookup returns SOME compound for an acronym ("BCAA" → bromochloroacetic
+    // acid). TOPIC MATCH != CLAIM SUPPORT: the record is used only when its title actually names what was asked.
+    if (!pubChemTitleMatches(compound, getString(first.Title) ?? "")) {
       return null;
     }
 
@@ -2403,7 +2613,8 @@ async function searchPubChem(
       error,
     );
 
-    return null;
+    // Network failure, malformed body or timeout (TimeoutError kept): the retrieval owner classifies it.
+    throw error;
   }
 }
 
@@ -2413,6 +2624,7 @@ async function searchPubChem(
 
 async function searchOpenFda(
   substance: string | null,
+  signal?: AbortSignal,
 ): Promise<OpenFdaResult | null> {
   if (!substance) {
     return null;
@@ -2449,12 +2661,17 @@ async function searchOpenFda(
         url.toString(),
         {
           cache: "no-store",
+          signal,
         },
         7000,
       );
 
-    if (!response.ok) {
+    // H0 WP1: 404 is this source's "no match"; any other non-2xx is a dependency FAILURE, never an empty success.
+    if (response.status === 404) {
       return null;
+    }
+    if (!response.ok) {
+      throw new Error(`OPENFDA HTTP ${response.status}`);
     }
 
     const data =
@@ -2464,10 +2681,12 @@ async function searchOpenFda(
       !isRecord(data) ||
       !Array.isArray(
         data.results,
-      ) ||
-      data.results.length ===
-        0
+      )
     ) {
+      throw new Error("OPENFDA malformed response");
+    }
+
+    if (data.results.length === 0) {
       return null;
     }
 
@@ -2536,7 +2755,8 @@ async function searchOpenFda(
       error,
     );
 
-    return null;
+    // Network failure, malformed body or timeout (TimeoutError kept): the retrieval owner classifies it.
+    throw error;
   }
 }
 
@@ -2547,7 +2767,45 @@ async function searchOpenFda(
 async function getEvidence(
   message: string,
   intent: Intent,
-): Promise<EvidenceContext> {
+  options: { skipLiterature?: boolean; requireLiterature?: boolean; budget?: TurnBudget } = {},
+): Promise<{ evidence: EvidenceContext; literatureFailed: boolean; sources: Record<string, RetrievalSourceStatus> }> {
+  // H0 WP1: one phase signal for every source (dependency deadline <= turn deadline), and every started source ends in
+  // a terminal status — no source can keep the turn waiting past the phase.
+  const signal = options.budget
+    ? AbortSignal.any([options.budget.signal, AbortSignal.timeout(Math.min(RETRIEVAL_PHASE_MS, options.budget.remainingMs()))])
+    : AbortSignal.timeout(RETRIEVAL_PHASE_MS);
+  const sources: Record<string, RetrievalSourceStatus> = {};
+  const ended = (): RetrievalSourceStatus => (options.budget?.clientGone() ? "CANCELLED" : "TIMED_OUT");
+  const track = <T,>(name: string, search: () => Promise<T>, empty: T, isEmpty: (value: T) => boolean): Promise<T> => {
+    if (signal.aborted || (options.budget && !options.budget.tryStart("retrieval"))) {
+      sources[name] = ended();
+      return Promise.resolve(empty);
+    }
+    sources[name] = "RUNNING";
+    return search().then(
+      (value) => {
+        // Empty after the abort means the abort ended it, not that the source found nothing.
+        sources[name] = signal.aborted && isEmpty(value) ? ended() : "SUCCESS";
+        return value;
+      },
+      (error: unknown) => {
+        // The source's own timeout (shorter than the phase) is a TIMED_OUT too, not a FAILED.
+        sources[name] = signal.aborted ? ended() : error instanceof Error && error.name === "TimeoutError" ? "TIMED_OUT" : "FAILED";
+        throw error;
+      },
+    );
+  };
+  // A literature search that throws did not finish: it contributes nothing, and the turn knows it FAILED.
+  let literatureFailed = false;
+  const literature = <T,>(name: string, search: (signal: AbortSignal) => Promise<T[]>): Promise<T[]> =>
+    track(name, () => search(signal), [] as T[], (value) => value.length === 0).catch(() => {
+      literatureFailed = true;
+      return [];
+    });
+  // Food/chem sources throw on real failure (404 = no match stays empty). `track` has recorded FAILED/TIMED_OUT/CANCELLED
+  // by the time this catch runs; the failed source then contributes nothing, exactly like a failed literature search.
+  const other = <T,>(name: string, search: (signal: AbortSignal) => Promise<T>, empty: T) =>
+    track(name, () => search(signal), empty, (value) => value === empty || (Array.isArray(value) && value.length === 0)).catch(() => empty);
   const supplementName =
     intent.supplement
       ? extractSupplement(
@@ -2555,16 +2813,15 @@ async function getEvidence(
         )
       : null;
 
+  // ICH-1 selective retrieval: live literature search runs only when the knowledge layer says canonical
+  // knowledge does not already cover the turn (a known gap, an explicit ask for the evidence, or an uncovered topic).
+  // `requireLiterature` = the knowledge layer named a gap or the user asked for the evidence: retrieve even when the legacy
+  // keyword intent did not recognise the topic (an obscure supplement is exactly that case).
   const needPubMed =
-    intent.training ||
-    intent.nutrition ||
-    intent.supplement ||
-    intent.health ||
-    intent.recovery;
+    !options.skipLiterature &&
+    (options.requireLiterature || intent.training || intent.nutrition || intent.supplement || intent.health || intent.recovery);
 
-  const needConsumerEvidence =
-    intent.recovery ||
-    intent.health;
+  const needConsumerEvidence = !options.skipLiterature && (intent.recovery || intent.health);
 
   // Food DBs only for explicit food/meal asks — not when "kcal"/"ăn thêm"
   // appear as confounders inside a training-outcome / strategy narrative.
@@ -2575,6 +2832,8 @@ async function getEvidence(
     /\b(món ăn|thực phẩm|ăn gì|dinh dưỡng|bữa sáng|bữa trưa|bữa tối)\b/i.test(message);
 
   const needFoodDatabases = intent.nutrition && explicitFoodAsk;
+  // Unconfigured USDA is NOT_RUN (absent from `sources`), never a SUCCESS with no foods.
+  const usdaConfigured = Boolean(process.env.USDA_FDC_API_KEY?.trim());
 
   const [
     pubmed,
@@ -2586,74 +2845,27 @@ async function getEvidence(
     openFda,
   ] =
     await Promise.all([
-      needPubMed
-        ? searchPubMed(
-            message,
-          )
-        : Promise.resolve(
-            [],
-          ),
-
-      needConsumerEvidence
-        ? searchEuropePmc(
-            message,
-          )
-        : Promise.resolve(
-            [],
-          ),
-
-      needConsumerEvidence
-        ? searchMedlinePlus(
-            message,
-          )
-        : Promise.resolve(
-            [],
-          ),
-
-      needFoodDatabases
-        ? searchUsda(
-            message,
-          )
-        : Promise.resolve(
-            [],
-          ),
-
-      needFoodDatabases
-        ? searchOpenFoodFacts(
-            message,
-          )
-        : Promise.resolve(
-            [],
-          ),
-
-      intent.supplement
-        ? searchPubChem(
-            supplementName,
-          )
-        : Promise.resolve(
-            null,
-          ),
-
-      (
-        intent.supplement ||
-        intent.health
-      )
-        ? searchOpenFda(
-            supplementName,
-          )
-        : Promise.resolve(
-            null,
-          ),
+      needPubMed ? literature("pubmed", (sig) => searchPubMed(message, sig)) : Promise.resolve([]),
+      needConsumerEvidence ? literature("europepmc", (sig) => searchEuropePmc(message, sig)) : Promise.resolve([]),
+      needConsumerEvidence ? literature("medlineplus", (sig) => searchMedlinePlus(message, sig)) : Promise.resolve([]),
+      needFoodDatabases && usdaConfigured ? other("usda", (sig) => searchUsda(message, sig), [] as UsdaFood[]) : Promise.resolve([]),
+      needFoodDatabases ? other("openfoodfacts", (sig) => searchOpenFoodFacts(message, sig), [] as OpenFoodFactsProduct[]) : Promise.resolve([]),
+      intent.supplement ? other("pubchem", (sig) => searchPubChem(supplementName, sig), null) : Promise.resolve(null),
+      intent.supplement || intent.health ? other("openfda", (sig) => searchOpenFda(supplementName, sig), null) : Promise.resolve(null),
     ]);
 
   return {
-    pubmed,
-    europePmc,
-    medlinePlus,
-    usda,
-    openFoodFacts,
-    pubchem,
-    openFda,
+    evidence: {
+      pubmed,
+      europePmc,
+      medlinePlus,
+      usda,
+      openFoodFacts,
+      pubchem,
+      openFda,
+    },
+    literatureFailed,
+    sources,
   };
 }
 
@@ -2692,6 +2904,9 @@ async function getKnowledgeBrainResults(
 /* =========================================================
    DANTE SYSTEM INSTRUCTIONS
 ========================================================= */
+
+/** Sections the prompt budget may never drop (authority, safety, epistemics, tools). Matched on the section header. */
+const MANDATORY_INSTRUCTION_SECTION = /^(?:TRUST BOUNDARY|CONTEXT PRIORITY|SUPPLEMENTS|HEALTH SAFETY|EPISTEMIC DISCIPLINE|TOOL AUTHORITY)\b/;
 
 const DANTE_INSTRUCTIONS = `
 You are DANTE, the intelligent coaching system inside Muscle Fitness.
@@ -2976,6 +3191,15 @@ If recovery data is missing or the client has not checked in today,
 say so plainly and suggest completing today's check-in rather than
 guessing.
 
+recovery.current says what "now" means. status CURRENT = today's
+verified check-in. status STALE = the score is from recordedDate, an
+earlier day: never call it today's or current recovery, and give its
+date if you mention it. status MISSING = no recent check-in at all.
+If the client states their own recovery number and it differs from a
+CURRENT verified score, keep the verified score, name both numbers,
+and do not adopt theirs. With no check-in today, a number the client
+states is self-reported, not verified.
+
 ============================================================
 TRAINING INTELLIGENCE
 ============================================================
@@ -3233,8 +3457,8 @@ differently:
 - Keep it short — a few sentences, not a structured essay. Keep the
   response under 200 words. Responses over 300 words are almost
   always a failure mode for these messages.
-- Do not use headings, bullet lists, numbered steps, tables, or a
-  "Sources checked" section for this kind of reply.
+- Do not use headings, bullet lists, numbered steps, or tables for
+  this kind of reply.
 - Do not reach for a named framework or theory (psychological,
   philosophical, behavioral, or otherwise) to explain the client's
   feeling back to them.
@@ -3280,14 +3504,11 @@ normally under ANSWER STYLE above — this section only changes tone,
 length and formatting for the reflective part, never factual
 accuracy.
 
-When external sources or retrieved knowledge materially support the
-answer, finish with a short section called:
-
-Sources checked
-
-Only list sources actually supplied in EXTERNAL EVIDENCE or RETRIEVED
-KNOWLEDGE. Never invent a title, author, or citation that isn't
-literally present in one of those two sections.
+Do not write a sources, references or citations section: the app
+shows the sources this answer actually used next to it. You may name
+a source in a sentence only when it is literally present in EXTERNAL
+EVIDENCE or RETRIEVED KNOWLEDGE. Never invent a title, author, or
+citation.
 ` + "\n\n" + buildEpistemicPolicyInstruction() + "\n\n" + buildToolAuthorityInstruction(DANTE_TOOLS);
 
 /* =========================================================
@@ -3435,6 +3656,10 @@ function buildTurnEpistemicContext(userMessage: string, userContext: UserContext
  * decided (applied / refused) so the model neither repeats nor contradicts it. No raw context, no history dump.
  * Returns null when the provider fails or the verifier rejects every attempt: the caller then dispositions each
  * open request as NEEDS_CLARIFICATION instead of dropping it.
+ *
+ * ICH-1 integrity is obligation-scoped: each request gets its own brief (from its own words), its answer is checked
+ * against that brief only, a violating answer is regenerated ONCE on its own (siblings that passed are not), and the
+ * canonical integrity tail runs per answer. A sibling's knowledge gap never revises another request's text.
  */
 async function generateOpenRequestAnswers(input: {
   open: TurnObligation[];
@@ -3444,9 +3669,14 @@ async function generateOpenRequestAnswers(input: {
   plan: ExpressionPlan;
   /** Extra provider guard when the user asked for a behaviour change that conflicts with Dante's core. */
   coreGuard: string;
+  /** The turn's conversation control (language, address bans): global, rendered once. */
+  control: ConversationControl;
+  /** One request's own words → its own brief. Never the whole turn's brief. */
+  briefOf: (question: string) => IntelligenceBrief;
   /** The turn carries a red-flag symptom: these requests are unrelated to it, but no answer may clear the user to train. */
   safetyActive?: boolean;
-  signal: AbortSignal;
+  /** H0 WP1: the turn budget — its signal and attempt caps bound the first generation AND every repair below. */
+  budget: TurnBudget;
   /** Shared retrieval. Filtered per obligation before it reaches the prompt line for that request. */
   userContext?: Record<string, unknown>;
 }): Promise<{ text: string; model: string; partsById: Record<string, string>; usedFallback: boolean } | null> {
@@ -3468,8 +3698,10 @@ async function generateOpenRequestAnswers(input: {
   };
   const envelopes = buildObligationEnvelopes(input.open, input.userContext);
   const explicit = input.open.some((o) => scopeOf(o).mode !== "NONE");
+  const questionOf = new Map(envelopes.map((e) => [e.obligationId, e.question]));
+  const briefs = new Map(envelopes.map((e) => [e.obligationId, input.briefOf(e.question)]));
 
-  const prompt = [
+  const buildPrompt = (open: TurnObligation[]) => [
     "You are Dante, a calm, direct, gym-native training and nutrition coach. You are not a customer-service agent.",
     `Answer ONLY in ${vi ? "Vietnamese" : "English"}.`,
     `${buildStyleHint(input.plan, input.language).trim()}${input.coreGuard}`,
@@ -3486,34 +3718,89 @@ async function generateOpenRequestAnswers(input: {
     explicit
       ? "Each envelope's eligibleContext is the ONLY evidence for that obligationId. Do not use another envelope's facts. Reply with a JSON array of {\"obligationId\",\"text\"} covering every envelope id. No other keys, no merged context."
       : "Answer each request below, in order, as its own short paragraph. Do not number them, do not add headings, do not restate the requests.",
+    scopedPromptBlock(input.control, open.map((o, index) => ({ label: explicit ? `obligationId ${o.id}` : `REQUEST ${index + 1}`, brief: briefs.get(o.id)! }))),
     decided.length > 0 ? `DECIDED:\n${decided.join("\n")}` : "DECIDED: (none)",
     explicit
-      ? `OBLIGATION_ENVELOPES=${JSON.stringify(envelopes)}`
-      : `REQUESTS TO ANSWER:\n${envelopes.map((e, index) => `${index + 1}. "${e.question}"`).join("\n")}`,
-  ].join("\n\n");
+      ? `OBLIGATION_ENVELOPES=${JSON.stringify(envelopes.filter((e) => open.some((o) => o.id === e.obligationId)))}`
+      : `REQUESTS TO ANSWER:\n${open.map((o, index) => `${index + 1}. "${questionOf.get(o.id)}"`).join("\n")}`,
+  ].filter(Boolean).join("\n\n");
 
   let usedModel = "dante";
-  try {
-    const result = await runVerifiedGeneration(
-      async (correctionBrief) => {
-        let text = "";
-        const attempt = correctionBrief ? `${prompt}
+  const generate = async (prompt: string, correctionBrief: string | null): Promise<string> => {
+    let text = "";
+    const attempt = correctionBrief ? `${prompt}
 
 VERIFICATION CORRECTION
 ${correctionBrief}` : prompt;
-        for await (const event of streamDanteReply(attempt, input.signal)) {
-          if (event.kind === "delta") text += event.text;
-          else usedModel = event.model;
+    for await (const event of streamDanteReply(attempt, input.budget.signal, input.budget)) {
+      if (event.kind === "delta") text += event.text;
+      else usedModel = event.model;
+    }
+    return withCurrentWeightTargets(
+      guardCanonicalTargetClaim(guardStaleRecoverySpeech(text, recoverySpeechOf(input.userContext)), readCanonicalCalories(input.userContext)),
+      (input.userContext?.bodyWeight as { planTargetsAtCurrentWeight?: PlanTargetsAtCurrentWeight } | undefined)?.planTargetsAtCurrentWeight,
+      input.language === "vi" ? "vi" : "en",
+    );
+  };
+  const verifierInput = (replyText: string) => ({
+    replyText,
+    knownFacts: [],
+    availableSources: [],
+    safety: { triggered: false, responseOverride: null },
+  });
+  // ONE bounded regeneration of a single obligation. Null = keep the first answer (the tail below still runs on it).
+  const regenerateOne = async (o: TurnObligation, correction: string): Promise<string | null> => {
+    // Per-obligation repair draws from the SAME semantic budget as the verifier: N obligations can no longer mean N repairs.
+    if (!input.budget.tryStart("semantic")) return null;
+    try {
+      const text = (await generate(buildPrompt([o]), correction)).trim();
+      if (!verifyFinalResponse(verifierInput(text)).passed) return null;
+      const raw = explicit ? parseBoundObligationReplies(text, [o.id])?.[o.id] : text;
+      return raw?.trim() ? applyScopeToText(raw, scopeOf(o), input.language) : null;
+    } catch (error) {
+      if (input.budget.clientGone()) throw error;
+      return null;
+    }
+  };
+  const settleParts = async (partsById: Record<string, string>): Promise<Record<string, string>> => {
+    for (const o of input.open) {
+      const brief = briefs.get(o.id)!;
+      const question = questionOf.get(o.id) ?? "";
+      let part = partsById[o.id] ?? "";
+      // An empty part stays empty: disposeOpenRequests turns it into a clarification, never a filler answer.
+      if (!part.trim()) continue;
+      const violations = checkOutputIntegrity({ reply: part, brief });
+      if (violations.length > 0) {
+        logToolEvent("DANTE_VERIFIER_RETRY", { tool: "open-request", stage: "integrity", errorCategory: violations.map((violation) => violation.code).join(",") });
+        const repaired = await regenerateOne(o, integrityCorrectionBrief(violations));
+        if (repaired) {
+          const next = checkOutputIntegrity({ reply: repaired, brief });
+          if (acceptIntegrityRetry({
+            previousViolations: violations.length,
+            nextViolations: next.length,
+            nextHasNewCode: next.some((n) => !violations.some((previous) => previous.code === n.code)),
+            previousCompleteness: obligationScore(part, question, brief),
+            nextCompleteness: obligationScore(repaired, question, brief),
+          })) part = repaired;
         }
-        return text;
-      },
-      (replyText) => ({
-        replyText,
-        knownFacts: [],
-        availableSources: [],
-        safety: { triggered: false, responseOverride: null },
-      }),
+      }
+      partsById[o.id] = applyScopedAnswerIntegrity({
+        draft: part,
+        question,
+        brief,
+        language: input.language,
+        clinical: (draft) => supplementEducationReply(draft, question).reply,
+      }).reply;
+    }
+    return partsById;
+  };
+
+  try {
+    const result = await runVerifiedGeneration(
+      (correctionBrief) => generate(buildPrompt(input.open), correctionBrief),
+      verifierInput,
       () => Object.values(fallbackParts()).join("\n\n"),
+      input.budget,
     );
     if (result.usedFallback || !result.replyText.trim()) {
       // Scoped fallback needs the obligation contract AND eligible context.
@@ -3531,7 +3818,7 @@ ${correctionBrief}` : prompt;
     const rawParts = bound
       ? ids.map((id) => bound[id] ?? "")
       : splitReplyParts(result.replyText.trim(), input.open.length);
-    const partsById = scopedParts(rawParts);
+    const partsById = await settleParts(scopedParts(rawParts));
     return {
       text: input.open.map((o) => partsById[o.id]).filter(Boolean).join("\n\n"),
       model: usedModel,
@@ -3539,10 +3826,21 @@ ${correctionBrief}` : prompt;
       usedFallback: false,
     };
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") throw error;
+    if (input.budget.clientGone()) throw error;
     console.warn("[DANTE LEDGER] open-request generation failed:", error);
     return null;
   }
+}
+
+/** ICH-1: the few canonical facts the need policy reads. Canonical state only — nothing here is inferred or computed. */
+function extractAthleteFacts(context: Record<string, unknown>): AthleteFacts {
+  const fitness = isRecord(context.fitnessProfile) ? context.fitnessProfile : null;
+  const recovery = isRecord(context.recovery) ? context.recovery : null;
+  const averages = recovery && isRecord(recovery.recent7DayAverages) ? recovery.recent7DayAverages : null;
+  return {
+    goal: fitness && typeof fitness.goal === "string" ? fitness.goal : null,
+    avgSleepHours: averages && typeof averages.sleepHours === "number" ? averages.sleepHours : null,
+  };
 }
 
 function buildDantePrompt(
@@ -3560,11 +3858,15 @@ function buildDantePrompt(
   confidenceClaims: ClaimConfidence[] = [],
   riskEvaluation: RiskEvaluationResult | null = null,
   reasoningScope = primaryObligationScope([]),
+  queryUnderstandingBlock: string | null = null,
+  intelligenceBlock: string | null = null,
 ): string {
   // Budget allocation leaves room for question + final instruction under
-  // the configured OpenAI input ceiling. The full DANTE_INSTRUCTIONS alone is
-  // far larger than that ceiling — fitTextToTokenBudget keeps identity,
-  // priority, and citation rules (head + tail) while dropping the middle.
+  // the configured OpenAI input ceiling. The full DANTE_INSTRUCTIONS (~8.8k
+  // tokens) does not fit: the mandatory core (trust boundary, context
+  // priority, supplements, health safety + emergency escalation, epistemic
+  // discipline, tool authority — ~3.7k) is always kept whole, and optional
+  // domain detail fills the rest by whole sections, never mid-sentence.
   const scope = reasoningScope;
   const eligibleContext = restrictUserContext(userContext as Record<string, unknown>, scope) as UserContext;
   const eligibleNotes = restrictNotes(epistemicNotes, scope);
@@ -3574,7 +3876,7 @@ function buildDantePrompt(
       : scope.mode === "EXCLUDE" && !scope.excludedFactors.includes("recovery")
         ? riskEvaluation
         : null;
-  const instructions = fitTextToTokenBudget(DANTE_INSTRUCTIONS, 2200);
+  const instructions = fitInstructionSections(DANTE_INSTRUCTIONS, 4400, (header) => MANDATORY_INSTRUCTION_SECTION.test(header));
   const profileJson = fitJsonToTokenBudget(eligibleContext, 1800);
   const evidenceJson = fitJsonToTokenBudget(evidence, 1100);
   const communicationSignals = detectCommunicationSignals(
@@ -3713,6 +4015,25 @@ EXTERNAL EVIDENCE
 
 ${evidenceJson}
 ${retrievedKnowledgeSection}${epistemicNotesSection}
+${
+  queryUnderstandingBlock
+    ? `
+============================================================
+QUERY UNDERSTANDING (deterministic, internal — never quote or mention this block)
+============================================================
+
+${fitTextToTokenBudget(queryUnderstandingBlock, 650)}
+`
+    : ""
+}
+${
+  intelligenceBlock
+    ? `
+============================================================
+${fitTextToTokenBudget(intelligenceBlock, 2600)}
+`
+    : ""
+}
 ============================================================
 CLIENT QUESTION
 ============================================================
@@ -3811,11 +4132,11 @@ function getSources(
   };
 
   for (const article of evidence.pubmed) {
-    push({ type: "PubMed", title: article.title, url: article.url });
+    push({ type: literatureType("PubMed", article.population), title: article.title, url: article.url });
   }
 
   for (const article of evidence.europePmc) {
-    push({ type: "Europe PMC", title: article.title, url: article.url });
+    push({ type: literatureType("Europe PMC", article.population), title: article.title, url: article.url });
   }
 
   for (const result of evidence.medlinePlus) {
@@ -3891,6 +4212,8 @@ export async function GET() {
 export async function POST(
   request: Request,
 ) {
+  // H0 WP1: the ONE authoritative deadline for this turn, started at request arrival. Client disconnect aborts it too.
+  const budget = createTurnBudget(request);
   try {
     /* -----------------------------------------------------
        AUTH — anonymous requests never touch rate-limit storage.
@@ -3899,14 +4222,19 @@ export async function POST(
     const supabase =
       await createClient();
 
-    const {
-      data: {
-        user,
-      },
-      error:
-        authError,
-    } =
-      await supabase.auth.getUser();
+    // H0 WP1: every early Supabase call below runs through boundedDependency — it never starts once the turn is over,
+    // and the turn stops waiting after EARLY_READ_MS or at the turn deadline. A hung auth/rate-limit call is an outage
+    // (503), never "not logged in".
+    const auth = await boundedDependency(budget, "auth", () => supabase.auth.getUser());
+    if (auth.status !== "OK" && auth.status !== "FAILED") {
+      if (budget.clientGone()) return new Response(null, { status: 499 });
+      return Response.json(
+        { ok: false, code: "DEPENDENCY_TIMEOUT", message: "Dante is temporarily unavailable. Please try again shortly." },
+        { status: 503 },
+      );
+    }
+    const user = auth.status === "OK" ? auth.value.data.user : null;
+    const authError = auth.status === "OK" ? auth.value.error : auth.error;
 
     if (
       authError ||
@@ -3933,7 +4261,9 @@ export async function POST(
 
     let rateLimit;
     try {
-      rateLimit = await checkDanteRateLimit(user.id);
+      const limited = await boundedDependency(budget, "rate_limit", () => checkDanteRateLimit(user.id));
+      if (limited.status !== "OK") throw new Error(`rate limit ${limited.status}`);
+      rateLimit = limited.value;
     } catch {
       return Response.json(
         {
@@ -4001,7 +4331,7 @@ export async function POST(
     ----------------------------------------------------- */
 
     if (getCoachMode(body) === "nutrition") {
-      return await handleNutritionCoachChat({ supabase, userId: user.id, body });
+      return await handleNutritionCoachChat({ supabase, userId: user.id, body, budget });
     }
 
     const userMessage =
@@ -4012,10 +4342,31 @@ export async function POST(
     // Decided once per request, from the real client message — never
     // a static default. Both response paths below (legacy Q&A and the
     // agent tool loop) must use this SAME decision.
-    const languageDecision = decideDanteLanguage({
+    /* -----------------------------------------------------
+       CONVERSATION CONTROL (ICH-1) — resolved HERE, at pipeline level,
+       before safety copy, domain routing, persona or any prompt.
+       SAFETY > EXPLICIT CURRENT-TURN CONTROL > USER CORRECTION >
+       DOMAIN INTENT > CONVERSATIONAL CONTEXT > PERSONA.
+       An explicit language request (this turn, or an earlier one still
+       in force) decides the response language for every branch below;
+       no route, stored session language or persona may override it.
+    ----------------------------------------------------- */
+    // H0 cluster A: up to 20 prior user turns feed the context working set (bounded selection, never the raw transcript).
+    const priorUserMessages = getPriorUserMessagesChronological(body, userMessage, 20);
+    const languageControl = resolveConversationControl({ message: userMessage, priorUserMessages });
+    const detectedLanguage = decideDanteLanguage({
       currentMessage: userMessage,
       recentMessages: getRecentUserMessages(body, 3),
     });
+    const languageDecision: DanteLanguageDecision =
+      languageControl.responseLanguage === "MATCH_USER"
+        ? detectedLanguage
+        : {
+            language: languageControl.responseLanguage === "EN" ? "en" : "vi",
+            languageName: languageControl.responseLanguage === "EN" ? "English" : "Vietnamese",
+            source: "explicit_request",
+            confidence: "high",
+          };
 
     const selectedMuscle = getSelectedMuscle(body);
     const selectedExercise = getSelectedExercise(body);
@@ -4063,11 +4414,11 @@ export async function POST(
 
     const now = new Date();
 
-    const { data: timezoneRow } = await supabase
-      .from("profiles")
-      .select("timezone")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    // PostgREST honours the signal, so a stalled read is really cancelled; any non-OK outcome is "unavailable".
+    const timezoneRead = await boundedDependency(budget, "timezone", (signal) =>
+      supabase.from("profiles").select("timezone").eq("user_id", user.id).abortSignal(signal).maybeSingle(),
+    );
+    const timezoneRow = timezoneRead.status === "OK" ? timezoneRead.value.data : null;
 
     const timezone = (timezoneRow as { timezone: string | null } | null)?.timezone ?? null;
     const temporalContext = buildDanteTemporalContext(now, timezone);
@@ -4100,7 +4451,7 @@ export async function POST(
     // supporting evidence (and the bootstrap when nothing durable exists yet). Fail-open: a store outage
     // degrades to history-derived state and never blocks the reply.
     const coherenceSession = await prepareTurnWithPersistence({
-      store: createSupabaseCoherenceStore(supabase),
+      store: boundedCoherenceStore(createSupabaseCoherenceStore(supabase), budget),
       key: user.id,
       message: userMessage,
       now: now.toISOString(),
@@ -4109,14 +4460,15 @@ export async function POST(
       // P-6: this route already required a signed-in user, so personalization is keyed by that authenticated user_id.
       authenticated: true,
       // Conditional only: runs solely for a clause that tries to constrain Dante's behaviour (never on normal turns).
-      coreConflictClassifier: llmCoreConflictClassifier,
+      // H0 WP1: one provider attempt from the turn budget, bounded by the turn signal; a timeout is UNCERTAIN.
+      coreConflictClassifier: budgetedCoreConflictClassifier(budget),
     });
     const coherencePrepared = coherenceSession.prepared;
 
     // Response language is a session property: the persisted, reducer-resolved language wins over a per-message
     // guess, so the provider prompt, the deterministic branches and the Phase 2 surface all speak one language.
     const sessionLanguageDecision: DanteLanguageDecision =
-      coherencePrepared.language === languageDecision.language
+      languageControl.responseLanguage !== "MATCH_USER" || coherencePrepared.language === languageDecision.language
         ? languageDecision
         : {
             language: coherencePrepared.language,
@@ -4124,6 +4476,67 @@ export async function POST(
             source: "conversation",
             confidence: "medium",
           };
+    /* -----------------------------------------------------
+       PERFORMANCE INTELLIGENCE BRIEF (ICH-1) — the shared core both
+       coaches consume: canonical knowledge + evidence strength, need
+       policy, safety posture and conversation control, as structured
+       state. Built once here (pure, no I/O) so every provider call in
+       this turn receives the same brief; enriched with canonical
+       athlete facts once context has loaded.
+    ----------------------------------------------------- */
+    const historyTurns = getChatHistoryTurns(body, userMessage);
+    const previousReply = [...historyTurns].reverse().find((turn) => turn.role === "assistant")?.text ?? null;
+    const recentTurns = historyTurns.slice(-6).map((turn) => ({ role: turn.role, text: turn.text }));
+    // A stored phase is context. It must not suppress this turn's substance/medical screen.
+    const briefSafetyActive = safetyCheck.triggered;
+    const screenKind = (screened: ReturnType<typeof screenSafety> | null): SupplementScreenKind =>
+      screened && (screened.kind === "supplement_medical" || screened.kind === "supplement_claim" || screened.kind === "medication")
+        ? screened.kind
+        : null;
+    const supplementScreened = briefSafetyActive ? null : screenSafety(userMessage, { recent: recentTurns });
+    const briefInput: BriefInput = {
+      message: userMessage,
+      coach: "DANTE",
+      priorUserMessages,
+      previousReply,
+      hardSafetyTriggered: briefSafetyActive,
+      supplementScreen: screenKind(supplementScreened),
+      canRetrieve: true,
+    };
+    // A disclosure the user made to Gemma (allergy, dangerously low intake) is part of this answer's context too, exactly like
+    // something said earlier in this chat (coach_signals, same user, RLS). Bounded; a failed read leaves the local context.
+    const disclosedRead = await boundedDependency(budget, "disclosure_read", () => loadActiveCoachSignalsForDomain(supabase, { userId: user.id, targetDomain: "TRAINING", clearance: "SENSITIVE", now }));
+    if (disclosedRead.status === "OK" && disclosedRead.value?.length) {
+      briefInput.context = withDisclosedFacts(buildContextWorkingSet({ priorUserMessages, message: userMessage }), disclosedRead.value, "DANTE");
+    }
+    let intelligenceBrief = buildIntelligenceBrief(briefInput);
+    // H0 cluster D: a safety disclosure made to Dante this turn reaches Gemma as closed-vocabulary context (coach_signals), and a
+    // retraction withdraws it. Best effort and bounded like every early dependency: the reply never depends on it.
+    await boundedDependency(budget, "disclosure_write", () => syncDisclosureSignals({ userId: user.id, source: "DANTE", context: intelligenceBrief.context, message: userMessage, timezone, now, getClient: createSupabaseAdminClient }));
+    // Multi-obligation provider calls get one brief PER open request, built from that request's words only: the
+    // turn's conversation control and safety state carry over; prior turns, the whole-message supplement screen and a
+    // sibling's knowledge gap do not. `settled` replays this turn's retrieval outcome (only a request that needed
+    // retrieval changes), so a call made after retrieval never sees a pre-retrieval state.
+    const obligationBriefOf = (settled?: { returnedEvidence: boolean; run: "EMPTY" | "FAILED" }) => (question: string): IntelligenceBrief => {
+      const input: BriefInput = {
+        message: question,
+        coach: "DANTE",
+        hardSafetyTriggered: briefSafetyActive,
+        supplementScreen: screenKind(briefSafetyActive ? null : screenSafety(question, { recent: [] })),
+        canRetrieve: true,
+        control: intelligenceBrief.control,
+        // The user's earlier disclosures are the turn's, not one request's: every request is answered in their light.
+        context: intelligenceBrief.context,
+      };
+      const brief = buildIntelligenceBrief(input);
+      return settled ? settleBrief(brief, input, settled.returnedEvidence, settled.run) : brief;
+    };
+    const scopedProvider = (settled?: Parameters<typeof obligationBriefOf>[0]) => ({
+      coreGuard: coreConflictGuard(coherencePrepared.coreConflict),
+      control: intelligenceBrief.control,
+      briefOf: obligationBriefOf(settled),
+    });
+
     const emitConvergedSingleShot = async (
       input: Parameters<typeof emitConvergedCore>[0],
       handledObligations?: HandledObligation[],
@@ -4135,7 +4548,11 @@ export async function POST(
         ...input,
         done: {
           ...input.done,
-          toolTraceSummary: [...input.done.toolTraceSummary, persistenceTrace(coherenceSession)],
+          toolTraceSummary: [
+            ...input.done.toolTraceSummary,
+            persistenceTrace(coherenceSession),
+            `wp1:early;provider=${budget.counts.provider};dep=${wp1Dependencies(budget)};client=${budget.clientGone() ? "gone" : "open"}`,
+          ],
         },
         coherence: {
           prepared: coherencePrepared,
@@ -4147,9 +4564,10 @@ export async function POST(
           },
         },
       });
-      if (captured.finished) {
-        // post_turn_delta → reducer → persist v_n+2 (optional; never affects the response).
-        await commitPostTurn(coherenceSession, captured.finished);
+      // post_turn_delta → reducer → persist v_n+2 (optional; never affects the response). Never for a client that left:
+      // the reply this state records was never delivered (H0 WP1 late-result suppression; CAS already rejects stale writes).
+      if (captured.finished && !budget.clientGone()) {
+        await untilAborted(commitPostTurn(coherenceSession, captured.finished), AbortSignal.timeout(POST_TURN_COMMIT_WAIT_MS), () => "skipped");
       }
       return response;
     };
@@ -4203,9 +4621,9 @@ export async function POST(
           handled: scoped.handled,
           language: safety.language,
           plan: coherencePrepared.expressionPlan,
-          coreGuard: coreConflictGuard(coherencePrepared.coreConflict),
+          ...scopedProvider(),
           safetyActive: true,
-          signal: request.signal,
+          budget,
         });
         handledFinal = disposeOpenRequests({
           handled: scoped.handled,
@@ -4265,12 +4683,16 @@ export async function POST(
 
       // Active N-of-1 must not continue after hard safety — abort durable row if present.
       try {
-        const active = await loadActiveNof1Experiment(supabase, user.id);
-        if (active) {
-          await updateNof1Experiment(supabase, user.id, active.id, {
-            status: "ABORTED",
-            completedAt: now.toISOString(),
-          });
+        const active = await boundedDependency(budget, "nof1_active", () => loadActiveNof1Experiment(supabase, user.id));
+        if (active.status === "OK" && active.value) {
+          const activeId = active.value.id;
+          // A timed-out write has an UNKNOWN effect (it may still land); the reply below never depends on it.
+          await boundedDependency(budget, "nof1_abort_write", () =>
+            updateNof1Experiment(supabase, user.id, activeId, {
+              status: "ABORTED",
+              completedAt: now.toISOString(),
+            }),
+          );
         }
       } catch (error) {
         console.warn("[DANTE NOF1] safety abort failed:", error);
@@ -4295,8 +4717,12 @@ export async function POST(
             ? " Các câu hỏi khác mình giữ lại, sẽ trả lời ngay khi vấn đề an toàn này được xử lý."
             : " Your other questions are on hold; I will answer them as soon as this safety issue is dealt with."
           : "";
+      // A substance dose request refuses the dose, not a "what is it" asked alongside it.
+      const hardSafetyDraft = (safetyCheck.category === "dangerous_substance"
+        ? restrictedSubstanceReply(userMessage, intelligenceBrief, languageDecision.language === "vi" ? "vi" : "en")
+        : null) ?? safetyCheck.responseOverride;
       return await emitConvergedSingleShot({
-        draft: `${safetyCheck.responseOverride}${safetyCheck.responseMode === "HARD_BLOCK" ? freshSafetyDeferral : ""}`,
+        draft: `${hardSafetyDraft}${safetyCheck.responseMode === "HARD_BLOCK" ? freshSafetyDeferral : ""}`,
         branch: "HARD_SAFETY",
         requestTimestamp: now.toISOString(),
         language: languageDecision.language === "vi" ? "vi" : "en",
@@ -4318,6 +4744,48 @@ export async function POST(
       });
     }
 
+    /* -----------------------------------------------------
+       SUPPLEMENT BOUNDARIES — SYSTEM / SAFETY AUTHORITY (ICH-1)
+
+       Decided before any coaching branch or model call, from structured
+       state: a hormonal/drug product (knowledge-registry policy boundary)
+       or a medical/treatment supplement request (the existing nutrition
+       supplement screen). Both reuse existing safety copy — no new
+       safety engine, no model in the loop.
+    ----------------------------------------------------- */
+    // ENTITY_RISK != INTENT_RISK: a hormonal/drug product named in an information, risk, symptom or cessation question
+    // goes on to the provider under its no-use posture; only a restricted ask (dose, cycle, stack, sourcing, evasion)
+    // stops here, and even then a DEFINE in the same message is answered before the targeted refusal.
+    const substanceBoundaryDraft = briefSafetyActive
+      ? null
+      : restrictedSubstanceReply(userMessage, intelligenceBrief, sessionLanguageDecision.language === "vi" ? "vi" : "en");
+    const supplementBoundaryDraft = briefSafetyActive
+      ? null
+      : substanceBoundaryDraft
+        ? substanceBoundaryDraft
+        : supplementScreened && (supplementScreened.kind === "supplement_medical" || supplementScreened.kind === "supplement_claim")
+          ? safetyReply(supplementScreened, userMessage, "en", sessionLanguageDecision.language === "vi" ? "vi" : "en")
+          : null;
+    if (supplementBoundaryDraft) {
+      return await emitConvergedSingleShot({
+        draft: supplementBoundaryDraft,
+        branch: "CASUAL",
+        requestTimestamp: now.toISOString(),
+        language: sessionLanguageDecision.language === "vi" ? "vi" : "en",
+        responseIntent: "SOCIAL_RESPONSE",
+        done: {
+          model: "dante-supplement-safety-boundary",
+          insight: null,
+          sources: [],
+          actions: [],
+          pendingConfirmation: null,
+          toolTraceSummary: [`ich1:posture=${intelligenceBrief.posture.decision};ctx=${intelligenceBrief.posture.contexts.join(",") || "none"};intent=${intelligenceBrief.posture.substanceIntent?.intentClass ?? "none"};restricted=${intelligenceBrief.posture.substanceIntent?.restricted.join(",") || "none"}`],
+          safetyTriggered: false,
+          safetyCategory: null,
+        },
+      });
+    }
+
     // SAFETY → SOCIAL → CASUAL/FITNESS. Session streak is rebuilt from the
     // active chat only — never profiles, Phase 2–4 memory, or the DB.
     const socialSession = deriveSocialSessionFromHistory(
@@ -4330,7 +4798,8 @@ export async function POST(
 
     // Peek durable N-of-1 early so anti-manipulation can preserve active context
     // instead of resetting to generic onboarding / calorie prompts.
-    const durableNof1 = await loadActiveNof1Experiment(supabase, user.id).catch(() => null);
+    const durableNof1Read = await boundedDependency(budget, "nof1_active", () => loadActiveNof1Experiment(supabase, user.id));
+    const durableNof1 = durableNof1Read.status === "OK" ? durableNof1Read.value : null;
     /* -----------------------------------------------------
        PERSISTED SAFETY CONTINUATION (Phase 2 lifecycle)
 
@@ -4353,6 +4822,31 @@ export async function POST(
           ? " Các câu hỏi khác mình giữ lại, sẽ trả lời ngay khi vấn đề an toàn này được xử lý."
           : " Your other questions are on hold; I will answer them as soon as this safety issue is dealt with."
         : "";
+
+    /**
+     * AI-R1E.2a: best-effort CoachSignal publication for the two deterministic COACHING exits (current-state, risk accumulator)
+     * that return before the post-context step. Hard safety / casual / correction / N-of-1 never call this. Reads the same
+     * recovery loader the post-context path uses, persists through the R1E.1 adapter, and can never alter or delay the reply
+     * beyond its own timeout: every failure is swallowed.
+     */
+    const publishEarlyExitSignals = async (exit: EarlyExitClass): Promise<void> => {
+      try {
+        const safetyActive = safetyCheck.triggered || persistedSafetyActive;
+        const recoveryIntent = detectIntent(userMessage).recovery;
+        if (!earlyExitMayPublish({ exit, safetyActive, recoveryIntent, message: userMessage })) return;
+        const recoveryRead = await boundedDependency(budget, "early_exit_recovery", () => loadRecoveryContext(supabase, user.id), 2000);
+        const recovery = recoveryRead.status === "OK" ? recoveryRead.value : null;
+        const state = recovery ? extractDanteStateSnapshot({ recovery: summarizeRecoveryContext(recovery) }) : null;
+        await boundedDependency(budget, "signals_write", () => persistDanteSignals({
+          userId: user.id,
+          signals: buildEarlyExitSignals({ userScope: toUserScopeRef(user.id), exit, safetyActive, recoveryIntent, message: userMessage, state, timezone }, now),
+          getClient: createSupabaseAdminClient,
+        }));
+      } catch (error) {
+        // shared intelligence is never a single point of failure — the failure is still logged (category only)
+        logToolEvent("DANTE_INTELLIGENCE", { stage: "early-exit", errorCategory: error instanceof Error ? error.name : "unknown" });
+      }
+    };
 
     // STORE OUTAGE: a continuation cue ("vẫn còn", "still there") that no recoverable episode grounds must never
     // fall through to normal coaching. Keep the conservative posture and ask which symptom is meant.
@@ -4526,8 +5020,8 @@ export async function POST(
           handled: multi.handledObligations,
           language: boundaryLang,
           plan: coherencePrepared.expressionPlan,
-          coreGuard: coreConflictGuard(coherencePrepared.coreConflict),
-          signal: request.signal,
+          ...scopedProvider(),
+          budget,
         });
         handledFinal = disposeOpenRequests({
           handled: multi.handledObligations,
@@ -4664,7 +5158,9 @@ export async function POST(
     // durableNof1 was loaded before social routing for active-context continuity.
     const failedNof1 = durableNof1
       ? null
-      : await loadLatestFailedNof1Proposal(supabase, user.id).catch(() => null);
+      : await boundedDependency(budget, "nof1_failed", () => loadLatestFailedNof1Proposal(supabase, user.id)).then((read) =>
+          read.status === "OK" ? read.value : null,
+        );
     const historyNof1 = deriveNof1SessionFromHistory(priorRiskTurns.map((turn) => turn.content), {
       now,
       riskEvaluation,
@@ -4813,6 +5309,7 @@ export async function POST(
     if (currentStateResponse) {
       const patternAck = buildRiskPatternAck(riskEvaluation, lang);
       const reply = patternAck ? `${patternAck}\n\n${currentStateResponse}` : currentStateResponse;
+      await publishEarlyExitSignals("DETERMINISTIC_COACHING");
       return await emitConvergedSingleShot({
         draft: reply,
         branch: "CURRENT_STATE",
@@ -4836,7 +5333,9 @@ export async function POST(
     const confidenceReply = buildConfidenceDeterministicReply(confidenceAssessment, lang, {
       message: userMessage,
     });
-    if (confidenceReply && confidenceReplyEligible({ reply: confidenceReply, obligations: turnObligations, message: userMessage })) {
+    // H0 cluster G: a rank / buy / skip decision over named candidates is never answered by a single-claim confidence note.
+    if (confidenceReply && !intelligenceBrief.candidates && confidenceReplyEligible({ reply: confidenceReply, obligations: turnObligations, message: userMessage })) {
+      await publishEarlyExitSignals("DETERMINISTIC_COACHING");
       return await emitConvergedSingleShot({
         draft: confidenceReply,
         branch: "CONFIDENCE",
@@ -4858,12 +5357,21 @@ export async function POST(
       });
     }
 
+    // A train/rest decision must be ANSWERED, grounded on today's verified state. The watch-level fatigue one-liner is not an answer
+    // ("a few low reports, not enough baseline"), so it never replaces the decision; the risk bias still reaches the prompt.
+    const turnFrame = parseUserQuery(userMessage, { surface: "DANTE" });
+    const asksReadinessDecision = turnFrame.intent === "READINESS_RECOMMENDATION";
+    // SAFETY DEFINES BOUNDARIES, NOT DEFAULT PROSE: an irritation note answers a symptom REPORT. When the same message
+    // asks for something ("best exercise for shoulder pain", "what can I train today"), the note would replace the answer,
+    // so the turn goes on to the provider with the risk bias in the prompt and the recommendation decision bounding it.
+    const asksForAnswer = Boolean(intelligenceBrief.knowledge.requestedOutcome) || ASKS_FOR_ANSWER.test(foldText(userMessage));
     const riskReply = buildRiskDeterministicReply(riskEvaluation, lang, {
       currentTurnResolution: currentRiskTouch.some((item) => item.kind === "SYMPTOM_FREE_RESOLUTION"),
-      currentTurnIrritation: currentRiskTouch.some((item) => item.kind === "IRRITATION"),
-      currentTurnFatigue: currentRiskTouch.some((item) => item.kind === "LOW_RECOVERY"),
+      currentTurnIrritation: currentRiskTouch.some((item) => item.kind === "IRRITATION") && !asksForAnswer,
+      currentTurnFatigue: currentRiskTouch.some((item) => item.kind === "LOW_RECOVERY") && !asksReadinessDecision && !asksForAnswer,
     });
     if (riskReply) {
+      await publishEarlyExitSignals("RISK_ACCUMULATOR");
       return await emitConvergedSingleShot({
         draft: riskReply,
         branch: "RISK",
@@ -4908,10 +5416,164 @@ export async function POST(
     // Workout-mutation asks that never entered the agent write path still
     // must not claim a saved change. Status is SUGGESTED: proposal only,
     // zero unconfirmed writes.
-    if (isWorkoutMutationRequest(userMessage)) {
-      const language = sessionLanguageDecision.language === "vi" ? "vi" : "en";
+    const turnLanguage = proposalLanguage(userMessage, sessionLanguageDecision.language === "vi" ? "vi" : "en");
+    if (needsTrainingCountClarification(userMessage)) {
       return await emitConvergedSingleShot({
-        draft: buildSuggestedWorkoutChangeReply(language),
+        draft: trainingCountClarification(turnLanguage),
+        branch: "TOOL",
+        requestTimestamp: now.toISOString(),
+        language: turnLanguage,
+        responseIntent: "TOOL_ACTION_RESPONSE",
+        done: {
+          model: "dante-action-truthfulness",
+          insight: null,
+          sources: [],
+          actions: [],
+          pendingConfirmation: null,
+          toolTraceSummary: [],
+          safetyTriggered: false,
+          safetyCategory: null,
+        },
+      });
+    }
+    const sideAnswer = answerShoulderSide(userMessage, authoritativeLaterality(coherencePrepared.state), turnLanguage);
+    if (sideAnswer) {
+      return await emitConvergedSingleShot({
+        draft: sideAnswer,
+        branch: "CURRENT_STATE",
+        requestTimestamp: now.toISOString(),
+        language: turnLanguage,
+        responseIntent: "CORRECTION_RESPONSE",
+        done: {
+          model: "dante-laterality",
+          insight: null,
+          sources: [],
+          actions: [],
+          pendingConfirmation: null,
+          toolTraceSummary: [],
+          safetyTriggered: false,
+          safetyCategory: null,
+        },
+      });
+    }
+    // Hackathon repair F-03: "Why did you change today's workout?" presupposes a change. PROPOSED != APPLIED: the answer
+    // comes from today's mutation record / proposal rows, never from the premise or the model's reading of the chat.
+    if (WHY_WORKOUT_CHANGED_ASK.test(foldText(userMessage))) {
+      const statusRead = await boundedDependency(budget, "adjustment_status", async () => {
+        const session = await loadTodaySession(supabase, user.id, now, timezone);
+        return loadTodayAdjustmentStatus({ supabase, admin: createSupabaseAdminClient(), userId: user.id, sessionId: session?.id ?? null, now });
+      });
+      const status = statusRead.status === "OK" ? statusRead.value : null;
+      return await emitConvergedSingleShot({
+        draft: renderAdjustmentStatusReply(status, turnLanguage),
+        branch: "TOOL",
+        requestTimestamp: now.toISOString(),
+        language: turnLanguage,
+        responseIntent: "TOOL_ACTION_RESPONSE",
+        toolState: { permission: "READ", persisted: status?.status === "APPLIED" },
+        done: { model: "dante-action-truthfulness", insight: null, sources: [], actions: [], pendingConfirmation: null, toolTraceSummary: [`tool:adjustment_status;state=${status?.status ?? "UNKNOWN"};read=${statusRead.status}`], safetyTriggered: false, safetyCategory: null },
+      });
+    }
+    // H0 cluster C: typing "yes, confirm" in chat confirms nothing — only the Confirm control on a pending proposal does.
+    // Say so truthfully, from the user's own pending row (bounded read), instead of letting prose narrate a confirmation.
+    const readPendingAction = () => boundedDependency(budget, "pending_action", async () => {
+      const { data } = await supabase.from("dante_tool_actions").select("id, summary").eq("user_id", user.id).eq("status", "pending").gt("expires_at", now.toISOString()).order("created_at", { ascending: false }).limit(1);
+      return data?.[0] ?? null;
+    });
+    // H0 final closure: "did that save?" is answered from the rows, never from the model's reading of the chat — a model
+    // said "not saved" right after a confirmed write. Last 24 h of the user's own food rows + the pending proposal, if any.
+    if (SAVE_STATUS_ASK.test(foldText(userMessage))) {
+      const [logRead, pendingRead] = await Promise.all([
+        boundedDependency(budget, "food_log_status", async () => {
+          const { data, error } = await supabase.from("food_logs").select("food_name, quantity_grams").eq("user_id", user.id).gt("created_at", new Date(now.getTime() - 864e5).toISOString()).order("created_at", { ascending: false }).limit(4);
+          if (error) throw error;
+          return data ?? [];
+        }),
+        readPendingAction(),
+      ]);
+      const vi = turnLanguage === "vi";
+      const rows = logRead.status === "OK" ? (logRead.value as Array<{ food_name: string; quantity_grams: number | string }>) : null;
+      const pending = pendingRead.status === "OK" ? (pendingRead.value as { summary?: string | null } | null) : null;
+      const items = (rows ?? []).map((row) => `${row.food_name} (${Number(row.quantity_grams)} g)`).join(", ");
+      const draft = [
+        rows === null
+          ? vi ? "Mình không kiểm tra được nhật ký ăn uống lúc này, nên không xác nhận được — hãy xem trang Dinh dưỡng." : "I couldn't check your food log just now, so I can't confirm either way — the Nutrition page shows what's saved."
+          : rows.length > 0
+            ? vi ? `Nhật ký ăn uống 24 giờ qua có: ${items}.` : `Your food log from the last 24 hours shows: ${items}.`
+            : pending ? null : vi ? "Nhật ký ăn uống 24 giờ qua chưa có món nào, nên chưa có gì được lưu." : "Nothing is in your food log from the last 24 hours, so nothing was saved.",
+        pending
+          ? vi ? `Đề xuất “${pending.summary ?? "ghi món ăn"}” vẫn đang chờ bạn bấm Xác nhận — chưa được lưu.` : `“${pending.summary ?? "The food proposal"}” is still waiting for you to tap Confirm — it isn't saved until you do.`
+          : null,
+      ].filter(Boolean).join(" ");
+      return await emitConvergedSingleShot({
+        draft,
+        branch: "TOOL",
+        requestTimestamp: now.toISOString(),
+        language: turnLanguage,
+        responseIntent: "TOOL_ACTION_RESPONSE",
+        toolState: { permission: "READ", persisted: false },
+        done: { model: "dante-action-truthfulness", insight: null, sources: [], actions: [], pendingConfirmation: null, toolTraceSummary: [`tool:save_status;rows=${rows?.length ?? "ERR"};pending=${pending ? 1 : 0}`], safetyTriggered: false, safetyCategory: null },
+      });
+    }
+    // "Actually make it 2 eggs" cannot edit a pending proposal from chat: say so from the row, never "Got it, adjusted".
+    if (PENDING_EDIT.test(foldText(userMessage))) {
+      const pendingRead = await readPendingAction();
+      const pending = pendingRead.status === "OK" ? (pendingRead.value as { summary?: string | null } | null) : null;
+      if (pending) {
+        const vi = turnLanguage === "vi";
+        return await emitConvergedSingleShot({
+          draft: vi
+            ? `Đề xuất đang chờ vẫn là “${pending.summary ?? "ghi món ăn"}” — mình không sửa được nó trong chat và chưa có gì được lưu. Hãy bấm Hủy trên đề xuất đó, rồi nói lại số lượng mới để mình đề xuất lại.`
+            : `The pending proposal still says “${pending.summary ?? "the original amount"}” — I can't edit it from chat, and nothing has been saved. Tap Cancel on it, then tell me the new amount and I'll propose that instead.`,
+          branch: "TOOL",
+          requestTimestamp: now.toISOString(),
+          language: turnLanguage,
+          responseIntent: "TOOL_ACTION_RESPONSE",
+          toolState: { permission: "CONFIRMATION_REQUIRED", persisted: false },
+          done: { model: "dante-action-truthfulness", insight: null, sources: [], actions: [], pendingConfirmation: null, toolTraceSummary: ["tool:pending_edit;pending=1"], safetyTriggered: false, safetyCategory: null },
+        });
+      }
+    }
+    if (CONFIRM_IN_CHAT.test(foldText(userMessage))) {
+      const pendingRead = await readPendingAction();
+      const pending = pendingRead.status === "OK" ? (pendingRead.value as { summary?: string | null } | null) : null;
+      const vi = turnLanguage === "vi";
+      const draft = pendingRead.status !== "OK"
+        ? vi ? "Mình không kiểm tra được thao tác đang chờ lúc này, nên chưa có gì được lưu. Hãy bấm Xác nhận trên đề xuất nếu nó vẫn còn." : "I couldn't check for a pending action just now, so nothing has been saved. If the proposal is still showing, tap Confirm on it."
+        : pending
+          ? vi ? `Gõ xác nhận ở đây không lưu gì cả — hãy bấm Xác nhận trên đề xuất${pending.summary ? ` (“${pending.summary}”)` : ""}. Chưa có gì được ghi.` : `Typing it here doesn't save anything — tap Confirm on the proposal${pending.summary ? ` (“${pending.summary}”)` : ""}. Nothing has been logged yet.`
+          : vi ? "Hiện không có thao tác nào đang chờ xác nhận, nên chưa có gì được lưu. Bạn muốn ghi món gì?" : "There's nothing waiting for confirmation right now, so nothing has been saved. What would you like to log?";
+      return await emitConvergedSingleShot({
+        draft,
+        branch: "TOOL",
+        requestTimestamp: now.toISOString(),
+        language: turnLanguage,
+        responseIntent: "TOOL_ACTION_RESPONSE",
+        toolState: { permission: pending ? "CONFIRMATION_REQUIRED" : "READ", persisted: false },
+        done: { model: "dante-action-truthfulness", insight: null, sources: [], actions: [], pendingConfirmation: null, toolTraceSummary: [`tool:confirm_in_chat;pending=${pending ? 1 : 0};read=${pendingRead.status}`], safetyTriggered: false, safetyCategory: null },
+      });
+    }
+    // No chat path can change the saved profile (no writer exists for it): a request to does not get a narrated update.
+    if (PROFILE_UPDATE_ASK.test(foldText(userMessage))) {
+      const weight = activeFacts(intelligenceBrief.context).find((fact) => fact.key === "BODYWEIGHT");
+      const vi = turnLanguage === "vi";
+      const draft = vi
+        ? `Mình không đổi được hồ sơ từ trong chat, nên chưa có gì được lưu. Bạn cập nhật cân nặng trong trang hồ sơ hoặc ghi một lần cân trên dashboard.${weight ? ` Trong cuộc trò chuyện này mình sẽ dùng ${weight.value} ${weight.unit}.` : ""}`
+        : `I can't change your profile from chat, so nothing has been saved. You can update your weight on your profile page or log a weigh-in on the dashboard.${weight ? ` For this conversation I'll use ${weight.value} ${weight.unit}.` : ""}`;
+      return await emitConvergedSingleShot({
+        draft,
+        branch: "TOOL",
+        requestTimestamp: now.toISOString(),
+        language: turnLanguage,
+        responseIntent: "TOOL_ACTION_RESPONSE",
+        toolState: { permission: "READ", persisted: false },
+        done: { model: "dante-action-truthfulness", insight: null, sources: [], actions: [], pendingConfirmation: null, toolTraceSummary: ["tool:profile_update=UNSUPPORTED;persisted=0"], safetyTriggered: false, safetyCategory: null },
+      });
+    }
+    if (isWorkoutMutationRequest(userMessage)) {
+      const language = turnLanguage;
+      return await emitConvergedSingleShot({
+        draft: buildSuggestedWorkoutChangeReply(language, userMessage),
         branch: "TOOL",
         requestTimestamp: now.toISOString(),
         language,
@@ -4954,9 +5616,54 @@ export async function POST(
       });
     }
 
+    // Reverse boundary: building a meal / meal adjustment / craving makeover / a pure food-macro lookup is Gemma's, never Dante's. Deterministic, no model call,
+    // so Dante cannot improvise a meal plan with invented numbers. Nutrition FACTS for a performance question stay Dante's to read.
+    // A supplement priority / purchase decision is shared knowledge, not a food fact: diet context in it ("I eat salmon
+    // 4 times a week") is need state for the decision, never a reason to hand the turn over.
+    // H0 cluster D — domain ownership, not keywords. The whole turn goes to Gemma only when it is meal construction or a pure
+    // food lookup AND nothing Dante owns rides on it: an action or log-status ask (tools are Dante's), a supplement product
+    // (whey/EAA are supplements), a disclosure statement with no request ("I eat 600 kcal a day"), or an active safety
+    // disclosure from this chat (Gemma cannot see this conversation, so the safety part must be handled where it was said).
+    const ownedByDante = isAgentToolIntent(userMessage)
+      || LOG_STATUS_ASK.test(foldText(userMessage))
+      || isSupplementTurn(intelligenceBrief.knowledge)
+      || !REQUESTS_SOMETHING.test(foldText(userMessage))
+      || activeFacts(intelligenceBrief.context).some((fact) => fact.relevance === "SAFETY" && fact.temporal === "CURRENT")
+      // H1-WEIGHT: a bodyweight stated in this chat is the input of a target question; Gemma would answer from the profile.
+      || (activeFacts(intelligenceBrief.context).some((fact) => fact.key === "BODYWEIGHT") && /\b(?:protein|calories?|calo|kcal|macros?|targets?|muc tieu)\b/.test(foldText(userMessage)));
+    if (dantePassesToGemma(turnFrame) && !ownedByDante) {
+      const language = sessionLanguageDecision.language === "vi" ? "vi" : "en";
+      return await emitConvergedSingleShot({
+        // HANDOFF keeps the obligation: the user's own request travels with the handoff, quoted.
+        draft: buildGemmaDeferralReply(language, userMessage),
+        branch: "CASUAL",
+        requestTimestamp: now.toISOString(),
+        language,
+        responseIntent: "SOCIAL_RESPONSE",
+        done: {
+          model: "dante-defer-to-gemma",
+          insight: null,
+          sources: [],
+          actions: [],
+          pendingConfirmation: null,
+          toolTraceSummary: [],
+          safetyTriggered: false,
+          safetyCategory: null,
+        },
+      });
+    }
+
     // Intent classification is deliberately after the safety/social/casual exits;
     // a social turn must never enter normal coaching context assembly.
     const intent = detectIntent(userMessage);
+
+    // H1-LM: a workout-plan ask under an active training constraint (dangerously low intake, diagnosed / clinician-restricted
+    // injury) is a decision the safety posture owns — the Q&A path, with its directives, check and one regeneration. The
+    // agent loop would plan the workout first and only get a warning prepended (L17 heavy leg day on 650 kcal).
+    const trainingConstrained = activeFacts(intelligenceBrief.context).some((fact) => fact.temporal === "CURRENT" && ((fact.kind === "LOW_ENERGY_INTAKE" && fact.relevance === "SAFETY") || clinicallyBounded(fact)));
+    const agentToolIntent = isAgentToolIntent(userMessage) && !(trainingConstrained && isWorkoutPlanAsk(userMessage));
+    // AI-R1D phase A: after auth, rate limit, validation, safety and every deterministic exit; before tool selection.
+    runDanteIntelligence({ phase: "pre-route", userId: user.id, userMessage, intent, safetyActive: safetyCheck.triggered || persistedSafetyActive, agentToolIntent, now, timezone });
 
     /* -----------------------------------------------------
        AGENTIC TOOL LOOP (Part 2/10) — Dante Actions/Interface upgrade.
@@ -4973,13 +5680,14 @@ export async function POST(
        user CONFIRM against POST /api/dante/tools/confirm.
     ----------------------------------------------------- */
 
-    if (isAgentToolIntent(userMessage)) {
+    if (agentToolIntent) {
       logToolEvent("DANTE_ROUTE_SELECTED", { tool: "agent-loop" });
 
       try {
         const envelope = await runDanteAgentTurn(
           { supabase, userId: user.id, now, timezone, temporalContext, languageDecision: sessionLanguageDecision, cache: new Map() },
           userMessage,
+          { budget },
         );
 
         /* -----------------------------------------------------
@@ -5012,12 +5720,19 @@ export async function POST(
           executedActions: envelope.toolTraceSummary ?? [],
         });
 
-        const verifiedReply = clarifyUnconfirmedWorkoutChange(
+        const clarifiedReply = clarifyUnconfirmedWorkoutChange(
           agentVerifier.passed ? envelope.reply : buildFallbackMessage(agentVerifier.outcome),
           userMessage,
           envelope.pendingConfirmation,
           sessionLanguageDecision.language === "vi" ? "vi" : "en",
         );
+        // H1: the user's active safety facts constrain this path too ("plan a heavy leg day for me" on 650 kcal, a push
+        // session under a clinician's overhead restriction). Deterministic, no regeneration (side effects may exist). A
+        // pending write is the user's own request, mirrored by its confirmation card, so its text is left as written.
+        // ponytail: a read reply that reports an allergen the user already logged is stripped too; scope by tool if it bites.
+        const verifiedReply = envelope.pendingConfirmation
+          ? clarifiedReply
+          : enforceSafetyConstraints(clarifiedReply, intelligenceBrief, sessionLanguageDecision.language === "vi" ? "vi" : "en");
 
         if (!agentVerifier.passed) {
           logToolEvent("DANTE_VERIFIER_FALLBACK", { tool: "agent-loop", stage: "verify" });
@@ -5048,11 +5763,33 @@ export async function POST(
         });
       } catch (error) {
         console.error("[DANTE AGENT TOOL LOOP ERROR]", error);
-        // Fall through to the legacy prompt-stuffed flow rather than
-        // failing the whole request — a normal, informational answer
-        // is still better than no answer (Part 19: never a false
-        // success, but also never a hard failure when a safe fallback
-        // exists).
+        // H0 WP1: a client that left gets no second pipeline (the route fallback below is a full retry of the turn).
+        if (budget.clientGone()) return new Response(null, { status: 499 });
+        // H0 cluster C: an ACTION-shaped turn whose tool path failed gets a truthful status, never the prose path — that
+        // path narrated "Logging now" / "Confirmed." for actions that never ran. The request is restated so nothing is
+        // lost, and nothing is claimed: a pending row the loop may have created is a proposal, not a write.
+        const language = sessionLanguageDecision.language === "vi" ? "vi" : "en";
+        const asked = userMessage.trim().replace(/\s+/g, " ").slice(0, 160);
+        return await emitConvergedSingleShot({
+          draft: language === "vi"
+            ? `Mình chưa thực hiện được yêu cầu này lúc này, nên chưa có gì được ghi hay thay đổi. Yêu cầu của bạn: “${asked}”. Bạn thử lại sau ít phút nhé.`
+            : `I couldn't set that up just now, so nothing was logged or changed. Your request: “${asked}”. Please try again in a moment.`,
+          branch: "TOOL",
+          requestTimestamp: now.toISOString(),
+          language,
+          responseIntent: "TOOL_ACTION_RESPONSE",
+          toolState: { permission: "READ", persisted: false },
+          done: {
+            model: "dante-tool-failure",
+            insight: null,
+            sources: [],
+            actions: [],
+            pendingConfirmation: null,
+            toolTraceSummary: [`tool:agent_loop=FAILED;category=${error instanceof Error ? categorizeProviderError(error) : "unknown"};persisted=0`],
+            safetyTriggered: false,
+            safetyCategory: null,
+          },
+        });
       }
     }
 
@@ -5066,34 +5803,49 @@ export async function POST(
     let chatInsight: DanteInsight | null;
     let epistemicNotes: string[];
     let evidence: EvidenceContext;
+    let literatureFailed: boolean;
+    let retrievalSources: Record<string, RetrievalSourceStatus>;
     let retrievedKnowledge: RetrievedKnowledgeChunk[];
+    let planInput: NutritionInput | null | undefined;
 
     try {
       [
-        { context: userContext, chatInsight, epistemicNotes },
-        evidence,
+        { context: userContext, chatInsight, epistemicNotes, planInput },
+        { evidence, literatureFailed, sources: retrievalSources },
         retrievedKnowledge,
       ] = await Promise.all([
-        loadUserContext(
-          user.id,
-          intent,
-          userMessage,
-          now,
-          timezone,
-          selectedMuscle,
-          selectedExercise,
+        // Supabase reads cannot be cancelled (class C): the turn stops WAITING at its deadline and drops the late value.
+        untilAborted(
+          loadUserContext(
+            user.id,
+            intent,
+            userMessage,
+            now,
+            timezone,
+            selectedMuscle,
+            selectedExercise,
+          ),
+          budget.signal,
+          () => {
+            throw new DOMException("Athlete context did not load before the turn deadline.", "TimeoutError");
+          },
         ),
 
-        getEvidence(
-          userMessage,
-          intent,
-        ),
+        getEvidence(userMessage, intent, {
+          skipLiterature: !retrievalWarranted(intelligenceBrief.knowledge),
+          requireLiterature: intelligenceBrief.knowledge.state === "RETRIEVAL_REQUIRED",
+          budget,
+        }),
 
-        getKnowledgeBrainResults(
-          supabase,
-          user.id,
-          userMessage,
-          intent,
+        untilAborted(
+          getKnowledgeBrainResults(
+            supabase,
+            user.id,
+            userMessage,
+            intent,
+          ),
+          budget.signal,
+          () => [],
         ),
       ]);
     } catch (error: unknown) {
@@ -5105,7 +5857,71 @@ export async function POST(
       throw error;
     }
 
+    // H0 cluster E: USER_CORRECTION > objective measurement > database state. A bodyweight the user stated in this chat
+    // (context working set) becomes the current value; the stored ones stay visible as history.
+    const statedWeight = activeFacts(intelligenceBrief.context).find((fact) => fact.key === "BODYWEIGHT" && typeof fact.value === "number");
+    const resolvedWeight = userContext.bodyWeight as BodyWeightState | undefined;
+    // H1-LM (W09): a fresh weigh-in that outranks the profile is the current weight too — the saved plan, computed from the
+    // profile weight, gets the same provenance treatment as after a chat correction.
+    const weighInKg = resolvedWeight?.current?.origin === "WEIGH_IN" && resolvedWeight.current.freshness !== "STALE" ? resolvedWeight.current.valueKg : null;
+    if (statedWeight?.value || weighInKg) {
+      const stated = statedWeight?.value ? (statedWeight.unit === "lb" ? Math.round(statedWeight.value * 0.4536 * 10) / 10 : statedWeight.value) : weighInKg!;
+      const resolved = resolvedWeight;
+      const state = !statedWeight?.value ? resolved! : resolved ? withUserStatedWeight(resolved, stated, now) : resolveBodyWeight({ userStatedKg: stated, now });
+      // H1-WEIGHT: the correction is a calculation input, not only prose — the app's own plan formula re-run at the stated
+      // weight (nothing saved; the stored plan keeps the profile weight until the user updates it).
+      const target = planInput && planInput.weightKg !== stated ? buildNutritionPlan({ ...planInput, weightKg: stated }).target : null;
+      const storedTarget = target ? buildNutritionPlan(planInput!).target : null;
+      // H1-LM numeric provenance: the saved plan's numbers stay visible, but never under a key that reads as "the target for
+      // the current weight" — each number carries its authority and the weight it was computed from.
+      const savedPlan = userContext.currentNutritionPlan as { dailyTargets?: unknown } | null;
+      userContext = {
+        ...userContext,
+        ...(target && savedPlan
+          ? {
+              currentNutritionPlan: {
+                ...savedPlan,
+                dailyTargets: {
+                  SAVED_NUTRITION_TARGET: { ...(savedPlan.dailyTargets as object), computedFromWeightKg: planInput!.weightKg, appliesToCurrentWeight: false },
+                  RECOMPUTED_TARGET_AT_CURRENT_WEIGHT: { calories: target.calories, protein: target.protein, carbs: target.carbs, fat: target.fat, computedFromWeightKg: stated, saved: false },
+                },
+              },
+            }
+          : {}),
+        bodyWeight: target
+          ? {
+              ...state,
+              planTargetsAtCurrentWeight: { basisKg: stated, calories: target.calories, proteinG: target.protein, carbsG: target.carbs, fatG: target.fat, storedFromKg: planInput!.weightKg, storedCalories: storedTarget!.calories, storedProteinG: storedTarget!.protein },
+              rule: `${state.rule} The stored plan targets were computed from ${planInput!.weightKg} kg; the same plan formula at ${stated} kg gives about ${target.calories} kcal and ${target.protein} g protein a day (planTargetsAtCurrentWeight). Asked for a target this turn, give these and say they use ${stated} kg; the saved plan changes only when the profile weight is updated. Never call these the saved plan's numbers ("your plan targets ${target.protein} g" is false — the saved plan still says ${storedTarget!.protein} g), and never place a saved number inside a range computed at ${stated} kg.`,
+            }
+          : state,
+      };
+    }
     const sharedContext = userContext as Record<string, unknown>;
+    // ICH-1: add canonical athlete facts to the brief, then settle its knowledge state against what retrieval actually
+    // returned — an empty retrieval becomes stated uncertainty, never a confident fallback to model prior.
+    const fullBriefInput: BriefInput = { ...briefInput, athlete: extractAthleteFacts(sharedContext) };
+    // Transport success is not evidence: a returned paper that is not about this turn's entity/outcome never reaches the
+    // prompt or the source list, and a search that returned only such papers settles like an empty one.
+    const transportHits = evidence.pubmed.length + evidence.europePmc.length + evidence.medlinePlus.length;
+    // Relevant is not applicable: each kept paper carries who it studied, human evidence first, so a mouse study reaches
+    // the prompt and the source list as preclinical background, never as direct human support.
+    const relevant = <T extends { title: string; abstract?: string }>(items: T[]) =>
+      items
+        .filter((item) => retrievedDocumentRelevant(intelligenceBrief.knowledge, item.title, item.abstract) !== false)
+        .map((item) => ({ ...item, population: retrievedPopulation(item.title, item.abstract) }))
+        .sort((a, b) => POPULATION_ORDER.indexOf(a.population) - POPULATION_ORDER.indexOf(b.population));
+    const literature = { pubmed: relevant(evidence.pubmed), europePmc: relevant(evidence.europePmc) };
+    evidence = { ...evidence, ...literature, medlinePlus: evidence.medlinePlus.filter((item) => retrievedDocumentRelevant(intelligenceBrief.knowledge, item.title) !== false) };
+    const retrievalReturnedEvidence = evidence.pubmed.length + evidence.europePmc.length + evidence.medlinePlus.length > 0;
+    intelligenceBrief = settleBrief(
+      buildIntelligenceBrief(fullBriefInput),
+      fullBriefInput,
+      retrievalReturnedEvidence,
+      literatureFailed ? "FAILED" : transportHits > 0 ? "IRRELEVANT" : "EMPTY",
+      // MedlinePlus is consumer health information about people.
+      [...literature.pubmed, ...literature.europePmc].map((item) => item.population).concat(evidence.medlinePlus.map(() => "HUMAN_RELEVANT" as const)),
+    );
     const reasoningScope = primaryObligationScope(turnObligations);
     if (hasDivergentReasoningScopes(turnObligations)) {
       const open = openRequests(turnObligations);
@@ -5122,8 +5938,8 @@ export async function POST(
         handled: multi.handledObligations,
         language: boundaryLang,
         plan: coherencePrepared.expressionPlan,
-        coreGuard: coreConflictGuard(coherencePrepared.coreConflict),
-        signal: request.signal,
+        ...scopedProvider({ returnedEvidence: retrievalReturnedEvidence, run: literatureFailed ? "FAILED" : "EMPTY" }),
+        budget,
         userContext: sharedContext,
       });
       const handledFinal = disposeOpenRequests({
@@ -5150,6 +5966,13 @@ export async function POST(
       }, handledFinal, generated && !generated.usedFallback ? "PASSED" : undefined);
     }
     userContext = restrictUserContext(sharedContext, reasoningScope) as UserContext;
+    // AI-R1D phase B (legacy path): Athlete State context is now available, so evidence/hypothesis/signal production runs.
+    // AI-R1E.1: persist the validated signals (best effort; a failure is logged and never affects the reply).
+    await boundedDependency(budget, "signals_write", () => persistDanteSignals({
+      userId: user.id,
+      signals: runDanteIntelligence({ phase: "post-context", userId: user.id, userMessage, intent, safetyActive: safetyCheck.triggered || persistedSafetyActive, agentToolIntent, now, timezone, state: extractDanteStateSnapshot(sharedContext) }),
+      getClient: createSupabaseAdminClient,
+    }));
     epistemicNotes = restrictNotes(epistemicNotes, reasoningScope);
     if (!insightAllowed(chatInsight?.category, reasoningScope)) chatInsight = null;
 
@@ -5188,6 +6011,19 @@ export async function POST(
     });
     const recentUserMessages = extractRecentUserMessages(body, userMessage);
 
+    // Shared query understanding (AI-R1F): references, cross-domain relevance and verified food facts. Fail-open:
+    // a failure here must never block the turn, it just removes the extra block.
+    const queryContext = await untilAborted(
+      buildDanteQueryContext(
+        userMessage,
+        getChatHistoryTurns(body, userMessage).map((turn) => ({ role: turn.role, text: turn.text })),
+        { currentRecovery: currentRecoveryFromContext(sharedContext.recovery) },
+      ),
+      // Its USDA resolver has its own timeout; the retrieval phase bound keeps it inside the turn as well.
+      AbortSignal.any([budget.signal, AbortSignal.timeout(RETRIEVAL_PHASE_MS)]),
+      () => null,
+    ).catch(() => null);
+
     const prompt =
       buildDantePrompt(
         userMessage,
@@ -5206,6 +6042,8 @@ export async function POST(
           ? null
           : riskEvaluation,
         reasoningScope,
+        queryContext?.block ?? null,
+        intelligenceBrief.promptBlock || null,
       );
 
     /* -----------------------------------------------------
@@ -5245,8 +6083,22 @@ export async function POST(
        unverified history / false persistence claims never reach the client.
     ----------------------------------------------------- */
 
+    // Canonical knowledge is citable only through a claim in this turn's scope (claim ↔ source linkage). The verifier
+    // sees every in-scope candidate; the client is shown only those whose entity the final reply actually discusses.
+    const canonicalSourceItems = (reply?: string): SourceItem[] =>
+      citedCanonicalSources(intelligenceBrief.knowledge, reply).slice(0, 8).flatMap(({ sourceId, support }) => {
+        const source = getSource(sourceId);
+        return source
+          ? [{
+              type: support === "DIRECT" ? "Canonical knowledge" : "Background (canonical)",
+              title: `${source.title} (${source.authors.split(",")[0]} ${source.year}, ${source.journal})`,
+              url: `https://doi.org/${source.doi}`,
+            }]
+          : [];
+      });
+
     const knownFacts = buildKnownFactsFromContext(userContext);
-    const availableSourceTitles = sources.map((source) => source.title);
+    const availableSourceTitles = [...sources, ...canonicalSourceItems()].map((source) => source.title);
     let usedModel = "dante";
     let bufferedPartial = "";
 
@@ -5258,7 +6110,7 @@ export async function POST(
       sessionLanguageDecision.language === "vi" ? "vi" : "en",
     )}${coreConflictGuard(coherencePrepared.coreConflict)}`;
 
-    const generateReply = async (correctionBrief: string | null): Promise<string> => {
+    const generateDraft = async (correctionBrief: string | null): Promise<string> => {
       const basePrompt = `${prompt}${sessionStyleBrief}`;
       const attemptPrompt = correctionBrief
         ? `${basePrompt}\n\n============================================================\nVERIFICATION CORRECTION\n============================================================\n${correctionBrief}`
@@ -5266,7 +6118,7 @@ export async function POST(
 
       let text = "";
       bufferedPartial = "";
-      for await (const event of streamDanteReply(attemptPrompt, request.signal)) {
+      for await (const event of streamDanteReply(attemptPrompt, budget.signal, budget)) {
         if (event.kind === "delta") {
           text += event.text;
           bufferedPartial = text;
@@ -5275,16 +6127,108 @@ export async function POST(
         }
       }
 
+      const grounded = withCurrentWeightTargets(
+        guardCanonicalTargetClaim(guardStaleRecoverySpeech(text, recoverySpeechOf(userContext)), readCanonicalCalories(userContext)),
+        (userContext.bodyWeight as { planTargetsAtCurrentWeight?: PlanTargetsAtCurrentWeight } | undefined)?.planTargetsAtCurrentWeight,
+        sessionLanguageDecision.language === "vi" ? "vi" : "en",
+      );
       if (!epistemic.highRiskEpistemic) {
-        return text;
+        return grounded;
       }
 
       return enforceEpistemicReplyBoundaries({
-        reply: text,
+        reply: grounded,
         memoryCheck: epistemic.memoryCheck,
         writeAuthorization: epistemic.writeAuthorization,
         forgetConfounders: epistemic.forgetConfounders,
       }).reply;
+    };
+
+    /* -----------------------------------------------------
+       OUTPUT INTEGRITY (ICH-1) — structured checks of the draft against
+       the brief: explicit language control, banned address, a low-value
+       option offered as a pick, necessity/certainty beyond the evidence,
+       a dose under a no-dosing posture. One bounded regeneration with a
+       correction brief; dosing, gap-filling and treatment claims are then removed
+       deterministically so they cannot reach the client either way.
+       Numeric grounding stays with the Layer 6 verifier below.
+    ----------------------------------------------------- */
+    let integrityRetried = false;
+    let initialViolationCodes: string[] = [];
+    // Repair quality, measured (never assumed): did the targeted error go, was valid content kept, did a new one appear.
+    let repairQuality = "NOT_RUN";
+    const generateReply = async (correctionBrief: string | null): Promise<string> => {
+      let draft = await generateDraft(correctionBrief);
+      const violations = checkOutputIntegrity({ reply: draft, brief: intelligenceBrief });
+      if (!integrityRetried) initialViolationCodes = violations.map((violation) => violation.code);
+      // The integrity repair is a semantic repair: it draws from the same turn budget as the verifier loop around it.
+      if (violations.length > 0 && !integrityRetried && budget.tryStart("semantic")) {
+        integrityRetried = true;
+        logToolEvent("DANTE_VERIFIER_RETRY", { tool: "legacy-qa", stage: "integrity", errorCategory: violations.map((violation) => violation.code).join(",") });
+        const repairStarted = Date.now();
+        const repaired = await generateDraft([correctionBrief, integrityCorrectionBrief(violations)].filter(Boolean).join("\n"));
+        const nextViolations = checkOutputIntegrity({ reply: repaired, brief: intelligenceBrief });
+        const previousCompleteness = obligationScore(draft, userMessage, intelligenceBrief) + candidateCompleteness(draft, intelligenceBrief.candidates).rendered;
+        const nextCompleteness = obligationScore(repaired, userMessage, intelligenceBrief) + candidateCompleteness(repaired, intelligenceBrief.candidates).rendered;
+        const newCode = nextViolations.some((next) => !violations.some((previous) => previous.code === next.code));
+        const accepted = acceptIntegrityRetry({
+          previousViolations: violations.length,
+          nextViolations: nextViolations.length,
+          nextHasNewCode: newCode,
+          previousCompleteness,
+          nextCompleteness,
+        });
+        const targetRemoved = violations.filter((previous) => !nextViolations.some((next) => next.code === previous.code && next.detail === previous.detail)).length;
+        repairQuality = `target_removed=${targetRemoved}/${violations.length};valid_preserved=${nextCompleteness >= previousCompleteness};new_error=${newCode};attempts=1;latency_ms=${Date.now() - repairStarted};accepted=${accepted}`;
+        if (accepted) draft = repaired;
+      }
+      // One clinical pass, then the canonical gap pass. Both call reviseClaimSpans; the second does not re-delete a span the first already repaired.
+      const integrity = applyScopedAnswerIntegrity({
+        draft,
+        question: userMessage,
+        brief: intelligenceBrief,
+        language: sessionLanguageDecision.language === "vi" ? "vi" : "en",
+        clinical: (text) => supplementEducationReply(text, userMessage, recentTurns).reply,
+      });
+      draft = integrity.reply;
+      const trace = buildAnswerTrace({
+        message: userMessage,
+        brief: intelligenceBrief,
+        violationCodes: integrity.violationCodes,
+        missing: integrity.missing,
+        retryCount: integrityRetried ? 1 : 0,
+        reply: draft,
+        initialViolationCodes,
+      });
+      logToolEvent("DANTE_INTELLIGENCE", {
+        tool: "answerability",
+        stage: "FINAL_RESULT",
+        fields: {
+          questionTypes: trace.questionTypes.join("|"),
+          entityStatus: trace.entityStatus,
+          identityGrounding: trace.identityGrounding,
+          identityMatch: trace.identityMatch.join("|") || "NONE",
+          retrievalMatch: trace.retrievalMatch.join("|") || "NONE",
+          retrievalStatus: trace.retrievalStatus,
+          coverage: trace.coverage,
+          evidenceConclusion: trace.evidenceConclusion,
+          requestedOutcome: trace.requestedOutcome,
+          recommendation: trace.recommendation,
+          violationCodes: trace.violationCodes.join("|"),
+          missingObligations: trace.missingObligationIds.join("|"),
+          retryCount: trace.retryCount,
+          claimScopeStatus: trace.claimScopeStatus,
+          populationApplicability: trace.populationApplicability,
+          safeContinuationStatus: trace.safeContinuationStatus,
+          safetyIntentClass: trace.safetyIntentClass,
+          restrictedObligations: trace.restrictedObligations.join("|"),
+          candidateTask: trace.candidateTask,
+          candidateCounts: trace.candidateCounts,
+          candidateCompleteness: trace.candidateCompleteness,
+          repairQuality,
+        },
+      });
+      return draft;
     };
 
     const buildVerifierInput = (replyText: string) => ({
@@ -5294,12 +6238,19 @@ export async function POST(
       safety: { triggered: false, responseOverride: null },
     });
 
+    // H0 WP1 measurement: duration, attempts per counter and every retrieval source's terminal status for this turn.
+    const runtimeTrace = () =>
+      `wp1:ms=${Date.now() - (budget.deadlineAt - TURN_DEADLINE_MS)};provider=${budget.counts.provider};semantic=${budget.counts.semantic};retrieval=${budget.counts.retrieval};phase=${retrievalPhaseStatus(retrievalSources)};src=${Object.entries(retrievalSources).map(([name, status]) => `${name}:${status}`).join(",") || "none"};dep=${wp1Dependencies(budget)};client=${budget.clientGone() ? "gone" : "open"}`;
+
     return createChatStreamResponse(async (emit) => {
       try {
         const result = await runVerifiedGeneration(
           generateReply,
           buildVerifierInput,
-          (outcome) => (reasoningScope.mode === "NONE" ? buildFallbackMessage(outcome) : scopedFallback(reasoningScope, boundaryLang)),
+          (outcome, findings, lastDraft) =>
+            (reasoningScope.mode === "NONE" ? salvageUnsourcedResearchClaims(lastDraft, findings, boundaryLang) : null)
+            ?? (reasoningScope.mode === "NONE" ? buildFallbackMessage(outcome) : scopedFallback(reasoningScope, boundaryLang)),
+          budget,
         );
 
         if (!result.replyText.trim()) {
@@ -5352,27 +6303,39 @@ export async function POST(
           },
         });
 
-        // post_turn_delta → reducer → persist v_n+2. Optional by design: never affects the reply.
-        if (phase2.finished) {
-          await commitPostTurn(coherenceSession, phase2.finished);
+        // post_turn_delta → reducer → persist v_n+2. Optional by design: never affects the reply. A client that left
+        // never receives this reply, so its state is not committed (H0 WP1 late-result suppression).
+        if (phase2.finished && !budget.clientGone()) {
+          await untilAborted(commitPostTurn(coherenceSession, phase2.finished), AbortSignal.timeout(POST_TURN_COMMIT_WAIT_MS), () => "skipped");
         }
 
+        const displayedCanonical = canonicalSourceItems(converged.text);
+        logToolEvent("DANTE_INTELLIGENCE", {
+          tool: "answerability",
+          stage: "SOURCE_LINKAGE",
+          fields: { retrieved: sources.length, canonicalCandidates: canonicalSourceItems().length, canonicalShown: displayedCanonical.length },
+        });
         emit({ type: "delta", text: converged.text });
         emit({
           type: "done",
           model: result.usedFallback ? "dante-core-verifier-fallback" : usedModel,
           insight: chatInsight,
-          sources,
+          // A clarification-only answer (no pick, no diagnosis) asserts nothing retrieved papers could back: condition-named
+          // studies beside it would read as a diagnosis. They stay in the trace counts, not on screen.
+          sources: [...(intelligenceBrief.recommendation.eligibility === "NEEDS_CLARIFICATION" ? sources.filter((source) => !isLiteratureSource(source)) : sources), ...displayedCanonical],
           actions: [],
           pendingConfirmation: null,
           toolTraceSummary: [
             persistenceTrace(coherenceSession),
             ...converged.phase2Trace,
             `phase1:branch=${result.usedFallback ? "FALLBACK" : "NORMAL_PROVIDER"};fp=${converged.fingerprint.slice(0, 12)};finalizer=1`,
+            ...(result.usedFallback ? [`verifier:fallback=${(result.failedCodes ?? []).join(",") || "unknown"}`] : []),
+            runtimeTrace(),
           ],
         });
       } catch (error: unknown) {
-        if (error instanceof Error && error.name === "AbortError") {
+        logToolEvent("DANTE_RUNTIME", { stage: "terminal", fields: { trace: runtimeTrace() } });
+        if (budget.clientGone()) {
           // Client cancelled (Stop button / navigation) — nothing was
           // ever emitted on this path before completion, so there is
           // nothing more to send or clean up.

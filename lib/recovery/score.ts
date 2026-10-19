@@ -9,7 +9,7 @@ import type {
 /**
  * Deterministic recovery scoring engine.
  *
- * This is the ONLY place a recovery score is calculated. Groq / Dante
+ * This is the ONLY place a recovery score is calculated. The AI coach
  * never invents or adjusts this number — it only explains it.
  */
 

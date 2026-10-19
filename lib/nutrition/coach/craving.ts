@@ -113,7 +113,7 @@ export { compareToOriginal, UNSAFE_CRAVING_CLAIMS } from "./claims"
 export function detectCravingKey(text: string): CravingKey | null {
   const lower = text.toLowerCase()
   if (/ice[ -]?cream|gelato|protein ice/.test(lower)) return "protein_ice_cream"
-  if (/(real|actual|regular|original).*(cereal|coco ?pops)/.test(lower)) return "real_cereal"
+  if (/\b(real|actual|regular|original)\b.*(cereal|coco ?pops)/.test(lower)) return "real_cereal"
   if (/cereal|coco ?pops|choco(late)? (crunch|pops)/.test(lower)) return "chocolate_cereal"
   return null
 }

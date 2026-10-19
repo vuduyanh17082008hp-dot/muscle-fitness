@@ -122,6 +122,20 @@ export function resolveStreamErrorContent(existingContent: string, _partial: boo
   return fallbackMessage;
 }
 
+/**
+ * H0 WP1 — TIMEOUT != FAILED EFFECT. What a CONFIRM/CANCEL reply proves about the write. A lost or 5xx reply (or a
+ * network error: `response === null`) says nothing about whether the write happened, and a refused cancel means the
+ * action was already handled: neither may be shown as "cancelled" or "nothing changed".
+ */
+export function resolveConfirmationOutcome(
+  intent: "confirm" | "cancel",
+  response: { status: number; ok?: boolean } | null,
+): "confirmed" | "cancelled" | "failed" | "unknown" {
+  if (!response) return "unknown";
+  if (response.ok === true) return intent === "cancel" ? "cancelled" : "confirmed";
+  return intent === "cancel" || response.status >= 500 || response.ok === undefined ? "unknown" : "failed";
+}
+
 function isChatStreamEvent(value: unknown): value is ChatStreamEvent {
   return (
     typeof value === "object" &&
@@ -143,10 +157,10 @@ export function createChatStreamResponse(
 ): Response {
   const encoder = new TextEncoder();
 
+  // H0 WP1: set once the response is finished OR the client cancelled it; a late event after that is dropped.
+  let closed = false;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      let closed = false;
-
       const emit = (event: ChatStreamEvent) => {
         if (closed) return;
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
@@ -155,9 +169,14 @@ export function createChatStreamResponse(
       try {
         await produce(emit);
       } finally {
-        closed = true;
-        controller.close();
+        if (!closed) {
+          closed = true;
+          controller.close();
+        }
       }
+    },
+    cancel() {
+      closed = true;
     },
   });
 

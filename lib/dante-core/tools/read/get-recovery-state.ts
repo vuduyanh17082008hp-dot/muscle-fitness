@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
+import { recoveryScoreForDisplay, recoverySpeech, type RecoverySpeech } from "@/lib/recovery/current-recovery";
 import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import type { DanteTool } from "@/lib/dante-core/tools/types";
 import { cached } from "@/lib/dante-core/tools/request-cache";
@@ -11,6 +12,7 @@ const inputSchema = z.object({}).strict();
 
 export type RecoveryStateToolOutput = {
   hasCheckinToday: boolean;
+  speech: RecoverySpeech;
   score: number | null;
   status: string | null;
   lowestDrivers: string[];
@@ -30,7 +32,7 @@ export type RecoveryStateToolOutput = {
  */
 export const getRecoveryStateTool: DanteTool<Record<string, never>, RecoveryStateToolOutput> = {
   name: "get_recovery_state",
-  description: "Get the user's today's recovery/readiness score, its lowest-scoring drivers, and current training-load state.",
+  description: "Get recovery freshness. score is today's check-in only. A STALE speech.line is historical and must not be called current.",
   inputSchema,
   mode: "read",
   risk: "low",
@@ -46,6 +48,8 @@ export const getRecoveryStateTool: DanteTool<Record<string, never>, RecoveryStat
         ok: true,
         data: {
           hasCheckinToday: false,
+          current: null,
+          speech: recoverySpeech(null),
           score: null,
           status: null,
           lowestDrivers: [],
@@ -60,7 +64,9 @@ export const getRecoveryStateTool: DanteTool<Record<string, never>, RecoveryStat
       ok: true,
       data: {
         hasCheckinToday: recovery.today !== null,
-        score: todayScoreResult.score,
+        current: recovery.current,
+        speech: recoverySpeech(recovery.current),
+        score: recoveryScoreForDisplay(recovery.current, todayScoreResult.score),
         status: todayScoreResult.status !== null ? RECOVERY_STATUS_LABEL[todayScoreResult.status] : null,
         lowestDrivers: todayScoreResult.drivers
           .filter((driver) => driver.available)

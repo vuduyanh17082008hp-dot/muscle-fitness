@@ -13,8 +13,21 @@ export function getRecoveryProposalSecret(): string | null {
   return secret
 }
 
+// The snapshot round-trips through jsonb, which reorders object keys, so every object level is
+// serialized with sorted keys. Signing and verifying must both go through this one function.
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`
+  }
+  return JSON.stringify(value ?? null)
+}
+
 export function canonicalProposalPayload(proposal: WorkoutAdjustmentProposal): string {
-  return JSON.stringify({
+  return canonicalJson({
     proposalId: proposal.proposalId,
     subjectRef: proposal.subjectRef,
     workoutRef: proposal.workoutRef,

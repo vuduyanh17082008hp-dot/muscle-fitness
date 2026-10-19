@@ -21,11 +21,11 @@ import type { TraceableDecision } from "@/lib/dante-core/types";
 
 import { DashboardHeader } from "@/components/dashboard/glass/dashboard-header";
 import { DailyActionHero } from "@/components/dashboard/daily-action-hero";
+import { loadPlannedDay } from "@/lib/training/planned-day";
 import { AthleteStateStrip } from "@/components/dashboard/athlete-state-strip";
 import { WhatMattersNow, type WhatMattersItem } from "@/components/dashboard/what-matters-now";
 import { NutritionOpportunity } from "@/components/dashboard/nutrition-opportunity";
 import { DanteDailyBrief } from "@/components/dashboard/dante-daily-brief";
-import { QuickCapture } from "@/components/dashboard/quick-capture";
 import { NewUserDashboard } from "@/components/dashboard/new-user-dashboard";
 import { MuscleIntelligenceCard } from "@/components/dashboard/glass/muscle-intelligence-card";
 import { RecentActivityCard } from "@/components/dashboard/glass/recent-activity-card";
@@ -131,6 +131,7 @@ export default async function DashboardPage() {
     athleteStateResult,
     recentWorkoutSessionsResult,
     weeklyNutritionTotalsResult,
+    plannedDayResult,
   ] = await Promise.allSettled([
     loadReadinessForUser(supabase, user.id),
     getOrBuildDailyIntelligence(supabase, user.id),
@@ -140,6 +141,7 @@ export default async function DashboardPage() {
     buildAthleteState(supabase, user.id, { now }),
     loadRecentWorkoutSessions(supabase, user.id, 5),
     loadWeeklyNutritionTotals(supabase, user.id, now, timeZone, 7),
+    loadPlannedDay(supabase, user.id, now, timeZone),
   ]);
 
   const readinessForUser = unwrap(readinessForUserResult, "loadReadinessForUser");
@@ -151,6 +153,7 @@ export default async function DashboardPage() {
     totals: computeDailyTotals([]),
   };
   const todaySession = unwrap(todaySessionResult, "loadTodaySession");
+  const plannedDay = unwrap(plannedDayResult, "loadPlannedDay");
   const athleteState: AthleteState | null = unwrap(athleteStateResult, "buildAthleteState");
   const recentWorkoutSessions = unwrap(recentWorkoutSessionsResult, "loadRecentWorkoutSessions") ?? [];
   const weeklyNutritionTotals = unwrap(weeklyNutritionTotalsResult, "loadWeeklyNutritionTotals") ?? [];
@@ -158,6 +161,7 @@ export default async function DashboardPage() {
   const recoveryContext = readinessForUser?.recoveryContext ?? null;
   const trainingContext = readinessForUser?.trainingContext ?? null;
   const nutritionPlan = nutritionContext?.plan ?? null;
+  const nutritionTargets = nutritionContext?.targets ?? null;
 
   /* =======================================================
      DISPLAY NAME / GREETING
@@ -206,7 +210,7 @@ export default async function DashboardPage() {
     recoveryScoreToday: recoveryContext?.todayScoreResult.score ?? null,
     recoverySevenDayAverage: recoveryContext?.averages7Days.score ?? null,
     weeklyNutritionTotals,
-    proteinTargetG: nutritionPlan?.target.protein ?? null,
+    proteinTargetG: nutritionTargets?.protein ?? null,
     currentWeightKg: athleteState?.profile.weightKg ?? null,
   });
 
@@ -242,13 +246,13 @@ export default async function DashboardPage() {
     });
   }
 
-  if (nutritionPlan?.target.protein) {
-    const proteinRemaining = Math.max(0, nutritionPlan.target.protein - Math.round(foodLog.totals.protein));
+  if (nutritionTargets?.protein) {
+    const proteinRemaining = Math.max(0, nutritionTargets.protein - Math.round(foodLog.totals.protein));
     if (proteinRemaining > 0 && foodLog.totals.protein > 0) {
       whatMattersItems.push({
         id: "protein-gap",
         title: `${proteinRemaining}g protein remaining today`,
-        subtitle: `Logged ${Math.round(foodLog.totals.protein)}g / ${nutritionPlan.target.protein}g target`,
+        subtitle: `Logged ${Math.round(foodLog.totals.protein)}g / ${nutritionTargets.protein}g target`,
         href: "/dashboard/nutrition",
         urgency: "normal",
       });
@@ -284,22 +288,22 @@ export default async function DashboardPage() {
             displayName={displayName}
             hasProfileGoal={Boolean(athleteState?.profile.goal)}
             hasWorkoutPlan={Boolean(todaySession || trainingContext?.hasAnyLoggedData)}
-            hasNutritionTarget={Boolean(nutritionPlan?.target.calories)}
+            hasNutritionTarget={Boolean(nutritionTargets?.calories)}
           />
         </div>
       ) : (
         <div className="mt-5 flex flex-col gap-5 sm:mt-6 sm:gap-6">
           {/* 1. Daily Action Hero (Dominant Above-The-Fold Action) */}
-          <DailyActionHero todaySession={todaySession} hasCheckinToday={Boolean(recoveryContext?.today)} />
+          <DailyActionHero todaySession={todaySession} plannedDay={plannedDay} hasCheckinToday={Boolean(recoveryContext?.today)} />
 
           {/* 2. Athlete State Strip (Compact Horizontal Row) */}
           <AthleteStateStrip
             recoveryScore={recoveryContext?.todayScoreResult.score ?? null}
             recoveryStatus={recoveryContext?.todayScoreResult.status ?? null}
             caloriesConsumed={foodLog.totals.calories}
-            caloriesTarget={nutritionPlan?.target.calories ?? null}
+            caloriesTarget={nutritionTargets?.calories ?? null}
             proteinConsumed={foodLog.totals.protein}
-            proteinTarget={nutritionPlan?.target.protein ?? null}
+            proteinTarget={nutritionTargets?.protein ?? null}
             weightKg={athleteState?.profile.weightKg ?? null}
           />
 
@@ -328,9 +332,6 @@ export default async function DashboardPage() {
           </div>
         </div>
       )}
-
-      {/* Universal Quiet Quick Capture (+) */}
-      <QuickCapture />
     </>
   );
 }

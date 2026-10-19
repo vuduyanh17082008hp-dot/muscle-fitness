@@ -7,6 +7,7 @@ import { addDaysIso } from "@/lib/nutrition/date-utils"
 import { computeRecoveryScore } from "@/lib/recovery/score"
 import { computeTrainingLoad, type RecentSessionRow } from "@/lib/recovery/training-load"
 import { toCheckinInput } from "@/lib/recovery/recovery-state"
+import { resolveCurrentRecovery, type CurrentRecovery } from "@/lib/recovery/current-recovery"
 import type {
   RecoveryCheckinRow,
   RecoveryScoreResult,
@@ -34,6 +35,12 @@ export type RecoveryAverages = {
 }
 
 export type RecoveryContext = {
+  /**
+   * CURRENT / STALE / MISSING for the user's local calendar day
+   * (lib/recovery/current-recovery.ts). Use this — not "the latest row" —
+   * whenever a surface needs to say what recovery is right now.
+   */
+  current: CurrentRecovery
   today: RecoveryCheckinRow | null
   todayScoreResult: RecoveryScoreResult
   trend30Days: RecoveryTrendPoint[]
@@ -162,6 +169,11 @@ export async function loadRecoveryContext(
   )
 
   return {
+    current: resolveCurrentRecovery({
+      localDate,
+      checkins,
+      todayScore: todayScoreResult.score,
+    }),
     today,
     todayScoreResult,
     trend30Days,

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * OpenAI migration (Dante's only LLM provider — no Groq/Gemini
+ * OpenAI migration (Dante's only LLM provider with no alternate
  * fallback). Each test re-imports the module after `vi.resetModules()`
  * so the module-level cached client never leaks between tests that
  * intentionally vary OPENAI_API_KEY.
@@ -170,7 +170,7 @@ describe("getOpenAiModel", () => {
 });
 
 describe("callDanteLlm", () => {
-  it("returns null without calling OpenAI when OPENAI_API_KEY is missing (no Groq fallback)", async () => {
+  it("returns null without calling OpenAI when OPENAI_API_KEY is missing", async () => {
     const { callDanteLlm } = await import("@/lib/dante-core/llm-client");
     const result = await callDanteLlm("hello");
 

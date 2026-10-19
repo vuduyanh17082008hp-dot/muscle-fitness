@@ -37,7 +37,7 @@ export function contextualPromptForPath(pathname: string): string {
   return "Ask Dante anything…";
 }
 
-export function FloatingDante() {
+export function FloatingDante({ className }: { className?: string } = {}) {
   const [open, setOpen] = useState(false);
   const [everOpened, setEverOpened] = useState(false);
   const pathname = usePathname();
@@ -71,11 +71,11 @@ export function FloatingDante() {
         aria-label={open ? "Close Dante" : "Ask Dante"}
         aria-expanded={open}
         className={cn(
-          "group fixed bottom-20 right-4 z-40 grid size-14 place-items-center rounded-full",
+          "group pointer-events-auto relative grid size-14 place-items-center rounded-full",
           "border border-mf-glass-dante/30 bg-mf-glass-brand text-mf-glass-brand-ink",
           "shadow-[0_8px_30px_rgba(0,0,0,0.35)] transition duration-200 hover:-translate-y-0.5",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mf-glass-brand",
-          "lg:bottom-6 lg:right-6",
+          className,
         )}
       >
         <DanteMascot size="xs" state="idle" />

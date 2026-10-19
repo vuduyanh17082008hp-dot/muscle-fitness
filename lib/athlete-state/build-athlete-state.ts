@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
+import { recoveryScoreForDisplay } from "@/lib/recovery/current-recovery";
 import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import {
   computeMuscleRecommendation,
@@ -378,7 +379,8 @@ export async function buildAthleteState(
 
     recovery: {
       available: recoveryContext !== null,
-      score: recoveryContext?.todayScoreResult.score ?? null,
+      current: recoveryContext?.current ?? null,
+      score: recoveryScoreForDisplay(recoveryContext?.current ?? null, recoveryContext?.todayScoreResult.score ?? null),
       status:
         recoveryContext?.todayScoreResult.status !== null &&
         recoveryContext?.todayScoreResult.status !== undefined
@@ -396,10 +398,10 @@ export async function buildAthleteState(
 
     nutrition: {
       available: nutritionContext.plan !== null,
-      calorieTarget: nutritionContext.plan?.target.calories ?? null,
-      proteinTargetGrams: nutritionContext.plan?.target.protein ?? null,
-      carbsTargetGrams: nutritionContext.plan?.target.carbs ?? null,
-      fatTargetGrams: nutritionContext.plan?.target.fat ?? null,
+      calorieTarget: nutritionContext.targets.calories,
+      proteinTargetGrams: nutritionContext.targets.protein,
+      carbsTargetGrams: nutritionContext.targets.carbs,
+      fatTargetGrams: nutritionContext.targets.fat,
     },
 
     setVision: {

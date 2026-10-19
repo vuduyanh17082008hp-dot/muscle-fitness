@@ -54,6 +54,7 @@ function athleteState(overrides: {
     },
     training: { hasAnyLoggedData: true, muscles: [], exerciseNames: {} },
     recovery: {
+      current: null,
       available: true,
       score: 80,
       status: "Good",

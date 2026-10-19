@@ -7,7 +7,7 @@ import type {
 } from "openai/resources/chat/completions";
 
 /**
- * Dante's LLM client — OpenAI is the only provider (no Groq/Gemini
+ * Dante's LLM client — OpenAI is the only provider, with no fallback
  * fallback chain; a missing/failing key degrades to each caller's own
  * deterministic text, never a second provider). Server-only, lazily
  * initialized: reading OPENAI_API_KEY happens on first actual
@@ -51,13 +51,16 @@ export function supportsReasoningEffort(model: string): boolean {
  * request body so an unsupported field is cleanly omitted rather than
  * sent as `undefined`.
  */
-function chatCompletionTuning(
+export function chatCompletionTuning(
   model: string,
   standardTemperature: number,
+  options: { functionTools?: boolean } = {},
 ): { reasoning_effort: ReasoningEffort } | { temperature: number } {
-  return supportsReasoningEffort(model)
-    ? { reasoning_effort: getReasoningEffort() }
-    : { temperature: standardTemperature };
+  // H0 cluster C: /v1/chat/completions rejects function tools with any reasoning_effort except "none" on gpt-5.x
+  // ("Function tools with reasoning_effort are not supported … set reasoning_effort to 'none'", confirmed live 2026-10-16).
+  // Every agent tool round failed with that 400 and the route fell back to prose that narrated actions it never took.
+  if (supportsReasoningEffort(model)) return { reasoning_effort: options.functionTools ? "none" : getReasoningEffort() };
+  return { temperature: standardTemperature };
 }
 
 function getOpenAiKey(): string {
@@ -82,7 +85,8 @@ function getOpenAiClient(): OpenAI {
     return cachedClient;
   }
 
-  cachedClient = new OpenAI({ apiKey: getOpenAiKey() });
+  // H0 WP1: one SDK transport retry (default is 2). Each call is also capped by its own 20s abort, which covers retries.
+  cachedClient = new OpenAI({ apiKey: getOpenAiKey(), maxRetries: 1 });
   return cachedClient;
 }
 
@@ -119,15 +123,21 @@ export type LlmResult = { reply: string; model: string; provider: "openai" };
  * ONLY fallback behavior in this module; there is no second LLM
  * provider to retry against.
  */
-export async function callDanteLlm(prompt: string): Promise<LlmResult | null> {
+/**
+ * `signal` (H0 WP1): the caller's turn signal. When given, the request also aborts with it, and the SDK's own retry is
+ * off so ONE budgeted provider attempt is ONE HTTP request.
+ */
+export async function callDanteLlm(prompt: string, options: { signal?: AbortSignal } = {}): Promise<LlmResult | null> {
   if (!isOpenAiConfigured()) {
     console.error("[DANTE CORE LLM] OPENAI_API_KEY is not configured");
     return null;
   }
+  if (options.signal?.aborted) return null;
 
   const model = getOpenAiModel();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
+  const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
 
   try {
     const client = getOpenAiClient();
@@ -138,7 +148,7 @@ export async function callDanteLlm(prompt: string): Promise<LlmResult | null> {
         max_completion_tokens: 1024,
         ...chatCompletionTuning(model, 0.3),
       },
-      { signal: controller.signal },
+      options.signal ? { signal, maxRetries: 0 } : { signal },
     );
 
     const reply = response.choices[0]?.message?.content?.trim();
@@ -205,10 +215,15 @@ function parseToolCallArguments(raw: string): unknown {
 export async function callDanteAgentTurn(
   messages: DanteChatMessage[],
   tools: DanteToolSpec[],
+  /** H0 WP1: the turn's signal (client disconnect / deadline) narrows the per-call 20s abort. */
+  signal?: AbortSignal,
 ): Promise<DanteAgentTurnResult> {
   const model = getOpenAiModel();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
+  const onAbort = () => controller.abort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+  if (signal?.aborted) controller.abort();
 
   try {
     const client = getOpenAiClient();
@@ -217,7 +232,7 @@ export async function callDanteAgentTurn(
         model,
         messages: messages as ChatCompletionMessageParam[],
         max_completion_tokens: 1024,
-        ...chatCompletionTuning(model, 0.2),
+        ...chatCompletionTuning(model, 0.2, { functionTools: true }),
         tools: tools.map(
           (tool): ChatCompletionTool => ({
             type: "function",
@@ -254,6 +269,7 @@ export async function callDanteAgentTurn(
     throw error instanceof OpenAiProviderError ? error : toProviderError(error, model);
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 

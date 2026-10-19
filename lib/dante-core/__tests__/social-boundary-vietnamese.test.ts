@@ -65,4 +65,14 @@ describe("social boundary — Vietnamese coverage", () => {
     expect(fitnessVi.mode).toBe("NORMAL");
     expect(fitnessVi.derailmentStreak).toBe(0);
   });
+
+  // R1E.2b: diacritic folding made "ngủ" (sleep) read as "ngu" (stupid), so recovery statements were answered as self-insult.
+  it.each([
+    "Tôi ngủ rất tệ và hồi phục kém hôm nay. Nên tập thế nào?",
+    "Tôi ngủ tệ",
+    "Hôm qua tôi ngủ kém, hôm nay nên tập thế nào?",
+    "Mình ngủ không ngon, hồi phục thấp.",
+  ])("sleep statement is not an insult: %s", (message) => {
+    expect(evalMsg(message).mode).toBe("NORMAL");
+  });
 });

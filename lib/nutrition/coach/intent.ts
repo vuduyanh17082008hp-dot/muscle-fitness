@@ -16,11 +16,13 @@ export const SAFETY_REPLY =
   "One meal doesn't require compensation. We can adjust the rest of the day around your overall target — no skipping meals, no punishing workouts. If food or eating feels stressful or out of control, talking to a doctor or a registered dietitian is a good next step."
 
 export const TRAINING_REDIRECT =
-  "That's a training or recovery question, so it's one for Dante — I only work on nutrition and I can't change your workouts or recovery. Ask Dante in the AI Coach, and bring me back anything about meals, macros or cravings."
+  "That's a training or recovery question, so it's one for Dante — I only work on nutrition and I can't change your workouts or recovery. Ask Dante, and bring me back anything about meals, macros or cravings — including what to eat around that session."
 
 const DISORDERED = /\b(starv\w*|purg\w*|laxative\w*|make myself (throw|vomit|sick)|throw (it )?up|vomit\w*|fast(ing)? for \d+\s*(days?|hours?)|skip (all|every) meals?|not eat (at all|for (days|a week)))\b/i
 const COMPENSATION = /\b(burn (it |this |that |these )?off|work (it |this |that )?off|make up for (it|what|that|eating)|earn (it|this|my|the|food|dinner|lunch|breakfast)|punish\w*|compensat\w*|cheat meal.*(run|exercise))\b/i
-const TRAINING = /\b(workout|exercise|training|program|routine|sets|reps|squat|deadlift|bench|injur\w*|pain|sore|soreness|recovery|rest day|cardio|stretch\w*|mobility)\b/i
+const SUPPLEMENT_ASK = /\b(?:supplements?|supps?|creatine|pre-?workout|bcaas?|eaas?|multivitamins?|vitamins?|omega-?3|fish oil|magnesium|zinc|ashwagandha)\b/i
+// H0 cluster D: day names of a split ("push day", "leg day") and programming words are training, Dante's domain.
+const TRAINING = /\b(workout|exercise|training|program|routine|sets|reps|squat|deadlift|bench|injur\w*|pain|sore|soreness|recovery|rest day|cardio|stretch\w*|mobility|(?:push|pull|leg|legs|upper|lower|arm|chest|back|shoulder) day|split|hypertrophy block|1rm|progressive overload|deload)\b/i
 const FOODISH = /\b(meal|food|eat|eating|calorie|calories|kcal|protein|carb|carbs|macro|macros|recipe|snack|breakfast|lunch|dinner|ingredient|cook|cooking|hungry|craving|craving)\b/i
 
 export type Intent =
@@ -74,6 +76,20 @@ export function resolveFoods(texts: string[]): { ids: string[]; unresolved: stri
   return { ids, unresolved }
 }
 
+/** A day-level calorie number is a proposal, not the current target. */
+export function dayLevelCalorieProposal(message: string): number | null {
+  const patterns = [
+    /\b(\d{3,4})\s*(?:kcal|k?cal(?:orie)?s?|calo)\b[^.?!]{0,24}\bday\b/i,
+    /\b(?:cut|target|budget)\b[^.?!]{0,32}?\b(\d{3,4})\s*(?:k?cals?|calories|calo)\b/i,
+  ]
+  for (const pattern of patterns) {
+    const match = message.match(pattern)
+    const raw = match?.[1] ?? match?.[2]
+    if (raw) return Number(raw)
+  }
+  return null
+}
+
 function calorieNumber(message: string): { value: number; strict: boolean } | null {
   const strict = message.match(/\b(?:under|below|less than|fewer than|no more than|at most|max(?:imum)?(?: of)?|within|<=?)\s*(\d{2,4})\s*(?:k?cal(?:ories)?)?/i)
   if (strict && /cal|kcal/i.test(message)) return { value: Number(strict[1]), strict: true }
@@ -96,7 +112,9 @@ export function parseCoachMessage(message: string, options: { hasDraft: boolean 
   const lower = text.toLowerCase()
 
   if (isSafetyMessage(text)) return { kind: "safety", reply: SAFETY_REPLY }
-  if (TRAINING.test(text) && !FOODISH.test(text)) return { kind: "redirect_training", reply: TRAINING_REDIRECT }
+  // H0 cluster D: a supplement question is shared knowledge (ICH-1: each coach reads it through its own lens), so "for
+  // recovery" in it never turns it into a training bounce — Gemma answers it food-first from the shared brief.
+  if (TRAINING.test(text) && !FOODISH.test(text) && !SUPPLEMENT_ASK.test(text)) return { kind: "redirect_training", reply: TRAINING_REDIRECT }
 
   if (/^(undo|go back|revert)\b/.test(lower)) return { kind: "op", op: { type: "undo" } }
   if (/^redo\b/.test(lower)) return { kind: "op", op: { type: "redo" } }
@@ -165,7 +183,7 @@ export function parseCoachMessage(message: string, options: { hasDraft: boolean 
   if (asksForMeal || namesFoodsForMeal || /\bbuild\b/.test(lower) || /^(high[- ]protein|meal under)/.test(lower)) {
     const overrides: ConstraintOverrides = {}
     const calories = calorieNumber(text)
-    if (calories) {
+    if (calories && dayLevelCalorieProposal(text) === null) {
       overrides.calorieCeiling = calories.value
       overrides.strict = calories.strict
     }

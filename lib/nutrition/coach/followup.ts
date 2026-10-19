@@ -140,7 +140,7 @@ export type FollowUpResolution = {
 
 export type StructuredBlock =
   | { type: "INGREDIENT_LIST"; mealName: string; items: Array<{ name: string; grams: number }> }
-  | { type: "MACRO_SUMMARY"; mealName: string; macros: MacroTotals; confidence: string }
+  | { type: "MACRO_SUMMARY"; mealName: string; macros: MacroTotals; confidence: string; mealId?: string; calculationId?: string }
   | { type: "OPTION_LIST"; options: Array<{ id: string; label: string; calories: number; protein: number }> }
   | { type: "MEAL_COMPARISON"; rows: Array<{ id: string; label: string; calories: number; protein: number; carbs: number; fat: number }> }
   | { type: "MODIFICATION_PROPOSAL"; mealName: string; changes: string[]; before: MacroTotals; after: MacroTotals; expiresAt: string }
@@ -283,7 +283,7 @@ const VI: Array<[RegExp, string]> = [
 export function normalizeMessage(raw: string): string {
   let text = raw.normalize("NFC").toLowerCase().replace(/[’‘`]/g, "'").replace(/\s+/g, " ").trim().replace(/[\s?!.,]+$/g, "")
   for (const [pattern, to] of VI) text = text.replace(pattern, to)
-  text = text.replace(/^(?:ok(?:ay)?|so|and|hey|yo|hmm+|um+|please|pls|then)[ ,]+/, "").replace(/[\s?!.,]+$/g, "").replace(/\s+/g, " ").trim()
+  text = text.replace(/^(?:(?:ok(?:ay)?|so|and|hey|yo|hmm+|um+|please|pls|then)[ ,]+)+/, "").replace(/[\s?!.,]+$/g, "").replace(/\s+/g, " ").trim()
   return text
 }
 
@@ -298,7 +298,7 @@ export const isAccept = (t: string) => AFFIRM.test(t)
 export const isReject = (t: string) => REJECT.test(t)
 
 const INGREDIENTS = /^(?:(?:show|give|tell) me )?(?:the |its )?(?:(?:detailed|full|complete|exact) )?(?:ingredients?(?: list)?|what(?:'s| is) in (?:it|this|that|the (?:meal|bowl))|what(?:'s| is) inside(?: it)?|what goes in (?:it|this))(?: list)?(?: please)?$/
-const MACROS = /^(?:(?:show|give|tell) me )?(?:the |its )?(?:(?:detailed|full) )?(?:macros?|macro breakdown|nutrition(?: facts| info)?|calories|kcal|protein|carbs?|fat|how many (?:calories|kcal)(?: (?:is|are) (?:in )?(?:it|this|that))?|how much (?:protein|carbs?|fat)(?: (?:is|are) (?:in )?(?:it|this|that))?|what(?:'s| are| is) (?:the |its )?(?:macros?|calories|protein))(?: please)?$/
+const MACROS = /^(?:(?:show|give|tell) me )?(?:the |its )?(?:(?:detailed|full) )?(?:(?:exactly|precisely) )?(?:how (?:many|much) (?:(?:grams? of )?(?:calories|kcal|protein|carbs?|fat)(?:,? and |, | and )?)+(?: (?:is|are) (?:in )?(?:it|this|that|there))?|macros?|macro breakdown|nutrition(?: facts| info)?|calories|kcal|protein|carbs?|fat|how many (?:calories|kcal)(?: (?:is|are) (?:in )?(?:it|this|that))?|how much (?:protein|carbs?|fat)(?: (?:is|are) (?:in )?(?:it|this|that))?|what(?:'s| are| is) (?:the |its )?(?:macros?|calories|protein))(?: please)?$/
 const PORTIONS = /^(?:how much|how many (?:grams|g) of|what(?:'s| is) the (?:portion|amount|quantity) of|portion of) ([a-z]+(?: [a-z]+){0,1})(?: (?:is|are) (?:there|in (?:it|this|that)))?(?: in (?:it|this|that))?$/
 const NOT_A_PORTION_FOOD = /\b(?:should|per|day|week|do|did|can|i|eat|need|have|get|daily|each|every|meal|a|the|my|to|of|usually|normally|is|are|it|this|that)\b/
 const PORTIONS_ALL = /^(?:portions?|portion sizes?|how much of (?:each|everything)|amounts?|quantities)$/
@@ -331,6 +331,8 @@ const UNDO = /^(?:undo(?: that| this| it| the (?:last )?(?:change|proposal))?|go
 const ORIGINAL = /^(?:(?:actually,? )?(?:keep|go back to|revert to|restore) the (?:original|first|old)(?: one| version| meal)?|back to (?:the )?original|original (?:one|version))$/
 const CORRECT_MEANT = /^(?:no,? ?)?(?:i meant|i mean|i was talking about|i was asking about|meant|the one i meant is)(?: the)? ([a-z][a-z &-]{1,30}?)(?: one| meal)?$/
 const CORRECT_NOT = /^(?:no,? ?)?not (?:that|this) one(?:,? (?:the )?([a-z][a-z &-]{1,24}?)(?: one| meal)?)?$|^(?:no,? )?(?:the )?([a-z][a-z &-]{1,24}?) (?:one|bowl|plate|meal),? (?:not (?:that|this)(?: one)?)$|^wrong one$/
+
+const MEAL_SLOT_WORD = /^(?:the\s+|for\s+)?(?:breakfast|brunch|lunch|dinner|supper|snack)s?$/i
 
 type Fast = { intent: NutritionFollowUpIntent; args: FollowUpArgs }
 const fast = (intent: NutritionFollowUpIntent, args: FollowUpArgs = {}): Fast => ({ intent, args })
@@ -555,6 +557,9 @@ export function resolveTurn(input: TurnInput): TurnResolution {
 
   if (!fastHit) return { kind: "none" }
   const { intent, args } = fastHit
+  // N1.6.4: a correction can only revise a meal reference. With no meal to correct, or when it names a meal SLOT
+  // ("no, I meant dinner"), it is a correction of the conversation's understanding: orchestration handles it.
+  if (intent === "CORRECT_PREVIOUS_RESOLUTION" && (meals.length === 0 || (args.nameText && MEAL_SLOT_WORD.test(args.nameText) && matchMeals(args.nameText, meals).length === 0))) return { kind: "none" }
   if (TARGETLESS.has(intent)) {
     const target: TargetResolution = { kind: "clarify", candidates: [], reason: "no_context" }
     return { kind: "follow_up", resolution: { isFollowUp: true, referent: live?.referent ?? null, intent, responseMode: MODE_BY_INTENT[intent], confidence: "HIGH" }, intent, args, target, viaClarification: false }

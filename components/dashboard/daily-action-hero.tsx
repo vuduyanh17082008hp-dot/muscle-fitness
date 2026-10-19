@@ -1,13 +1,49 @@
 import Link from "next/link";
 import { Dumbbell, Play, CheckCircle2, Calendar, PlusCircle } from "lucide-react";
 import type { TodaySession } from "@/lib/training/load-today-session";
+import type { PlannedDay } from "@/lib/training/planned-day";
+import { startWorkoutAction } from "@/app/dashboard/workouts/actions";
 
 export type DailyActionHeroProps = {
   todaySession: TodaySession | null;
+  /** What the active plan says about today when no session row exists yet (null = no plan / unknown). */
+  plannedDay?: PlannedDay | null;
   hasCheckinToday?: boolean;
 };
 
-export function DailyActionHero({ todaySession }: DailyActionHeroProps) {
+export function DailyActionHero({ todaySession, plannedDay = null }: DailyActionHeroProps) {
+  // A plan day has no session row until it is started: offer it, with a 1-tap Start (start_workout creates or begins it).
+  if (!todaySession && plannedDay && plannedDay.kind !== "REST") {
+    return (
+      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-5 sm:p-7 shadow-lg">
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-mf-glass-brand" />
+              <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
+                {plannedDay.kind === "SCHEDULED" ? "Today's Training" : "Next In Your Plan"}
+              </p>
+            </div>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-mf-glass-text sm:text-3xl">{plannedDay.name}</h2>
+            <p className="mt-1 text-sm text-mf-glass-text-muted">
+              {plannedDay.exerciseCount} exercises · not started yet
+            </p>
+          </div>
+          <form action={startWorkoutAction}>
+            <input type="hidden" name="workout_day_id" value={plannedDay.dayId} />
+            <button
+              type="submit"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-5 py-2.5 text-sm font-bold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+            >
+              <Play className="size-4" />
+              Start Workout
+            </button>
+          </form>
+        </div>
+      </section>
+    );
+  }
+
   // Determine state
   if (!todaySession) {
     return (

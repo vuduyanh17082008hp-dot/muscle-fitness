@@ -95,7 +95,7 @@ If an external API fails:
 1. Continue the demo.
 2. Use local profile, workout, and demo-wearable features.
 3. Explain that external retrieval (USDA, Open Food Facts, PubMed,
-   Groq vision) is additive — the deterministic engines underneath
+   OpenAI vision) is additive — the deterministic engines underneath
    keep working without it.
 4. Never fake a source response, a benchmark number, or a "live"
    wearable connection that isn't real.

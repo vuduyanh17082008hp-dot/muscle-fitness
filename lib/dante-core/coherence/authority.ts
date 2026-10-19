@@ -106,7 +106,7 @@ export type AuthorityContext = {
   authoritative: AuthoritativeResponseState | null;
 };
 
-const MEDICAL_STOP_CATEGORIES = new Set(["chest_pain_cardiac", "fainting_dizziness", "neurological_symptoms", "severe_pain", "self_harm_crisis"]);
+const MEDICAL_STOP_CATEGORIES = new Set(["chest_pain_cardiac", "fainting_dizziness", "neurological_symptoms", "medical_red_flag", "severe_pain", "self_harm_crisis"]);
 const STOP_CONCEPTS = new Set(["CHEST_PAIN", "DIZZINESS", "FAINTING", "SHORTNESS_OF_BREATH", "NUMBNESS"]);
 const TRUSTED_PROVENANCE = new Set(["EXPLICIT_CURRENT_REPORT", "EXPLICIT_HISTORICAL_REPORT", "VERIFIED_TOOL_DATA"]);
 

@@ -7,6 +7,7 @@ import { scaleMacrosToGrams } from "@/lib/nutrition/food-log-calculator"
 import type { NormalizedFoodMacros } from "@/lib/nutrition/food-data/types"
 import type { EstimationConfidence, FoodLogSource, MealType } from "./types"
 import { isIdempotencyKey } from "./idempotency-key"
+import { isPlausiblePer100g, resolveFoodProvenance, type ResolvedFoodProvenance } from "./provenance"
 import { mapFoodLogRow, resolveLocalToday, type FoodLogRow } from "./load-food-log-context"
 import { emitEvent } from "@/lib/events/emit"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -47,6 +48,12 @@ export type CreateFoodLogInput = {
    * (finalize_food_log_action); the action id is the idempotency key.
    */
   finalizeActionId?: string
+
+  /**
+   * The profile was computed by server code from server-held data (e.g. a meal draft built from the ingredient table),
+   * so there is nothing to re-resolve. NEVER set from request data: the HTTP schema does not carry this field.
+   */
+  serverComputedProfile?: true
 }
 
 export type MutationResult<T> =
@@ -66,11 +73,8 @@ export async function createFoodLog(
     return { success: false, error: "Quantity must be a positive number of grams.", status: 400 }
   }
 
-  const macros = [input.per100g.calories, input.per100g.protein, input.per100g.carbs, input.per100g.fat]
-  const optionalMacros = [input.per100g.fiber, input.per100g.sugar, input.per100g.sodiumMg]
-  if (macros.some((value) => !Number.isFinite(value) || value < 0) ||
-      optionalMacros.some((value) => value != null && (!Number.isFinite(value) || value < 0))) {
-    return { success: false, error: "Nutrients must be finite, non-negative numbers.", status: 400 }
+  if (!isPlausiblePer100g(input.per100g)) {
+    return { success: false, error: "Nutrients must be finite, non-negative and physically possible per 100 g.", status: 400 }
   }
 
   const idempotencyKey = input.finalizeActionId ?? input.idempotencyKey ?? crypto.randomUUID()
@@ -83,7 +87,11 @@ export async function createFoodLog(
   if (!isSupportedFoodLogWriteDate(logDate, localToday)) {
     return { success: false, error: "Food can only be logged for today.", status: 400 }
   }
-  const scaled = scaleMacrosToGrams(input.per100g, input.quantityGrams)
+  // Trust boundary: source, per-100 g profile and estimation status are decided here, never taken from the request.
+  const provenance: ResolvedFoodProvenance = input.serverComputedProfile
+    ? { source: input.source, per100g: input.per100g, isEstimated: input.isEstimated ?? false, estimationConfidence: input.estimationConfidence ?? null, estimationReason: input.estimationReason ?? null, estimatedFrom: input.estimatedFrom ?? null, verified: true }
+    : await resolveFoodProvenance(input)
+  const scaled = scaleMacrosToGrams(provenance.per100g, input.quantityGrams)
   if (Object.values(scaled).some((value) => value !== null && !Number.isFinite(value))) {
     return { success: false, error: "Nutrient totals are out of range.", status: 400 }
   }
@@ -94,7 +102,7 @@ export async function createFoodLog(
     meal_type: input.mealType,
     food_name: input.foodName.trim(),
     brand: input.brand ?? null,
-    source: input.source,
+    source: provenance.source,
     source_id: input.sourceId ?? null,
     barcode: input.barcode ?? null,
     quantity_grams: input.quantityGrams,
@@ -105,10 +113,10 @@ export async function createFoodLog(
     carbs_g: scaled.carbs,
     fat_g: scaled.fat,
     fiber_g: scaled.fiber,
-    is_estimated: input.isEstimated ?? false,
-    estimation_confidence: input.estimationConfidence ?? null,
-    estimation_reason: input.estimationReason ?? null,
-    estimated_from: input.estimatedFrom ?? null,
+    is_estimated: provenance.isEstimated,
+    estimation_confidence: provenance.estimationConfidence,
+    estimation_reason: provenance.estimationReason,
+    estimated_from: provenance.estimatedFrom,
     idempotency_key: idempotencyKey,
   }
 

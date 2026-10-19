@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context"
 import { buildTodayAdjustment } from "@/lib/recovery/today-adjustment"
-import { persistWorkoutProposal } from "@/lib/recovery/supabase-apply"
+import { hasAppliedAdjustment, persistWorkoutProposal } from "@/lib/recovery/supabase-apply"
 import { createRecoveryAdminClient } from "@/lib/supabase/admin"
 import { proposalMutatesWorkout } from "@/lib/recovery/proposal"
 import { loadTodaySession } from "@/lib/training/load-today-session"
@@ -31,7 +31,9 @@ export async function GET() {
       recovery,
       session,
     })
-    if (proposalMutatesWorkout(adjustment.proposal)) {
+    // One adjustment per session: once applied, no further (stacking) proposal is issued.
+    const alreadyApplied = session ? (await hasAppliedAdjustment(supabase, user.id, session.id)) === true : false
+    if (!alreadyApplied && proposalMutatesWorkout(adjustment.proposal)) {
       const stored = await persistWorkoutProposal(createRecoveryAdminClient(), adjustment.proposal)
       if (!stored.ok) {
         return NextResponse.json(
@@ -47,6 +49,7 @@ export async function GET() {
       proposal: adjustment.proposal,
       insight: adjustment.insight,
       hasCheckin: recovery.today !== null,
+      alreadyApplied,
     })
   } catch (error) {
     console.error("[RECOVERY ADJUSTMENT] generate failed", error)

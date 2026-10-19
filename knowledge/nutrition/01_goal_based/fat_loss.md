@@ -9,7 +9,7 @@ authority: mf_curated
 confidence: curated
 risk: moderate
 locale: global
-updatedAt: 2026-10-09
+updatedAt: 2026-10-11
 ---
 
 # Fat Loss Strategy
@@ -27,16 +27,19 @@ Keep protein steady while energy is lower, because it helps protect lean mass an
 Add volume with vegetables, broth, fruit, or high-water foods. Use protein and fibre to stretch fullness. Slow, textured, and cold foods tend to feel more filling per bite.
 
 ## High-leverage substitutions
-Change the biggest calorie drivers first (oil, sugary sauces, large refined-starch portions, sweet drinks), and leave small contributors alone. One high-leverage change usually beats many fussy ones.
+Change the biggest calorie drivers first (oil, sugary sauces, large refined-starch portions, sweet drinks) by swapping, trimming or downsizing them, and leave small contributors alone. One high-leverage change usually beats many fussy ones.
 
 ## Preserve preferred foods where reasonable
-If the user loves a food, try a measured portion or a restructured version before telling them to drop it. A plan that removes everything enjoyable fails.
+A favourite food, a daily treat or a regular takeaway meal does not have to go while the user is losing fat. Try keeping it in a measured portion, a restructured version, or a smaller or less frequent serving before telling them to drop it, and let the rest of the day absorb it. Ask what the user wants to keep before proposing what to cut. A plan that removes everything enjoyable tends not to last.
 
 ## Avoid unnecessary restriction
 Do not cut whole food groups or suggest skipping meals as a default. Restriction beyond what the user asked for tends to backfire into overeating later.
 
 ## Handling an indulgent meal
 One indulgent meal is just a meal. Do not suggest punishing compensation (skipping the next meal, extra cardio as penance, fasting). Return to the normal plan at the next meal.
+
+## Ordering at restaurants and takeaways
+Most restaurant and takeaway orders can fit a fat-loss plan without being replaced. Decide the one thing worth keeping (the main dish, a sauce, the dessert) and adjust around it: choose a lighter cooking method over a deep-fried or creamy one, take the regular option rather than the large one, and treat sauces, sweet drinks and extra rice or bread as the flexible parts. This works for ramen, curry, pasta, sushi, café brunch and delivery. Skipping earlier meals to bank calories for a big restaurant meal usually backfires, so a normal day before it is the better default.
 
 ## Coach decision rules
 - Ask what the user wants to keep before proposing what to cut.

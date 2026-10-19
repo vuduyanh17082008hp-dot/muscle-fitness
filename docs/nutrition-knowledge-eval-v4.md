@@ -425,3 +425,26 @@ Pipeline: R3 candidate pool -> G3 semantic section rerank (raw query vs titled c
 - Wrong-doc sits at chunk positions #2/#3 (R3 .38/.41, R3-H .22/.34); 2nd-document usefulness is only .47. Section target is in the lexical top-12 pool for .865 of section cases (post-rerank Top-3 .775): ~.09 ranking loss, ~.135 candidate generation, 21% of targets have no local lexical evidence.
 - Latency (replay): R3 0.82 -> R3-H ~1.5 ms avg; query embedding live avg ~205 ms, 1 call/query, ~48 tokens (R3-G measurement); context unchanged (avg 1967 / max 2743 chars).
 - Verdict: not at public targets (wrong-doc .24 vs .10, Section T3 .78 vs .90). Corpus-granularity bottleneck likely. Do not tune further.
+
+## R3-I — corpus granularity & candidate-generation audit (DEV only, 2026-10-11)
+
+R3-H (weights, k=12, goal guard, gate, intent schema) is unchanged. Sealed v4 was not read or run. Tooling (test-only, DEV): `__tests__/eval/r3i-audit.print.test.ts` (`R3I=pool|miss|slots|filler|cases|eval|labels|queries|breakdown`), `r3i-record.live.test.ts` (`R3I_RECORD=1`, embeds only changed titled + body chunk texts).
+
+**Hard constraint found.** The frozen DEV/v1/v2/v3.1 labels pin 93 of 141 section ids (slug = heading), so headings of labelled sections cannot be renamed, split or merged without a benchmark id-migration. Only unlabelled sections, bodies, document metadata and new content were editable. Heading-level fixes for labelled sections are listed as follow-ups, not done.
+
+**Findings (baseline R3-H, DEV v4).** Target section in the floor-limited lexical pool: .865 (top-3 .690, top-6 .810, top-12 .875). 27 section misses: 14 no lexical/metadata evidence reaching `minScore` (A), 7 Vietnamese/mixed with no concept (D), 3 pool cap (E), 2 relative floor (I), 1 metadata gate (B). Wrong-doc slots: 254 across 4 positions (#1 .162 #2 .218 #3 .342 #4 .593); 205 (81%) were filler after every required document was already present, 49 had the required document absent from the pool; 86 of the filler slots displaced a higher-scored acceptable chunk (selector penalties/cap), 168 had no better acceptable chunk (corpus-limited). Top slot thieves were makeover/craving boilerplate (`fried_chicken::high-leverage-strategies`, `cereal::preserve-high-value-sensory-features`, ...) and meat "cut" sections matching the goal word "cut".
+
+**Shipped (all body/new-section edits; no id of a labelled section changed).**
+1. "cut" as a meat word -> "piece/meat/versions" in hawker, Vietnamese and fried-chicken bodies (polysemy collision with the goal word).
+2. `fat_loss::ordering-at-restaurants-and-takeaways` (new): cross-cuisine eating-out strategy for ramen/curry/pasta/sushi/café/delivery, where only hawker/Vietnamese sections existed.
+3. `fat_loss::preserve-preferred-foods-where-reasonable` body in user-facing words (5 DEV targets, 0 retrievals before).
+4. Vietnamese dish names in Vietnamese script (phở, bún bò Huế, cơm tấm, gỏi cuốn, chả giò) in the existing sections (diacritics are not folded by `normalize.ts`; a dictionary was not added).
+5. `core.basics::energy-balance-as-a-planning-framework` gains the maintenance sentence; `uncertainty::restaurant-and-hawker-uncertainty`, `flavor_hacks::salt`, `texture_hacks::volume`, `fat_loss::high-leverage-substitutions` bodies use the user-facing words (restaurant/takeaway, sodium, bigger plate, swap/trim).
+
+**Tried and rejected on DEV (do not repeat).** Removing `sensoryTargets` from the three makeover docs (neutral). Folding all "Core goal" sections into the doc intro (cuisine R@3 .825 -> .775: they carry document identity). A stand-alone cross-cuisine `eating_out` document (R@3 -1.3 pt, wrong-doc +0.8 pt, 17 DEV cases got it as a wrong document because frozen labels cannot credit a new document; the same knowledge as one goal-document section works). Separate basics sections for maintenance / meal frequency / late-day gap (no measurable gain, small R@1/R@3 cost). Deleting the unlabelled `fast_food::identify-what-the-user-actually-wants` (R@3 -0.5, secT3 -1.0).
+
+**Fragility note.** Adding words changes corpus idf: a 0.29 vs 0.30 `minScore` knife-edge flipped a multi-document case (`d4-md11`) when the word "size" was added to a new section. Check `Coverage@4` and the R3-H tests after every wording change.
+
+**Result (DEV v4, same gate recordings).** R@1 .719 -> .756, R@3 .885 -> .903, e2e R@3 .853 -> .871, wrong-doc .240 -> .218, Section T1 .535 -> .555, T3 .780 -> .800, wrong-section .313 -> .311, Coverage@4 .773 / full .545 (unchanged). Four-suite average: R@3 .903 -> .917, wrong-doc .159 -> .147, secT3 .899 -> .900. Public targets (wrong-doc .10, secT3 .90) are still not met.
+
+**R3-I-S (selector fill) — confirmed, not fixed.** The selector always fills 4 primaries (3.85 on average) and the 3-per-document cap with k=4 forces slot #4 to another document. After the corpus changes 199 of 239 wrong slots are still "required documents already present" filler; 88 of those displaced a better-scoring acceptable chunk. A relevance-gated fill (or fewer primaries when the next candidate is far below the leader) is the next lever and is a selector change.

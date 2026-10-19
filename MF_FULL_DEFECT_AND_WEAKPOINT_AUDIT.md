@@ -405,7 +405,7 @@ Documented fallback exists. Residual HIGH-CONFIDENCE RISK of rare “intermitten
 - `/auth/comfirmed` typo alias (now redirects to `/auth/confirm` — keep, don’t feature).
 - `/callback` duplicate of `/auth/callback` (same handler; documented).
 - Admin home copy “Phase 1 foundation is live” and prints `userId`.
-- `OPENAI_MODEL` alias `GROQ_MODEL` deprecated leftover in `lib/ai/client.ts`.
+- `OPENAI_MODEL` deprecated compatibility alias in `lib/ai/client.ts`.
 - Hero GSAP starts `.hero-line` at opacity 0 (first paint can be empty until JS).
 - Login/signup/chatbot clipping at 390px (prior live screenshots).
 - Pitch deck “clinically-safe” vs Responsible AI “no diagnosis”.
@@ -438,7 +438,7 @@ Documented fallback exists. Residual HIGH-CONFIDENCE RISK of rare “intermitten
 
 **Weak:** Public shell (P1-1). 401 → generic unavailable copy. No app rate limit. Authenticated quality **NOT TESTABLE** here. Do not classify live Dante as D without a logged-in turn.
 
-**SUSPECTED:** Timeout/retry storms under Groq/OpenAI load — mapped in code (`PROVIDER_RATE_LIMIT`) but not production-probed.
+**SUSPECTED:** Timeout/retry storms under provider load — mapped in code (`PROVIDER_RATE_LIMIT`) but not production-probed.
 
 ## 11. Recovery Findings
 
@@ -669,7 +669,7 @@ Food double-submit; apply transaction; emitEvent isolation; logDate bounds; chat
 Orbit numbers; meal-plan header; hide coming-soon nav; 390px clip; PLACEHOLDER-adjacent copy.
 
 **FIX PHASE E — technical debt**  
-Remove unused home Hero; `/api/food`; Groq alias; design-system publicity if unused.
+Remove unused home Hero; `/api/food`; obsolete provider alias; design-system publicity if unused.
 
 ## 33. Final Engineering Verdict
 

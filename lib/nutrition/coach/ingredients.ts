@@ -188,6 +188,10 @@ export function findIngredientByText(text: string): CoachIngredient | undefined 
   const aliases: Record<string, string> = {
     fish: "white_fish",
     cod: "white_fish",
+    "cod fish": "white_fish",
+    "cod fillet": "white_fish",
+    "atlantic cod": "white_fish",
+    "pacific cod": "white_fish",
     beef: "lean_beef",
     steak: "lean_beef",
     egg: "whole_eggs",

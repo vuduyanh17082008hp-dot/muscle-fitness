@@ -82,6 +82,10 @@ export async function GET(request: Request) {
  * server always recomputes calories/protein/carbs/fat from
  * `per100g` × `quantityGrams` itself (lib/nutrition/food-log-calculator.ts)
  * — client-submitted totals are never trusted or persisted directly.
+ * `source`, `per100g` and `isEstimated` are only a PROPOSAL: createFoodLog
+ * re-resolves usda / open-food-facts / local records by id and stores the
+ * server's profile, or stores the entry as user-provided + estimated
+ * (lib/nutrition/food-log/provenance.ts).
  */
 export async function POST(request: Request) {
   const supabase = await createClient()

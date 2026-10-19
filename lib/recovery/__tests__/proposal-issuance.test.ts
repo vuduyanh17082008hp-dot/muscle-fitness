@@ -62,6 +62,29 @@ describe("recovery proposal issuance", () => {
     expect(canonicalProposalPayload(issued)).not.toBe(canonicalProposalPayload(forged))
   })
 
+  it("verifies a snapshot whose nested keys were reordered by jsonb storage", () => {
+    const issued = proposal()
+    const mac = signRecoveryProposal(issued, SECRET)
+    // jsonb returns keys ordered by length then bytes: repMax, repMin, isSkipped, targetSets.
+    const reordered = JSON.parse(JSON.stringify(issued)) as WorkoutAdjustmentProposal
+    const change = reordered.changes[0]!
+    change.before = { repMax: 8, repMin: 6, isSkipped: false, targetSets: 4 } as typeof change.before
+    change.after = { repMax: 8, repMin: 6, isSkipped: false, targetSets: 3 } as typeof change.after
+    const shuffled = Object.fromEntries(Object.entries(reordered).reverse()) as unknown as WorkoutAdjustmentProposal
+    expect(canonicalProposalPayload(shuffled)).toBe(canonicalProposalPayload(issued))
+    expect(verifyRecoveryProposal(shuffled, mac, SECRET)).toBe(true)
+    change.after = { repMax: 8, repMin: 6, isSkipped: false, targetSets: 1 } as typeof change.after
+    expect(verifyRecoveryProposal(reordered, mac, SECRET)).toBe(false)
+  })
+
+  it("binds the mac to user, workout, plan version and expiry", () => {
+    const mac = signRecoveryProposal(proposal(), SECRET)
+    expect(verifyRecoveryProposal(proposal({ subjectRef: "user-b" }), mac, SECRET)).toBe(false)
+    expect(verifyRecoveryProposal(proposal({ workoutRef: "session-2" }), mac, SECRET)).toBe(false)
+    expect(verifyRecoveryProposal(proposal({ planVersionRef: "plan-v2" }), mac, SECRET)).toBe(false)
+    expect(verifyRecoveryProposal(proposal({ expiresAtRef: "2027-01-01T00:00:00.000Z" }), mac, SECRET)).toBe(false)
+  })
+
   it("rejects a missing or truncated mac", () => {
     const issued = proposal()
     expect(verifyRecoveryProposal(issued, undefined, SECRET)).toBe(false)

@@ -31,6 +31,7 @@ function buildAthleteState(overrides: Partial<AthleteState["recovery"]> = {}): A
     },
     training: { hasAnyLoggedData: true, muscles: [], exerciseNames: {} },
     recovery: {
+      current: null,
       available: true,
       score: 75,
       status: "good",

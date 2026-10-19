@@ -344,6 +344,8 @@ export type TurnAnalysis = {
   obligations: TurnObligation[];
   intents: ObligationIntent[];
   corrections: CorrectionCandidate[];
+  /** True only when the user corrected or restated a fact. A bare observation is not a correction. */
+  explicitCorrection: boolean;
   boundaries: BoundaryCandidate[];
   commitments: CommitmentCandidate[];
   safetyCandidates: SafetyCandidate;

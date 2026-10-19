@@ -12,6 +12,8 @@
  * decideDanteLanguage below for the exact priority order).
  */
 
+import { detectTurnLanguageRequest } from "@/lib/intelligence/performance-core/conversation-control";
+
 export type DanteLanguageSource =
   | "explicit_request"
   | "conversation"
@@ -33,25 +35,6 @@ export type DanteLanguageDecision = {
 const ENGLISH: Omit<DanteLanguageDecision, "source" | "confidence"> = { language: "en", languageName: "English" };
 const VIETNAMESE: Omit<DanteLanguageDecision, "source" | "confidence"> = { language: "vi", languageName: "Vietnamese" };
 
-/** A temporary request ("answer this in English") — matched narrowly so it doesn't fire on ordinary sentences that merely contain the word "English"/"Vietnamese". */
-const EXPLICIT_ENGLISH_REQUEST: RegExp[] = [
-  /\b(answer|reply|respond|explain|write|say)\b[^.!?]{0,20}\bin\s+english\b/i,
-  /\benglish\s+please\b/i,
-  /\bswitch\s+(back\s+)?to\s+english\b/i,
-  /\buse\s+english\b/i,
-  /\bactually,?\s+(answer|reply|respond)\b[^.!?]{0,20}\benglish\b/i,
-];
-
-const EXPLICIT_VIETNAMESE_REQUEST: RegExp[] = [
-  /tr[aả]\s*l[oờ][iì]\s*b[ằă]ng\s*ti[eế]ng\s*vi[eệ]t/i,
-  /\b(answer|reply|respond|explain|write|say)\b[^.!?]{0,20}\bin\s+vietnamese\b/i,
-  /\bvietnamese\s+please\b/i,
-  /chuy[eể]n\s*sang\s*ti[eế]ng\s*vi[eệ]t/i,
-  /quay\s*l[aạ]i\s*ti[eế]ng\s*vi[eệ]t/i,
-  /n[oó]i\s*ti[eế]ng\s*vi[eệ]t/i,
-  /d[uù]ng\s*ti[eế]ng\s*vi[eệ]t/i,
-];
-
 /** Precomposed Vietnamese-only vowels (Latin Extended Additional) — this range is not shared with French/Spanish/Portuguese/German, so a match here is a reliable, low-false-positive Vietnamese signal without a language-ID library. */
 const VIETNAMESE_SPECIFIC_VOWELS = /[Ạ-ỹ]/;
 /** ă/ơ/ư are Vietnamese-distinctive letters that live OUTSIDE the range above (Latin Extended-A/B). */
@@ -62,15 +45,11 @@ const VIETNAMESE_DISTINCTIVE_LETTERS = /[ăĂơƠưƯ]/;
  * English and locked the whole session to English. These words carry their tone marks and are not English words.
  */
 const VIETNAMESE_ACCENTED_WORDS =
-  /(?<![\p{L}])(?:tôi|bạn|của|không|và|nên|được|với|này|những|một|các|có|đang|sẽ|đã|tập|giờ|muốn|hôm nay|bao nhiêu|mấy|thế nào)(?![\p{L}])/iu;
+  /(?<![\p{L}])(?:tôi|bạn|của|không|và|nên|được|với|này|những|một|các|có|đang|sẽ|đã|tập|giờ|muốn|hôm nay|bao nhiêu|mấy|thế nào|là gì)(?![\p{L}])/iu;
 /** đ/Đ alone is common enough elsewhere (e.g. Croatian) that it's only used together with a common Vietnamese function word, never alone. */
 const VIETNAMESE_DJ = /[đĐ]/;
 const VIETNAMESE_COMMON_WORDS =
   /\b(t[oô]i|b[aạ]n|c[uủ]a|kh[oô]ng|v[aà]|l[aà]|h[oô]m\s*nay|n[eê]n|đư[oợ]c|cho|v[oớ]i|n[aà]y|nh[uữ]ng|m[oộ]t|c[aá]c|c[oó]|đang|s[eẽ]|đ[aã]|t[aậ]p|gi[oờ]|mu[oố]n)\b/i;
-
-function matchesAny(patterns: RegExp[], text: string): boolean {
-  return patterns.some((pattern) => pattern.test(text));
-}
 
 /**
  * Lightweight, deterministic Vietnamese detector. Diacritic ranges are
@@ -146,11 +125,10 @@ export type DecideDanteLanguageInput = {
 export function decideDanteLanguage(input: DecideDanteLanguageInput): DanteLanguageDecision {
   const { currentMessage, recentMessages = [], storedPreference = null } = input;
 
-  if (matchesAny(EXPLICIT_ENGLISH_REQUEST, currentMessage)) {
-    return { ...ENGLISH, source: "explicit_request", confidence: "high" };
-  }
-  if (matchesAny(EXPLICIT_VIETNAMESE_REQUEST, currentMessage)) {
-    return { ...VIETNAMESE, source: "explicit_request", confidence: "high" };
+  // ICH-1: the ONE explicit-language detector (pipeline-level conversation control). "in english bro" is a request.
+  const explicit = detectTurnLanguageRequest(currentMessage);
+  if (explicit) {
+    return { ...(explicit.language === "EN" ? ENGLISH : VIETNAMESE), source: "explicit_request", confidence: "high" };
   }
 
   if (currentMessage.trim().length > 0) {

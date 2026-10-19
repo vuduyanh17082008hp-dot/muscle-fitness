@@ -17,6 +17,8 @@ const RAW_CONTEXT_PATTERN = /(?:context capsule|decision object|tool authority|r
 const INTERNAL_ENUM_PATTERN = /\b(?:EMERGENCY_ACTION|URGENT_EVALUATION|STOP_ACTIVITY|HARD_BLOCK|CONFOUNDED)\b/;
 
 const SOFT_STOP_PATTERN = /(?:có lẽ|maybe|might want to|cân nhắc nghỉ một chút|consider resting a bit)/i;
+/** Hazard-specific care copy. It already meets the fence; do not replace it with a generic stop-the-set line. */
+const CARE_PATHWAY_PATTERN = /(?:talk to a doctor|dosing guidance|won't give doses|sẽ không đưa liều|life-threatening|hurt yourself|crisis line|emergency number|hướng dẫn liều|huong dan lieu|nhân viên y tế|nhan vien y te|làm hại bản thân|lam hai ban than)/i;
 
 function severityRank(surface: SafetySurfaceClass): number {
   switch (surface) {
@@ -82,8 +84,11 @@ export function applyHardSafetySurfaceContract(input: HardSafetySurfaceInput): H
   let response = scrubInternalJargon(input.draft, input.language).trim();
   let surfaceClass = requiredSurface;
 
+  const carePathway = CARE_PATHWAY_PATTERN.test(response)
+    && !HUMOR_PATTERN.test(response)
+    && !SOFT_STOP_PATTERN.test(response);
   const weak =
-    !/(?:dừng|stop|ngừng|ngưng|khẩn|urgent|emergency|cấp cứu|medical)/i.test(response)
+    (!carePathway && !/(?:dừng|stop|ngừng|ngưng|khẩn|urgent|emergency|cấp cứu|medical)/i.test(response))
     || SOFT_STOP_PATTERN.test(response)
     || HUMOR_PATTERN.test(response)
     || CONTINUE_TRAINING_PATTERN.test(response)
@@ -112,6 +117,7 @@ export function applyHardSafetySurfaceContract(input: HardSafetySurfaceInput): H
   let observed: SafetySurfaceClass = "INFO";
   if (/(?:cấp cứu|emergency)/i.test(response)) observed = "EMERGENCY_ACTION";
   else if (/(?:khẩn|urgent|medical evaluation|đánh giá y tế)/i.test(response)) observed = "URGENT_EVALUATION";
+  else if (carePathway) observed = "URGENT_EVALUATION";
   else if (/(?:dừng|stop|ngừng)/i.test(response)) observed = "STOP_ACTIVITY";
   else observed = "CAUTION";
 

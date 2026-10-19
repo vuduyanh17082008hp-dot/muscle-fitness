@@ -31,8 +31,8 @@ describe("buildKnownFactsFromContext", () => {
 
     expect(facts).toEqual(
       expect.arrayContaining([
-        { label: "calories", value: 1800 },
-        { label: "protein", value: 120 },
+        expect.objectContaining({ label: "calories", value: 1800 }),
+        expect.objectContaining({ label: "protein", value: 120 }),
       ]),
     );
   });

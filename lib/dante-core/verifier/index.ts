@@ -4,8 +4,11 @@ import {
   checkInventedAthleteMetric,
   checkSafetyAdherence,
   checkToolCapabilityClaim,
+  EVIDENCE_LANGUAGE,
 } from "@/lib/dante-core/verifier/checks";
 import type { VerifierFinding, VerifierInput, VerifierOutcome, VerifierResult } from "@/lib/dante-core/verifier/types";
+import type { TurnBudget } from "@/lib/dante-core/turn-budget";
+import { mapSentencesKeepingLists } from "@/lib/intelligence/performance-core/claim-revision";
 
 export type {
   VerifierCheckCode,
@@ -135,6 +138,8 @@ export type VerifiedGenerationResult = {
   /** Total calls made to `generate` (1 = passed on the first try). */
   attempts: number;
   usedFallback: boolean;
+  /** H0 cluster G: the finding codes that forced the fallback (observability; never shown to the user). */
+  failedCodes?: string[];
 };
 
 /**
@@ -151,20 +156,47 @@ export type VerifiedGenerationResult = {
  * (Dante P1: never one generic "couldn't verify" line regardless of
  * cause) rather than pretending every failure looks the same.
  */
+/**
+ * H0 cluster F/G — removal-only salvage. When the ONLY problem is research language with no retrieved source
+ * (citation_mismatch), the answer is not discarded: its "research shows…" sentences are removed and the rest is kept,
+ * with one line saying why. null = not salvageable (another finding, or too little would be left).
+ */
+export function salvageUnsourcedResearchClaims(draft: string | null, findings: VerifierFinding[], language: "en" | "vi"): string | null {
+  if (!draft || findings.length === 0 || findings.some((finding) => finding.code !== "citation_mismatch")) return null;
+  const kept = mapSentencesKeepingLists(draft, (sentence) => (EVIDENCE_LANGUAGE.test(sentence) ? null : sentence));
+  if (kept.split(/(?<=[.!?…])\s+/).filter((sentence) => sentence.trim().split(/\s+/).length >= 5).length < 2) return null;
+  const note = language === "vi"
+    ? "Mình chưa có nguồn đã kiểm chứng cho phần nghiên cứu ở đây, nên mình bỏ các khẳng định về nghiên cứu ra."
+    : "I don't have a checked source for the research side of this here, so I've left the study claims out.";
+  return `${kept}\n\n${note}`;
+}
+
 export async function runVerifiedGeneration(
   generate: (correctionBrief: string | null) => Promise<string>,
   buildInput: (replyText: string) => VerifierInput,
-  fallback: (outcome: VerifierOutcome, findings: VerifierFinding[]) => string,
+  /** `lastDraft` = the last generated text (null when every attempt failed to generate); used only for removal-only salvage. */
+  fallback: (outcome: VerifierOutcome, findings: VerifierFinding[], lastDraft: string | null) => string,
+  /**
+   * H0 WP1: the turn's shared budget. A regeneration starts only if the budget grants it; a client that went away
+   * ends the loop by rethrowing (nobody can receive a fallback), while a spent deadline ends it with the fallback.
+   */
+  budget?: Pick<TurnBudget, "tryStart" | "clientGone">,
 ): Promise<VerifiedGenerationResult> {
   let correctionBrief: string | null = null;
   let lastVerifier: VerifierResult | null = null;
+  let lastDraft: string | null = null;
+  let attempts = 0;
 
   for (let attempt = 1; attempt <= MAX_VERIFIER_RETRIES + 1; attempt += 1) {
     let replyText: string;
 
+    if (attempt > 1 && budget && !budget.tryStart("semantic")) break;
+    attempts = attempt;
+
     try {
       replyText = await generate(correctionBrief);
     } catch (error) {
+      if (budget?.clientGone()) throw error;
       // A provider hiccup on one attempt must not crash the whole
       // pipeline or be indistinguishable from a content problem — it
       // just consumes this attempt and the loop retries (or falls
@@ -182,6 +214,7 @@ export async function runVerifiedGeneration(
 
     const verifier = verifyFinalResponse(buildInput(replyText));
     lastVerifier = verifier;
+    lastDraft = replyText;
 
     if (verifier.passed) {
       return { replyText, verifier, attempts: attempt, usedFallback: false };
@@ -192,14 +225,15 @@ export async function runVerifiedGeneration(
 
   const outcome = lastVerifier?.outcome ?? "failed";
   const findings = lastVerifier?.findings ?? [];
-  const fallbackText = fallback(outcome, findings);
+  const fallbackText = fallback(outcome, findings, lastDraft);
 
   return {
     replyText: fallbackText,
     // Actually re-verified, not assumed — if the fallback itself ever
     // fails this, that is a real bug worth surfacing, not hidden.
     verifier: verifyFinalResponse(buildInput(fallbackText)),
-    attempts: MAX_VERIFIER_RETRIES + 1,
+    attempts,
     usedFallback: true,
+    failedCodes: findings.map((finding) => finding.code),
   };
 }

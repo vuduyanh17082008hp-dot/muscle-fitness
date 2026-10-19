@@ -302,6 +302,29 @@ and the retry/fallback loop are unit-tested in isolation, and so is the new
 (English, Vietnamese, an actual fabricated-number attempt) in a live
 session before being considered fully proven.
 
+## Turn runtime budget (H0 WP1)
+
+`lib/dante-core/turn-budget.ts` — one `TurnBudget` per `/api/chatbot` turn, created at request arrival from the
+`Request` itself (not `request.signal`: undici's `Request.signal` follows the caller through a WeakRef that only the
+Request keeps alive, so a streaming turn that already returned could silently lose a client disconnect).
+
+- One deadline (`TURN_DEADLINE_MS` 60s = the old per-stream timeout) and one `signal` (client disconnect OR
+  deadline). Every dependency signal derives from it, so no dependency outlives the turn.
+- Transport retries (`streamDanteReply` model fallback, agent rounds) count `provider` attempts (cap 4); semantic
+  repairs (verifier regeneration, integrity repair, per-obligation repair) count `semantic` (cap 3). No attempt
+  starts with less than `MIN_ATTEMPT_MS` (8s) left.
+- Retrieval: one phase signal (`RETRIEVAL_PHASE_MS` 10s, ≤ remaining turn). Each source ends `SUCCESS` /
+  `FAILED` / `TIMED_OUT` / `CANCELLED`; the phase is `PARTIAL` when some succeeded. Fetch timeouts stay attached
+  through the body read (the earlier cleared-at-headers timer let a stalled body hang a turn indefinitely).
+- Client gone: the verifier loop rethrows instead of producing a fallback, the agent failure does not fall through
+  to the legacy pipeline, and no post-turn coherence state is committed. A spent deadline ships the fallback.
+- Supabase reads cannot be cancelled: `untilAborted` stops waiting at the deadline and drops the late value; it never
+  claims the query was cancelled.
+- The `done` event's `toolTraceSummary` carries `wp1:ms=…;provider=…;semantic=…;retrieval=…;phase=…;src=…`.
+
+Tests: `__tests__/wp1-runtime.test.ts` (fault injection + counterfactuals), `__tests__/wp1-route-runtime.test.ts`
+(real route, real provider client, stalled real socket), `__tests__/wp1-runtime.live.test.ts` (opt-in `WP1_LIVE=1`).
+
 ## DecisionObject identity (new)
 
 `TraceableDecision<T>` (`lib/dante-core/types.ts`) gained two **optional**
@@ -316,10 +339,10 @@ backfilled this pass.
 
 - **Single provider, no fallback LLM**: as of the OpenAI migration, Dante has
   exactly one LLM provider (`OPENAI_API_KEY` / `OPENAI_MODEL`, default
-  `gpt-5.4-mini`, in `lib/dante-core/llm-client.ts`) — no Groq/Gemini
+  `gpt-5.4-mini`, in `lib/dante-core/llm-client.ts`) — no alternate
   fallback chain. `app/api/chatbot/route.ts`'s streaming path now delegates
   to `streamDanteLlmReply()` from that same module (the prior
-  Groq-fetch-duplicated-in-the-route problem this bullet used to describe no
+  duplicated provider-fetch problem this bullet used to describe no
   longer applies). If OpenAI is misconfigured or down, the main chat route
   surfaces an error to the client; only `explain.ts` and
   `daily-intelligence.ts` have a deterministic (non-LLM) text fallback.

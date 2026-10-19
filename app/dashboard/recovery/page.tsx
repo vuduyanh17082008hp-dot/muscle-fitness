@@ -20,7 +20,7 @@ import { TrainingRecoveryCard } from "@/components/recovery/training-recovery-ca
 import { MuscleReadinessPanel } from "@/components/dante/muscle-readiness-panel";
 import { RecoveryTrendsChart } from "@/components/recovery/recovery-trends-chart";
 import { RecoveryKnowledgeHub } from "@/components/recovery/recovery-knowledge-hub";
-import { persistWorkoutProposal } from "@/lib/recovery/supabase-apply";
+import { hasAppliedAdjustment, persistWorkoutProposal } from "@/lib/recovery/supabase-apply";
 import { createRecoveryAdminClient } from "@/lib/supabase/admin";
 import { proposalMutatesWorkout } from "@/lib/recovery/proposal";
 import { loadRadarContext } from "@/lib/health-radar/load-radar-context";
@@ -76,8 +76,11 @@ export default async function RecoveryPage() {
     recovery: context,
     session: todaySession,
   });
-  let proposalReady = true;
-  if (proposalMutatesWorkout(adjustment.proposal)) {
+  // Applied today = a mutation record exists for today's session (workout_before_ref is the session id). Then the session
+  // already carries the adjustment; issuing another proposal would stack a second cut on top of it.
+  const alreadyApplied = todaySession ? (await hasAppliedAdjustment(supabase, userId, todaySession.id)) === true : false;
+  let proposalReady = !alreadyApplied;
+  if (!alreadyApplied && proposalMutatesWorkout(adjustment.proposal)) {
     try {
       const stored = await persistWorkoutProposal(createRecoveryAdminClient(), adjustment.proposal);
       if (!stored.ok) {
@@ -128,6 +131,15 @@ export default async function RecoveryPage() {
         recommendation={recommendation}
       />
 
+      {context.current.status === "STALE" ? (
+        <p className="text-sm leading-6 text-mf-glass-text-muted">
+          No check-in logged today. Your last check-in was on{" "}
+          {context.current.recordedDate} (score {context.current.score}
+          /100) — that is not today&apos;s readiness. Check in below to
+          get today&apos;s score.
+        </p>
+      ) : null}
+
       {/* =================================================
           PERFORMANCE / RECOVERY RADAR
       ================================================= */}
@@ -147,6 +159,7 @@ export default async function RecoveryPage() {
         hasCheckin={context.today !== null}
         localDate={localDate}
         proposalReady={proposalReady}
+        alreadyApplied={alreadyApplied}
       />
 
       {/* =================================================

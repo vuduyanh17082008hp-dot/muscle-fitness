@@ -83,6 +83,25 @@ const topicSchema = z.object({
   sensoryTargets: z.array(z.enum(SENSORY_TARGETS)).max(7).optional(),
 })
 
+/** N1.6.4-P2R: the options the last reply actually showed. A client-echoed claim: malformed => ignored (never a 400), valid => re-validated against the conversation before use. */
+const presentedSnapshotSchema = z.object({
+  responseId: z.string().max(40),
+  owner: z.enum(["ENGINE", "CONVERSATION"]),
+  options: z.array(z.object({ index: z.number().int().min(1).max(5), entityId: z.string().max(100), label: z.string().max(200), sourceRef: z.string().max(80), provenance: z.literal("ASSISTANT_DISPLAYED_OPTION") })).min(2).max(5),
+  createdAtServer: z.string().max(40),
+  expiresAt: z.string().max(40),
+})
+/** N1.6.4-P2R: the blocking question the last reply asked and the request its answer resumes. Lives for exactly one answer. */
+const pendingClarificationSchema = z.object({
+  questionType: z.enum(["safety", "calculation", "option", "action", "none"]),
+  requestedField: z.enum(["calorieTarget", "quantity", "referent", "slot", "other"]),
+  question: z.string().max(300),
+  resumeIntent: z.string().max(200),
+  resumeTaskRef: z.enum(["remaining_calories", "request"]),
+  createdAtServer: z.string().max(40),
+  expiresAt: z.string().max(40),
+})
+
 /** What the client echoes back each turn (the draft itself travels as `activeDraft`). */
 export const conversationInputSchema = z.object({
   lastIntent: z.enum(NUTRITION_INTENTS).optional(),
@@ -90,9 +109,20 @@ export const conversationInputSchema = z.object({
   pendingMealBuild: z.object({ topic: z.string().max(80), approach: z.string().max(40).optional() }).nullish(),
   handoff: z.object({ offer: z.enum(OFFERABLE_OPS).nullable() }).nullish(),
   recentMessages: z.array(z.object({ role: z.enum(["user", "coach"]), text: z.string().max(800) })).max(6).optional(),
+  /** H0 cluster A: the user's own earlier messages (newest last) for the context working set only — disclosures outlive the 6-message window. */
+  priorUserTurns: z.array(z.string().max(400)).max(20).optional().catch(undefined),
   /** N1.5.6 ephemeral follow-up context (TTL-bound, server-validated, macros always recomputed). */
   followUp: followUpStateSchema.nullish(),
   signals: z.array(z.object({ kind: z.enum(["DISLIKE", "LIKE", "PREFERRED_TEXTURE", "CRAVING_PATTERN"]), value: z.string().max(60), strength: z.enum(["EXPLICIT", "INFERRED"]), scope: z.literal("SESSION"), context: z.string().max(40).optional() })).max(10).optional(),
+  /** N1.6.4: the user's own durable constraints for THIS conversation ("low_prep", "without:x"...). Session-scoped, shape-validated, never persisted. */
+  constraints: z.array(z.string().max(60)).max(10).optional(),
+  /** N1.6.4: the coach's own written options own the conversation until the engine produces a new meal. `item` = the option the user picked. */
+  focus: z.object({ owner: z.literal("CONVERSATION"), item: z.string().max(160).nullable() }).nullish(),
+  /** N1.6.4-P2R: undefined = a client that predates the snapshot (legacy ownership heuristic); null = nothing selectable is displayed. */
+  presented: presentedSnapshotSchema.nullable().optional().catch(undefined),
+  pending: pendingClarificationSchema.nullish().catch(undefined),
+  /** The food the last tool run resolved. Identity + basis only: a follow-up ("150 g of that") re-resolves it server-side, so no echoed number is ever used. */
+  foodReference: z.object({ canonicalName: z.string().max(160), provider: z.enum(["LOCAL_CANONICAL", "USDA_FDC"]), sourceId: z.string().max(80), basis: z.enum(["raw", "cooked", "prepared", "packaged", "unknown"]), base: z.string().max(60) }).nullish().catch(undefined),
 })
 export type ConversationInput = z.infer<typeof conversationInputSchema>
 

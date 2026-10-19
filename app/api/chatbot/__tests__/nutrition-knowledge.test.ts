@@ -33,6 +33,7 @@ import { POST } from "@/app/api/chatbot/route"
 import { callOpenAiWithFallback } from "@/lib/dante-core/openai/client"
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
+import { getCanonicalNutritionTargets } from "@/lib/nutrition/targets"
 import { createClient } from "@/lib/supabase/server"
 
 const USER = "00000000-0000-4000-8000-00000000000a"
@@ -53,6 +54,7 @@ beforeEach(() => {
       target: { calories: 2200, protein: 160, carbs: 250, fat: 70, proteinPerKg: 2, carbsPerKg: 3, fatPerKg: 1 },
       input: { goal: "fat_loss", allergies: [], excludedFoods: [], foodPreferences: ["chicken"] },
     },
+    targets: getCanonicalNutritionTargets({ planTarget: { calories: 2200, protein: 160, carbs: 250, fat: 70 } }),
     fitnessGoal: "fat_loss",
     cookingAbility: null,
   } as never)
@@ -131,6 +133,7 @@ const withProfile = (input: { allergies?: string[]; excludedFoods?: string[] }) 
       target: { calories: 2200, protein: 160, carbs: 250, fat: 70, proteinPerKg: 2, carbsPerKg: 3, fatPerKg: 1 },
       input: { goal: "fat_loss", allergies: [], excludedFoods: [], foodPreferences: [], ...input },
     },
+    targets: getCanonicalNutritionTargets({ planTarget: { calories: 2200, protein: 160, carbs: 250, fat: 70 } }),
     fitnessGoal: "fat_loss",
     cookingAbility: null,
   } as never)

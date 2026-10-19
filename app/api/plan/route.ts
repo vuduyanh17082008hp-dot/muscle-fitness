@@ -3,6 +3,7 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 
 export async function GET() {
   const supabase = await createClient();
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
   const { data: fitness, error: fitnessError } = await supabase
     .from("fitness_profiles")
     .select(
-      "goal, training_days, experience, calories_target, protein_target_g",
+      "goal, training_days, experience",
     )
     .eq("user_id", user.id)
     .maybeSingle();
@@ -72,6 +73,9 @@ export async function POST(request: Request) {
   if (fitnessError) {
     return NextResponse.json({ error: "Unable to load fitness profile." }, { status: 500 });
   }
+
+  // Canonical targets (lib/nutrition/targets.ts) — same as every other surface.
+  const targets = (await loadNutritionContext(supabase, user.id).catch(() => null))?.targets ?? null;
 
   const goal =
     parsed.data.goal ||
@@ -85,8 +89,8 @@ export async function POST(request: Request) {
         "Personalised planning should be created through /dashboard/workouts using your real profile data.",
       trainingDays: fitness?.training_days ?? null,
       experience: fitness?.experience ?? null,
-      caloriesTarget: fitness?.calories_target ?? null,
-      proteinTarget: fitness?.protein_target_g ?? null,
+      caloriesTarget: targets?.calories ?? null,
+      proteinTarget: targets?.protein ?? null,
       disclaimer:
         "This endpoint no longer returns fake sample workouts as if they belonged to you.",
     },

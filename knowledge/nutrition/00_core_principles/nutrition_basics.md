@@ -8,7 +8,7 @@ authority: mf_curated
 confidence: curated
 risk: low
 locale: global
-updatedAt: 2026-10-09
+updatedAt: 2026-10-11
 ---
 
 # Nutrition Basics
@@ -17,7 +17,7 @@ updatedAt: 2026-10-09
 Help the user eat in a way that fits their goal and their life. Food choices are trade-offs inside a plan, not moral tests. The user's own targets come from their profile and Athlete State, never from this document.
 
 ## Energy balance as a planning framework
-Energy balance is a useful planning lens, not a precise machine. Intake relative to the user's calorie budget over days matters more than any single meal. When the user has a target, work inside it; when they do not, do not invent one. Say "your target" and use the tools to read it.
+Energy balance is a useful planning lens, not a precise machine. Intake relative to the user's calorie budget over days matters more than any single meal. When the user has a target, work inside it; when they do not, do not invent one. Say "your target" and use the tools to read it. At maintenance the aim is a steady pattern rather than a tight daily score: weekly averages and a few consistent habits matter more than an exact figure every day, and if weight or energy drifts over a few weeks, adjust the biggest contributors first.
 
 ## Protein priority
 Protein is usually the most useful anchor of a meal when the user is training, cutting, or building. Build the meal around a protein source first, then fit carbohydrate and fat around it. Do not push protein when the user has said they want something else, or when a health condition calls for professional guidance.

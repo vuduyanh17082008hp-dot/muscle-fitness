@@ -78,7 +78,8 @@ function describeSignal(signal: RadarSignal, unit: string): string {
         ? "below"
         : "at";
 
-  return `${label} is ${magnitude}${unit} ${trendWord} your usual ${deviation.baseline}${unit} (currently ${deviation.current}${unit}).`;
+  const r = (n: number) => Math.round(n * 10) / 10;
+  return `${label} is ${r(magnitude)}${unit} ${trendWord} your usual ${r(deviation.baseline)}${unit} (currently ${r(deviation.current)}${unit}).`;
 }
 
 export function buildRecoveryRadar(input: RecoveryRadarInput): TraceableDecision<RecoveryRadarResult> {

@@ -29,6 +29,7 @@ import { getDanteTool, DANTE_TOOLS } from "@/lib/dante-core/tools/registry"
 import { getCoachMode, handleNutritionCoachChat, NUTRITION_COACH_TOOLS } from "@/lib/nutrition/coach/chat"
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
+import { getCanonicalNutritionTargets } from "@/lib/nutrition/targets"
 import { createClient } from "@/lib/supabase/server"
 
 const USER_A = "00000000-0000-4000-8000-00000000000a"
@@ -50,6 +51,7 @@ function plan(userId: string) {
       target: { calories: isB ? 3000 : 2200, protein: isB ? 200 : 160, carbs: 250, fat: 70, proteinPerKg: 2, carbsPerKg: 3, fatPerKg: 1 },
       input: { goal: "fat_loss", allergies: isB ? ["dairy"] : [], excludedFoods: isB ? [] : ["tofu"], foodPreferences: ["chicken"] },
     },
+    targets: getCanonicalNutritionTargets({ planTarget: { calories: isB ? 3000 : 2200, protein: isB ? 200 : 160, carbs: 250, fat: 70 } }),
     fitnessGoal: "fat_loss",
     cookingAbility: null,
   }
@@ -193,6 +195,21 @@ describe("scope and safety", () => {
     expect(callOpenAiWithFallback).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ["tôi muốn đi tập nhưng buồn ngủ quá, nên đi ko bạn", /Buồn ngủ là một tín hiệu thật/],
+    ["I'm really sleepy but want to train. Should I go?", /Feeling sleepy is a real readiness signal/],
+  ])("defers a train/rest decision to Dante without a data load or model call: %s", async (message, ack) => {
+    const response = await post({ message, coachMode: "nutrition" })
+    const json = await response.json()
+    expect(json.route).toBe("defer_to_dante")
+    expect(json.reply).toMatch(ack)
+    expect(json.reply).toMatch(/Dante/)
+    // sleepy is not bored is not sad, and no generic gym-motivation fallback
+    expect(json.reply).not.toMatch(/chán|bored|buồn bã|great way|mood|motivat|động lực/i)
+    expect(loadNutritionContext).not.toHaveBeenCalled()
+    expect(callOpenAiWithFallback).not.toHaveBeenCalled()
+  })
+
   it("answers compensation/restriction talk with the safe message, never an exercise prescription", async () => {
     const response = await post({ message: "I ate too much, how long should I run to burn it off?", coachMode: "nutrition" })
     const json = await response.json()
@@ -203,7 +220,11 @@ describe("scope and safety", () => {
   })
 
   it("replaces an unsafe model reply", async () => {
-    vi.mocked(callOpenAiWithFallback).mockResolvedValueOnce({ reply: "You should work it off with a 60 minute run.", model: "t" })
+    // Planner (junk) + its one reduced retry (junk) -> safe fallback; then the existing open-chat answer, also unsafe text.
+    vi.mocked(callOpenAiWithFallback)
+      .mockResolvedValueOnce({ reply: "You should work it off with a 60 minute run.", model: "t" })
+      .mockResolvedValueOnce({ reply: "You should work it off with a 60 minute run.", model: "t" })
+      .mockResolvedValueOnce({ reply: "You should work it off with a 60 minute run.", model: "t" })
     const json = await (await post({ message: "what is a good snack idea", coachMode: "nutrition" })).json()
     expect(json.reply).toMatch(/doesn't require compensation/)
   })
@@ -256,8 +277,9 @@ describe("conversation edits are deterministic", () => {
 
   it("uses the LLM only for open conversation, with structured context", async () => {
     await post({ message: "is greek yogurt a good snack?", coachMode: "nutrition" })
-    expect(callOpenAiWithFallback).toHaveBeenCalledTimes(1)
-    const prompt = vi.mocked(callOpenAiWithFallback).mock.calls[0][0]
+    // N1.6.4: planner call + its one reduced retry (default mock is not a plan -> safe fallback) + the unchanged single answer call.
+    expect(callOpenAiWithFallback).toHaveBeenCalledTimes(3)
+    const prompt = vi.mocked(callOpenAiWithFallback).mock.calls[2][0]
     expect(prompt).toContain("Use ONLY the numbers in CONTEXT")
     expect(prompt).toContain('"remaining":{"calories":520,"protein":54}')
   })
@@ -265,5 +287,13 @@ describe("conversation edits are deterministic", () => {
   it("rejects malformed nutrition requests", async () => {
     const response = await post({ message: "", coachMode: "nutrition" })
     expect(response.status).toBe(400)
+  })
+
+  it("does not confirm a user calorie claim as the canonical target", async () => {
+    const json = await (await post({ message: "I think my target is 1800 calories.", coachMode: "nutrition" })).json()
+    expect(json.route).toBe("target_truth")
+    expect(json.reply).toMatch(/2200/)
+    expect(json.reply).not.toMatch(/confirmed at 1800/i)
+    expect(callOpenAiWithFallback).not.toHaveBeenCalled()
   })
 })

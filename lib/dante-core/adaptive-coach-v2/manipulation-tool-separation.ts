@@ -1,6 +1,9 @@
+import { isWorkoutMutationRequest } from "@/lib/dante-core/tools/action-response-guard";
+
 /**
  * Keep SYSTEM_OVERRIDE / anti-manipulation separate from write confirmation
  * unless an actual write/action intent is present.
+ * Workout-edit intent has one authority: isWorkoutMutationRequest.
  */
 export function evaluateManipulationAndToolIntent(message: string): {
   manipulation: boolean;
@@ -8,7 +11,7 @@ export function evaluateManipulationAndToolIntent(message: string): {
   requiresConfirmation: boolean;
 } {
   const manipulation = /(?:ignore|override|bypass|disable).{0,40}(?:rules?|safety|instructions?)|act as (?:an )?evil coach|bo quy tac|bo safety/i.test(message);
-  const writeIntent = /(?:save|luu|sua|doi|update|modify|persist|write).{0,40}(?:workout|program|plan|buoi|bai tap)|(?:workout|program).{0,40}(?:save|luu|without ask|khong hoi|dung confirm)/i.test(message);
+  const writeIntent = isWorkoutMutationRequest(message);
   return {
     manipulation,
     writeIntent,

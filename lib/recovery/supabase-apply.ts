@@ -76,6 +76,14 @@ async function loadSession(
     workout_plan_id: string | null
   }
 
+  // Same version inputs as loadTodaySession (which issued the proposal): the plan's updated_at is part of planVersionRef,
+  // so leaving it null here made every apply look like a stale plan.
+  let planUpdatedAt: string | null = null
+  if (row.workout_plan_id) {
+    const { data: planRow } = await supabase.from("workout_plans").select("updated_at").eq("id", row.workout_plan_id).maybeSingle()
+    planUpdatedAt = (planRow as { updated_at?: string | null } | null)?.updated_at ?? null
+  }
+
   return {
     id: row.id,
     userId: row.user_id,
@@ -85,7 +93,7 @@ async function loadSession(
     sessionState: row.session_state,
     workoutPlanId: row.workout_plan_id,
     updatedAt: row.updated_at,
-    planUpdatedAt: null,
+    planUpdatedAt,
     exercises: asExercises(exerciseRows as never),
   }
 }
@@ -163,11 +171,32 @@ function asMutationPayload(data: unknown): WorkoutMutationRecord | null {
   }
 }
 
+/**
+ * True when an adjustment was already applied to this session (workout_before_ref is the session id). One adjustment per
+ * session: a second proposal issued against the already-trimmed session would stack another cut. null = read failed.
+ */
+export async function hasAppliedAdjustment(supabase: SupabaseClient, userId: string, sessionId: string): Promise<boolean | null> {
+  const { data, error } = await supabase
+    .from("workout_mutation_records")
+    .select("proposal_id")
+    .eq("user_id", userId)
+    .eq("workout_before_ref", sessionId)
+    .limit(1)
+  if (error) return null
+  return (data ?? []).length > 0
+}
+
 export function createSupabaseCanonicalCommit(supabase: SupabaseClient): CanonicalCommit {
   return {
     async commit({ userId, proposal, session }) {
       if (!userId || proposal.subjectRef !== userId) {
         return { ok: false, error: "FORBIDDEN", message: applyErrorMessage("FORBIDDEN") }
+      }
+      // Same-proposal replays never reach here (applyWorkoutAdjustment returns the existing record first).
+      const applied = await hasAppliedAdjustment(supabase, userId, proposal.workoutRef)
+      if (applied !== false) {
+        const code = applied === null ? "APPLY_FAILED" : "ALREADY_APPLIED"
+        return { ok: false, error: code, message: applyErrorMessage(code) }
       }
       const { data, error } = await supabase.rpc("apply_recovery_workout_proposal", {
         p_proposal_id: proposal.proposalId,

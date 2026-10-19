@@ -2,7 +2,7 @@
  * Phase 1 — Multi-intent turn handling (final blocker).
  * Exact convergence + 2 semantic variants + live route certification.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
@@ -193,12 +193,30 @@ describe("Phase 1 — multi-intent LIVE runtime certification", () => {
   beforeEach(() => {
     vi.mocked(createClient).mockReset();
     vi.mocked(createClient).mockResolvedValue(authenticatedClient() as never);
+    // Hermetic: a developer OPENAI_API_KEY must not turn this into a live provider call. With no provider every
+    // obligation is disposed deterministically, which is what this certification asserts.
+    vi.stubEnv("OPENAI_API_KEY", "");
   });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /**
+   * The multi-intent branch answered, and no obligation was dropped. `done.model` is NOT the routing signal: by design
+   * (INV-11 ledger) an open request is answered by one scoped provider call and the reply then carries that provider's
+   * model id, so the label is asserted only because the provider is disabled above.
+   */
+  function assertMultiIntentRoute(live: Awaited<ReturnType<typeof postLive>>) {
+    expect(live.toolTrace.some((t) => t.startsWith("multi-intent:") && t.includes("drop=none"))).toBe(true);
+    for (const intent of EXPECTED) expect(live.toolTrace.join(" ")).toContain(intent);
+    expect(live.model).toBe("dante-multi-intent");
+  }
 
   it("exact convergence via real chatbot route", async () => {
     const live = await postLive(EXACT_CONVERGENCE);
     expect(live.response.status).toBe(200);
-    expect(live.model).toBe("dante-multi-intent");
+    assertMultiIntentRoute(live);
     expect(live.toolTrace.some((t) => t.includes("multi-intent:") && t.includes("cov=6"))).toBe(true);
     assertCorrectness(live.text);
 
@@ -215,7 +233,7 @@ describe("Phase 1 — multi-intent LIVE runtime certification", () => {
   it("VARIANT A via real chatbot route", async () => {
     const live = await postLive(VARIANT_A);
     expect(live.response.status).toBe(200);
-    expect(live.model).toBe("dante-multi-intent");
+    assertMultiIntentRoute(live);
     assertCorrectness(live.text);
     const resolved = resolveMultiIntentTurn({ message: VARIANT_A, language: "vi" });
     console.info("[LIVE variantA]", {
@@ -228,7 +246,7 @@ describe("Phase 1 — multi-intent LIVE runtime certification", () => {
   it("VARIANT B via real chatbot route", async () => {
     const live = await postLive(VARIANT_B);
     expect(live.response.status).toBe(200);
-    expect(live.model).toBe("dante-multi-intent");
+    assertMultiIntentRoute(live);
     assertCorrectness(live.text);
     const resolved = resolveMultiIntentTurn({ message: VARIANT_B, language: "vi" });
     console.info("[LIVE variantB]", {

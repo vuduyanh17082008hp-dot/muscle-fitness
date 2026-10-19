@@ -136,7 +136,7 @@ async function assertSessionOwned(
 ) {
   const { data, error } = await supabase
     .from("workout_sessions")
-    .select("id")
+    .select("id, session_state")
     .eq("id", sessionId)
     .eq("user_id", userId)
     .maybeSingle()
@@ -147,6 +147,25 @@ async function assertSessionOwned(
 
   if (!data) {
     throw new Error("Workout session not found.")
+  }
+
+  return data.session_state
+}
+
+/**
+ * Logging mutations (save set / skip / replace) only apply to a session
+ * that is still open. A finished session's totals are frozen by
+ * finish_workout, so editing its sets afterwards would desync History.
+ */
+async function assertSessionOpen(
+  supabase: LooseSupabase,
+  sessionId: string,
+  userId: string,
+) {
+  const state = await assertSessionOwned(supabase, sessionId, userId)
+
+  if (state === "completed" || state === "cancelled") {
+    throw new Error("This workout is already finished and can no longer be edited.")
   }
 }
 
@@ -165,7 +184,7 @@ export async function mutateSaveSet(
       }
     }
 
-    await assertSessionOwned(supabase, sessionId, userId)
+    await assertSessionOpen(supabase, sessionId, userId)
 
     const setId =
       asString(payload.setId) ?? asString(payload.set_id)
@@ -241,7 +260,7 @@ export async function mutateSkipExercise(
       }
     }
 
-    await assertSessionOwned(supabase, sessionId, userId)
+    await assertSessionOpen(supabase, sessionId, userId)
 
     const sessionExerciseId =
       asString(payload.sessionExerciseId) ??
@@ -309,7 +328,7 @@ export async function mutateReplaceExercise(
       }
     }
 
-    await assertSessionOwned(supabase, sessionId, userId)
+    await assertSessionOpen(supabase, sessionId, userId)
 
     const sessionExerciseId =
       asString(payload.sessionExerciseId) ??
@@ -517,7 +536,8 @@ export async function mutateFinishWorkout(
     if (error) {
       const completed = await loadCompletedSession(supabase, sessionId, userId)
       if (completed) {
-        await emitWorkoutCompleted(sessionId, userId, sessionRpe)
+        // Retry of an already-finished session: the first finish emitted
+        // WORKOUT_COMPLETED, so this is a no-op success, not a second event.
         return {
           success: true,
           message: "Workout completed.",

@@ -8,7 +8,7 @@ authority: mf_curated
 confidence: curated
 risk: moderate
 locale: global
-updatedAt: 2026-10-09
+updatedAt: 2026-10-11
 ---
 
 # Uncertainty and Provenance
@@ -26,7 +26,7 @@ Say which one you are giving. Never let an inference sound like a verified fact.
 Portion size is usually the biggest source of error, bigger than the food's identity. Ask for or state an assumed portion (bowl, plate, handful, a measured amount) and let the tools compute from it.
 
 ## Restaurant and hawker uncertainty
-Preparation varies by stall, cook, and day: oil, sauce, rice volume, and added sugar. Treat these dishes as ranges. Prefer the official brand data when it exists, and say when it does not.
+Preparation varies by stall, kitchen, cook, and day: oil, sauce, rice volume, and added sugar. This holds for hawker, restaurant, takeaway and delivery meals in any cuisine. Treat these dishes as ranges. Prefer the official brand data when it exists, and say when it does not.
 
 ## User-recalled food uncertainty
 When a user recalls what they ate, treat the description as approximate. Do not argue with it. Offer a range or the closest matching option and let them confirm before anything is logged.

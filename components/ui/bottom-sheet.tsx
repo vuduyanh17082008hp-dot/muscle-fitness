@@ -62,6 +62,11 @@ export function BottomSheet({
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 24 }}
                 transition={{ duration: reduceMotion ? 0.01 : 0.3, ease: [0.16, 1, 0.3, 1] }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape") return
+                  event.preventDefault()
+                  onOpenChange(false)
+                }}
               >
                 <div className="mb-4 flex items-center justify-between gap-3">
                   {title ? (

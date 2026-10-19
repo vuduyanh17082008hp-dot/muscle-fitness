@@ -9,7 +9,7 @@ authority: mf_curated
 confidence: curated
 risk: low
 locale: global
-updatedAt: 2026-10-09
+updatedAt: 2026-10-11
 ---
 
 # Texture Hacks
@@ -30,7 +30,7 @@ Chewy textures slow eating and help fullness: whole grains, dense noodles, jerky
 Crisp coatings come from thin, dry coatings, high heat, and airflow (air fryer or rack-in-oven). A damp coating or crowded tray makes food soggy.
 
 ## Volume
-Whipping or blending frozen fruit, adding vegetables, or using soups and broths increases volume. Large, airy portions feel more generous at a lower energy load.
+Whipping or blending frozen fruit, adding vegetables, or using soups and broths increases volume. Large, airy portions feel more generous at a lower energy load, which is how a plate or a small bowl can look and feel bigger without adding much energy.
 
 ## Cold and frozen texture
 Freezing changes how sweetness and creaminess feel. Partially frozen fruit, frozen yoghurt-style bases, and chilled bowls hit the cold-and-creamy target for desserts and cereal-style cravings.

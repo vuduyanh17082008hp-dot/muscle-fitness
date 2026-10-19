@@ -131,12 +131,18 @@ describe("T4-5 a bare side is recorded, so a later correction has something to c
   });
 
   it.each([
-    "vai phải đau lắm",
     "tập vai phải hôm nay",
     "vai phải?",
     "không phải vai phải",
   ])("a clause with anything else, a question, or a negation is not recorded: %s", (message) => {
     expect(resolveLaterality(folded(message), false).value).toBeNull();
+  });
+
+  it("an explicit side plus pain is the user's statement of that side", () => {
+    const resolved = resolveLaterality(folded("vai phải đau lắm"), false);
+    expect(resolved.value).toBe("RIGHT");
+    expect(resolved.evidence).toBe("USER_EXPLICIT");
+    expect(resolved.explicit).toBe(false);
   });
 
   it("literal scenario across separate requests: RIGHT → SUPERSEDED, LEFT → ACTIVE, and it stays that way", async () => {

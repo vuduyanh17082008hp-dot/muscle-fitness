@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -121,6 +122,46 @@ function nullableNumber(
 }
 
 /* =========================================================
+   PENDING SETS (offline-safe logging)
+
+   A completed set is written to localStorage BEFORE the server call
+   and removed only after the server confirms it. A network failure
+   keeps the typed values on screen and in storage; they are re-sent
+   on reconnect and on the next load. The receiver is an update by
+   set id, so a repeated delivery has one logical effect (at-least-
+   once delivery, effectively-once result). "Set saved." is shown
+   only for a server-confirmed write.
+   ponytail: last write wins against the server row; per-set version
+   checks if multi-device editing of one session ever matters.
+========================================================= */
+
+type PendingSet = Pick<WorkoutPlayerSet, "weightKg" | "reps" | "rir" | "rpe" | "completed"> & { exerciseId: string }
+
+const pendingKey = (sessionId: string) => `mf:pending-sets:${sessionId}`
+
+function readPendingSets(sessionId: string): Record<string, PendingSet> {
+  try {
+    const raw = window.localStorage.getItem(pendingKey(sessionId))
+    return raw ? (JSON.parse(raw) as Record<string, PendingSet>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function writePendingSets(sessionId: string, pending: Record<string, PendingSet>) {
+  try {
+    if (Object.keys(pending).length === 0) window.localStorage.removeItem(pendingKey(sessionId))
+    else window.localStorage.setItem(pendingKey(sessionId), JSON.stringify(pending))
+  } catch {
+    // Storage unavailable (private mode): the values still stay on screen for this visit.
+  }
+}
+
+const OFFLINE_SET_MESSAGE =
+  "You're offline — this set isn't saved yet. It's kept on this device and will be sent when you're back online."
+const OFFLINE_ACTION_MESSAGE = "You're offline — that didn't go through, and nothing was changed. Try again when you're back online."
+
+/* =========================================================
    WORKOUT PLAYER
 ========================================================= */
 
@@ -190,6 +231,69 @@ export function WorkoutPlayer({
     setIsError,
   ] =
     useState(false);
+
+  const [
+    pendingSetIds,
+    setPendingSetIds,
+  ] =
+    useState<string[]>([]);
+
+  /** Sends every stored pending set once, in order; stops at the first network failure (still offline). */
+  const syncPendingSets = useCallback(async () => {
+    const pending = readPendingSets(sessionId);
+    const ids = Object.keys(pending);
+    if (ids.length === 0) return;
+    let synced = 0;
+    for (const setId of ids) {
+      const entry = pending[setId]!;
+      let result: Awaited<ReturnType<typeof saveWorkoutSetAction>>;
+      try {
+        result = await saveWorkoutSetAction({ sessionId, setId, weightKg: entry.weightKg, reps: entry.reps, rir: entry.rir, rpe: entry.rpe, completed: entry.completed, notes: "" });
+      } catch {
+        setIsError(true);
+        setMessage(OFFLINE_SET_MESSAGE);
+        return;
+      }
+      delete pending[setId];
+      writePendingSets(sessionId, pending);
+      setPendingSetIds(Object.keys(pending));
+      if (!result.success) {
+        // The server refused it (e.g. the session was finished elsewhere): say so, never claim it synced.
+        setIsError(true);
+        setMessage(result.message);
+        return;
+      }
+      synced += 1;
+    }
+    if (synced > 0) {
+      setIsError(false);
+      setMessage(synced === 1 ? "Back online — your saved set was synced." : `Back online — ${synced} sets were synced.`);
+    }
+  }, [sessionId]);
+
+  // Restore unsynced sets typed earlier on this device (refresh, closed tab), try to send them, and retry on reconnect.
+  useEffect(() => {
+    const pending = readPendingSets(sessionId);
+    const ids = Object.keys(pending);
+    if (ids.length > 0) {
+      // One-time sync from an external store (localStorage) after hydration; a lazy initial state would mismatch SSR.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExercises((current) =>
+        current.map((exercise) => ({
+          ...exercise,
+          sets: exercise.sets.map((set) => {
+            const entry = pending[set.id];
+            return entry ? { ...set, weightKg: entry.weightKg, reps: entry.reps, rir: entry.rir, rpe: entry.rpe, completed: entry.completed } : set;
+          }),
+        })),
+      );
+      setPendingSetIds(ids);
+      void syncPendingSets();
+    }
+    const onOnline = () => void syncPendingSets();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [sessionId, syncPendingSets]);
 
   /* =======================================================
      DERIVED TIMER STATE
@@ -390,35 +494,54 @@ export function WorkoutPlayer({
       null,
     );
 
+    // Durable before the network: a dropped connection can no longer lose what was typed.
+    const pending = readPendingSets(sessionId);
+    pending[nextSet.id] = { exerciseId: exercise.id, weightKg: nextSet.weightKg, reps: nextSet.reps, rir: nextSet.rir, rpe: nextSet.rpe, completed: nextSet.completed };
+    writePendingSets(sessionId, pending);
+
     startTransition(
       async () => {
-        const result =
-          await saveWorkoutSetAction(
-            {
-              sessionId,
+        let result: Awaited<ReturnType<typeof saveWorkoutSetAction>>;
+        try {
+          result =
+            await saveWorkoutSetAction(
+              {
+                sessionId,
 
-              setId:
-                nextSet.id,
+                setId:
+                  nextSet.id,
 
-              weightKg:
-                nextSet.weightKg,
+                weightKg:
+                  nextSet.weightKg,
 
-              reps:
-                nextSet.reps,
+                reps:
+                  nextSet.reps,
 
-              rir:
-                nextSet.rir,
+                rir:
+                  nextSet.rir,
 
-              rpe:
-                nextSet.rpe,
+                rpe:
+                  nextSet.rpe,
 
-              completed:
-                nextSet.completed,
+                completed:
+                  nextSet.completed,
 
-              notes:
-                "",
-            },
-          );
+                notes:
+                  "",
+              },
+            );
+        } catch {
+          // Network failure: keep the values on screen and in the pending store; they sync on reconnect.
+          setPendingSetIds(Object.keys(readPendingSets(sessionId)));
+          setIsError(true);
+          setMessage(OFFLINE_SET_MESSAGE);
+          return;
+        }
+
+        const stillPending = readPendingSets(sessionId);
+        delete stillPending[nextSet.id];
+        writePendingSets(sessionId, stillPending);
+        setPendingSetIds(Object.keys(stillPending));
 
         if (
           !result.success
@@ -508,7 +631,7 @@ export function WorkoutPlayer({
               isSkipped:
                 nextSkipped,
             },
-          );
+          ).catch(() => ({ success: false as const, message: OFFLINE_ACTION_MESSAGE }));
 
         if (
           !result.success
@@ -588,7 +711,7 @@ export function WorkoutPlayer({
 
               replacementExerciseId,
             },
-          );
+          ).catch(() => ({ success: false as const, message: OFFLINE_ACTION_MESSAGE }));
 
         if (
           !result.success
@@ -635,7 +758,7 @@ export function WorkoutPlayer({
               notes:
                 sessionNotes,
             },
-          );
+          ).catch(() => ({ success: false as const, message: OFFLINE_ACTION_MESSAGE }));
 
         if (
           !result.success
@@ -665,7 +788,7 @@ export function WorkoutPlayer({
   ======================================================= */
 
   return (
-    <div className="space-y-6 pb-32">
+    <div className="space-y-6 pb-52 lg:pb-32">
       {/* ===================================================
           HEADER
       =================================================== */}
@@ -824,8 +947,16 @@ export function WorkoutPlayer({
           MESSAGE
       =================================================== */}
 
+      {pendingSetIds.length > 0 ? (
+        <p className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-sm font-semibold text-amber-200">
+          {pendingSetIds.length === 1 ? "1 set" : `${pendingSetIds.length} sets`} not synced yet — kept on this device.
+        </p>
+      ) : null}
+
       {message ? (
         <div
+          role="status"
+          aria-live="polite"
           className={`flex items-center gap-3 rounded-2xl border p-4 ${
             isError
               ? "border-red-400/20 bg-red-400/10 text-red-200"
@@ -1230,6 +1361,8 @@ export function WorkoutPlayer({
                                 !set.completed,
                               )
                             }
+                            aria-label={`${set.completed ? "Mark not done" : "Complete"} set ${set.setNumber} of ${exercise.name}`}
+                            aria-pressed={set.completed}
                             className={`flex h-11 items-center justify-center rounded-xl border transition ${
                               set.completed
                                 ? "border-emerald-400/30 bg-emerald-400/15 text-emerald-200"
@@ -1340,7 +1473,8 @@ export function WorkoutPlayer({
           COMPLETE BAR
       =================================================== */}
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/90 p-3 backdrop-blur-xl lg:left-64">
+      {/* Above the mobile bottom nav (same offset as the shell's floating layers); flush to the bottom on desktop. */}
+      <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-30 border-t border-white/10 bg-black/90 p-3 pr-20 backdrop-blur-xl lg:bottom-0 lg:left-64 lg:pr-3">
         <div className="mx-auto flex max-w-6xl items-center gap-3">
           <div className="hidden min-w-40 sm:block">
             <p className="text-xs text-zinc-500">
@@ -1423,6 +1557,7 @@ function SetInput({
 
       <input
         type="number"
+        aria-label={label}
         min={
           0
         }

@@ -64,6 +64,29 @@ function hybridRank(index: KnowledgeIndex, query: NutritionKnowledgeQuery, confi
   return { docs, all: hybridScores(sem, docs, h) }
 }
 
+/**
+ * R3-I-S: "return UP TO k relevant primaries". The normal selection is walked in rank order and stops at the first candidate that adds no
+ * query-supported evidence of its own; an empty slot is never a reason to add a chunk. Evidence is structural, not a score cutoff:
+ *   local   the section itself matches the query (its own heading/body terms or the topic concepts), not just its document's metadata
+ *   S1      every candidate after the first needs local evidence
+ *   S2      S1, but another section of the leading document is admitted without it (a dominant document may keep its sections)
+ *   S3      S2, plus a new document with an explicit query facet (stated-goal document, requested cuisine or food) is a real second need
+ */
+export function gateFill(picked: ScoredChunk[], query: NutritionKnowledgeQuery, mode: NonNullable<ScoreConfig["fill"]>): ScoredChunk[] {
+  if (picked.length < 2) return picked
+  const lead = picked[0].item.chunk.documentId
+  const out = [picked[0]]
+  for (const s of picked.slice(1)) {
+    const g = s.signals
+    const local = g.localMatch > 0 || g.headingMatch > 0 || g.concept > 0
+    const sameLead = s.item.chunk.documentId === lead
+    const facet = (!!query.goalStated && s.item.chunk.metadata.category === "goal" && g.goal === 1) || g.cuisine > 0 || g.foodType > 0
+    if (!(local || (mode !== "S1" && sameLead) || (mode === "S3" && facet))) break
+    out.push(s)
+  }
+  return out
+}
+
 export type RetrievalResult = { context: NutritionKnowledgeContext | null; trace: NutritionRetrievalTrace }
 
 /** Dev / eval only: every eligible chunk that clears the gates, with its full score breakdown, best first. */
@@ -94,12 +117,13 @@ export function retrieveKnowledge(index: KnowledgeIndex, query: NutritionKnowled
   const protect = hyb ? config.hybrid!.protect : undefined
   const dominant = protect?.dominantRepeat && hyb && !protectedDocuments(scored, hyb.docs, protect, query).length
   const normal = selectPrimary(scored, k, dominant ? protect!.dominantRepeat : config.repeatPenalty, config.maxPerDocument)
+  const gated = config.fill ? gateFill(normal, query, config.fill) : normal
   const primary =
     hier && config.hier!.allocation
       ? allocateSlots(hier.sections.filter((s) => scored.includes(s.scored)), hier.docs, k, config.hier!.allocation)
       : hyb && protect
-        ? protectDocuments(normal, scored, hyb.docs, protect, query)
-        : normal
+        ? protectDocuments(gated, scored, hyb.docs, protect, query)
+        : gated
   const built = primary.length ? buildKnowledgeContext(primary, pickCompanions(primary, index.byDocument)) : null
   const chunks = built?.chunks ?? []
   const trace = makeTrace({

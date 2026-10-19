@@ -1,3 +1,5 @@
+import { guardMutationClaims } from "@/lib/dante-core/tools/action-response-guard";
+import { mapSentencesKeepingLists } from "@/lib/intelligence/performance-core/claim-revision";
 import { validateOutputClaims } from "@/lib/dante-core/adaptive-coach-v2/output-claim-validator";
 import { scrubInternalJargon } from "@/lib/dante-core/adaptive-coach-v2/natural-response/jargon-policy";
 import { buildDanteDecision } from "@/lib/dante-core/adaptive-coach-v2/decision-object";
@@ -41,7 +43,8 @@ function applySemanticsPreservingSurfaceTransform(text: string, language: "en" |
     .replace(/\bnot established as the cause\b/gi, language === "vi"
       ? "chưa đủ để kết luận là nguyên nhân"
       : "is not established as the cause");
-  out = out.replace(RAW_CONTEXT_LEAK, "").replace(/\s{2,}/g, " ").trim();
+  // Spaces only: `\s{2,}` also turned paragraph breaks into spaces, merging lists and caveats into one line.
+  out = out.replace(RAW_CONTEXT_LEAK, "").replace(/[ \t]{2,}/g, " ").trim();
   return out;
 }
 
@@ -51,20 +54,32 @@ function enforceContextPrivacy(text: string): string {
       .replace(/```[\s\S]*?```/g, "")
       .replace(RAW_CONTEXT_LEAK, "")
       .replace(/\buser_id\s*[:=]\s*\S+/gi, "")
-      .replace(/\s{2,}/g, " ")
+      .replace(/[ \t]{2,}/g, " ")
       .trim(),
   );
 }
 
+/**
+ * H0 cluster C: MODEL TEXT cannot establish mutation success. Only a backend receipt (`toolState.persisted === true`)
+ * may leave a "logged / saved / recorded / confirmed" claim; no toolState at all means no receipt.
+ */
 function enforceActionTruth(text: string, toolState: FinalizeDanteResponseInput["toolState"], language: "en" | "vi"): string {
-  if (toolState?.persisted === false && /(?:đã lưu|has been saved|i(?:'ve| have) saved)/i.test(text)) {
-    return language === "vi"
-      ? `${text.replace(/(?:Tôi|Mình|I)\s+đã\s+lưu[^.!?\n]*/gi, "Mình chưa lưu thay đổi này")}\n\nThay đổi này chưa được lưu.`
-        .replace(/\n{3,}/g, "\n\n")
-        .trim()
-      : text.replace(/\bI(?:'ve| have) saved\b/gi, "I have not saved");
-  }
-  return text;
+  return guardMutationClaims(text, {
+    receipt: toolState?.persisted === true,
+    pending: toolState?.permission === "CONFIRMATION_REQUIRED",
+    language,
+  });
+}
+
+/**
+ * H0 cluster G: internal prompt text never reaches the user. A sentence carrying a prompt-section marker or a
+ * model-directed instruction is removed whole; every other sentence (the user's content) is left exactly as written.
+ */
+const INSTRUCTION_LEAK = /\b(?:PERFORMANCE INTELLIGENCE BRIEF|SAFETY POSTURE|CONVERSATION CONTEXT —|KNOWLEDGE_STATE|CANONICAL KNOWLEDGE —|REASONING RULES|OPEN REQUEST UNDER A SAFETY BOUNDARY|SYSTEM-COMPUTED CAVEATS|FINAL INSTRUCTION|CLIENT QUESTION|obligationId|OBLIGATION_ENVELOPES)\b|never quote or mention this block|do not quote this block|\bDo not dump\b/;
+
+export function scrubInstructionLeak(text: string): string {
+  if (!INSTRUCTION_LEAK.test(text)) return text;
+  return mapSentencesKeepingLists(text, (sentence) => (INSTRUCTION_LEAK.test(sentence) ? null : sentence));
 }
 
 function resolveAuthoritativeState(input: FinalizeDanteResponseInput): AuthoritativeResponseState {
@@ -220,6 +235,7 @@ export function finalizeDanteResponse(input: FinalizeDanteResponseInput): Finali
   response = projected.text;
 
   response = enforceActionTruth(response, input.toolState ?? decision?.tool ?? null, language);
+  response = scrubInstructionLeak(response);
   response = enforceContextPrivacy(response);
   response = applySemanticsPreservingSurfaceTransform(response, language);
 

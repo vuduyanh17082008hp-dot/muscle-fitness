@@ -11,11 +11,15 @@ import { extractCurrentTurnState } from "@/lib/dante-core/current-turn-state";
 import { checkSafety, type SafetyCheckResult } from "@/lib/dante-core/safety-layer";
 import { evaluateContrastiveSafety } from "@/lib/dante-core/adaptive-coach-v2/semantic-interface";
 import { looksVietnamese } from "@/lib/dante-language";
+import { detectTurnLanguageRequest } from "@/lib/intelligence/performance-core/conversation-control";
 import { activeCorrections } from "@/lib/dante-core/coherence/reducer";
 import {
+  DEADLINE_TOPIC,
   extractLateralityCorrections,
   extractWeekdayCorrections,
   LATERALITY_TOPIC,
+  resolveLaterality,
+  resolveWeekday,
 } from "@/lib/dante-core/coherence/corrections";
 import { dominantLanguage } from "@/lib/dante-core/coherence/session";
 import { classifySafetyEvidence } from "@/lib/dante-core/coherence/safety-evidence";
@@ -86,9 +90,6 @@ function extractBoundaries(message: string): BoundaryCandidate[] {
 }
 
 const CLARIFY_MAX_WORDS = 8;
-const EXPLICIT_EN = /\b(?:answer|reply|respond|switch).{0,20}(?:in )?english\b|\benglish please\b|\buse english\b/i;
-const EXPLICIT_VI = /trả lời bằng tiếng việt|chuyển sang tiếng việt|nói tiếng việt|answer.{0,20}vietnamese/i;
-
 export function analyzeTurn(input: {
   message: string;
   snapshot: VersionedState;
@@ -102,6 +103,17 @@ export function analyzeTurn(input: {
   const ledgerCoverage = verifyLedgerCoverage(ledger);
   const intents = obligations.map((o) => o.intent) as ObligationIntent[];
   const corrections = extractCorrections(ledger.normalized.text, input.snapshot);
+  const lateralitySlot = resolveLaterality(
+    ledger.normalized.text,
+    activeCorrections(input.snapshot).some((c) => c.value.topic === LATERALITY_TOPIC),
+  );
+  const weekdaySlot = resolveWeekday(ledger.normalized.text);
+  const explicitTopics = new Set<string>();
+  if (lateralitySlot.explicit) explicitTopics.add(LATERALITY_TOPIC);
+  if (weekdaySlot.explicit) explicitTopics.add(DEADLINE_TOPIC);
+  const explicitCorrection = corrections.some(
+    (c) => explicitTopics.has(c.topic) && !c.role && !c.conflictsWith && c.statement !== "CONFLICT",
+  );
   const boundaries = extractBoundaries(input.message);
   const safety = input.safety ?? checkSafety(input.message);
   const current = extractCurrentTurnState(input.message);
@@ -122,13 +134,18 @@ export function analyzeTurn(input: {
   const n = norm(input.message);
   const mixed = looksVietnamese(input.message) && /[A-Za-z]{4,}/.test(input.message)
     && (input.message.match(/[A-Za-z]/g)?.length ?? 0) > 8;
-  const explicitLanguageSwitch = EXPLICIT_EN.test(input.message) || EXPLICIT_VI.test(input.message);
-  const languageSignal = explicitLanguageSwitch
-    ? (EXPLICIT_EN.test(input.message) ? "en" : "vi")
-    : dominantLanguage(input.message);
-  const numericConflict =
-    (/(?:not|khong phai|không phải).{0,24}\d+/.test(n) && /(?:wait|actually|thuc ra|thực ra).{0,24}\d+/.test(n))
-    || ((n.includes("wait") || n.includes("actually")) && (input.message.match(/\b\d+(?:\.\d+)?\s*kg\b/gi)?.length ?? 0) >= 2);
+  // ICH-1: explicit language control is resolved by the shared pipeline-level detector, not a local phrase list.
+  const explicitLanguage = detectTurnLanguageRequest(input.message);
+  const explicitLanguageSwitch = explicitLanguage !== null;
+  const languageSignal = explicitLanguage ? (explicitLanguage.language === "EN" ? "en" : "vi") : dominantLanguage(input.message);
+  // H1-LM: old → new is ONE correction ("profile says 80 kg but I'm actually 60", "not 80, actually 60"); a value the
+  // message attributes to stored data is not the user's. Competing needs a third distinct value the user stated.
+  const statedValues = new Set(
+    n.replace(/\b(?:profile|app|record|dashboard|ho so)\b[^.?!\d]{0,24}\d+(?:\.\d+)?/g, " ").match(/\b\d+(?:\.\d+)?\b/g) ?? [],
+  );
+  const numericConflict = statedValues.size >= 3 && (
+    (/(?:not|khong phai).{0,24}\d+/.test(n) && /(?:wait|actually|thuc ra).{0,24}\d+/.test(n))
+    || ((n.includes("wait") || n.includes("actually")) && (input.message.match(/\b\d+(?:\.\d+)?\s*kg\b/gi)?.length ?? 0) >= 2));
   const competingSameTurn = corrections.some((c) => c.conflictsWith) || numericConflict;
   // A clarification cue only points back at the prior answer when it is a short turn ("huh? what do you mean").
   // A long, self-contained question that merely contains the words is a new question, not a return-path request.
@@ -143,7 +160,7 @@ export function analyzeTurn(input: {
       op: "upsert_correction",
       topic: c.topic,
       statement: c.statement,
-      provenance: "CURRENT_TURN_EXPLICIT",
+      provenance: explicitTopics.has(c.topic) && !c.role ? "USER_CORRECTION" : "USER_OBSERVATION",
     });
   }
   for (const b of boundaries) {
@@ -163,7 +180,7 @@ export function analyzeTurn(input: {
   const verbosityCandidate = inferVerbosityPreference(ledger.normalized);
   const addressDetected = detectAddressSignal(input.message);
   const address = addressDetected.form;
-  const expression = interpretExpressionFeedback(input.message, { hasFactCorrection: corrections.length > 0 });
+  const expression = interpretExpressionFeedback(input.message, { hasFactCorrection: explicitCorrection });
   if (unclearPriorAsk) {
     proposedOps.push({ op: "open_loop", topic: "clarification" });
     proposedOps.push({ op: "mark_unclear", value: true });
@@ -173,6 +190,7 @@ export function analyzeTurn(input: {
     obligations,
     intents,
     corrections,
+    explicitCorrection,
     boundaries,
     commitments: unclearPriorAsk ? [{ kind: "clarification", text: "user asked to clarify prior answer" }] : [],
     safetyCandidates: {

@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { loadTodaySession } from "@/lib/training/load-today-session";
+import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
@@ -69,27 +70,20 @@ async function loadRecoveryPreview(
   userId: string,
 ): Promise<RecoveryViewModel> {
   try {
-    const { data, error } = await supabase
-      .from("recovery_checkins")
-      .select("recovery_score, sleep_hours, checkin_date")
-      .eq("user_id", userId)
-      .order("checkin_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Same loader as the Recovery page and Dante. Only TODAY's verified
+    // check-in is a live score — an older check-in (STALE) is never shown
+    // as current readiness.
+    const { current, today, todayScoreResult } = await loadRecoveryContext(supabase, userId);
 
-    if (error || !data || typeof data.recovery_score !== "number") {
+    if (current.status !== "CURRENT" || current.score === null || todayScoreResult.status === null) {
       return { ...FALLBACK_VIEW_MODEL.recovery, hasLiveScore: false };
     }
 
-    const readiness = Math.min(100, Math.max(0, Math.round(data.recovery_score)));
-    const status =
-      readiness >= 80 ? "ready" : readiness >= 60 ? "good" : readiness >= 40 ? "moderate" : "priority";
-
     return {
       hasLiveScore: true,
-      readiness,
-      status: STATUS_LABEL[status] ?? "Ready",
-      sleepHours: typeof data.sleep_hours === "number" ? data.sleep_hours : null,
+      readiness: current.score,
+      status: STATUS_LABEL[todayScoreResult.status] ?? "Ready",
+      sleepHours: today?.sleep_hours ?? null,
     };
   } catch {
     return { ...FALLBACK_VIEW_MODEL.recovery, hasLiveScore: false };
@@ -134,11 +128,12 @@ async function loadNutritionPreview(
       loadFoodLogForDate(supabase, userId),
     ]);
 
-    if (!nutritionContext.plan) {
+    const target = nutritionContext.targets.protein;
+
+    if (!nutritionContext.plan || target === null) {
       return { ...FALLBACK_VIEW_MODEL.nutrition, hasLiveTarget: false };
     }
 
-    const target = nutritionContext.plan.target.protein;
     const consumed = Math.round(foodLog.totals.protein);
     const remaining = Math.max(0, Math.round(target - consumed));
 

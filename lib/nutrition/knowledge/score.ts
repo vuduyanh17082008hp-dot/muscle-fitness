@@ -36,6 +36,8 @@ export type ScoreConfig = {
   semantic?: SemanticConfig
   /** N1.6.3-R3-H: document signal x semantic section rerank (see hybrid.ts). EXPERIMENT; absent = the flat scorer. */
   hybrid?: HybridConfig
+  /** N1.6.3-R3-I-S: relevance-gated primary fill (retrieve.ts gateFill). Absent = fill up to MAX_PRIMARY_CHUNKS, byte-for-byte as before. */
+  fill?: "S1" | "S2" | "S3"
 }
 
 /**

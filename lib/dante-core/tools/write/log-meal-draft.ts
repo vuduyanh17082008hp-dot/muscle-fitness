@@ -95,6 +95,8 @@ export const logMealDraftTool: DanteTool<LogMealDraftInput, LogMealDraftOutput> 
       foodName: input.name,
       source: "local",
       sourceId: mealFingerprint(input.ingredients),
+      // totals come from the server's own ingredient table (totalsFor above), not from the request
+      serverComputedProfile: true,
       per100g: {
         calories: (totals.calories / grams) * 100,
         protein: (totals.protein / grams) * 100,

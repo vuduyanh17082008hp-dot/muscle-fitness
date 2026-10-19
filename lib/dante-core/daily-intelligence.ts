@@ -85,7 +85,7 @@ async function resolveNutritionAdherence(
     loadFoodLogForDate(supabase, userId),
   ]);
 
-  const targetCalories = nutritionContext.plan?.target.calories ?? null;
+  const targetCalories = nutritionContext.targets.calories;
 
   if (foodLog.unavailable || !targetCalories || targetCalories <= 0) {
     return null;

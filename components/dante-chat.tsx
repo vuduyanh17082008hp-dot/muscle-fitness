@@ -34,9 +34,11 @@ import {
   isDanteRateLimitedMessage,
 } from "@/lib/dante-chat-http-error";
 import type { DanteInsight } from "@/lib/dante-core/insight";
+import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT } from "@/lib/coach-context-event";
 import {
   parseChatStreamChunk,
   resolveAbortedContent,
+  resolveConfirmationOutcome,
   resolveStreamErrorContent,
   type ChatStreamEvent,
   type ChatStreamSource,
@@ -61,7 +63,7 @@ type ChatMessage = {
   insight?: DanteInsight | null;
   sources?: ChatStreamSource[] | null;
   pendingConfirmation?: PendingConfirmation | null;
-  confirmationResolution?: "confirmed" | "cancelled" | "failed" | null;
+  confirmationResolution?: "confirmed" | "cancelled" | "failed" | "unknown" | null;
   isComplete?: boolean;
   wasAborted?: boolean;
 };
@@ -283,7 +285,7 @@ function PendingConfirmationPanel({
   onCancel,
 }: {
   pendingConfirmation: PendingConfirmation;
-  resolution: "confirmed" | "cancelled" | "failed" | null | undefined;
+  resolution: "confirmed" | "cancelled" | "failed" | "unknown" | null | undefined;
   isBusy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -308,6 +310,15 @@ function PendingConfirmationPanel({
     return (
       <p className="mt-3 text-xs font-semibold text-rose-400">
         That couldn&apos;t be saved. Nothing was changed.
+      </p>
+    );
+  }
+
+  // The request may have reached the server before the connection failed: never claim "nothing changed" here.
+  if (resolution === "unknown") {
+    return (
+      <p className="mt-3 text-xs font-semibold text-amber-400">
+        We couldn&apos;t confirm the result. Check your log before trying again — it may already be saved.
       </p>
     );
   }
@@ -441,6 +452,42 @@ export default function DanteChat({
   }, [input]);
 
   /* =======================================================
+     PENDING PROPOSALS — a Confirm/Cancel card is server state
+     (dante_tool_actions), not chat state: after navigation or a
+     refresh, still-valid proposals come back as actionable cards.
+     Expired or handled ones are never restored (the server filters
+     them, and confirm re-checks atomically).
+  ======================================================= */
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/dante/tools/pending")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { pending?: Array<PendingConfirmation & { expiresAt: string }> } | null) => {
+        const pending = data?.pending ?? [];
+        if (cancelled || pending.length === 0) return;
+        setMessages((current) => {
+          const shown = new Set(current.map((message) => message.pendingConfirmation?.actionId).filter(Boolean));
+          const restored = pending
+            .filter((item) => !shown.has(item.actionId))
+            .map((item): ChatMessage => ({
+              id: `pending-${item.actionId}`,
+              role: "assistant",
+              content: "This is still waiting for you — nothing is saved until you tap Confirm.",
+              pendingConfirmation: { actionId: item.actionId, toolName: item.toolName, summary: item.summary },
+              confirmationResolution: null,
+              isComplete: true,
+            }));
+          return restored.length ? [...current, ...restored] : current;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* =======================================================
      FORM COACH HANDOFF — auto-send a session summary left by
      the Form Coach camera (see lib/form-coach/handoff.ts).
   ======================================================= */
@@ -525,6 +572,7 @@ export default function DanteChat({
     setInput("");
     setIsLoading(true);
     setActivity("thinking");
+    window.dispatchEvent(new Event(COACH_TURN_STARTED_EVENT));
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -544,8 +592,8 @@ export default function DanteChat({
             JSON.stringify({
               message:
                 trimmed,
-              // Recent user turns only — powers Phase 2D gradual
-              // communication adaptation without dumping full transcripts.
+              // Recent user turns only — the server selects a bounded context
+              // working set from them (H0 cluster A); never dumped into a prompt.
               messages: [
                 ...messages
                   .filter((entry) => entry.role === "user" && entry.content.trim())
@@ -559,7 +607,7 @@ export default function DanteChat({
                   content: trimmed,
                   createdAt: userMessage.createdAt,
                 },
-              ].slice(-8),
+              ].slice(-20),
               ...contextPayload,
             }),
 
@@ -593,7 +641,7 @@ export default function DanteChat({
         remainder = parsed.remainder;
 
         // One setMessages call per network chunk (not per line, and
-        // never per character) — batches naturally with however Groq
+        // never per character) — batches naturally with however the provider
         // itself chunked the response, instead of one rerender per token.
         let appendedText = "";
         let doneEvent: Extract<ChatStreamEvent, { type: "done" }> | null = null;
@@ -656,11 +704,13 @@ export default function DanteChat({
       );
 
       setActivity(wasAborted ? "idle" : "error");
+      // The message stays in the conversation, and back in the composer so retrying is one tap (never auto-resent).
+      if (!wasAborted) setInput((current) => current || trimmed);
 
       /*
        * Reassuring, non-technical failure state (spec: "Failure
        * State"). Never crash the page and never leave the user
-       * thinking their own data was affected — Groq failing has no
+       * thinking their own data was affected — provider failure has no
        * bearing on training/nutrition/recovery data, which all lives
        * in Supabase, not in this request. Technical detail still goes
        * to the console above for debugging. An abort keeps whatever
@@ -684,6 +734,8 @@ export default function DanteChat({
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      // A turn may have published or withdrawn a disclosure (allergy, low intake): surfaces derived from it re-fetch.
+      window.dispatchEvent(new Event(COACH_CONTEXT_CHANGED_EVENT));
     }
   }
 
@@ -711,14 +763,9 @@ export default function DanteChat({
         body: JSON.stringify({ actionId, intent }),
       });
 
-      const data = (await response.json()) as { ok?: boolean };
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean };
 
-      const resolution: "confirmed" | "cancelled" | "failed" =
-        intent === "cancel"
-          ? "cancelled"
-          : data.ok
-          ? "confirmed"
-          : "failed";
+      const resolution = resolveConfirmationOutcome(intent, { status: response.status, ok: data.ok });
 
       setMessages((previous) =>
         previous.map((message) =>
@@ -733,7 +780,7 @@ export default function DanteChat({
       setMessages((previous) =>
         previous.map((message) =>
           message.id === messageId
-            ? { ...message, confirmationResolution: "failed" }
+            ? { ...message, confirmationResolution: "unknown" }
             : message
         )
       );
@@ -963,7 +1010,7 @@ export default function DanteChat({
                 className={`relative px-4 py-3.5 text-left transition ${hudStyles.hudCard} ${driftClass} ${spatialPositionClass} ${opacityClass} disabled:cursor-not-allowed disabled:opacity-40`}
               >
                 <p className="font-mono text-[9.5px] font-bold uppercase tracking-wider text-[#D4FF00]/90 mb-1">
-                  {item.tag ?? `// TELEMETRY: PROMPT 0${index + 1}`}
+                  {item.tag ?? "Prompt"}
                 </p>
                 <p className="text-xs font-semibold leading-5 text-zinc-100">
                   {item.label}
@@ -1075,9 +1122,10 @@ export default function DanteChat({
                                 </ul>
                               );
                             },
-                            ol({ children }) {
+                            // `start` must pass through: a list interrupted by a paragraph or heading continues as <ol start="n">.
+                            ol({ children, start }) {
                               return (
-                                <ol className="mb-4 ml-5 list-decimal space-y-1.5 marker:font-semibold marker:text-[#D4FF00]">
+                                <ol start={start} className="mb-4 ml-5 list-decimal space-y-1.5 marker:font-semibold marker:text-[#D4FF00]">
                                   {children}
                                 </ol>
                               );

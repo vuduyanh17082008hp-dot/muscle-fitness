@@ -18,6 +18,8 @@ describe("createRecoveryAdminClient", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:54321")
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "pub-key")
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY", "must-not-be-used")
+    // The dev/test env may carry a real key; blank it here (afterEach restores it).
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "")
     expect(() => createRecoveryAdminClient()).toThrow(/SUPABASE_SERVICE_ROLE_KEY/)
     expect(createClient).not.toHaveBeenCalled()
   })

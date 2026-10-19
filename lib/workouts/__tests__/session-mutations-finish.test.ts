@@ -10,7 +10,7 @@ vi.mock("@/lib/events/emit", () => ({
 
 import { createClient } from "@/lib/supabase/server"
 import { emitEvent } from "@/lib/events/emit"
-import { mutateFinishWorkout } from "@/lib/workouts/session-mutations"
+import { mutateFinishWorkout, mutateSaveSet, mutateSkipExercise } from "@/lib/workouts/session-mutations"
 
 const SESSION_ID = "11111111-1111-1111-1111-111111111111"
 const USER_ID = "user-a"
@@ -106,5 +106,18 @@ describe("mutateFinishWorkout event semantics", () => {
     const result = await mutateFinishWorkout(SESSION_ID, {})
     expect(result.success).toBe(true)
     expect(result.message).toBe("Workout completed.")
+    // the first finish already emitted; a retry must not double-count the workout
+    expect(emitEvent).not.toHaveBeenCalled()
+  })
+
+  it("PF-01: a completed session rejects further set logging and skips", async () => {
+    vi.mocked(createClient).mockResolvedValue(
+      fakeClient({ sessionState: "completed" }) as never,
+    )
+    const saved = await mutateSaveSet(SESSION_ID, { setId: "set-1", reps: 5, completed: true })
+    expect(saved.success).toBe(false)
+    expect(saved.message).toContain("already finished")
+    const skipped = await mutateSkipExercise(SESSION_ID, { sessionExerciseId: "ex-1" })
+    expect(skipped.success).toBe(false)
   })
 })
