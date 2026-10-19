@@ -46,7 +46,7 @@ async function loadAiCoachSuggestions(
       loadFoodLogForDate(supabase, userId).catch(() => null),
     ])
 
-  const proteinTargetG = nutritionContext?.plan?.target.protein ?? null
+  const proteinTargetG = nutritionContext?.targets.protein ?? null
   const proteinLoggedG = foodLog?.totals.protein ?? 0
 
   return buildChatSuggestions({
@@ -106,14 +106,14 @@ const sections: Record<string, SectionConfig> = {
   calendar: {
     title: "Calendar",
     description:
-      "Training days and check-ins will appear here.",
+      "Sessions and check-ins already on your plan show up here.",
     project: "Calendar",
     icon: CalendarDays,
   },
   settings: {
     title: "Settings",
     description:
-      "Update your profile through onboarding or account preferences.",
+      "This is not a settings screen. Profile changes live on your account page.",
     project: "Settings",
     icon: Settings,
   },
@@ -150,6 +150,10 @@ export default async function DashboardSectionPage({
     notFound()
   }
 
+  if (sectionKey === "check-in" || sectionKey === "messages") {
+    redirect("/dashboard")
+  }
+
   const Icon = section.icon
   const supabase = await createClient()
 
@@ -166,16 +170,17 @@ export default async function DashboardSectionPage({
     fitnessResponse,
     calendarDays,
     aiCoachSuggestions,
+    todayNutritionContext,
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("full_name, onboarding_completed")
+      .select("full_name, onboarding_completed, timezone")
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase
       .from("fitness_profiles")
       .select(
-        "weight_kg, height_cm, goal, calories_target, protein_target_g, carbs_target_g, fat_target_g, training_days, experience",
+        "weight_kg, height_cm, goal, training_days, experience",
       )
       .eq("user_id", user.id)
       .maybeSingle(),
@@ -185,7 +190,14 @@ export default async function DashboardSectionPage({
     sectionKey === "ai-coach"
       ? loadAiCoachSuggestions(supabase, user.id)
       : Promise.resolve(null),
+    // Same canonical targets the Dashboard, Dante and Gemma use — never a
+    // fitness_profiles column read of its own.
+    sectionKey === "today"
+      ? loadNutritionContext(supabase, user.id).catch(() => null)
+      : Promise.resolve(null),
   ])
+
+  const targets = todayNutritionContext?.targets ?? null
 
   const profile = profileResponse.data
   const fitness = fitnessResponse.data
@@ -229,10 +241,10 @@ export default async function DashboardSectionPage({
 
       {sectionKey === "today" && (
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <PerformanceCard glass variant="nutrition" title="Calories" metric={{ value: formatValue(fitness?.calories_target) }} />
-          <PerformanceCard glass variant="nutrition" title="Protein" metric={{ value: formatValue(fitness?.protein_target_g, " g") }} />
-          <PerformanceCard glass variant="nutrition" title="Carbs" metric={{ value: formatValue(fitness?.carbs_target_g, " g") }} />
-          <PerformanceCard glass variant="nutrition" title="Fat" metric={{ value: formatValue(fitness?.fat_target_g, " g") }} />
+          <PerformanceCard glass variant="nutrition" title="Calories" metric={{ value: formatValue(targets?.calories) }} />
+          <PerformanceCard glass variant="nutrition" title="Protein" metric={{ value: formatValue(targets?.protein, " g") }} />
+          <PerformanceCard glass variant="nutrition" title="Carbs" metric={{ value: formatValue(targets?.carbs, " g") }} />
+          <PerformanceCard glass variant="nutrition" title="Fat" metric={{ value: formatValue(targets?.fat, " g") }} />
         </section>
       )}
 
@@ -332,7 +344,7 @@ export default async function DashboardSectionPage({
 
       {sectionKey === "calendar" && (
         calendarDays && calendarDays.some((day) => day.actions.length > 0) ? (
-          <CalendarAgenda days={calendarDays} />
+          <CalendarAgenda days={calendarDays} timeZone={profile?.timezone || "UTC"} />
         ) : (
           <EmptyState
             glass

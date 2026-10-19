@@ -9,7 +9,7 @@ import "server-only";
  * - streaming chat (/api/chatbot)
  *
  * Uses fetch against the OpenAI-compatible chat completions API —
- * no Groq/Gemini runtime dependency.
+ * OpenAI is the sole runtime provider.
  */
 
 import {
@@ -20,6 +20,7 @@ import {
   OPENAI_STREAM_TIMEOUT_MS,
 } from "@/lib/dante-core/openai/config";
 import { maxCompletionTokens } from "@/lib/dante-core/openai/prompt-budget";
+import type { TurnBudget } from "@/lib/dante-core/turn-budget";
 
 export type LlmResult = {
   reply: string;
@@ -73,37 +74,21 @@ async function callOpenAiChatCompletion(
   signal?: AbortSignal,
 ): Promise<Response> {
   const apiKey = getOpenAiApiKey();
-  if (signal) {
-    return fetch(`${OPENAI_CHAT_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ model, ...body }),
-      signal,
-    });
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(`${OPENAI_CHAT_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ model, ...body }),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  // H0 WP1: the timeout stays attached for the BODY too (a cleared timer left `.json()` / the SSE read unbounded), and a
+  // caller signal (client disconnect / turn deadline) narrows it — it never replaces it.
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return fetch(`${OPENAI_CHAT_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ model, ...body }),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
 }
 
-async function callModel(model: string, prompt: string): Promise<LlmResult | null> {
+async function callModel(model: string, prompt: string, signal?: AbortSignal): Promise<LlmResult | null> {
   const response = await callOpenAiChatCompletion(
     model,
     {
@@ -112,6 +97,7 @@ async function callModel(model: string, prompt: string): Promise<LlmResult | nul
       max_tokens: maxCompletionTokens({ inputText: prompt, preferredCap: 1536 }),
     },
     OPENAI_REQUEST_TIMEOUT_MS,
+    signal,
   );
 
   const data = (await response.json()) as ChatCompletionResponse;
@@ -128,16 +114,24 @@ async function callModel(model: string, prompt: string): Promise<LlmResult | nul
   return reply ? { reply, model } : null;
 }
 
-export async function callOpenAiWithFallback(prompt: string): Promise<LlmResult | null> {
+/**
+ * H0: with a turn budget every model attempt reserves one provider attempt and runs under the turn's signal (client
+ * disconnect / deadline). An aborted attempt never falls through to the next model, and a result that lands after the
+ * signal fired is dropped, so a late reply can never become this turn's answer.
+ */
+export async function callOpenAiWithFallback(prompt: string, budget?: Pick<TurnBudget, "tryStart" | "signal">): Promise<LlmResult | null> {
   const models = getDanteOpenAiModels();
   let lastError: unknown = null;
 
   for (const model of models) {
+    if (budget && !budget.tryStart("provider")) break;
     try {
-      const result = await callModel(model, prompt);
+      const result = await callModel(model, prompt, budget?.signal);
+      if (budget?.signal.aborted) return null;
       if (result) return result;
     } catch (error) {
       lastError = error;
+      if (budget?.signal.aborted) return null;
       if (error instanceof Error && error.message.includes("rejected OPENAI_API_KEY")) {
         throw error;
       }
@@ -299,12 +293,19 @@ async function* streamOpenAiModel(
 export async function* streamDanteReply(
   prompt: string,
   signal: AbortSignal,
+  /** H0 WP1: every model attempt (the transport retry) reserves one provider attempt from the turn budget. */
+  budget?: Pick<TurnBudget, "tryStart">,
 ): AsyncGenerator<DanteStreamEvent, void, unknown> {
   const models = getDanteOpenAiModels();
   let lastError: Error | null = null;
 
   for (const model of models) {
     let emittedAny = false;
+
+    if (budget && !budget.tryStart("provider")) {
+      lastError ??= new Error("Dante turn budget exhausted before a provider attempt could start.");
+      break;
+    }
 
     try {
       console.log(`[DANTE] Trying ${model}`);
@@ -319,7 +320,8 @@ export async function* streamDanteReply(
     } catch (error: unknown) {
       const resolvedError = error instanceof Error ? error : new Error(String(error));
 
-      if (resolvedError.name === "AbortError") {
+      // The caller's signal decides, not the error name: Next aborts a disconnected request with "ResponseAborted".
+      if (signal.aborted || resolvedError.name === "AbortError") {
         throw resolvedError;
       }
 
@@ -336,13 +338,3 @@ export async function* streamDanteReply(
   throw new Error(lastError?.message ?? "All Dante OpenAI models failed to produce a final answer.");
 }
 
-/** @deprecated Use callOpenAiWithFallback — kept for explain/daily-intelligence imports during migration. */
-export const callGroqWithFallback = callOpenAiWithFallback;
-
-/** @deprecated Use callOpenAiAgentTurn */
-export const callGroqAgentTurn = callOpenAiAgentTurn;
-
-export type GroqChatMessage = OpenAiChatMessage;
-export type GroqToolSpec = OpenAiToolSpec;
-export type GroqToolCall = OpenAiToolCall;
-export type GroqAgentTurnResult = OpenAiAgentTurnResult;

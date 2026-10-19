@@ -34,7 +34,7 @@ import "./globals.css";
  */
 
 const inter = Inter({
-  subsets: ["latin"],
+  subsets: ["latin", "vietnamese"],
   variable: "--font-inter",
   display: "swap",
 });

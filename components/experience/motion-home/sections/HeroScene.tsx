@@ -9,10 +9,13 @@ import { Ecosystem } from "@/components/experience/motion-home/hero/Ecosystem";
 import { ParticleCanvas } from "@/components/experience/motion-home/hero/ParticleCanvas";
 import { TransitionLink } from "@/components/experience/motion-home/interaction/TransitionLink";
 import styles from "@/components/experience/motion-home/styles/motion-home.module.css";
-import type { HomepageRoutes } from "@/components/experience/motion-home/data/homepageViewModel";
+import type {
+  MotionHomepageViewModel,
+} from "@/components/experience/motion-home/data/homepageViewModel";
 
-export function HeroScene({ routes }: { routes: HomepageRoutes }) {
+export function HeroScene({ viewModel }: { viewModel: MotionHomepageViewModel }) {
   const rootRef = useRef<HTMLElement>(null);
+  const { routes } = viewModel;
 
   useGSAP(
     () => {
@@ -35,20 +38,18 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
         // present in some form in the hero").
         gsap
           .timeline({ delay: 0.1 })
-          .fromTo(
+          .from(
             ".hero-ecosystem",
-            { opacity: 0, scale: 0.94 },
-            { opacity: 1, scale: 1, duration: 0.6, ease: ease.soft },
+            { scale: 0.96, duration: 0.6, ease: ease.soft },
             0,
           )
-          .fromTo(
+          .from(
             ".hero-line",
-            { y: 16, opacity: 0 },
-            { y: 0, opacity: 1, duration: 0.55, ease: ease.heavy, stagger: 0.08 },
+            { y: 16, duration: 0.55, ease: ease.heavy, stagger: 0.08 },
             0.05,
           )
-          .fromTo(".hero-sub", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: ease.precise }, "-=0.35")
-          .fromTo(".hero-cta", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: ease.precise, stagger: 0.06 }, "-=0.25");
+          .from(".hero-sub", { y: 12, duration: 0.45, ease: ease.precise }, "-=0.35")
+          .from(".hero-cta", { y: 12, duration: 0.4, ease: ease.precise, stagger: 0.06 }, "-=0.25");
       });
 
       return () => mm.revert();
@@ -128,7 +129,10 @@ export function HeroScene({ routes }: { routes: HomepageRoutes }) {
         </div>
 
         <div className="hero-ecosystem relative overflow-visible bg-transparent lg:pl-2 xl:pl-6">
-          <Ecosystem routes={routes} />
+          <p className="mb-6 hidden text-center text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500 lg:block">
+            {viewModel.mode === "anonymous" ? "Illustrative system preview" : "Your current system preview"}
+          </p>
+          <Ecosystem viewModel={viewModel} />
         </div>
       </div>
     </section>

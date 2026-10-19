@@ -21,6 +21,7 @@ function baseAthleteState(overrides: Partial<AthleteState> = {}): AthleteState {
     },
     training: { hasAnyLoggedData: true, muscles: [], exerciseNames: {} },
     recovery: {
+      current: null,
       available: true,
       score: 78,
       status: "Good",
@@ -158,6 +159,7 @@ describe("buildDanteContext", () => {
     const state = baseAthleteState({
       training: { hasAnyLoggedData: false, muscles: [], exerciseNames: {} },
       recovery: {
+        current: null,
         available: false,
         score: null,
         status: null,

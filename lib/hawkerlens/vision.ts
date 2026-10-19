@@ -23,8 +23,7 @@ import type {
  * ("classify into exactly one of these N Singapore dishes, or none").
  *
  * MODEL CHOICE, documented per spec §5: a general-purpose
- * vision-language model (the same Groq vision model already
- * configured for Photo Estimate via GROQ_VISION_MODEL), constrained
+ * OpenAI vision-language model, constrained
  * by prompt to the MVP dish list, rather than a fine-tuned CNN
  * classifier. There is no labeled Singapore-hawker-food image dataset
  * or training pipeline in this project to fine-tune one on — a VLM
@@ -223,7 +222,7 @@ export async function analyzeHawkerPhoto(
     });
 
     if (!response.ok) {
-      console.warn(`[HAWKERLENS] Groq vision request failed: HTTP ${response.status}`);
+      console.warn(`[HAWKERLENS] OpenAI vision request failed: HTTP ${response.status}`);
       return null;
     }
 

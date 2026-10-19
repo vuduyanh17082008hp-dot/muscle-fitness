@@ -100,6 +100,7 @@ function baseAthleteState(overrides: Partial<AthleteState["training"]> = {}): At
     },
     training: { hasAnyLoggedData: true, muscles: [], exerciseNames: {}, ...overrides },
     recovery: {
+      current: null,
       available: false,
       score: null,
       status: null,

@@ -124,8 +124,8 @@ describe("POST /api/hawkerlens/confirm", () => {
         dish: "chicken_rice",
         mealType: "lunch",
         components: [
-          { name: "Rice", grams: 150, per100g: { calories: 200, protein: 4.2, carbs: 33, fat: 5.5 }, confidence: 0.8 }, // user reduced from 240g
-          { name: "Chicken", grams: 180, per100g: { calories: 215, protein: 19, carbs: 0, fat: 15 }, confidence: 0.8 }, // user increased
+          { name: "Rice", grams: 150, per100g: { calories: 200, protein: 4.2, carbs: 33, fat: 5.5 }, confidence: 0.8, idempotencyKey: "11111111-1111-4111-8111-111111111111" }, // user reduced from 240g
+          { name: "Chicken", grams: 180, per100g: { calories: 215, protein: 19, carbs: 0, fat: 15 }, confidence: 0.8, idempotencyKey: "22222222-2222-4222-8222-222222222222" }, // user increased
         ],
       }),
     )

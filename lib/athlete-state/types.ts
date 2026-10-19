@@ -1,3 +1,4 @@
+import type { CurrentRecovery } from "@/lib/recovery/current-recovery";
 import type { CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
 import type { WeeklyMuscleAnalytics } from "@/lib/training/weekly-analytics";
 import type { PersonalBaseline } from "@/lib/training/baseline";
@@ -53,6 +54,13 @@ export type AthleteState = {
 
   recovery: {
     available: boolean;
+    /**
+     * CURRENT / STALE / MISSING for the user's local calendar day, with the
+     * recorded date and provenance (lib/recovery/current-recovery.ts).
+     * `score` below is today's score only — it is null whenever this is not
+     * CURRENT; a stale score lives here and nowhere else.
+     */
+    current: CurrentRecovery | null;
     score: number | null;
     status: string | null;
     trainingLoadState: "green" | "amber" | "red" | null;

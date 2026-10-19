@@ -25,7 +25,15 @@ export type DanteToolEvent =
   | "DANTE_STREAM_FAILED"
   /** Layer 6 Final Response Verifier outcomes — see lib/dante-core/verifier/. */
   | "DANTE_VERIFIER_RETRY"
-  | "DANTE_VERIFIER_FALLBACK";
+  | "DANTE_VERIFIER_FALLBACK"
+  /** AI-R1D shared-intelligence summary: enums/counts/booleans only (see lib/intelligence/dante-runtime.ts). */
+  | "DANTE_INTELLIGENCE"
+  /** AI-R1E.1 coach-signal persistence failures (category + counts only). */
+  | "DANTE_SIGNAL_PERSISTENCE"
+  /** AI-R1E.2 Nutrition Coach signal consumption (enums/counts/booleans only). */
+  | "GEMMA_COORDINATION"
+  /** H0 WP1 turn runtime: duration, attempt counters, retrieval terminal states (enums/counts only). */
+  | "DANTE_RUNTIME";
 
 export type DanteToolEventMeta = {
   tool?: string;
@@ -36,6 +44,8 @@ export type DanteToolEventMeta = {
   stage?: string;
   /** A short error CATEGORY (e.g. "timeout", "http_5xx", "abort") — never a raw message, stack trace, or provider payload. */
   errorCategory?: string;
+  /** Flat enum/count/boolean fields only — never message text, state values, or ids. */
+  fields?: Record<string, string | number | boolean>;
 };
 
 export function logToolEvent(event: DanteToolEvent, meta: DanteToolEventMeta): void {
@@ -45,5 +55,6 @@ export function logToolEvent(event: DanteToolEvent, meta: DanteToolEventMeta): v
     timezone: meta.timezone ?? undefined,
     stage: meta.stage ?? undefined,
     errorCategory: meta.errorCategory ?? undefined,
+    ...(meta.fields && { fields: meta.fields }),
   });
 }

@@ -6,17 +6,19 @@ import {
   sessionStateToActionStatus,
   type DailyAction,
 } from "@/lib/daily-plan/types";
+import { addDaysIso } from "@/lib/nutrition/date-utils";
+import {
+  localDateRangeUtc,
+  localDateTimeParts,
+  resolveUserTimeZone,
+} from "@/lib/training/load-today-session";
 
 export type CalendarDay = {
-  /** YYYY-MM-DD, local-agnostic (derived from the same ISO timestamps the rest of the app stores). */
+  /** YYYY-MM-DD in the user's persisted profile timezone. */
   date: string;
   isToday: boolean;
   actions: DailyAction[];
 };
-
-function toDateKey(iso: string): string {
-  return iso.slice(0, 10);
-}
 
 /**
  * Loads a real, bounded window of the SAME workout_sessions and
@@ -30,15 +32,12 @@ export async function loadCalendarRange(
   now: Date = new Date(),
   { daysBefore = 3, daysAfter = 10 }: { daysBefore?: number; daysAfter?: number } = {},
 ): Promise<CalendarDay[]> {
-  const todayKey = now.toISOString().slice(0, 10);
-
-  const rangeStart = new Date(now);
-  rangeStart.setDate(rangeStart.getDate() - daysBefore);
-  const rangeEnd = new Date(now);
-  rangeEnd.setDate(rangeEnd.getDate() + daysAfter);
-
-  const startIso = `${rangeStart.toISOString().slice(0, 10)}T00:00:00.000Z`;
-  const endIso = `${rangeEnd.toISOString().slice(0, 10)}T23:59:59.999Z`;
+  const timeZone = await resolveUserTimeZone(supabase, userId);
+  const todayKey = localDateTimeParts(now, timeZone).localDate;
+  const startDate = addDaysIso(todayKey, -daysBefore);
+  const endDate = addDaysIso(todayKey, daysAfter);
+  const { startIso } = localDateRangeUtc(startDate, timeZone);
+  const { endIso } = localDateRangeUtc(endDate, timeZone);
 
   const [sessionsResponse, checkinsResponse] = await Promise.all([
     supabase
@@ -53,8 +52,8 @@ export async function loadCalendarRange(
       .from("recovery_checkins")
       .select("checkin_date, recovery_score")
       .eq("user_id", userId)
-      .gte("checkin_date", startIso.slice(0, 10))
-      .lte("checkin_date", endIso.slice(0, 10)),
+      .gte("checkin_date", startDate)
+      .lte("checkin_date", endDate),
   ]);
 
   if (sessionsResponse.error) {
@@ -90,7 +89,7 @@ export async function loadCalendarRange(
     }> | null) ?? [];
 
   for (const row of sessionRows) {
-    const dateKey = toDateKey(row.scheduled_for);
+    const dateKey = localDateTimeParts(new Date(row.scheduled_for), timeZone).localDate;
 
     ensureDay(dateKey).push({
       id: `workout-${row.id}`,

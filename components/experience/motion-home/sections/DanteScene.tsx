@@ -118,7 +118,7 @@ export function DanteScene({ dante, routes }: { dante: DanteViewModel; routes: H
     >
       <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1fr_1fr]">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-violet)]">08 · Dante</p>
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-violet)]">09 · Dante</p>
 
           <h2 className="dante-heading mt-4 font-heading text-4xl font-black uppercase leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
             Why did my performance change?

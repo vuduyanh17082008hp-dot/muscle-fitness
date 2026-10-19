@@ -61,7 +61,9 @@ describe("current-turn state precedence", () => {
     expect(response).toMatch(/2 ngày trước|2 ngày/i);
     expect(response).toMatch(/không max/i);
     expect(response).toMatch(/overhead/i);
-    expect(response).toMatch(/Squat\/Deadlift|Lat Pulldown|Seated Row/i);
+    // H0 cluster G: the reply asks which session is planned; it never carries the model-directed "do not dump …" instruction.
+    expect(response).toMatch(/buổi nào/i);
+    expect(response).not.toMatch(/Không đổ Squat|Do not dump/i);
     expect(response).toMatch(/không khẳng định|chỉ là dữ kiện tiêu thụ/i);
     expect(response).toMatch(/không phải chẩn đoán/i);
     expect(response).not.toMatch(/recovery 42|stress 7\.5|fatigue 6/i);

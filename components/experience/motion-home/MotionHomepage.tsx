@@ -59,7 +59,7 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
               <span className="hidden items-center gap-1.5 sm:flex" aria-hidden="true">
                 <span className={`${styles.pulseDot} size-1.5 rounded-full bg-[var(--mf-brand)]`} />
                 <span className={`${styles.monoLabel} text-[10px] uppercase tracking-[0.16em] text-zinc-500`}>
-                  Live
+                  {viewModel.mode === "anonymous" ? "Preview" : "Live"}
                 </span>
               </span>
             </div>
@@ -67,7 +67,7 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
             <nav className="hidden items-center gap-6 lg:flex">
               {[
                 { label: "Dashboard", href: routes.dashboard },
-                { label: "Train", href: routes.training },
+                { label: "Training", href: routes.training },
                 { label: "Nutrition", href: routes.nutrition },
                 { label: "Progress", href: routes.progress },
                 { label: "Dante", href: routes.chatbot },
@@ -112,7 +112,7 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
               <nav className="flex flex-col gap-3">
                 {[
                   { label: "Dashboard", href: routes.dashboard },
-                  { label: "Train", href: routes.training },
+                  { label: "Training", href: routes.training },
                   { label: "Nutrition", href: routes.nutrition },
                   { label: "Progress", href: routes.progress },
                   { label: "Dante", href: routes.chatbot },
@@ -135,11 +135,11 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
         <ChapterNav activeChapter={activeChapter} />
 
         <main className="relative z-10">
-          <HeroScene routes={routes} />
+          <HeroScene viewModel={viewModel} />
           <ProblemScene />
           <AdaptiveTrainingScene />
           <UserSegmentScene routes={routes} />
-          <AthleteSignalScene />
+          <AthleteSignalScene viewModel={viewModel} />
           <TrainingScene training={viewModel.training} routes={routes} />
           <MuscleIntelligenceScene muscle={viewModel.muscle} dante={viewModel.dante} routes={routes} />
           <RecoveryScene recovery={viewModel.recovery} nutrition={viewModel.nutrition} routes={routes} />

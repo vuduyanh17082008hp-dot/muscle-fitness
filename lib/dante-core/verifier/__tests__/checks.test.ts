@@ -75,6 +75,20 @@ describe("checkDeterministicValueMutation", () => {
     expect(findings).toEqual([]);
   });
 
+  // H0 final closure: "protein" (consumed today) must not be judged against a protein target or a g/kg guideline.
+  const consumed = [{ label: "protein", value: 45, cue: /\b(?:logged|so far|eaten|consumed)\b/i }];
+  it("cued fact: a protein target / g-per-kg mention is not a statement of protein eaten", () => {
+    for (const replyText of [
+      "Your protein target is 160 g a day, about 1.6 to 2.2 g per kg of body weight.",
+      "At 60 kg, aim for roughly 96 to 132 grams of protein per day.",
+    ]) expect(checkDeterministicValueMutation(baseInput({ replyText, knownFacts: consumed }))).toEqual([]);
+  });
+
+  it("cued fact: the logged amount is verified wherever it is stated, and a wrong one is flagged", () => {
+    expect(checkDeterministicValueMutation(baseInput({ replyText: "You've logged 45 g of protein so far, so about 115 g is left of your 160 g protein target.", knownFacts: consumed }))).toEqual([]);
+    expect(checkDeterministicValueMutation(baseInput({ replyText: "So far you've logged 80 g of protein today.", knownFacts: consumed }))).toHaveLength(1);
+  });
+
   it("accepts a fraction voiced as a percent", () => {
     const findings = checkDeterministicValueMutation(
       baseInput({

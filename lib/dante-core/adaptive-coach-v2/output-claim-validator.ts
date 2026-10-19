@@ -68,7 +68,12 @@ function stripFalsePersistence(text: string, language: "en" | "vi"): string {
   const cleaned = text
     .replace(/(?:^|[.!?]\s+|\n)(?:tôi|mình|i)\s+(?:đã|have)\s+(?:lưu|saved?|persisted|ghi)\b[^.!?\n]*/giu, "")
     .replace(/(?:Tôi|Mình|I)\s+đã\s+lưu[^.!?\n]*/gi, language === "vi" ? "Mình chưa lưu thay đổi này" : "I have not saved that change")
-    .replace(/(?:đã lưu|has been saved|successfully saved|saved the change)/gi, language === "vi" ? "chưa lưu thay đổi này" : "has not saved that change");
+    // A negated mention ("nothing has been saved yet", "chưa có gì đã lưu") is already the truth: never rewrite it into
+    // a double negative ("nothing has not saved that change yet", seen live once the tool path produced proposals).
+    .replace(/(?:đã lưu|has been saved|successfully saved|saved the change)/gi, (match: string, offset: number, whole: string) =>
+      /(?:nothing|not|n't|never|no change|chưa|không)[^.!?\n]{0,12}$/iu.test(whole.slice(Math.max(0, offset - 24), offset))
+        ? match
+        : language === "vi" ? "chưa lưu thay đổi này" : "has not saved that change");
   return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -165,7 +170,8 @@ export function validateOutputClaims(input: {
   return {
     ok: !hard,
     violations,
-    repairedText: repaired.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim(),
+    // Trailing spaces only: `\s+\n` also matched "\n\n" and erased paragraph breaks (a caveat then joined the last list item).
+    repairedText: repaired.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim(),
     usedDeterministicRepair: violations.length > 0,
     requiresLlmRetry: false,
   };

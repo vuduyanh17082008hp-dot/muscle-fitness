@@ -8,7 +8,7 @@
  * using the same SUBSTITUTION_ORDER equivalence groups the engine
  * already uses for allergy/exclusion swaps.
  *
- * Everything here is deterministic. Groq/Dante never invents grams,
+ * Everything here is deterministic. The AI coach never invents grams,
  * prices, or the optimization itself — see app/api/chatbot/route.ts's
  * BUDGET NUTRITION prompt section, which explains this plan but does
  * not recalculate it.
@@ -16,6 +16,7 @@
 
 import {
   FOOD_TEMPLATES,
+  isFoodBlocked,
   SUBSTITUTION_ORDER,
   type FoodCategory,
   type Meal,
@@ -68,14 +69,6 @@ function macroKeyForCategory(
   if (category === "carb") return "carbsPer100g"
   if (category === "fat") return "fatPer100g"
   return null
-}
-
-function isNameBlocked(name: string, blockedTerms: string[]): boolean {
-  const normalized = name.toLowerCase()
-
-  return blockedTerms.some(
-    (term) => term.trim().length > 0 && normalized.includes(term.trim().toLowerCase()),
-  )
 }
 
 /**
@@ -185,7 +178,7 @@ function findCheaperSubstitute(
         price: NonNullable<typeof candidate.price>
       } => candidate.food !== undefined && candidate.price !== null,
     )
-    .filter((candidate) => !isNameBlocked(candidate.food.name, blockedTerms))
+    .filter((candidate) => !isFoodBlocked(candidate.food, blockedTerms))
     .filter((candidate) => candidate.price.pricePer100g < currentPrice.pricePer100g)
     .sort((a, b) => a.price.pricePer100g - b.price.pricePer100g)
 
@@ -264,7 +257,7 @@ export function buildBudgetPlan(
 
     if (!fromFood || !toFood) continue
     if (fromFood.category !== toFood.category) continue
-    if (isNameBlocked(toFood.name, blockedTerms)) continue
+    if (isFoodBlocked(toFood, blockedTerms)) continue
     if (!currentFoodIdsInMeals(workingMeals).has(manual.from)) continue
 
     applySubstitution(manual.from, manual.to)

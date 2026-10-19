@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { generateCampaign } from "@/lib/ai/campaign-generation";
+import { requireBusinessAdminApi } from "@/lib/business/require-business-admin";
 
 
 export const runtime = "nodejs";
@@ -29,25 +30,38 @@ const requestSchema = z.object({
 export async function POST(
   request: Request
 ) {
+  const auth = await requireBusinessAdminApi();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  let body: unknown;
   try {
-    const body = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid campaign request" },
+      { status: 400 },
+    );
+  }
 
-    const result =
-      requestSchema.safeParse(body);
+  const result =
+    requestSchema.safeParse(body);
 
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          error: "Invalid campaign request",
-          details:
-            result.error.flatten(),
-        },
-        {
-          status: 400,
-        }
-      );
-    }
+  if (!result.success) {
+    return NextResponse.json(
+      {
+        error: "Invalid campaign request",
+        details:
+          result.error.flatten(),
+      },
+      {
+        status: 400,
+      }
+    );
+  }
 
+  try {
     const generated =
       await generateCampaign(
         result.data

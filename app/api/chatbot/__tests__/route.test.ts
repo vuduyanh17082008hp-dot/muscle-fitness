@@ -166,6 +166,8 @@ recovery data if today’s state overrides it.`;
       "dante_nof1_experiments",
       "dante_tool_actions",
       "dante_coherence_state",
+      // Cross-coach disclosures (read-only SELECT of the user's own coach_signals; writes go through the admin client).
+      "coach_signals",
     ]);
     vi.mocked(createClient).mockResolvedValue({
       auth: {
@@ -233,6 +235,90 @@ recovery data if today’s state overrides it.`;
     expect(text).not.toMatch(/tôi sẽ thay đổi|đã cập nhật|đã thay đổi|I updated|I changed/i);
     expect(writeTablesTouched).toEqual([]);
     expect(tablesTouched.every((table) => allowedReadTables.has(table))).toBe(true);
+
+    tablesTouched.length = 0;
+    writeTablesTouched.length = 0;
+    const setChest = await postMessage("Set chest to 3 sessions weekly.");
+    const setText = setChest.events.find((event) => event.type === "delta");
+    const setReply = setText && setText.type === "delta" ? setText.text : "";
+    expect(setChest.response.status).toBe(200);
+    expect(setChest.events).toContainEqual(
+      expect.objectContaining({ type: "done", model: "dante-action-truthfulness", pendingConfirmation: null }),
+    );
+    expect(setReply).toMatch(/Set chest to 3 sessions weekly/);
+    expect(setReply).toMatch(/proposed|not changed|confirmation/i);
+    expect(setReply).not.toMatch(/I updated|I changed|have saved|đã cập nhật|đã thay đổi/i);
+    expect(writeTablesTouched).toEqual([]);
+
+    tablesTouched.length = 0;
+    writeTablesTouched.length = 0;
+    const polite = await postMessage("Can you set chest to 3x per week?");
+    const politeDelta = polite.events.find((event) => event.type === "delta");
+    const politeReply = politeDelta && politeDelta.type === "delta" ? politeDelta.text : "";
+    expect(polite.response.status).toBe(200);
+    expect(polite.events).toContainEqual(
+      expect.objectContaining({ type: "done", model: "dante-action-truthfulness", pendingConfirmation: null }),
+    );
+    expect(politeReply).toMatch(/Can you set chest to 3x per week/);
+    expect(politeReply).toMatch(/proposed|not changed|confirmation/i);
+    expect(politeReply).not.toMatch(/I updated|I changed|have saved/i);
+    expect(writeTablesTouched).toEqual([]);
+  });
+
+  it("answers a should-I frequency question without a mutation proposal", async () => {
+    const writeTablesTouched: string[] = [];
+    const empty = new Proxy(() => empty, {
+      get(_target, prop) {
+        if (prop === "then") return (resolve: (value: unknown) => void) => resolve({ data: [], error: null });
+        if (prop === "maybeSingle" || prop === "single") return async () => ({ data: null, error: null });
+        return () => empty;
+      },
+      apply: () => empty,
+    });
+    vi.mocked(createClient).mockResolvedValue({
+      auth: {
+        getUser: async () => ({ data: { user: { id: USER_ID } }, error: null }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "profiles") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({ data: { timezone: "Asia/Singapore" }, error: null }),
+              }),
+            }),
+          };
+        }
+        return {
+          select: () => empty,
+          insert: () => {
+            if (table === "dante_coherence_state") return Promise.resolve({ error: null });
+            writeTablesTouched.push(table);
+            throw new Error(`Unexpected INSERT: ${table}`);
+          },
+          update: () => {
+            if (table === "dante_coherence_state") return empty;
+            writeTablesTouched.push(table);
+            throw new Error(`Unexpected UPDATE: ${table}`);
+          },
+          delete: () => {
+            writeTablesTouched.push(table);
+            throw new Error(`Unexpected DELETE: ${table}`);
+          },
+        };
+      }),
+    } as never);
+
+    const { response, events } = await postMessage("Should I set chest to 3x per week?");
+    const delta = events.find((event) => event.type === "delta");
+    const text = delta && delta.type === "delta" ? delta.text : "";
+    const done = events.find((event) => event.type === "done");
+    expect(response.status).toBe(200);
+    expect(done && done.type === "done" ? done.model : "").not.toBe("dante-action-truthfulness");
+    expect(done && done.type === "done" ? done.pendingConfirmation : "missing").toBeNull();
+    expect(text).not.toMatch(/You asked to change the workout|have not written it to the saved program/i);
+    expect(text.length).toBeGreaterThan(0);
+    expect(writeTablesTouched).toEqual([]);
   });
 
   it("returns the exact live synthesis composition with warm-up gate and no generic dump", async () => {

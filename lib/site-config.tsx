@@ -31,7 +31,7 @@ export const siteConfig = {
     },
     {
       label: "Training",
-      href: "/training",
+      href: "/dashboard/workouts",
     },
     {
       label: "Meal Plan",

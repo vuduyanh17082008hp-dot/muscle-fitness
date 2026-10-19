@@ -35,6 +35,8 @@ export type ToolContext = {
   /** Always the authenticated server-derived user id — never a client- or model-supplied one (Part 17). */
   userId: string;
   now: Date;
+  /** Stable UUID of the persisted confirmed action currently being executed. */
+  actionId?: string;
   /**
    * The user's persisted `profiles.timezone`, resolved ONCE per turn
    * by the route handler and threaded through here — never
@@ -55,9 +57,18 @@ export type ToolContext = {
   cache?: Map<string, Promise<unknown>>;
 };
 
+/** Stable, client-safe failure codes for confirming a pending action. */
+export type ActionErrorCode =
+  | "ACTION_NOT_FOUND"
+  | "ACTION_ALREADY_PROCESSED"
+  | "ACTION_EXPIRED"
+  | "ACTION_CONFIRMATION_FAILED"
+  | "ACTION_STALE"
+  | "ACTION_FORBIDDEN";
+
 export type ToolExecuteResult<TOutput> =
   | { ok: true; data: TOutput }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: ActionErrorCode };
 
 export type DanteTool<TInput = unknown, TOutput = unknown> = {
   /** Stable, model-facing name — the only handle an LLM ever gets on this capability. */

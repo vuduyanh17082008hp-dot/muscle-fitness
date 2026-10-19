@@ -252,7 +252,8 @@ export function evaluateSocialBoundary(
   }
 
   const text = message.trim();
-  const normalized = normalizeSafetyText(text);
+  // Diacritic folding turns "ngủ" (sleep) into "ngu" (stupid): "tôi ngủ tệ" must not read as self-insult.
+  const normalized = normalizeSafetyText(text.normalize("NFC").replace(/ngủ/gi, "ngusleep"));
 
   const containsDirectDerailment = matchesAny(text, normalized, DIRECT_INSULT_PATTERN)
     || matchesAny(text, normalized, DERAILMENT_FILLER_PATTERN);

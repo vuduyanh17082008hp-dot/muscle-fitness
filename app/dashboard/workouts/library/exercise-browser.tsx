@@ -334,7 +334,7 @@ function ExerciseCard({ record, onSelect }: { record: ExerciseRecord; onSelect: 
         {hasAnimation ? (
           <span className="text-mf-glass-brand">● Technique available</span>
         ) : (
-          "Technique coming soon"
+          "Technique unavailable"
         )}
       </p>
     </button>

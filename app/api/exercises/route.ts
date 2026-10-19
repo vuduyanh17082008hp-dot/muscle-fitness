@@ -34,7 +34,7 @@ export async function GET() {
 
   const { data, error } = await loose
     .from("exercise_library")
-    .select("id, name, slug, muscle_group, equipment, difficulty")
+    .select("id, name, slug, muscle_group:primary_muscle, equipment, difficulty")
     .order("name", { ascending: true })
     .limit(200);
 

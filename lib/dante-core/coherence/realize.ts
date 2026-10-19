@@ -75,7 +75,7 @@ export function classifyRepetition(input: {
 function humorBudget(text: string, safetyPhase: SafetyPhase): string {
   const safetyActive = safetyPhase === "ENTER" || safetyPhase === "PERSIST" || safetyPhase === "ESCALATE";
   if (!safetyActive) return text;
-  return text.replace(/[😂🤣💀😭]/g, "").replace(/\b(?:haha+|lol|lmao)\b/gi, "").replace(/\s{2,}/g, " ").trim();
+  return text.replace(/[😂🤣💀😭]/g, "").replace(/\b(?:haha+|lol|lmao)\b/gi, "").replace(/[ \t]{2,}/g, " ").trim();
 }
 
 function naturalJoin(parts: string[]): string {
@@ -170,23 +170,29 @@ export function composeResponseBlocks(input: ComposeInput): ResponseBlock[] {
   }
 
   const activeCorr = activeCorrections(input.snapshot);
+  const sideAsk = /what side|which side|which shoulder|bên nào|ben nao/i.test(input.message);
   const laterality = activeCorr.find((c) => c.value.topic === "yesterday_shoulder_laterality");
-  if (laterality && /hom qua|hôm qua|yesterday|vai|shoulder/i.test(input.message)) {
+  if (laterality && (/hom qua|hôm qua|yesterday|vai|shoulder/i.test(input.message) || sideAsk)) {
     const side = laterality.value.statement;
-    // The slot also holds a side the user simply stated ("vai phải"). Only claim "yesterday" when this very message
-    // says so — otherwise state the side, which is true either way.
+    const explicit = laterality.provenance === "USER_CORRECTION";
+    // Only claim "yesterday" when this message says so. An observation is not voiced as a correction.
     const yesterday = /hom qua|hôm qua|yesterday/i.test(input.message);
-    // Only text that can actually surface counts as "already said" (a provider block awaiting authority does not).
     const soFar = blocks.filter((b) => b.source !== "PROVIDER_OUTPUT").map((b) => b.text).join(" ");
+    const line = (viFact: string, enFact: string, enCorrection: string) =>
+      input.language === "vi" ? viFact : explicit ? enCorrection : enFact;
     if (side === "LEFT" && !/(?:vai\s*)?trái|left/i.test(soFar)) {
-      addComposed("composed:laterality", input.language === "vi"
-        ? `Vẫn giữ nguyên: ${yesterday ? "hôm qua là " : ""}vai trái.`
-        : `Correction still stands: ${yesterday ? "yesterday was " : "it is "}the left shoulder.`);
+      addComposed("composed:laterality", line(
+        `Vẫn giữ nguyên: ${yesterday ? "hôm qua là " : ""}vai trái.`,
+        `You described the left shoulder${yesterday ? " yesterday" : ""}.`,
+        `Correction still stands: ${yesterday ? "yesterday was " : "it is "}the left shoulder.`,
+      ));
     }
     if (side === "RIGHT" && !/(?:vai\s*)?phải|right/i.test(soFar)) {
-      addComposed("composed:laterality", input.language === "vi"
-        ? `Vẫn giữ nguyên: ${yesterday ? "hôm qua là " : ""}vai phải.`
-        : `Correction still stands: ${yesterday ? "yesterday was " : "it is "}the right shoulder.`);
+      addComposed("composed:laterality", line(
+        `Vẫn giữ nguyên: ${yesterday ? "hôm qua là " : ""}vai phải.`,
+        `You described the right shoulder${yesterday ? " yesterday" : ""}.`,
+        `Correction still stands: ${yesterday ? "yesterday was " : "it is "}the right shoulder.`,
+      ));
     }
   }
 
@@ -222,14 +228,21 @@ const BRIEF_MAX_BLOCKS = 2;
 const BRIEF_MAX_LIST_LINES = 3;
 const LIST_LINE = /^\s*(?:[-*•]|\d+[.)])\s/;
 
+/**
+ * A rendered decision (bold tier heading, or list items with bold labels — renderCandidateAnswer's shape) is the
+ * answer itself: brief shortens prose around it, never drops a heading or an item (that would be a silent omission
+ * after the trace already counted every candidate as rendered).
+ */
+const STRUCTURED_DECISION = /^\s*(?:(?:[-*•]|\d+[.)])\s+)?\*\*[^*\n]+\*\*(?:\s*$|\s+—)/m;
+
 function clampToBrief(text: string): string {
   const blocks = text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
-  const kept = blocks.filter((block, index) => index < BRIEF_MAX_BLOCKS || BRIEF_PROTECTED.test(block));
+  const kept = blocks.filter((block, index) => index < BRIEF_MAX_BLOCKS || BRIEF_PROTECTED.test(block) || STRUCTURED_DECISION.test(block));
   return kept
     .map((block) => {
       const lines = block.split("\n");
       const isList = lines.length > BRIEF_MAX_LIST_LINES && lines.filter((l) => LIST_LINE.test(l)).length >= 2;
-      return isList ? lines.slice(0, BRIEF_MAX_LIST_LINES).join("\n") : block;
+      return isList && !STRUCTURED_DECISION.test(block) ? lines.slice(0, BRIEF_MAX_LIST_LINES).join("\n") : block;
     })
     .join("\n\n");
 }
@@ -329,13 +342,20 @@ export function realizePersona(input: {
     verbosity: input.plan?.verbosity,
   });
 
-  return text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  // Trailing spaces only: `\s+\n` also matched "\n\n" and erased every paragraph break.
+  return text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export { hasCustomerServiceDrift };
 
+/**
+ * A numbered QUESTIONNAIRE ("Question 1: …", or numbered lines that are questions). An ordinary numbered list of
+ * steps or options is not one: flagging every "1." line made the repair strip list numbers (items 1–3 lost theirs,
+ * 4+ kept them — the "first number disappears" defect).
+ */
+export const NUMBERED_QUESTION_LINE = /^\s*[123][.)]\s[^\n]*[?？]\s*$/gm;
 export function hasQuestionNumbering(text: string): boolean {
-  return /(?:question|câu hỏi)\s*[123]|^\s*[123][\.)]\s/im.test(text);
+  return /(?:question|câu hỏi)\s*[123]\b/i.test(text) || new RegExp(NUMBERED_QUESTION_LINE.source, "m").test(text);
 }
 
 export type SafetyContinuation = {
@@ -344,7 +364,7 @@ export type SafetyContinuation = {
   evaluationUrgency: "URGENT" | "EMERGENCY" | "ROUTINE";
 };
 
-const MEDICAL_CATEGORIES = new Set(["chest_pain_cardiac", "fainting_dizziness", "neurological_symptoms", "severe_pain"]);
+const MEDICAL_CATEGORIES = new Set(["chest_pain_cardiac", "fainting_dizziness", "neurological_symptoms", "medical_red_flag", "severe_pain"]);
 
 /**
  * Reply for a turn whose safety state is carried by the persisted lifecycle rather than by fresh red-flag wording

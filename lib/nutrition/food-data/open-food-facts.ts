@@ -58,18 +58,8 @@ function setCached(key: string, value: NormalizedFood[] | NormalizedFood | null)
 }
 
 async function fetchWithTimeout(url: string): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
-  try {
-    return await fetch(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": getUserAgent() },
-      cache: "no-store",
-    })
-  } finally {
-    clearTimeout(timer)
-  }
+  // H0 WP1: the timeout stays on the request so it bounds the body read too (a cleared timer left `.json()` unbounded).
+  return fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { "User-Agent": getUserAgent() }, cache: "no-store" })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

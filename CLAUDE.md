@@ -48,8 +48,11 @@ silently ignore it.
   `lib/supabase/config.ts` (publishable key preferred, falls back to legacy
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`). Don't add a third env-reading helper —
   extend `env.ts` instead.
-- No service-role/admin Supabase client exists in this codebase by design.
-  If one is added later, it must never be imported into client-bundled code.
+- One service-role client exists: `lib/supabase/admin.ts` (`server-only`,
+  `SUPABASE_SERVICE_ROLE_KEY`), used by server routes for recovery proposals,
+  Dante tool-action finalisation and `coach_signals` writes. It must never be
+  imported into client-bundled code, and every query through it must be scoped
+  to the authenticated user's id.
 - Domain services live under `lib/{training,nutrition,recovery,auth,workouts,
   athlete-state,repositories}/`. Several pages still query Supabase directly
   instead of going through these — known duplication (see
@@ -79,8 +82,12 @@ Real, Supabase-backed CRUD — not mocked. Barcode (Open Food Facts), search
 (`lib/nutrition/photo-estimate.ts`) all normalize into one `ConfirmedFood`
 shape (`components/nutrition/types.ts`) before hitting
 `app/api/nutrition/log/route.ts`. The server always recomputes macros from
-`per100g × quantity` — never trusts client-submitted totals. Keep it that
-way when adding new input sources (e.g. HawkerLens later).
+`per100g × quantity` — never trusts client-submitted totals. Provenance is
+server-owned too: `createFoodLog` re-resolves any `usda` / `open-food-facts`
+/ `local` claim by id (`lib/nutrition/food-log/provenance.ts`) and stores the
+server's profile, or downgrades the entry to `user_provided` + estimated —
+a request can never mark its own values verified. Keep it that way when
+adding new input sources (e.g. HawkerLens later).
 
 The only mock/hardcoded nutrition data in the app is the public,
 unauthenticated `/meal-plan` calculator (`app/meal-plan/page.tsx`) — it
@@ -121,6 +128,30 @@ layer that never lets the LLM compute a number. Public API:
 `generateRecommendation`, `explainRecommendation`). Wired to real data via
 `app/api/dante/{readiness,recommendation}/route.ts`. Full detail, formulas,
 and known limitations: `docs/dante-core.md`.
+
+## Performance Intelligence Core (ICH-1)
+
+`lib/intelligence/performance-core/` — the shared substrate Dante and Gemma
+both consume: canonical knowledge + evidence strength, need/recommendation
+policy, safety posture, conversation control, output integrity. Pure and
+synchronous. Public API: `index.ts` (`buildIntelligenceBrief`,
+`resolveConversationControl`, `checkOutputIntegrity`, `enforceIntegrity`).
+
+- Knowledge lives in `knowledge/*.ts` as `KnowledgeRecord`s, never in
+  prompts. Every source in `sources.ts` was looked up on PubMed and its
+  abstract read; a claim may state only what its abstract states. No
+  verified source → the topic goes in `KNOWLEDGE_GAPS`, not a record.
+  Evidence strength belongs to one claim × outcome × population × context.
+- One copy of supplement evidence; each coach reads it through its own lens.
+  Option tiers are derived per turn in `policy.ts`, never stored.
+- `detectTurnLanguageRequest` is the only explicit-language detector
+  (`lib/dante-language.ts` and the coherence layer call it). Don't add
+  another phrase list.
+- It stops nothing itself: hard stops stay with
+  `lib/dante-core/safety-layer.ts` and the nutrition coach's `screenSafety`.
+- `ICH1_LIVE=1 npx vitest run lib/dante-core/__tests__/ich1-intelligence.live.test.ts`
+  runs an opt-in real-provider smoke. Not frozen; independent evaluation
+  pending.
 
 ## SetVision
 

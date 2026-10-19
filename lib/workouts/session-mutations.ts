@@ -136,7 +136,7 @@ async function assertSessionOwned(
 ) {
   const { data, error } = await supabase
     .from("workout_sessions")
-    .select("id")
+    .select("id, session_state")
     .eq("id", sessionId)
     .eq("user_id", userId)
     .maybeSingle()
@@ -147,6 +147,25 @@ async function assertSessionOwned(
 
   if (!data) {
     throw new Error("Workout session not found.")
+  }
+
+  return data.session_state
+}
+
+/**
+ * Logging mutations (save set / skip / replace) only apply to a session
+ * that is still open. A finished session's totals are frozen by
+ * finish_workout, so editing its sets afterwards would desync History.
+ */
+async function assertSessionOpen(
+  supabase: LooseSupabase,
+  sessionId: string,
+  userId: string,
+) {
+  const state = await assertSessionOwned(supabase, sessionId, userId)
+
+  if (state === "completed" || state === "cancelled") {
+    throw new Error("This workout is already finished and can no longer be edited.")
   }
 }
 
@@ -165,7 +184,7 @@ export async function mutateSaveSet(
       }
     }
 
-    await assertSessionOwned(supabase, sessionId, userId)
+    await assertSessionOpen(supabase, sessionId, userId)
 
     const setId =
       asString(payload.setId) ?? asString(payload.set_id)
@@ -241,7 +260,7 @@ export async function mutateSkipExercise(
       }
     }
 
-    await assertSessionOwned(supabase, sessionId, userId)
+    await assertSessionOpen(supabase, sessionId, userId)
 
     const sessionExerciseId =
       asString(payload.sessionExerciseId) ??
@@ -309,7 +328,7 @@ export async function mutateReplaceExercise(
       }
     }
 
-    await assertSessionOwned(supabase, sessionId, userId)
+    await assertSessionOpen(supabase, sessionId, userId)
 
     const sessionExerciseId =
       asString(payload.sessionExerciseId) ??
@@ -345,13 +364,30 @@ export async function mutateReplaceExercise(
 
     const exerciseName = asString(libraryExercise.name) ?? "Exercise"
 
+    const { data: currentExercise, error: currentExerciseError } =
+      await supabase
+        .from("workout_session_exercises")
+        .select("exercise_id")
+        .eq("id", sessionExerciseId)
+        .eq("workout_session_id", sessionId)
+        .maybeSingle()
+
+    if (currentExerciseError || !currentExercise) {
+      return {
+        success: false,
+        message:
+          currentExerciseError?.message ??
+          "Session exercise not found.",
+      }
+    }
+
     const { error } = await supabase
       .from("workout_session_exercises")
       .update({
         exercise_id: replacementExerciseId,
-        exercise_name: exerciseName,
         display_name: exerciseName,
-        replacement_exercise_id: replacementExerciseId,
+        replaced_from_exercise_id:
+          asString(currentExercise.exercise_id),
         updated_at: new Date().toISOString(),
       })
       .eq("id", sessionExerciseId)
@@ -384,7 +420,7 @@ export async function mutateReplaceExercise(
 }
 
 /**
- * Adjusts target_sets/rep_min/rep_max for one session exercise —
+ * Adjusts target_sets/target_rep_min/target_rep_max for one session exercise —
  * used by Dante's `adjust_sets_reps` and `modify_volume` actions
  * (lib/dante-core/actions/apply-action.ts). Same ownership check and
  * error handling as every other mutation in this file; Dante never
@@ -431,8 +467,8 @@ export async function mutateAdjustSetsReps(
 
     const updates: UnknownRecord = { updated_at: new Date().toISOString() }
     if (targetSets !== null) updates.target_sets = Math.max(1, Math.round(targetSets))
-    if (repMin !== null) updates.rep_min = Math.max(1, Math.round(repMin))
-    if (repMax !== null) updates.rep_max = Math.max(1, Math.round(repMax))
+    if (repMin !== null) updates.target_rep_min = Math.max(1, Math.round(repMin))
+    if (repMax !== null) updates.target_rep_max = Math.max(1, Math.round(repMax))
 
     const { error } = await supabase
       .from("workout_session_exercises")
@@ -498,26 +534,23 @@ export async function mutateFinishWorkout(
     )
 
     if (error) {
+      const completed = await loadCompletedSession(supabase, sessionId, userId)
+      if (completed) {
+        // Retry of an already-finished session: the first finish emitted
+        // WORKOUT_COMPLETED, so this is a no-op success, not a second event.
+        return {
+          success: true,
+          message: "Workout completed.",
+          data: completed,
+        }
+      }
       return {
         success: false,
         message: error.message,
       }
     }
 
-    // Structured event (spec Part B §14) — a real Supabase client is
-    // used here rather than the loosely-typed one above, since
-    // emitEvent() takes the properly-typed SupabaseClient.
-    const eventClient = await createClient()
-    await emitEvent(eventClient, {
-      type: "WORKOUT_COMPLETED",
-      userId,
-      payload: {
-        workoutSessionId: sessionId,
-        totalVolumeKg: null,
-        totalSets: null,
-        sessionRpe: sessionRpe ?? null,
-      },
-    })
+    await emitWorkoutCompleted(sessionId, userId, sessionRpe)
 
     return {
       success: true,
@@ -532,6 +565,46 @@ export async function mutateFinishWorkout(
           ? error.message
           : "Unable to finish workout.",
     }
+  }
+}
+
+async function loadCompletedSession(
+  supabase: LooseSupabase,
+  sessionId: string,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from("workout_sessions")
+    .select("id, session_state")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error || !data) return null
+  const state = data.session_state
+  if (state !== "completed") return null
+  return data
+}
+
+async function emitWorkoutCompleted(
+  sessionId: string,
+  userId: string,
+  sessionRpe: number | null,
+) {
+  try {
+    const eventClient = await createClient()
+    await emitEvent(eventClient, {
+      type: "WORKOUT_COMPLETED",
+      userId,
+      payload: {
+        workoutSessionId: sessionId,
+        totalVolumeKg: null,
+        totalSets: null,
+        sessionRpe: sessionRpe ?? null,
+      },
+    })
+  } catch (error) {
+    console.error("[WORKOUT] WORKOUT_COMPLETED emit failed after finish", error)
   }
 }
 

@@ -3,7 +3,7 @@
  *
  * Keeps assembled prompts within a predictable input budget so
  * completion tokens remain usable and latency stays bounded — even
- * though OpenAI models allow much larger contexts than the old Groq
+ * though OpenAI models allow much larger contexts than prior providers'
  * free-tier ceiling.
  */
 
@@ -49,6 +49,31 @@ export function fitTextToTokenBudget(text: string, maxTokens: number): string {
   const head = Math.floor(available * 0.7);
   const tail = available - head;
   return `${text.slice(0, head)}${marker}${text.slice(-tail)}`;
+}
+
+/**
+ * Instruction blocks made of "====\nHEADER\n====" sections. The preamble and every mandatory section stay whole
+ * whatever the budget; optional sections are kept whole, in order, while they fit. Nothing is cut mid-sentence, so
+ * a safety, epistemic or tool-authority rule can never be the part that falls out of the middle.
+ */
+export function fitInstructionSections(
+  text: string,
+  maxTokens: number,
+  isMandatory: (header: string) => boolean,
+): string {
+  if (estimateTokenCount(text) <= maxTokens) return text;
+  const sections = text.split(/\n(?==+\n[^\n]+\n=+\n)/);
+  const required = sections.map((section, index) => index === 0 || isMandatory(section.match(/^=+\n([^\n]+)\n=+/)?.[1] ?? ""));
+  let used = sections.reduce((sum, section, index) => sum + (required[index] ? estimateTokenCount(section) : 0), 0);
+  return sections
+    .filter((section, index) => {
+      if (required[index]) return true;
+      const cost = estimateTokenCount(section);
+      if (used + cost > maxTokens) return false;
+      used += cost;
+      return true;
+    })
+    .join("\n");
 }
 
 export function fitJsonToTokenBudget(value: unknown, maxTokens: number): string {

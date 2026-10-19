@@ -16,13 +16,11 @@ export default async function AdminHomePage() {
         </p>
 
         <h1 className="mt-4 text-4xl font-black tracking-tight">
-          Phase 1 foundation is live
+          Platform administration
         </h1>
 
         <p className="mt-4 text-sm leading-7 text-zinc-400">
-          Role-gated admin entry point. CRM, support, billing, and AI
-          product surfaces will land in later V2 phases on top of the
-          entitlements and audit foundation.
+          Role-gated tools for Dante validation and AI evaluation.
         </p>
 
         <dl className="mt-8 grid gap-4 sm:grid-cols-2">

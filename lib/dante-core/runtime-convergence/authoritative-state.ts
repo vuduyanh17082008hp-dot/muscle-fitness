@@ -124,6 +124,22 @@ export function extractCausalTargetFromText(text: string): string | null {
   return null;
 }
 
+const PERF_NOUN = "(?:perform\\w*|reps?|loads?|weights?|strength|squat|bench|deadlift|press|lifts?|pr|1rm|volume|sets?|hiệu suất|hieu suat|sức mạnh|suc manh|tạ|mức tạ)";
+// Unambiguous decline words need no noun ("why am I weaker"); neutral direction words ("down", "lower") need a performance noun.
+const PERF_DECLINE_STRONG = /\bwhy\b[^?.!]{0,60}\b(?:worse|weaker|slower|stall(?:ed|ing)?|plateau(?:ed|ing)?|regress(?:ed|ing)?|declin(?:e|ed|ing))\b/i;
+const PERF_DECLINE_WITH_NOUN = new RegExp(`\\bwhy\\b[^?.!]{0,60}\\b${PERF_NOUN}\\b[^?.!]{0,40}\\b(?:drop(?:ped|ping)?|decreas(?:e|ed|ing)|lower|down|fell|falling)\\b|\\bwhy\\b[^?.!]{0,40}\\b(?:drop(?:ped|ping)?|decreas(?:e|ed|ing)|fell)\\b[^?.!]{0,40}\\b${PERF_NOUN}\\b`, "i");
+const PERF_CAUSE_ASK = /\bwhat\b[^?.!]{0,20}\bcaus\w*\b[^?.!]{0,40}\b(?:decline|drop|regression|plateau|stall\w*|decrease)\b/i;
+const PERF_DECLINE_VI = /(?:tại sao|vì sao|tai sao|vi sao)[^?.!]{0,50}(?:yếu hơn|yeu hon|tệ hơn|te hon|kém hơn|kem hon|đuối|duoi|giảm|giam|sụt|sut)/i;
+
+/**
+ * Performance-attribution question ("why is my squat worse", "why am I weaker", "what caused this decline").
+ * Detects the ASK only — it never names a cause, so reasoning stays UNKNOWN until evidence supports a hypothesis.
+ * Plain lookups ("show my squat history") have no why/cause framing and never match.
+ */
+export function isPerformanceAttributionQuery(text: string): boolean {
+  return PERF_DECLINE_STRONG.test(text) || PERF_DECLINE_WITH_NOUN.test(text) || PERF_CAUSE_ASK.test(text) || PERF_DECLINE_VI.test(text);
+}
+
 export function extractObservedOutcome(text: string): string | null {
   if (/(?:bench).{0,40}(?:rpe).{0,20}(?:giảm|giam|down|lower|decrease)/i.test(text)
     || /(?:rpe).{0,20}(?:bench).{0,20}(?:giảm|giam|down)/i.test(text)

@@ -71,16 +71,17 @@ export function getSupabaseEnvironment(): SupabaseEnvironment {
     parsedUrl.protocol === "https:" &&
     parsedUrl.hostname.endsWith(".supabase.co")
 
-  const isLoopbackSupabase =
+  // 26.169.20.28 is this machine's local Supabase dev host (loopback is unreliable here).
+  const isLocalDevSupabase =
     process.env.NODE_ENV !== "production" &&
     parsedUrl.protocol === "http:" &&
-    ["127.0.0.1", "localhost", "[::1]"].includes(
+    ["127.0.0.1", "localhost", "[::1]", "26.169.20.28"].includes(
       parsedUrl.hostname,
     )
 
-  if (!isHostedSupabase && !isLoopbackSupabase) {
+  if (!isHostedSupabase && !isLocalDevSupabase) {
     throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL must be a Supabase HTTPS project URL, or a loopback HTTP URL outside production.",
+      "NEXT_PUBLIC_SUPABASE_URL must be a Supabase HTTPS project URL, or a loopback / local dev host HTTP URL outside production.",
     )
   }
 

@@ -22,7 +22,7 @@ import { looksVietnamese } from "@/lib/dante-language";
 import { scrubInternalJargon } from "@/lib/dante-core/adaptive-coach-v2/natural-response/jargon-policy";
 import { blockSurfaceText, unverifiedDraftBlocks } from "@/lib/dante-core/coherence/authority";
 import { neutralPlan } from "@/lib/dante-core/coherence/expression";
-import { hasCustomerServiceDrift, stripCustomerService } from "@/lib/dante-core/coherence/style";
+import { hasCustomerServiceDrift, isDanglingFragment, stripCustomerService } from "@/lib/dante-core/coherence/style";
 import type { ContextMode, ExpressionPlan, ResponseBlock } from "@/lib/dante-core/coherence/types";
 
 /** HARD CONSTANT. Nothing in this module accepts a larger value. */
@@ -260,7 +260,9 @@ function splitSentences(paragraph: string): string[] {
  * never touched. Independent of repairPersonaDraft on purpose — it must still work when the repair itself failed.
  */
 function hardScrub(sentence: string, plan: ExpressionPlan, language: "en" | "vi"): string {
-  const noCs = sentence.replace(/(?:i['’]?m happy to help|i hope (?:this|that|it) helps|feel free to|rất vui được|hy vọng (?:điều|thông tin))[^.!?\n]*[.!?]?/giu, "");
+  const csRemoved = sentence.replace(/(?:i['’]?m happy to help|i hope (?:this|that|it) helps|feel free to|rất vui được|hy vọng (?:điều|thông tin))[^.!?\n]*[.!?]?/giu, "");
+  // H0 cluster G: a macro removed from the end of a conditional leaves "If you have questions about X," — drop it whole.
+  const noCs = csRemoved !== sentence && isDanglingFragment(csRemoved) ? "" : csRemoved;
   const noHumor = noCs.replace(HUMOR_MARKERS, "");
   return tidy(removeVocatives(noHumor, findDirectVocatives(noHumor, language))).replace(SLANG_INTERJECTION, "$1").trim();
 }

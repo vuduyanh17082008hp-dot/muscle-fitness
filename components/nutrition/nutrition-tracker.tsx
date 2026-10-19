@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, UtensilsCrossed } from "lucide-react"
 
 import { TrackFoodModal } from "@/components/nutrition/track-food-modal"
@@ -35,6 +35,8 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
 
   const [recentFoods, setRecentFoods] = useState<FoodHistoryItem[]>([])
@@ -102,12 +104,13 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
 
   async function handleAddFood(food: ConfirmedFood): Promise<boolean> {
     setError(null)
+    const idempotencyKey = food.idempotencyKey ?? crypto.randomUUID()
 
     try {
       const response = await fetch("/api/nutrition/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(food),
+        body: JSON.stringify({ ...food, idempotencyKey }),
       })
 
       const data = await response.json()
@@ -142,6 +145,9 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
   }
 
   async function handleAddAgain(item: FoodHistoryItem) {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    setSubmitting(true)
     setError(null)
 
     // Derive a per-100g profile back out of exactly what was logged
@@ -150,25 +156,30 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
     // result is byte-for-byte consistent with last time's entry.
     const factor = item.lastQuantityGrams > 0 ? 100 / item.lastQuantityGrams : 0
 
-    await handleAddFood({
-      foodName: item.foodName,
-      brand: item.brand,
-      source: item.source,
-      sourceId: item.sourceId,
-      barcode: item.barcode,
-      per100g: {
-        calories: item.lastMacros.calories * factor,
-        protein: item.lastMacros.protein * factor,
-        carbs: item.lastMacros.carbs * factor,
-        fat: item.lastMacros.fat * factor,
-        fiber: item.lastMacros.fiber === null ? null : item.lastMacros.fiber * factor,
-      },
-      quantityGrams: item.lastQuantityGrams,
-      servingName: item.lastServingName,
-      servingsConsumed: item.lastServingsConsumed,
-      mealType: suggestMealType(),
-      isEstimated: item.lastIsEstimated,
-    })
+    try {
+      await handleAddFood({
+        foodName: item.foodName,
+        brand: item.brand,
+        source: item.source,
+        sourceId: item.sourceId,
+        barcode: item.barcode,
+        per100g: {
+          calories: item.lastMacros.calories * factor,
+          protein: item.lastMacros.protein * factor,
+          carbs: item.lastMacros.carbs * factor,
+          fat: item.lastMacros.fat * factor,
+          fiber: item.lastMacros.fiber === null ? null : item.lastMacros.fiber * factor,
+        },
+        quantityGrams: item.lastQuantityGrams,
+        servingName: item.lastServingName,
+        servingsConsumed: item.lastServingsConsumed,
+        mealType: suggestMealType(),
+        isEstimated: item.lastIsEstimated,
+      })
+    } finally {
+      submittingRef.current = false
+      setSubmitting(false)
+    }
   }
 
   async function handleUpdateQuantity(id: string, grams: number) {
@@ -259,10 +270,10 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
       {isToday && (recentFoods.length > 0 || frequentFoods.length > 0) ? (
         <div id="history" className="grid gap-4 sm:grid-cols-2 scroll-mt-24">
           {recentFoods.length > 0 ? (
-            <FoodShortcutList title="Recent Foods" items={recentFoods} onAddAgain={handleAddAgain} />
+            <FoodShortcutList title="Recent Foods" items={recentFoods} submitting={submitting} onAddAgain={handleAddAgain} />
           ) : null}
           {frequentFoods.length > 0 ? (
-            <FoodShortcutList title="Frequent Foods" items={frequentFoods} onAddAgain={handleAddAgain} />
+            <FoodShortcutList title="Frequent Foods" items={frequentFoods} submitting={submitting} onAddAgain={handleAddAgain} />
           ) : null}
         </div>
       ) : null}
@@ -364,10 +375,12 @@ function DateNav({
 function FoodShortcutList({
   title,
   items,
+  submitting,
   onAddAgain,
 }: {
   title: string
   items: FoodHistoryItem[]
+  submitting: boolean
   onAddAgain: (item: FoodHistoryItem) => void
 }) {
   return (
@@ -387,9 +400,10 @@ function FoodShortcutList({
             <button
               type="button"
               onClick={() => onAddAgain(item)}
-              className="shrink-0 rounded-lg border border-mf-glass-brand-border bg-mf-glass-brand-soft px-3 py-1.5 text-xs font-bold text-mf-glass-brand hover:bg-mf-glass-brand-soft"
+              disabled={submitting}
+              className="shrink-0 rounded-lg border border-mf-glass-brand-border bg-mf-glass-brand-soft px-3 py-1.5 text-xs font-bold text-mf-glass-brand hover:bg-mf-glass-brand-soft disabled:opacity-40"
             >
-              Add Again
+              {submitting ? "Adding…" : "Add Again"}
             </button>
           </li>
         ))}

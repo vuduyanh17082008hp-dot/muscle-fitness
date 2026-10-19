@@ -37,7 +37,7 @@ function isNegated(text: string, index: number): boolean {
  * is a request for confirmation, not an assertion — it must never overwrite a recorded value. The frame is local to
  * the mention, so "hôm qua đau vai phải, giờ tập được không?" (an assertion plus an unrelated question) still counts.
  */
-const QUESTION_BEFORE = /(?:co phai|was it|is it|wasn'?t it|isn'?t it)\s+(?:hom qua\s+|yesterday\s+)?(?:la\s+)?(?:the\s+)?$/;
+const QUESTION_BEFORE = /(?:co phai|was it|is it|wasn'?t it|isn'?t it)\s+(?:hom qua\s+|yesterday\s+)?(?:la\s+)?(?:the\s+|my\s+)?$/;
 const QUESTION_AFTER = /^\s*(?:\?|(?:dung\s+(?:khong|ko)|nhi|ha|hen)\b)/;
 
 /**
@@ -188,6 +188,11 @@ function resolveSlotChunk<T extends string>(input: {
         return { kind: "correct", earlier, value };
       }
     }
+    const denial = /^(?:no|nope)\s*,?\s+(?:it'?s\s+|its\s+)?(?:my\s+|the\s+)?(?:left|right)\b|^(?:khong|ko)\s*,?\s+(?:la\s+|vai\s+)*(?:trai|phai)\b/.test(chunk.trim());
+    if (denial) {
+      const last = mentions.filter((m) => !m.negated && !m.questioned).at(-1);
+      if (last) return { kind: "correct", earlier: null, value: last.value };
+    }
     if (!anchored && !input.bareValue) return { kind: "none" };
     const positive = mentions.filter((m) => !m.negated && !m.questioned);
     const last = positive.at(-1);
@@ -197,7 +202,16 @@ function resolveSlotChunk<T extends string>(input: {
   const before = mentions.filter((m) => m.index < markers[0].index && !m.negated);
   // A correction needs a referent: a "yesterday" anchor, durable state, or — self-contained — an earlier assertion
   // of the same slot in this very clause ("vai phải — à khoan, vai trái").
-  if (!anchored && !hasReferent && before.length === 0) return { kind: "none" };
+  if (!anchored && !hasReferent && before.length === 0) {
+    const repairOnly = /\b(?:sua lai|a khoan|a khong|khoan da|chinh lai|dinh chinh|correction|i meant|i misspoke|my mistake)\b/.test(chunk);
+    const targets = markerTargets(markers, mentions, invert);
+    const shoulderish = /shoulder|\bside\b|\bvai\b|\bben\b/.test(chunk);
+    const clean = mentions.filter((m) => !m.questioned && !m.negated);
+    if (!repairOnly && !mentions.some((m) => m.negated) && shoulderish && clean.length === 1 && targets.length === 1) {
+      return { kind: "correct", earlier: null, value: targets[0] };
+    }
+    return { kind: "none" };
+  }
   const targets = markerTargets(markers, mentions, invert);
   if (targets.length === 0) return { kind: "none" };
   if (new Set(targets).size > 1) return { kind: "conflict", values: [...new Set(targets)] };
@@ -237,6 +251,8 @@ function collapseTopic(candidates: CorrectionCandidate[]): CorrectionCandidate[]
   return candidates;
 }
 
+export type LateralityEvidence = "UNKNOWN" | "USER_EXPLICIT" | "USER_CORRECTION" | "USER_UNCERTAIN_RECALL";
+
 export type SlotResolution = {
   candidates: CorrectionCandidate[];
   /** The message carried an explicit correction (marker or "X mới đúng"), not just an assertion. */
@@ -245,6 +261,8 @@ export type SlotResolution = {
   /** Final and superseded values, for reporting. */
   value: string | null;
   superseded: string | null;
+  /** Set by resolveLaterality. USER_EXPLICIT is a user statement; USER_CORRECTION supersedes it. */
+  evidence?: LateralityEvidence;
 };
 
 function summarize<T extends string>(topic: string, outcomes: SlotOutcome<T>[]): SlotResolution {
@@ -275,16 +293,21 @@ function summarize<T extends string>(topic: string, outcomes: SlotOutcome<T>[]):
   };
 }
 
+const PAIN = /\b(?:hurt|hurts|hurting|pain|painful|sore|soreness|ache|aching|ached|irritat\w*|dau|nhuc)\b/;
+
 /** `hasReferent`: durable state already holds a laterality slot, so a bare "sửa lại, là vai trái" has a target. */
 export function resolveLaterality(folded: string, hasReferent: boolean): SlotResolution {
   const outcomes: SlotOutcome<"LEFT" | "RIGHT">[] = [];
   for (const chunk of clausesOf(folded)) {
     if (!chunk.trim()) continue;
+    const mentions = sideMentions(chunk);
+    const today = /\b(?:hom nay|today|bay gio|right now|currently|hien tai)\b/.test(chunk);
+    const namedPain = !today && mentions.some((m) => !m.negated && !m.questioned) && PAIN.test(chunk);
     outcomes.push(
       resolveSlotChunk({
         chunk,
-        mentions: sideMentions(chunk),
-        anchored: /\b(?:hom qua|hqua|yesterday)\b/.test(chunk),
+        mentions,
+        anchored: /\b(?:hom qua|hqua|yesterday)\b/.test(chunk) || namedPain,
         hasReferent: hasReferent && /\bvai\b|shoulder/.test(chunk),
         invert: opposite,
         postfix: false,
@@ -292,7 +315,40 @@ export function resolveLaterality(folded: string, hasReferent: boolean): SlotRes
       }),
     );
   }
-  return summarize(LATERALITY_TOPIC, outcomes);
+  const slot = summarize(LATERALITY_TOPIC, outcomes);
+  const uncertainRecall = slot.value == null
+    && sideMentions(folded).length > 0
+    && /(?:\bi think\b|\bnot sure\b|hinh nhu|khong chac|co le|\bmaybe\b|\bperhaps\b)/.test(folded);
+  const evidence: LateralityEvidence = slot.explicit && slot.value
+    ? "USER_CORRECTION"
+    : slot.value
+      ? "USER_EXPLICIT"
+      : uncertainRecall
+        ? "USER_UNCERTAIN_RECALL"
+        : "UNKNOWN";
+  return { ...slot, evidence };
+}
+
+/** Short side questions are answered from stored user evidence. A yes/no guess is not answered yes. */
+export function answerShoulderSide(
+  message: string,
+  side: "LEFT" | "RIGHT" | null,
+  language: "en" | "vi",
+): string | null {
+  const q = message.trim().replace(/\s+/g, " ");
+  if (/^(?:is|was) it (?:my |the )?(?:left|right)(?: shoulder)?\??$/i.test(q)) {
+    return language === "vi"
+      ? "Ông đang hỏi, mình không tự kết luận bên nào."
+      : "You're asking, so I won't decide the side.";
+  }
+  if (!/^(?:so\s+)?(?:what|which)\s+side(?:\s+did\s+i(?:\s+say)?)?\??$|^(?:so\s+)?(?:which|what)\s+shoulder\??$|^(?:bên|ben)\s+nào\??$|^vai\s+nào\??$/i.test(q)) return null;
+  if (side !== "LEFT" && side !== "RIGHT") {
+    return language === "vi" ? "Ông chưa nói bên nào." : "You didn't specify a side.";
+  }
+  const name = side === "LEFT"
+    ? (language === "vi" ? "vai trái" : "the left shoulder")
+    : (language === "vi" ? "vai phải" : "the right shoulder");
+  return language === "vi" ? `Bên ông nói là ${name}.` : `You said ${name}.`;
 }
 
 export function resolveWeekday(folded: string): SlotResolution {

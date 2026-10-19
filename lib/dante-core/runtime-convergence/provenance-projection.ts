@@ -250,7 +250,7 @@ export function projectProvenanceStrength(input: {
   );
 
   return {
-    text: text.replace(/\s{2,}/g, " ").trim(),
+    text: text.replace(/[ \t]{2,}/g, " ").trim(),
     inputStrength,
     projectedOutputStrength,
     monotonicityPassed,

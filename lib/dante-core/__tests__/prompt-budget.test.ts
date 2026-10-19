@@ -4,6 +4,7 @@ import {
   DANTE_MAX_INPUT_TOKENS,
   estimateTokenCount,
   fitAssembledPromptToBudget,
+  fitInstructionSections,
   fitTextToTokenBudget,
   maxCompletionTokens,
 } from "@/lib/dante-core/openai/prompt-budget";
@@ -40,5 +41,31 @@ describe("fitTextToTokenBudget / fitAssembledPromptToBudget", () => {
     expect(estimateTokenCount(fitted)).toBeLessThanOrEqual(DANTE_MAX_INPUT_TOKENS);
     expect(fitted).toContain("CLIENT QUESTION");
     expect(fitted).toContain("What should I train today?");
+  });
+});
+
+describe("fitInstructionSections", () => {
+  const section = (header: string, words: number) => `${"=".repeat(20)}\n${header}\n${"=".repeat(20)}\n\n${`${header.toLowerCase()} rule. `.repeat(words)}`;
+  const text = ["You are Dante.", section("STYLE", 200), section("SAFETY", 200), section("DETAIL", 40), section("TOOLS", 200)].join("\n");
+  const mandatory = (header: string) => header === "SAFETY" || header === "TOOLS";
+
+  it("keeps the preamble and every mandatory section whole, even over budget", () => {
+    const fitted = fitInstructionSections(text, 100, mandatory);
+    expect(fitted).toContain("You are Dante.");
+    expect(fitted).toContain(section("SAFETY", 200));
+    expect(fitted).toContain(section("TOOLS", 200));
+    expect(fitted).not.toContain("\nSTYLE\n");
+  });
+
+  it("fills the remaining budget with whole optional sections, never a partial one", () => {
+    // STYLE (~600 tokens) no longer fits; DETAIL (~120) still does.
+    const fitted = fitInstructionSections(text, estimateTokenCount(text) - 400, mandatory);
+    expect(fitted).toContain(section("DETAIL", 40));
+    expect(fitted).not.toContain("\nSTYLE\n");
+    expect(fitted).not.toMatch(/condensed/);
+  });
+
+  it("returns the text untouched when it fits", () => {
+    expect(fitInstructionSections(text, 100_000, mandatory)).toBe(text);
   });
 });

@@ -21,7 +21,6 @@ import {
   Bot,
   CalendarDays,
   ChartNoAxesCombined,
-  CheckSquare2,
   ChevronRight,
   Dumbbell,
   HeartPulse,
@@ -29,7 +28,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  MessageSquareText,
   Settings,
   Sparkles,
   Utensils,
@@ -42,6 +40,7 @@ import {
 
 import { Logo } from "@/components/brand/logo";
 import { FloatingDante } from "@/components/dashboard/floating-dante";
+import { QuickCapture } from "@/components/dashboard/quick-capture";
 
 /* =========================================================
    TYPES
@@ -57,7 +56,7 @@ type NavItem = {
    * active. Used for Muscle Intelligence (/dashboard/training-intelligence),
    * which conceptually belongs under Train but lives at a sibling
    * route rather than nested under /dashboard/workouts — without
-   * this, "Train" would stop reading as the active parent domain
+   * this, "Training" would stop reading as the active parent domain
    * while the user is on that page.
    */
   activePrefixes?: string[];
@@ -104,7 +103,7 @@ const navSections: NavSection[] = [
         exact: true,
       },
       {
-        label: "Train",
+        label: "Training",
         href: "/dashboard/workouts",
         icon: Dumbbell,
         activePrefixes: ["/dashboard/training-intelligence"],
@@ -137,19 +136,9 @@ const navSections: NavSection[] = [
 
     items: [
       {
-        label: "Check-in",
-        href: "/dashboard/check-in",
-        icon: CheckSquare2,
-      },
-      {
         label: "Experiments",
         href: "/dashboard/experiments",
         icon: Beaker,
-      },
-      {
-        label: "Messages",
-        href: "/dashboard/messages",
-        icon: MessageSquareText,
       },
       {
         label: "Calendar",
@@ -169,18 +158,18 @@ const navSections: NavSection[] = [
    MOBILE PRIMARY NAV
 
    A persistent thumb-reachable bottom bar for the primary sections used
-   most often on a phone (Overview, Train, Nutrition, Recovery, Progress,
+   most often on a phone (Overview, Training, Nutrition, Recovery, Progress,
    Dante). This is additive, not a duplicate of the existing hamburger
-   drawer above: the drawer still holds the full nav tree (Check-in,
-   Messages, Calendar, Settings, Experiments); this bar is just a fast
+   drawer above: the drawer still holds Calendar, Settings and
+   Experiments; this bar is just a fast
    path to the sections someone opens every day.
 ========================================================= */
 
 const mobilePrimaryNav: NavItem[] = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Train", href: "/dashboard/workouts", icon: Dumbbell, activePrefixes: ["/dashboard/training-intelligence"] },
-  { label: "Fuel", href: "/dashboard/nutrition", icon: Utensils },
-  { label: "Recover", href: "/dashboard/recovery", icon: HeartPulse },
+  { label: "Training", href: "/dashboard/workouts", icon: Dumbbell, activePrefixes: ["/dashboard/training-intelligence"] },
+  { label: "Nutrition", href: "/dashboard/nutrition", icon: Utensils },
+  { label: "Recovery", href: "/dashboard/recovery", icon: HeartPulse },
   { label: "Progress", href: "/dashboard/progress", icon: ChartNoAxesCombined },
   { label: "Dante", href: "/dashboard/ai-coach", icon: Bot },
 ];
@@ -512,7 +501,7 @@ export function DashboardShell({
           MAIN
       =================================================== */}
 
-      <main className="min-h-screen pb-20 lg:pb-0 lg:pl-72">
+      <main className="min-h-screen pb-28 lg:pb-10 lg:pl-72">
         <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">
           {
             children
@@ -527,12 +516,19 @@ export function DashboardShell({
       <MobileBottomNav pathname={pathname} hash={hash} />
 
       {/* ===================================================
-          FLOATING DANTE — persistent, calm entry point across
-          every authenticated Client OS page (spec: "Global
-          Floating Dante"). See components/dashboard/floating-dante.tsx.
+          FLOATING CONTROLS (PF-02) — Centralized floating layout
+          for Floating Dante and Quick Capture (+).
+          Positioned above MobileBottomNav on mobile/tablet,
+          and anchored in the bottom-right corner on desktop.
       =================================================== */}
 
-      <FloatingDante />
+      <aside
+        aria-label="Floating quick actions"
+        className="pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] right-4 z-40 flex flex-col-reverse items-center gap-3 lg:bottom-6 lg:right-6"
+      >
+        <FloatingDante />
+        <QuickCapture />
+      </aside>
     </div>
   );
 }

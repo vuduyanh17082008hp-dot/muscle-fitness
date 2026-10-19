@@ -27,10 +27,18 @@ import {
 } from "@/components/dante/dante-presence";
 import { cn } from "@/lib/utils";
 import { FORM_COACH_HANDOFF_KEY } from "@/lib/form-coach/handoff";
+import {
+  DANTE_SESSION_EXPIRED_MESSAGE,
+  DANTE_UNAVAILABLE_MESSAGE,
+  danteHttpFailureCopy,
+  isDanteRateLimitedMessage,
+} from "@/lib/dante-chat-http-error";
 import type { DanteInsight } from "@/lib/dante-core/insight";
+import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT } from "@/lib/coach-context-event";
 import {
   parseChatStreamChunk,
   resolveAbortedContent,
+  resolveConfirmationOutcome,
   resolveStreamErrorContent,
   type ChatStreamEvent,
   type ChatStreamSource,
@@ -55,7 +63,7 @@ type ChatMessage = {
   insight?: DanteInsight | null;
   sources?: ChatStreamSource[] | null;
   pendingConfirmation?: PendingConfirmation | null;
-  confirmationResolution?: "confirmed" | "cancelled" | "failed" | null;
+  confirmationResolution?: "confirmed" | "cancelled" | "failed" | "unknown" | null;
   isComplete?: boolean;
   wasAborted?: boolean;
 };
@@ -68,22 +76,22 @@ export type QuickPrompt = {
 
 const QUICK_PROMPTS: QuickPrompt[] = [
   {
-    tag: "// TRAINING: TODAY",
+    tag: "Today's training",
     label: "What should I train today?",
     prompt: "Based on my current readiness, what should I train today?",
   },
   {
-    tag: "// NUTRITION: PROTEIN",
+    tag: "Nutrition target",
     label: "How do I hit my protein target?",
     prompt: "What should I eat to hit my remaining protein target?",
   },
   {
-    tag: "// RECOVERY: CHECK-IN",
+    tag: "Recovery check-in",
     label: "I haven't checked in today.",
     prompt: "I still need to do my daily recovery check-in. What should I log?",
   },
   {
-    tag: "// PROGRESS: 30 DAYS",
+    tag: "30-day trajectory",
     label: "How did I progress this month?",
     prompt: "How did my training and recovery progress over the last 30 days?",
   },
@@ -103,8 +111,7 @@ export type DanteChatProps = {
    * Suggestions") — built server-side from the caller's own already-
    * loaded data via lib/dante-core/build-chat-suggestions.ts. When
    * provided, these replace `quickPrompts` in the empty state. Omit
-   * on pages with no per-user signal (e.g. the public /chatbot page)
-   * to fall back to the generic starters.
+   * when there is no per-user signal to fall back to the generic starters.
    */
   contextualSuggestions?: DanteInsight[];
   compact?: boolean;
@@ -278,7 +285,7 @@ function PendingConfirmationPanel({
   onCancel,
 }: {
   pendingConfirmation: PendingConfirmation;
-  resolution: "confirmed" | "cancelled" | "failed" | null | undefined;
+  resolution: "confirmed" | "cancelled" | "failed" | "unknown" | null | undefined;
   isBusy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -303,6 +310,15 @@ function PendingConfirmationPanel({
     return (
       <p className="mt-3 text-xs font-semibold text-rose-400">
         That couldn&apos;t be saved. Nothing was changed.
+      </p>
+    );
+  }
+
+  // The request may have reached the server before the connection failed: never claim "nothing changed" here.
+  if (resolution === "unknown") {
+    return (
+      <p className="mt-3 text-xs font-semibold text-amber-400">
+        We couldn&apos;t confirm the result. Check your log before trying again — it may already be saved.
       </p>
     );
   }
@@ -338,7 +354,7 @@ function PendingConfirmationPanel({
 
 export default function DanteChat({
   welcomeMessage = DEFAULT_WELCOME_MESSAGE,
-  heroTitle = "Your AI Performance Coach",
+  heroTitle = "Dante, Your Performance Coach",
   quickPrompts = QUICK_PROMPTS,
   contextualSuggestions,
   compact = false,
@@ -436,6 +452,42 @@ export default function DanteChat({
   }, [input]);
 
   /* =======================================================
+     PENDING PROPOSALS — a Confirm/Cancel card is server state
+     (dante_tool_actions), not chat state: after navigation or a
+     refresh, still-valid proposals come back as actionable cards.
+     Expired or handled ones are never restored (the server filters
+     them, and confirm re-checks atomically).
+  ======================================================= */
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/dante/tools/pending")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { pending?: Array<PendingConfirmation & { expiresAt: string }> } | null) => {
+        const pending = data?.pending ?? [];
+        if (cancelled || pending.length === 0) return;
+        setMessages((current) => {
+          const shown = new Set(current.map((message) => message.pendingConfirmation?.actionId).filter(Boolean));
+          const restored = pending
+            .filter((item) => !shown.has(item.actionId))
+            .map((item): ChatMessage => ({
+              id: `pending-${item.actionId}`,
+              role: "assistant",
+              content: "This is still waiting for you — nothing is saved until you tap Confirm.",
+              pendingConfirmation: { actionId: item.actionId, toolName: item.toolName, summary: item.summary },
+              confirmationResolution: null,
+              isComplete: true,
+            }));
+          return restored.length ? [...current, ...restored] : current;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* =======================================================
      FORM COACH HANDOFF — auto-send a session summary left by
      the Form Coach camera (see lib/form-coach/handoff.ts).
   ======================================================= */
@@ -471,8 +523,7 @@ export default function DanteChat({
   // did would be a false claim. What IS always true: a failed chat
   // turn never mutates logged data (that only happens via explicit
   // confirmed write tools), so this states that instead.
-  const UNAVAILABLE_MESSAGE =
-    "Dante couldn't complete that response.\n\nYour logged data has not been changed.";
+  const UNAVAILABLE_MESSAGE = DANTE_UNAVAILABLE_MESSAGE;
 
   function updateStreamingMessage(
     messageId: string,
@@ -521,6 +572,7 @@ export default function DanteChat({
     setInput("");
     setIsLoading(true);
     setActivity("thinking");
+    window.dispatchEvent(new Event(COACH_TURN_STARTED_EVENT));
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -540,8 +592,8 @@ export default function DanteChat({
             JSON.stringify({
               message:
                 trimmed,
-              // Recent user turns only — powers Phase 2D gradual
-              // communication adaptation without dumping full transcripts.
+              // Recent user turns only — the server selects a bounded context
+              // working set from them (H0 cluster A); never dumped into a prompt.
               messages: [
                 ...messages
                   .filter((entry) => entry.role === "user" && entry.content.trim())
@@ -555,7 +607,7 @@ export default function DanteChat({
                   content: trimmed,
                   createdAt: userMessage.createdAt,
                 },
-              ].slice(-8),
+              ].slice(-20),
               ...contextPayload,
             }),
 
@@ -565,18 +617,15 @@ export default function DanteChat({
       );
 
       if (!response.ok || !response.body) {
-        let serverError: string | undefined;
-
-        try {
-          const errorBody = (await response.json()) as { error?: string };
-          serverError = errorBody.error;
-        } catch {
-          // Body wasn't JSON (or the stream already started) — fall back to a generic message below.
-        }
-
-        throw new Error(
-          serverError ?? `Request failed with status ${response.status}.`
-        );
+        const retryAfterHeader = Number(response.headers.get("Retry-After"));
+        const payload = await response.json().catch(() => null) as
+          | { retryAfterSeconds?: unknown }
+          | null;
+        const retryAfterSeconds =
+          typeof payload?.retryAfterSeconds === "number"
+            ? payload.retryAfterSeconds
+            : retryAfterHeader;
+        throw new Error(danteHttpFailureCopy(response.status, retryAfterSeconds));
       }
 
       const reader = response.body.getReader();
@@ -592,7 +641,7 @@ export default function DanteChat({
         remainder = parsed.remainder;
 
         // One setMessages call per network chunk (not per line, and
-        // never per character) — batches naturally with however Groq
+        // never per character) — batches naturally with however the provider
         // itself chunked the response, instead of one rerender per token.
         let appendedText = "";
         let doneEvent: Extract<ChatStreamEvent, { type: "done" }> | null = null;
@@ -655,27 +704,38 @@ export default function DanteChat({
       );
 
       setActivity(wasAborted ? "idle" : "error");
+      // The message stays in the conversation, and back in the composer so retrying is one tap (never auto-resent).
+      if (!wasAborted) setInput((current) => current || trimmed);
 
       /*
        * Reassuring, non-technical failure state (spec: "Failure
        * State"). Never crash the page and never leave the user
-       * thinking their own data was affected — Groq failing has no
+       * thinking their own data was affected — provider failure has no
        * bearing on training/nutrition/recovery data, which all lives
        * in Supabase, not in this request. Technical detail still goes
        * to the console above for debugging. An abort keeps whatever
        * text already streamed in rather than replacing it.
        */
+      const failureCopy =
+        error instanceof Error &&
+        (error.message === DANTE_SESSION_EXPIRED_MESSAGE ||
+          isDanteRateLimitedMessage(error.message))
+          ? error.message
+          : UNAVAILABLE_MESSAGE;
+
       updateStreamingMessage(assistantId, (message) => ({
         ...message,
         content: wasAborted
           ? resolveAbortedContent(message.content)
-          : message.content || UNAVAILABLE_MESSAGE,
+          : message.content || failureCopy,
         isComplete: true,
         wasAborted,
       }));
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      // A turn may have published or withdrawn a disclosure (allergy, low intake): surfaces derived from it re-fetch.
+      window.dispatchEvent(new Event(COACH_CONTEXT_CHANGED_EVENT));
     }
   }
 
@@ -703,14 +763,9 @@ export default function DanteChat({
         body: JSON.stringify({ actionId, intent }),
       });
 
-      const data = (await response.json()) as { ok?: boolean };
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean };
 
-      const resolution: "confirmed" | "cancelled" | "failed" =
-        intent === "cancel"
-          ? "cancelled"
-          : data.ok
-          ? "confirmed"
-          : "failed";
+      const resolution = resolveConfirmationOutcome(intent, { status: response.status, ok: data.ok });
 
       setMessages((previous) =>
         previous.map((message) =>
@@ -725,7 +780,7 @@ export default function DanteChat({
       setMessages((previous) =>
         previous.map((message) =>
           message.id === messageId
-            ? { ...message, confirmationResolution: "failed" }
+            ? { ...message, confirmationResolution: "unknown" }
             : message
         )
       );
@@ -955,7 +1010,7 @@ export default function DanteChat({
                 className={`relative px-4 py-3.5 text-left transition ${hudStyles.hudCard} ${driftClass} ${spatialPositionClass} ${opacityClass} disabled:cursor-not-allowed disabled:opacity-40`}
               >
                 <p className="font-mono text-[9.5px] font-bold uppercase tracking-wider text-[#D4FF00]/90 mb-1">
-                  {item.tag ?? `// TELEMETRY: PROMPT 0${index + 1}`}
+                  {item.tag ?? "Prompt"}
                 </p>
                 <p className="text-xs font-semibold leading-5 text-zinc-100">
                   {item.label}
@@ -1067,9 +1122,10 @@ export default function DanteChat({
                                 </ul>
                               );
                             },
-                            ol({ children }) {
+                            // `start` must pass through: a list interrupted by a paragraph or heading continues as <ol start="n">.
+                            ol({ children, start }) {
                               return (
-                                <ol className="mb-4 ml-5 list-decimal space-y-1.5 marker:font-semibold marker:text-[#D4FF00]">
+                                <ol start={start} className="mb-4 ml-5 list-decimal space-y-1.5 marker:font-semibold marker:text-[#D4FF00]">
                                   {children}
                                 </ol>
                               );
@@ -1195,10 +1251,10 @@ export default function DanteChat({
       =================================================== */}
       <form
         onSubmit={handleSubmit}
-        className="relative z-30 mt-3 w-full max-w-3xl mx-auto flex shrink-0 items-center gap-3 pb-[env(safe-area-inset-bottom)]"
+        className="relative z-30 mt-3 w-full min-w-0 max-w-3xl mx-auto flex shrink-0 items-center gap-2 sm:gap-3 pb-[env(safe-area-inset-bottom)]"
       >
         <div
-          className={`flex min-h-12 flex-1 items-center rounded-[18px] px-4 py-2 text-sm ${hudStyles.hudInputContainer}`}
+          className={`flex min-h-12 min-w-0 flex-1 items-center rounded-[18px] px-3 py-2 text-sm sm:px-4 ${hudStyles.hudInputContainer}`}
         >
           <span className="mr-2 font-mono text-xs font-bold text-[#D4FF00] select-none">
             $&gt;
@@ -1215,11 +1271,11 @@ export default function DanteChat({
             disabled={isLoading}
             aria-label="Message to Dante"
             placeholder="Ask Dante…"
-            className="max-h-40 w-full flex-1 resize-none border-none bg-transparent font-mono text-xs leading-5 text-white outline-none shadow-none placeholder:truncate placeholder:whitespace-nowrap placeholder:text-zinc-500 focus:border-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
+            className="max-h-40 min-w-0 w-full flex-1 resize-none border-none bg-transparent font-mono text-xs leading-5 text-white outline-none shadow-none placeholder:truncate placeholder:whitespace-nowrap placeholder:text-zinc-500 focus:border-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
           />
 
           {/* Live Audio Waveform (4 mini equalizer bars) */}
-          <div className="flex items-center gap-0.5 px-2 select-none" aria-hidden="true">
+          <div className="hidden items-center gap-0.5 px-2 select-none sm:flex" aria-hidden="true">
             <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
             <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.3s" }} />
             <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.15s" }} />

@@ -100,7 +100,7 @@ export function RecoveryScene({
     >
       <div className="mx-auto max-w-7xl">
         <div className="recovery-fade mx-auto max-w-2xl text-center">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-violet)]">06 · Recover + Nutrition</p>
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--mf-violet)]">06 · Recovery</p>
 
           <h2 className="mt-4 font-heading text-4xl font-black uppercase leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
             What your body can handle.

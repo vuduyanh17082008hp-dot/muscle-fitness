@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context";
+import { recoveryScoreForDisplay } from "@/lib/recovery/current-recovery";
 import { RECOVERY_STATUS_LABEL } from "@/lib/recovery/score";
 import {
   computeMuscleRecommendation,
@@ -89,9 +90,10 @@ function pickPerformanceTrendForMuscle(
 export async function buildAthleteState(
   supabase: SupabaseClient,
   userId: string,
-  options: { now?: Date; timeZoneOffsetMinutes?: number } = {},
+  options: { now?: Date; timeZoneOffsetMinutes?: number; timeZone?: string | null } = {},
 ): Promise<AthleteState> {
   const now = options.now ?? new Date();
+  const timezone = await resolveUserTimeZone(supabase, userId, options.timeZone);
 
   const [
     trainingContext,
@@ -101,11 +103,11 @@ export async function buildAthleteState(
     setVisionContext,
     latestFoodLogResponse,
     demoSettings,
-    timezone,
   ] = await Promise.all([
       loadTrainingContext(supabase, userId, {
         now,
         timeZoneOffsetMinutes: options.timeZoneOffsetMinutes,
+        timeZone: timezone,
       }),
       loadNutritionContext(supabase, userId),
       loadRecoveryContext(supabase, userId).catch((error: unknown) => {
@@ -128,7 +130,6 @@ export async function buildAthleteState(
         .limit(1)
         .maybeSingle(),
       loadDemoSettings(supabase, userId),
-      resolveUserTimeZone(supabase, userId),
     ]);
 
   const fitnessProfile = (fitnessProfileResponse.data as FitnessProfileRow | null) ?? null;
@@ -378,7 +379,8 @@ export async function buildAthleteState(
 
     recovery: {
       available: recoveryContext !== null,
-      score: recoveryContext?.todayScoreResult.score ?? null,
+      current: recoveryContext?.current ?? null,
+      score: recoveryScoreForDisplay(recoveryContext?.current ?? null, recoveryContext?.todayScoreResult.score ?? null),
       status:
         recoveryContext?.todayScoreResult.status !== null &&
         recoveryContext?.todayScoreResult.status !== undefined
@@ -396,10 +398,10 @@ export async function buildAthleteState(
 
     nutrition: {
       available: nutritionContext.plan !== null,
-      calorieTarget: nutritionContext.plan?.target.calories ?? null,
-      proteinTargetGrams: nutritionContext.plan?.target.protein ?? null,
-      carbsTargetGrams: nutritionContext.plan?.target.carbs ?? null,
-      fatTargetGrams: nutritionContext.plan?.target.fat ?? null,
+      calorieTarget: nutritionContext.targets.calories,
+      proteinTargetGrams: nutritionContext.targets.protein,
+      carbsTargetGrams: nutritionContext.targets.carbs,
+      fatTargetGrams: nutritionContext.targets.fat,
     },
 
     setVision: {

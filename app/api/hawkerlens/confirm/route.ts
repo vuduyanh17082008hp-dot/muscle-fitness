@@ -19,6 +19,7 @@ const confirmedComponentSchema = z.object({
     fat: z.number().min(0),
   }),
   confidence: z.number().min(0).max(1).nullable().optional(),
+  idempotencyKey: z.string().uuid(),
 });
 
 const requestSchema = z.object({
@@ -79,6 +80,7 @@ export async function POST(request: Request) {
       source: "ai_estimate",
       per100g: component.per100g,
       quantityGrams: component.grams,
+      idempotencyKey: component.idempotencyKey,
       isEstimated: true,
       estimationConfidence:
         component.confidence !== null && component.confidence !== undefined

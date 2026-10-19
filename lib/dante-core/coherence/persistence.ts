@@ -18,6 +18,7 @@ import { restoreVersionedState } from "@/lib/dante-core/coherence/reducer";
 import { classifyCoreConflict, type CoreConflictClassifier } from "@/lib/dante-core/coherence/core-conflict";
 import { interpretExpressionFeedback } from "@/lib/dante-core/coherence/expression-feedback";
 import { recoverSafetyFromHistory } from "@/lib/dante-core/coherence/safety-evidence";
+import { boundedDependency, type TurnBudget } from "@/lib/dante-core/turn-budget";
 import type {
   ChatHistoryTurn,
   CoherenceTurnResult,
@@ -302,6 +303,26 @@ export function createInMemoryCoherenceStore(): CoherenceStateStore & {
       }
       rows.set(key, { version: next.version, json: JSON.stringify(encodeState(next)) });
       return { ok: true };
+    },
+  };
+}
+
+/**
+ * H0 WP1: the coherence store under the turn budget. A load that times out or fails is a store outage (prepare degrades
+ * to history-derived state). A commit that times out has an UNKNOWN effect — it may still land — so it is reported as a
+ * failed commit and the turn never claims it persisted.
+ */
+export function boundedCoherenceStore(store: CoherenceStateStore, budget: TurnBudget): CoherenceStateStore {
+  return {
+    async load(key) {
+      const read = await boundedDependency(budget, "coherence_load", () => store.load(key));
+      if (read.status === "OK") return read.value;
+      throw read.error ?? new Error(`coherence load ${read.status}`);
+    },
+    async commit(key, next, expectedVersion) {
+      const write = await boundedDependency(budget, "coherence_commit", () => store.commit(key, next, expectedVersion));
+      if (write.status === "OK") return write.value;
+      throw write.error ?? new Error(write.status === "SKIPPED" ? "coherence commit SKIPPED (not written)" : `coherence commit ${write.status} (effect unknown)`);
     },
   };
 }

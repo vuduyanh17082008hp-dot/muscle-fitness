@@ -37,11 +37,11 @@ export function fakeCoherenceFrom(table: FakeCoherenceTable, profiles: { timezon
   return (name: string) => {
     if (name === "profiles") {
       return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: { timezone: profiles.timezone }, error: null }),
-          }),
-        }),
+        select: () => {
+          const read = { maybeSingle: async () => ({ data: { timezone: profiles.timezone }, error: null }) };
+          // PostgREST's `.abortSignal()` returns the same builder (the route bounds this read with it).
+          return { eq: () => ({ ...read, abortSignal: () => read }) };
+        },
       };
     }
     if (name !== "dante_coherence_state") return inertQuery();

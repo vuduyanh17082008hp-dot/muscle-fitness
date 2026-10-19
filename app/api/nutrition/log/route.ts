@@ -8,7 +8,7 @@ import { createFoodLog } from "@/lib/nutrition/food-log/mutations"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-import { isValidDateIso } from "@/lib/nutrition/date-utils"
+import { isSupportedFoodLogViewDate, isSupportedFoodLogWriteDate, isValidDateIso } from "@/lib/nutrition/date-utils"
 
 const per100gSchema = z.object({
   calories: z.number().min(0).max(10000),
@@ -40,6 +40,7 @@ const createSchema = z.object({
   estimatedFrom: z.string().trim().max(200).nullable().optional(),
 
   logDate: z.string().refine(isValidDateIso, "Invalid calendar date.").optional(),
+  idempotencyKey: z.string().uuid(),
 })
 
 /**
@@ -60,10 +61,11 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const requestedDate = url.searchParams.get("date")
-  if (requestedDate !== null && !isValidDateIso(requestedDate)) {
+  const today = await resolveLocalToday(supabase, user.id)
+  if (requestedDate !== null && !isSupportedFoodLogViewDate(requestedDate, today)) {
     return NextResponse.json({ ok: false, error: "Invalid calendar date." }, { status: 400 })
   }
-  const date = requestedDate ?? await resolveLocalToday(supabase, user.id)
+  const date = requestedDate ?? today
 
   const context = await loadFoodLogForDate(supabase, user.id, date)
 
@@ -80,6 +82,10 @@ export async function GET(request: Request) {
  * server always recomputes calories/protein/carbs/fat from
  * `per100g` × `quantityGrams` itself (lib/nutrition/food-log-calculator.ts)
  * — client-submitted totals are never trusted or persisted directly.
+ * `source`, `per100g` and `isEstimated` are only a PROPOSAL: createFoodLog
+ * re-resolves usda / open-food-facts / local records by id and stores the
+ * server's profile, or stores the entry as user-provided + estimated
+ * (lib/nutrition/food-log/provenance.ts).
  */
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -109,10 +115,15 @@ export async function POST(request: Request) {
     )
   }
 
+  const today = await resolveLocalToday(supabase, user.id)
+  if (parsed.data.logDate !== undefined && !isSupportedFoodLogWriteDate(parsed.data.logDate, today)) {
+    return NextResponse.json({ ok: false, error: "Food can only be logged for today." }, { status: 400 })
+  }
+
   const result = await createFoodLog(supabase, user.id, parsed.data)
 
   if (!result.success) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 500 })
+    return NextResponse.json({ ok: false, error: result.error }, { status: result.status ?? 500 })
   }
 
   return NextResponse.json({ ok: true, entry: result.data })

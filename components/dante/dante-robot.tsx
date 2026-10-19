@@ -332,6 +332,7 @@ function DanteRobotMascot({
             {/* SHADOW — keep rx/ry numeric (string ry + animated rx
                 produces SVG "Expected length, NaN" ellipse warnings). */}
             <motion.ellipse
+              initial={false}
               cx={100}
               cy={214}
               rx={42}
@@ -639,6 +640,7 @@ function Eye({ cx, cy, scale, color, glow, state, reduceMotion, glowFilterId }: 
     <motion.g animate={thinkingShift} transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}>
       <ellipse cx={cx} cy={cy} rx={rx + 4} ry={ry + 4} fill={color} opacity={glow * 0.18} filter={`url(#${glowFilterId})`} />
       <motion.ellipse
+        initial={false}
         cx={cx}
         cy={cy}
         rx={rx}

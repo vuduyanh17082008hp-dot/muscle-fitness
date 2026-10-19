@@ -1,5 +1,8 @@
 import type { VerifierFact } from "@/lib/dante-core/verifier/types";
 
+// "protein" / "calories" also name targets and g/kg guidelines: only a mention worded as what was eaten states these facts.
+const CONSUMED = /\b(?:consumed|logged|eaten|ate|so far|intake (?:today|so far)|you'?ve had|have had)\b/i;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -51,12 +54,12 @@ export function buildKnownFactsFromContext(context: KnownFactsContextInput): Ver
     const calories = isRecord(context.todayFoodLog.calories)
       ? getNumber(context.todayFoodLog.calories.consumed)
       : null;
-    if (calories !== null) facts.push({ label: "calories", value: calories });
+    if (calories !== null) facts.push({ label: "calories", value: calories, cue: CONSUMED });
 
     const protein = isRecord(context.todayFoodLog.protein)
       ? getNumber(context.todayFoodLog.protein.consumed)
       : null;
-    if (protein !== null) facts.push({ label: "protein", value: protein });
+    if (protein !== null) facts.push({ label: "protein", value: protein, cue: CONSUMED });
   }
 
   return facts;

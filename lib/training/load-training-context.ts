@@ -22,6 +22,12 @@ import {
 import { computePersonalBaseline, type PersonalBaseline } from "@/lib/training/baseline";
 import type { PerformanceDataPoint } from "@/lib/training/performance";
 import type { LoggedSetForProgression } from "@/lib/training/progression-engine";
+import { addDaysIso } from "@/lib/nutrition/date-utils";
+import {
+  localDateRangeUtc,
+  localDateTimeParts,
+  resolveUserTimeZone,
+} from "@/lib/training/load-today-session";
 
 const DEFAULT_WINDOW_DAYS = 12 * 7; // 12 weeks, matches the widest personal-baseline window
 
@@ -36,9 +42,12 @@ export type ExerciseSummary = {
 
 export type LastSessionForExercise = {
   sessionExerciseId: string;
+  displayName: string;
+  targetSets: number;
   targetRepMin: number;
   targetRepMax: number;
   targetRir: number | null;
+  targetRpe: number | null;
   completedAt: string | null;
   sets: LoggedSetForProgression[];
 };
@@ -73,17 +82,12 @@ type SessionExerciseRow = {
   id: string;
   workout_session_id: string;
   exercise_id: string;
-  // NOTE: the live workout_session_exercises table names these
-  // `rep_min`/`rep_max` (NOT `target_rep_min`/`target_rep_max`) while
-  // `target_rir`/`target_sets` DO carry the `target_` prefix — an
-  // inconsistent but real schema. Selecting the wrong names here
-  // silently broke this whole query (Postgres errors on an unknown
-  // column, which was being caught and swallowed below), so
-  // loadTrainingContext had been returning an EMPTY context for every
-  // user regardless of how much they'd actually logged.
-  rep_min: number | null;
-  rep_max: number | null;
+  display_name: string;
+  target_sets: number;
+  target_rep_min: number;
+  target_rep_max: number;
   target_rir: number | null;
+  target_rpe: number | null;
 };
 
 type ExerciseSetRow = {
@@ -116,12 +120,8 @@ type ContributionRow = {
   source: ExerciseMuscleContribution["source"];
 };
 
-function emptyContext(windowDays: number, now: Date): TrainingContext {
-  const endDate = now.toISOString().slice(0, 10);
-  const startDate = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-
+function emptyContext(windowDays: number, endDate: string): TrainingContext {
+  const startDate = addDaysIso(endDate, -windowDays);
   return {
     dataWindow: { startDate, endDate, weeksOfHistory: 0 },
     exercisesById: new Map(),
@@ -142,15 +142,27 @@ export async function loadTrainingContext(
     windowDays?: number;
     now?: Date;
     timeZoneOffsetMinutes?: number;
+    timeZone?: string | null;
   } = {},
 ): Promise<TrainingContext> {
   const windowDays = options.windowDays ?? DEFAULT_WINDOW_DAYS;
   const now = options.now ?? new Date();
   const timeZoneOffsetMinutes = options.timeZoneOffsetMinutes ?? 0;
-
-  const windowStartIso = new Date(
-    now.getTime() - windowDays * 24 * 60 * 60 * 1000,
-  ).toISOString();
+  const timeZone =
+    options.timeZone ??
+    (options.timeZoneOffsetMinutes === undefined
+      ? await resolveUserTimeZone(supabase, userId)
+      : undefined);
+  const endDate = timeZone
+    ? localDateTimeParts(now, timeZone).localDate
+    : new Date(now.getTime() + timeZoneOffsetMinutes * 60_000).toISOString().slice(0, 10);
+  const startDate = addDaysIso(endDate, -windowDays);
+  const windowStartIso = timeZone
+    ? localDateRangeUtc(startDate, timeZone).startIso
+    : new Date(
+        Date.parse(`${startDate}T00:00:00.000Z`) -
+          timeZoneOffsetMinutes * 60_000,
+      ).toISOString();
 
   const { data: sessionRows, error: sessionsError } = await supabase
     .from("workout_sessions")
@@ -167,7 +179,7 @@ export async function loadTrainingContext(
   const sessions = (sessionRows as WorkoutSessionRow[] | null) ?? [];
 
   if (sessions.length === 0) {
-    return emptyContext(windowDays, now);
+    return emptyContext(windowDays, endDate);
   }
 
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
@@ -175,7 +187,9 @@ export async function loadTrainingContext(
 
   const { data: sessionExerciseRows, error: sessionExerciseError } = await supabase
     .from("workout_session_exercises")
-    .select("id, workout_session_id, exercise_id, rep_min, rep_max, target_rir")
+    .select(
+      "id, workout_session_id, exercise_id, display_name, target_sets, target_rep_min, target_rep_max, target_rir, target_rpe",
+    )
     .in("workout_session_id", sessionIds);
 
   if (sessionExerciseError) {
@@ -188,7 +202,7 @@ export async function loadTrainingContext(
   const sessionExercises = (sessionExerciseRows as SessionExerciseRow[] | null) ?? [];
 
   if (sessionExercises.length === 0) {
-    return emptyContext(windowDays, now);
+    return emptyContext(windowDays, endDate);
   }
 
   const sessionExerciseById = new Map(
@@ -331,11 +345,13 @@ export async function loadTrainingContext(
   const weeklyAnalytics = computeWeeklyMuscleAnalytics(datedSets, contributionsByExercise, {
     now,
     timeZoneOffsetMinutes,
+    timeZone,
   });
 
   const baseline = computePersonalBaseline(datedSets, contributionsByExercise, {
     now,
     timeZoneOffsetMinutes,
+    timeZone,
   });
 
   const currentWeekSets: ExerciseSetLog[] = datedSets.map((set) => ({
@@ -387,9 +403,12 @@ export async function loadTrainingContext(
 
     lastSessionByExercise.set(exerciseId, {
       sessionExerciseId,
-      targetRepMin: sessionExercise.rep_min ?? 8,
-      targetRepMax: sessionExercise.rep_max ?? 12,
+      displayName: sessionExercise.display_name,
+      targetSets: sessionExercise.target_sets,
+      targetRepMin: sessionExercise.target_rep_min,
+      targetRepMax: sessionExercise.target_rep_max,
       targetRir: sessionExercise.target_rir,
+      targetRpe: sessionExercise.target_rpe,
       completedAt: lastSessionCompletedAtByExercise.get(exerciseId) ?? null,
       sets: exerciseSets,
     });
@@ -411,7 +430,14 @@ export async function loadTrainingContext(
     }
 
     const session = sessionById.get(sessionExercise.workout_session_id);
-    const date = (set.completed_at ?? session?.completed_at ?? "").slice(0, 10);
+    const completedAt = set.completed_at ?? session?.completed_at ?? "";
+    const date = completedAt
+      ? timeZone
+        ? localDateTimeParts(new Date(completedAt), timeZone).localDate
+        : new Date(
+            new Date(completedAt).getTime() + timeZoneOffsetMinutes * 60_000,
+          ).toISOString().slice(0, 10)
+      : "";
 
     if (!date) {
       continue;
@@ -428,13 +454,19 @@ export async function loadTrainingContext(
   }
 
   const distinctWeekKeys = new Set(
-    datedSets.map((set) => set.completedAt.slice(0, 10)),
+    datedSets.map((set) =>
+      timeZone
+        ? localDateTimeParts(new Date(set.completedAt), timeZone).localDate
+        : new Date(
+            new Date(set.completedAt).getTime() + timeZoneOffsetMinutes * 60_000,
+          ).toISOString().slice(0, 10),
+    ),
   );
 
   return {
     dataWindow: {
-      startDate: windowStartIso.slice(0, 10),
-      endDate: now.toISOString().slice(0, 10),
+      startDate,
+      endDate,
       weeksOfHistory: Math.max(1, Math.ceil(distinctWeekKeys.size / 7)),
     },
     exercisesById,

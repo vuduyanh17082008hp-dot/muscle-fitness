@@ -34,6 +34,7 @@ export {
 export {
   buildAuthoritativeResponseState,
   extractCausalTargetFromText,
+  isPerformanceAttributionQuery,
   buildStructuredActiveContextMeaning,
 } from "@/lib/dante-core/runtime-convergence/authoritative-state";
 export type {

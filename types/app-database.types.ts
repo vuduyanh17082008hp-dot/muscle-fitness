@@ -1,3 +1,6 @@
+// LEGACY / HAND_WRITTEN overlay, DEPRECATED. Still imported by the workout plan page (history + session pages moved to canonical types in WF-04/05); legacy columns
+// (workout_session_id, duration_seconds, total_volume, ...) that the migration schema does not have.
+// Do not extend. Canonical types: @/database.types.generated. Removal is tracked in docs/database-types.md.
 import type {
   Database as GeneratedDatabase,
 } from "@/database.types";
@@ -212,18 +215,20 @@ type WorkoutTables = {
     Row: {
       id: string;
       workout_session_id: string;
-      exercise_id: string | null;
-      replacement_exercise_id: string | null;
-      exercise_name: string;
+      workout_exercise_id: string | null;
+      exercise_id: string;
+      replaced_from_exercise_id: string | null;
       exercise_order: number;
+      display_name: string;
       target_sets: number;
-      rep_min: number;
-      rep_max: number;
-      rest_seconds: number;
+      target_rep_min: number;
+      target_rep_max: number;
       target_rir: number | null;
+      target_rpe: number | null;
+      rest_seconds: number;
       tempo: string | null;
-      is_skipped: boolean;
       notes: string | null;
+      is_skipped: boolean;
       created_at: string;
       updated_at: string;
     };
@@ -231,18 +236,20 @@ type WorkoutTables = {
     Insert: {
       id?: string;
       workout_session_id: string;
-      exercise_id?: string | null;
-      replacement_exercise_id?: string | null;
-      exercise_name: string;
-      exercise_order?: number;
-      target_sets?: number;
-      rep_min?: number;
-      rep_max?: number;
-      rest_seconds?: number;
+      workout_exercise_id?: string | null;
+      exercise_id: string;
+      replaced_from_exercise_id?: string | null;
+      exercise_order: number;
+      display_name: string;
+      target_sets: number;
+      target_rep_min: number;
+      target_rep_max: number;
       target_rir?: number | null;
+      target_rpe?: number | null;
+      rest_seconds?: number;
       tempo?: string | null;
-      is_skipped?: boolean;
       notes?: string | null;
+      is_skipped?: boolean;
       created_at?: string;
       updated_at?: string;
     };
@@ -250,18 +257,20 @@ type WorkoutTables = {
     Update: {
       id?: string;
       workout_session_id?: string;
-      exercise_id?: string | null;
-      replacement_exercise_id?: string | null;
-      exercise_name?: string;
+      workout_exercise_id?: string | null;
+      exercise_id?: string;
+      replaced_from_exercise_id?: string | null;
       exercise_order?: number;
+      display_name?: string;
       target_sets?: number;
-      rep_min?: number;
-      rep_max?: number;
-      rest_seconds?: number;
+      target_rep_min?: number;
+      target_rep_max?: number;
       target_rir?: number | null;
+      target_rpe?: number | null;
+      rest_seconds?: number;
       tempo?: string | null;
-      is_skipped?: boolean;
       notes?: string | null;
+      is_skipped?: boolean;
       created_at?: string;
       updated_at?: string;
     };

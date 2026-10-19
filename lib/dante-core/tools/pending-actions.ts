@@ -2,8 +2,9 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getDanteTool } from "@/lib/dante-core/tools/registry";
-import type { ToolContext } from "@/lib/dante-core/tools/types";
+import type { ActionErrorCode, ToolContext } from "@/lib/dante-core/tools/types";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { safeExecuteTool } from "@/lib/dante-core/tools/safe-execute";
 
@@ -19,6 +20,11 @@ import { safeExecuteTool } from "@/lib/dante-core/tools/safe-execute";
  * and a CONFIRM past expiry all resolve to "0 rows updated" instead of
  * a race (Part 9: "avoid race-prone check-then-insert when
  * database-level protection is possible").
+ *
+ * AUTHORIZATION: authenticated browser sessions have SELECT-only on the table
+ * (20261008090000). Every WRITE here uses the server-only service-role client;
+ * callers pass an already-authenticated `userId` derived from the session, and
+ * every query is explicitly scoped to it.
  */
 
 export const PENDING_ACTION_TTL_MS = 10 * 60 * 1000;
@@ -44,7 +50,7 @@ export type CreatePendingActionResult = {
 };
 
 export async function createPendingAction(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   userId: string,
   toolName: string,
   args: unknown,
@@ -53,7 +59,7 @@ export async function createPendingAction(
 ): Promise<CreatePendingActionResult> {
   const expiresAt = new Date(now.getTime() + PENDING_ACTION_TTL_MS).toISOString();
 
-  const { data, error } = await supabase
+  const { data, error } = await createSupabaseAdminClient()
     .from("dante_tool_actions")
     .insert({
       user_id: userId,
@@ -77,8 +83,8 @@ export async function createPendingAction(
 
 export type ConfirmOutcome =
   | { ok: true; status: "executed"; result: unknown }
-  | { ok: false; status: "failed"; error: string }
-  | { ok: false; status: "not_found" | "already_handled" | "expired"; error: string };
+  | { ok: false; status: "failed"; error: string; code: ActionErrorCode }
+  | { ok: false; status: "not_found" | "already_handled" | "expired"; error: string; code: ActionErrorCode };
 
 /**
  * CONFIRM: claims the row (pending -> confirmed, atomically), then
@@ -95,7 +101,9 @@ export async function confirmPendingAction(
 ): Promise<ConfirmOutcome> {
   const nowIso = context.now.toISOString();
 
-  const { data: claimed, error: claimError } = await supabase
+  const admin = createSupabaseAdminClient();
+
+  const { data: claimed, error: claimError } = await admin
     .from("dante_tool_actions")
     .update({ status: "confirmed" })
     .eq("id", actionId)
@@ -106,7 +114,8 @@ export async function confirmPendingAction(
     .maybeSingle();
 
   if (claimError) {
-    return { ok: false, status: "failed", error: claimError.message };
+    console.error("[DANTE CONFIRM] claim failed:", claimError.message);
+    return { ok: false, status: "failed", error: "We couldn't confirm this action right now. Please try again.", code: "ACTION_CONFIRMATION_FAILED" };
   }
 
   if (!claimed) {
@@ -118,42 +127,47 @@ export async function confirmPendingAction(
   const tool = getDanteTool(toolName);
 
   if (!tool) {
-    await supabase
+    await admin
       .from("dante_tool_actions")
       .update({ status: "failed", result: { error: "Tool no longer registered." }, executed_at: nowIso })
       .eq("id", actionId);
 
     logToolEvent("DANTE_TOOL_FAILED", { tool: toolName });
-    return { ok: false, status: "failed", error: "This action is no longer available." };
+    return { ok: false, status: "failed", error: "This action is no longer available.", code: "ACTION_CONFIRMATION_FAILED" };
   }
 
   const parsedArgs = tool.inputSchema.safeParse(claimed.args);
 
   if (!parsedArgs.success) {
-    await supabase
+    await admin
       .from("dante_tool_actions")
       .update({ status: "failed", result: { error: "Stored arguments failed validation." }, executed_at: nowIso })
       .eq("id", actionId);
 
-    return { ok: false, status: "failed", error: "This action's saved details are no longer valid." };
+    return { ok: false, status: "failed", error: "This action's saved details are no longer valid.", code: "ACTION_CONFIRMATION_FAILED" };
   }
 
-  const executionResult = await safeExecuteTool(tool, context, parsedArgs.data);
+  const executionResult = await safeExecuteTool(
+    tool,
+    { ...context, actionId: claimed.id as string },
+    parsedArgs.data,
+  );
 
   if (!executionResult.ok) {
-    await supabase
+    await admin
       .from("dante_tool_actions")
       .update({ status: "failed", result: { error: executionResult.error }, executed_at: nowIso })
       .eq("id", actionId);
 
     logToolEvent("DANTE_TOOL_FAILED", { tool: toolName });
-    return { ok: false, status: "failed", error: executionResult.error };
+    return { ok: false, status: "failed", error: executionResult.error, code: executionResult.code ?? "ACTION_CONFIRMATION_FAILED" };
   }
 
-  await supabase
+  await admin
     .from("dante_tool_actions")
     .update({ status: "executed", result: executionResult.data as Record<string, unknown>, executed_at: nowIso })
-    .eq("id", actionId);
+    .eq("id", actionId)
+    .eq("status", "confirmed"); // no-op when the tool already finalized atomically (finalize_food_log_action)
 
   logToolEvent("DANTE_CONFIRMATION_EXECUTED", { tool: toolName });
   logToolEvent("DANTE_TOOL_SUCCESS", { tool: toolName });
@@ -169,7 +183,7 @@ export async function cancelPendingAction(
   userId: string,
   actionId: string,
 ): Promise<CancelOutcome> {
-  const { data, error } = await supabase
+  const { data, error } = await createSupabaseAdminClient()
     .from("dante_tool_actions")
     .update({ status: "cancelled" })
     .eq("id", actionId)
@@ -179,7 +193,8 @@ export async function cancelPendingAction(
     .maybeSingle();
 
   if (error) {
-    return { ok: false, status: "already_handled", error: error.message };
+    console.error("[DANTE CANCEL] update failed:", error.message);
+    return { ok: false, status: "already_handled", error: "We couldn't cancel this action right now. Please try again." };
   }
 
   if (!data) {
@@ -212,14 +227,14 @@ async function describeUnclaimableAction(
     .maybeSingle();
 
   if (!data) {
-    return { ok: false, status: "not_found", error: "Action not found." };
+    return { ok: false, status: "not_found", error: "Action not found.", code: "ACTION_NOT_FOUND" };
   }
 
   if (data.status === "pending" && data.expires_at <= nowIso) {
-    await supabase.from("dante_tool_actions").update({ status: "expired" }).eq("id", actionId).eq("status", "pending");
+    await createSupabaseAdminClient().from("dante_tool_actions").update({ status: "expired" }).eq("id", actionId).eq("status", "pending");
     logToolEvent("DANTE_CONFIRMATION_EXPIRED", { tool: "" });
-    return { ok: false, status: "expired", error: "This confirmation has expired — please ask again." };
+    return { ok: false, status: "expired", error: "This confirmation has expired — please ask again.", code: "ACTION_EXPIRED" };
   }
 
-  return { ok: false, status: "already_handled", error: `This action was already ${data.status}.` };
+  return { ok: false, status: "already_handled", error: `This action was already ${data.status}.`, code: "ACTION_ALREADY_PROCESSED" };
 }

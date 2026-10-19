@@ -30,6 +30,7 @@ export type SafetyCategory =
   | "chest_pain_cardiac"
   | "fainting_dizziness"
   | "neurological_symptoms"
+  | "medical_red_flag"
   | "possible_injury"
   | "severe_pain"
   | "eating_disorder_indicator"
@@ -102,6 +103,10 @@ const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury" | "
     en: "Numbness, tingling, or sudden weakness — especially spreading down a limb — needs medical evaluation, not training advice. Please see a doctor promptly (or emergency care if it came on suddenly). Dante can help with training and nutrition questions, but this isn't something to guess about here — please talk to a doctor or other qualified professional.",
     vi: "Tê bì, cảm giác châm chích lan dọc chi hoặc yếu đột ngột cần được đánh giá y khoa sớm, không phải điều chỉnh buổi tập. Hãy dừng buổi tập và tìm hỗ trợ y tế có chuyên môn; dùng dịch vụ cấp cứu nếu triệu chứng xuất hiện đột ngột hoặc nghiêm trọng.",
   },
+  medical_red_flag: {
+    en: "Yellowing of the eyes or skin, very dark (cola-coloured) urine, or blood in urine or vomit needs prompt medical assessment — please see a doctor today, and go to emergency care if it comes with severe abdominal pain, confusion, fever or vomiting blood. Until you've been checked, hold off on hard training and don't start any new supplement: the cause has to be known first, and it can't be worked out over chat.",
+    vi: "Vàng mắt hoặc vàng da, nước tiểu sẫm màu (như nước coca), hoặc có máu trong nước tiểu hay chất nôn cần được khám y tế sớm — hãy gặp bác sĩ ngay trong hôm nay, và đến cấp cứu nếu kèm đau bụng dữ dội, lú lẫn, sốt hoặc nôn ra máu. Cho đến khi được kiểm tra, hãy tạm dừng tập nặng và đừng bắt đầu bất kỳ thực phẩm bổ sung mới nào: cần biết nguyên nhân trước, và điều đó không thể xác định qua chat.",
+  },
   severe_pain: {
     en: "That sounds like it could be an acute injury rather than normal training soreness. Please stop training on it and have it evaluated by a doctor or physiotherapist before continuing. Dante can help with training and nutrition questions, but this isn't something to guess about here — please talk to a doctor or other qualified professional.",
     vi: "Đây có thể là chấn thương cấp chứ không phải đau mỏi tập luyện thông thường. Hãy ngừng chịu tải lên vùng bị ảnh hưởng và được bác sĩ hoặc physiotherapist đánh giá trước khi tiếp tục. Không dùng thuốc giảm đau, chất kích thích hoặc chỉnh kỹ thuật để cố tập xuyên qua triệu chứng.",
@@ -123,6 +128,25 @@ const HARD_BLOCK_RESPONSES: Record<Exclude<SafetyCategory, "possible_injury" | "
     vi: "Mình muốn kiểm tra ý bạn khi nói \"mình đang chết\". Bạn đang nói theo nghĩa bóng, hay đang gặp nguy hiểm trước mắt hoặc nghĩ đến việc làm hại bản thân? Hãy trả lời điều đó trước khi mình nói về tập luyện.",
   },
 };
+
+/**
+ * ICH-1: copy for a stated urge or intent to self-harm. Same category and lifecycle as self_harm_crisis; separate wording
+ * because the crisis copy above quotes a specific statement the user may not have made.
+ */
+const SELF_HARM_INTENT_RESPONSE: LocalizedCopy = {
+  en: "Thank you for telling me — that matters more than anything about training or food. Are you thinking about acting on this right now, do you have a plan or the means to hurt yourself, or do you feel unable to stay safe? If there may be immediate danger, call your local emergency number or a crisis line now, move near someone you trust, and move away from anything you could use to hurt yourself. If it is not immediate, please still reach out today to someone you trust and to a qualified mental-health professional. You do not have to handle this alone.",
+  vi: "Cảm ơn bạn đã nói ra — điều này quan trọng hơn mọi chuyện về tập luyện hay ăn uống. Ngay lúc này bạn có đang nghĩ đến việc hành động theo điều đó, có kế hoạch hoặc phương tiện làm hại bản thân, hay cảm thấy mình không thể giữ an toàn không? Nếu có nguy hiểm trước mắt, hãy gọi số cấp cứu hoặc đường dây hỗ trợ khủng hoảng tại nơi bạn ở ngay, đến gần người bạn tin tưởng và tránh xa những thứ có thể dùng để làm hại bản thân. Nếu chưa phải nguy hiểm tức thời, hôm nay bạn vẫn hãy liên hệ một người bạn tin tưởng và một chuyên gia sức khỏe tâm thần. Bạn không cần chịu đựng một mình.",
+};
+
+/** The existing hard-block copy for a category, for callers that reach the same boundary by another route (ICH-1 supplement policy). */
+const INSULIN_HYPO_LEAD: LocalizedCopy = {
+  en: "After insulin, feeling faint, shaky, sweaty or confused can be dangerously low blood sugar. Take fast sugar now if you can swallow safely — juice, a regular soft drink, glucose tablets or sweets — and don't stay alone. Call emergency services now if you are confused, very drowsy, can't keep sugar down, or pass out.",
+  vi: "Sau khi dùng insulin, cảm giác muốn ngất, run, vã mồ hôi hay lú lẫn có thể là hạ đường huyết nguy hiểm. Uống ngay đồ ngọt hấp thu nhanh nếu nuốt được an toàn — nước trái cây, nước ngọt có đường, viên glucose hoặc kẹo — và đừng ở một mình. Gọi cấp cứu ngay nếu lú lẫn, rất buồn ngủ, không nuốt được đồ ngọt hoặc ngất.",
+};
+
+export function hardBlockCopy(category: Exclude<SafetyCategory, "possible_injury" | "composed_training_risk">, language: SupportedSafetyLanguage): string {
+  return HARD_BLOCK_RESPONSES[category][language];
+}
 
 /**
  * Strip Vietnamese (and other) combining marks so "đau ngực" and "dau nguc"
@@ -370,6 +394,40 @@ const NEUROLOGICAL_SYMPTOMS: SymptomConcept[] = [
   },
 ];
 
+/**
+ * Red-flag signs outside training (jaundice, rhabdomyolysis-type urine, bleeding). Not an emergency by themselves, but
+ * never something to coach or supplement around — also the classic PED / hepatotoxic-supplement warning signs.
+ */
+const MEDICAL_RED_FLAG_SYMPTOMS: SymptomConcept[] = [
+  {
+    id: "jaundice",
+    patterns: [
+      /\byellow(?:ing|ish)? (?:eyes|skin|whites of (?:my )?eyes)\b/i,
+      /\b(?:eyes|skin)\b[^.!?;,\n]{0,20}\b(?:turn(?:ed|ing)?|look(?:s|ing)?|are|is|went|gone|getting|got)\s+(?:a bit |kind of |slightly )?yellow\b/i,
+      /\bjaundice\w*\b/i,
+      /\bvang (?:da|mat)\b/i,
+      /\b(?:mat|da) (?:bi )?vang\b/i,
+    ],
+  },
+  {
+    id: "dark_urine",
+    patterns: [
+      /\b(?:cola|tea|coffee)[- ](?:colou?red )?(?:urine|pee)\b/i,
+      /\b(?:dark brown|brown|very dark) (?:urine|pee)\b/i,
+      /\b(?:urine|pee) (?:is |was |looks |turned )?(?:dark brown|brown|cola)/i,
+      /\bnuoc tieu (?:sam|nau|mau nau|den)\b/i,
+    ],
+  },
+  {
+    id: "bleeding",
+    patterns: [
+      /\bblood in (?:my )?(?:urine|pee|vomit|stool|poop)\b/i,
+      /\b(?:vomit(?:ing|ed)?|throwing up|threw up|coughing up|coughed up) blood\b/i,
+      /\b(?:tieu|non|ho) ra mau\b/i,
+    ],
+  },
+];
+
 const RULES: SafetyRule[] = [
   {
     category: "chest_pain_cardiac",
@@ -391,6 +449,13 @@ const RULES: SafetyRule[] = [
     patterns: [],
     matcher: (message) => matchPresentSymptom(message, NEUROLOGICAL_SYMPTOMS),
     response: HARD_BLOCK_RESPONSES.neurological_symptoms,
+  },
+  {
+    category: "medical_red_flag",
+    responseMode: "HARD_BLOCK",
+    patterns: [],
+    matcher: (message) => matchPresentSymptom(message, MEDICAL_RED_FLAG_SYMPTOMS),
+    response: HARD_BLOCK_RESPONSES.medical_red_flag,
   },
   {
     category: "severe_pain",
@@ -478,6 +543,19 @@ const RULES: SafetyRule[] = [
       /khong muon song nua/i,
     ],
     response: HARD_BLOCK_RESPONSES.self_harm_crisis,
+  },
+  {
+    // ICH-1 (hard-safety false negative): a stated urge or intent to self-harm. Intent wording is required, so an
+    // accidental injury report ("I keep hurting myself on deadlifts") stays with the injury rules.
+    category: "self_harm_crisis",
+    responseMode: "HARD_BLOCK",
+    patterns: [
+      /\b(?:feel like|want(?:ing)? to|wanna|going to|gonna|thinking (?:about|of)|thoughts? of|urges? to|tempted to)\s+(?:hurt(?:ing)?|harm(?:ing)?|cut(?:ting)?|kill(?:ing)?)\s+myself\b/i,
+      /\bself[- ]?harm(?:ing)?\b/i,
+      /(?:muon|dinh|nghi (?:den|toi) (?:viec|chuyen))\s+(?:tu\s+)?(?:lam hai|lam dau|hai|giet)\s+(?:ban than|chinh minh|minh)/i,
+      /tu (?:hai|lam hai|lam dau) (?:ban than|chinh minh)/i,
+    ],
+    response: SELF_HARM_INTENT_RESPONSE,
   },
   {
     category: "ambiguous_safety",
@@ -699,7 +777,10 @@ export function checkSafety(message: string, options: SafetyCheckOptions = {}): 
       matchedPhrase: matched.matchedPhrase,
       responseMode: "HARD_BLOCK",
       language,
-      responseOverride: matched.rule.response?.[language] ?? null,
+      // H0 cluster B: faint / dizzy / confused after insulin is possible severe hypoglycaemia — first aid leads.
+      responseOverride: (/\binsulin\b/i.test(normalizeSafetyText(message)) && (matched.rule.category === "fainting_dizziness" || matched.rule.category === "neurological_symptoms")
+        ? `${INSULIN_HYPO_LEAD[language]}\n\n${matched.rule.response?.[language] ?? ""}`.trim()
+        : null) ?? matched.rule.response?.[language] ?? null,
       contextTrace: {
         risk: "HIGH",
         observations: [matched.rule.category],

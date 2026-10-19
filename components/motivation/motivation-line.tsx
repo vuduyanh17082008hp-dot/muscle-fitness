@@ -9,6 +9,7 @@ import {
   type MotivationContext,
   type MotivationPreference,
 } from "@/lib/motivation";
+import { todayIso } from "@/lib/nutrition/date-utils";
 
 function readPreference(): MotivationPreference {
   const enabled = window.localStorage.getItem(MOTIVATION_PREF_KEY);
@@ -66,7 +67,7 @@ export function MotivationLine({
   className?: string;
 }) {
   const contextKey = contexts.join(",");
-  const date = localDate ?? new Date().toISOString().slice(0, 10);
+  const date = localDate ?? todayIso();
   const line = useSyncExternalStore(
     subscribeMotivation,
     () => clientLine(contextKey, date),

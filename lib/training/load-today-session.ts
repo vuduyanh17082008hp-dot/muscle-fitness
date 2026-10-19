@@ -40,7 +40,7 @@ export type TodaySession = {
  * calendar day into the UTC range `scheduled_for` is stored in,
  * instead of assuming the server's UTC day is the user's day.
  */
-function getUtcOffsetMinutes(date: Date, timeZone: string): number {
+export function getUtcOffsetMinutes(date: Date, timeZone: string): number {
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone,
@@ -72,13 +72,13 @@ function getUtcOffsetMinutes(date: Date, timeZone: string): number {
  * of silently falling into "yesterday". Reuses the same
  * `profiles.timezone` convention already used by `get_client_dashboard()`.
  */
-export function localDayRangeUtc(now: Date, timeZone: string): { startIso: string; endIso: string } {
-  const localDate = localDateTimeParts(now, timeZone).localDate;
+export function localDateRangeUtc(localDate: string, timeZone: string): { startIso: string; endIso: string } {
+  const anchor = new Date(`${localDate}T12:00:00.000Z`);
   // Locate each boundary independently: a daylight-saving day can be 23 or 25
   // hours, so applying the current UTC offset to both midnights is incorrect.
   function boundary(afterToday: boolean): number {
-    let low = now.getTime() - 48 * 60 * 60 * 1000;
-    let high = now.getTime() + 48 * 60 * 60 * 1000;
+    let low = anchor.getTime() - 48 * 60 * 60 * 1000;
+    let high = anchor.getTime() + 48 * 60 * 60 * 1000;
     while (low < high) {
       const middle = Math.floor((low + high) / 2);
       const date = localDateTimeParts(new Date(middle), timeZone).localDate;
@@ -91,6 +91,10 @@ export function localDayRangeUtc(now: Date, timeZone: string): { startIso: strin
     startIso: new Date(boundary(false)).toISOString(),
     endIso: new Date(boundary(true) - 1).toISOString(),
   };
+}
+
+export function localDayRangeUtc(now: Date, timeZone: string): { startIso: string; endIso: string } {
+  return localDateRangeUtc(localDateTimeParts(now, timeZone).localDate, timeZone);
 }
 
 /**
@@ -190,7 +194,7 @@ export async function loadTodaySession(
 
   const { data: exerciseRows, error: exerciseError } = await supabase
     .from("workout_session_exercises")
-    .select("id, exercise_id, exercise_name, target_sets, rep_min, rep_max, rest_seconds, is_skipped")
+    .select("id, exercise_id, display_name, target_sets, target_rep_min, target_rep_max, rest_seconds, is_skipped")
     .eq("workout_session_id", session.id)
     .order("exercise_order", { ascending: true });
 
@@ -202,10 +206,10 @@ export async function loadTodaySession(
     (exerciseRows as Array<{
       id: string;
       exercise_id: string;
-      exercise_name: string | null;
+      display_name: string | null;
       target_sets: number | null;
-      rep_min: number | null;
-      rep_max: number | null;
+      target_rep_min: number | null;
+      target_rep_max: number | null;
       rest_seconds: number | null;
       is_skipped: boolean | null;
     }> | null) ?? [];
@@ -240,10 +244,10 @@ export async function loadTodaySession(
     exercises: rows.map((row) => ({
       sessionExerciseId: row.id,
       exerciseId: row.exercise_id,
-      exerciseName: row.exercise_name ?? "Exercise",
+      exerciseName: row.display_name ?? "Exercise",
       targetSets: row.target_sets,
-      repMin: row.rep_min,
-      repMax: row.rep_max,
+      repMin: row.target_rep_min,
+      repMax: row.target_rep_max,
       restSeconds: row.rest_seconds,
       primaryMuscle: primaryMuscleById.get(row.exercise_id) ?? null,
       isSkipped: row.is_skipped === true,

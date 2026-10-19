@@ -22,6 +22,7 @@ export function VisualOverlay({ variant = "grid", className = "" }: VisualOverla
       aria-hidden="true"
       focusable="false"
       className={`pointer-events-none absolute inset-0 h-full w-full ${className}`}
+      viewBox="0 0 100 100"
       preserveAspectRatio="none"
     >
       <defs>
@@ -47,12 +48,12 @@ export function VisualOverlay({ variant = "grid", className = "" }: VisualOverla
 function TelemetryLines() {
   return (
     <g stroke="var(--color-accent, #ff7a45)" strokeWidth="1" fill="none" opacity="0.5">
-      <path d="M 8% 20% L 30% 34% L 26% 58% L 44% 70%" strokeDasharray="4 5" />
+      <path d="M 8 20 L 30 34 L 26 58 L 44 70" strokeDasharray="4 5" />
       <circle cx="8%" cy="20%" r="2.5" fill="var(--color-accent, #ff7a45)" stroke="none" />
       <circle cx="30%" cy="34%" r="2.5" fill="var(--color-accent, #ff7a45)" stroke="none" />
       <circle cx="26%" cy="58%" r="2.5" fill="var(--color-accent, #ff7a45)" stroke="none" />
       <circle cx="44%" cy="70%" r="2.5" fill="var(--color-accent, #ff7a45)" stroke="none" />
-      <path d="M 62% 12% L 70% 40% L 60% 62% L 74% 84%" strokeDasharray="4 5" opacity="0.6" />
+      <path d="M 62 12 L 70 40 L 60 62 L 74 84" strokeDasharray="4 5" opacity="0.6" />
     </g>
   );
 }
@@ -60,7 +61,7 @@ function TelemetryLines() {
 function WaveformLine() {
   return (
     <path
-      d="M 0 60% Q 8% 40%, 16% 60% T 32% 60% T 48% 45% T 64% 60% T 80% 55% T 100% 60%"
+      d="M 0 60 Q 8 40, 16 60 T 32 60 T 48 45 T 64 60 T 80 55 T 100 60"
       fill="none"
       stroke="var(--color-accent, #ff7a45)"
       strokeWidth="1.5"

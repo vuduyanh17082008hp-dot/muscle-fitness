@@ -7,12 +7,11 @@ import { getExposureType, getOutcomeType } from "@/lib/experiments/catalog";
 import type { ExperimentRecord } from "@/lib/experiments/mutations";
 import { loadExperimentObservations } from "@/lib/experiments/load-daily-series";
 import { buildExperimentResult, type ExperimentAnalysis } from "@/lib/experiments/engine";
-
-function daysAgoIso(days: number, now: Date): string {
-  const d = new Date(now);
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
-}
+import { addDaysIso } from "@/lib/nutrition/date-utils";
+import {
+  localDateTimeParts,
+  resolveUserTimeZone,
+} from "@/lib/training/load-today-session";
 
 /**
  * Loads real observations for one stored experiment and runs the
@@ -27,17 +26,21 @@ export async function buildExperimentResultFor(
   userId: string,
   experiment: ExperimentRecord,
   now: Date = new Date(),
+  timeZoneOverride?: string | null,
 ): Promise<TraceableDecision<ExperimentAnalysis> | null> {
   const exposure = getExposureType(experiment.exposureType);
   const outcome = getOutcomeType(experiment.outcomeType);
 
   if (!exposure || !outcome) return null;
 
+  const timeZone = await resolveUserTimeZone(supabase, userId, timeZoneOverride);
+  const endDate = localDateTimeParts(now, timeZone).localDate;
   const observations = await loadExperimentObservations(supabase, userId, {
     exposureType: experiment.exposureType,
     outcomeType: experiment.outcomeType,
-    startDate: daysAgoIso(experiment.windowDays, now),
-    endDate: now.toISOString().slice(0, 10),
+    startDate: addDaysIso(endDate, -experiment.windowDays),
+    endDate,
+    timeZone,
   });
 
   return buildExperimentResult(exposure, outcome, experiment.question, observations);

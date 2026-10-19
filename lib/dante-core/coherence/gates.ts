@@ -13,7 +13,7 @@ import type { HandledObligation, TurnObligation } from "@/lib/dante-core/runtime
 import { blockSurfaceText, blocksFromHandled } from "@/lib/dante-core/coherence/authority";
 import { checkDispositions } from "@/lib/dante-core/coherence/ledger";
 import { activeCorrections } from "@/lib/dante-core/coherence/reducer";
-import { hasCustomerServiceDrift, hasQuestionNumbering, realizePersona } from "@/lib/dante-core/coherence/realize";
+import { hasCustomerServiceDrift, hasQuestionNumbering, NUMBERED_QUESTION_LINE, realizePersona } from "@/lib/dante-core/coherence/realize";
 import type { DecisionState } from "@/lib/dante-core/coherence/decision-first";
 import { LATERALITY_TOPIC } from "@/lib/dante-core/coherence/corrections";
 import type {
@@ -212,9 +212,10 @@ export function surfaceRepair(input: {
     safetyCategory: input.snapshot.safety.category,
   });
   if (input.code === "COMPOSITION") {
+    // Only questionnaire numbering is removed; a numbered list of steps/options keeps its numbers.
     realized = realized
       .replace(/(?:question|câu hỏi)\s*[123][:.)]?\s*/gi, "")
-      .replace(/^\s*[123][.)]\s+/gm, "");
+      .replace(NUMBERED_QUESTION_LINE, (line) => line.replace(/^\s*[123][.)]\s+/, ""));
   }
   if (input.code === "PERSONA" || input.code === "CS_DRIFT") {
     realized = realized.replace(/[😂🤣💀😭]/g, "");

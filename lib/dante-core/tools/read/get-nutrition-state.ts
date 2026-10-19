@@ -54,11 +54,13 @@ export const getNutritionStateTool: DanteTool<Record<string, never>, NutritionSt
       return { ok: false, error: "Food log is unavailable. Consumed and remaining nutrients cannot be determined." };
     }
 
-    if (!nutritionContext.plan) {
+    const target = nutritionContext.targets.complete;
+
+    if (!nutritionContext.plan || !target) {
       return { ok: true, data: { hasTarget: false } };
     }
 
-    const comparison = compareToTargets(foodLog.totals, nutritionContext.plan.target);
+    const comparison = compareToTargets(foodLog.totals, target);
 
     return {
       ok: true,

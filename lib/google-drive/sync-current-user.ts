@@ -9,6 +9,24 @@ import {
   createClient,
 } from '@/lib/supabase/server'
 
+export type GoogleDriveSyncFailureKind =
+  | 'auth'
+  | 'validation'
+  | 'upstream'
+
+export class GoogleDriveSyncError extends Error {
+  readonly kind: GoogleDriveSyncFailureKind
+
+  constructor(
+    kind: GoogleDriveSyncFailureKind,
+    diagnostic: string,
+  ) {
+    super(diagnostic)
+    this.name = 'GoogleDriveSyncError'
+    this.kind = kind
+  }
+}
+
 export async function syncCurrentUserToGoogleDrive():
   Promise<DriveSyncResult> {
   const supabase =
@@ -23,7 +41,8 @@ export async function syncCurrentUserToGoogleDrive():
     await supabase.auth.getUser()
 
   if (authError || !user) {
-    throw new Error(
+    throw new GoogleDriveSyncError(
+      'auth',
       'Authentication required for Google Drive sync.',
     )
   }
@@ -43,29 +62,40 @@ export async function syncCurrentUserToGoogleDrive():
     foundationError ||
     !foundation
   ) {
-    throw new Error(
+    throw new GoogleDriveSyncError(
+      'upstream',
       foundationError?.message ??
         'Could not load client foundation data.',
     )
   }
 
-  return upsertClientDriveSnapshot({
-    schemaVersion: 1,
+  try {
+    return await upsertClientDriveSnapshot({
+      schemaVersion: 1,
 
-    user: {
-      id: user.id,
+      user: {
+        id: user.id,
 
-      email:
-        user.email ?? null,
+        email:
+          user.email ?? null,
 
-      createdAt:
-        user.created_at ?? null,
+        createdAt:
+          user.created_at ?? null,
 
-      lastSignInAt:
-        user.last_sign_in_at ??
-        null,
-    },
+        lastSignInAt:
+          user.last_sign_in_at ??
+          null,
+      },
 
-    foundation,
-  })
+      foundation,
+    })
+  } catch (error) {
+    if (error instanceof GoogleDriveSyncError) throw error
+    const diagnostic =
+      error instanceof Error ? error.name : "unknown"
+    throw new GoogleDriveSyncError(
+      "upstream",
+      diagnostic,
+    )
+  }
 }

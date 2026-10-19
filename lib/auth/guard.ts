@@ -5,6 +5,10 @@ import { redirect } from 'next/navigation'
 
 import type { User } from '@supabase/supabase-js'
 
+import {
+  classifyQueryError,
+  isAuthDisposition,
+} from '@/lib/supabase/query-error'
 import { createClient } from '@/lib/supabase/server'
 
 type SupabaseServerClient = Awaited<
@@ -72,6 +76,7 @@ export const requireCompletedOnboarding = cache(
     const {
       data: profile,
       error,
+      status,
     } = await supabase
       .from('profiles')
       .select('user_id, full_name, onboarding_completed')
@@ -79,15 +84,27 @@ export const requireCompletedOnboarding = cache(
       .maybeSingle()
 
     if (error) {
+      const disposition = classifyQueryError(error, status)
+
       console.error(
         'Unable to load dashboard onboarding context:',
         {
-          message: error.message,
+          disposition,
+          code: error.code,
+          status,
         },
       )
 
+      /*
+       * Never redirect here. GoTrue already accepted this session in
+       * requireUser, so /login would bounce straight back to /dashboard
+       * and loop. An auth rejection from PostgREST is surfaced to the
+       * error boundary (retry) — never treated as a missing profile.
+       */
       throw new Error(
-        'Unable to load your Muscle Fitness profile.',
+        isAuthDisposition(disposition)
+          ? `Your session could not be verified (${disposition}). Please retry or sign in again.`
+          : `Unable to load your Muscle Fitness profile (${disposition}).`,
       )
     }
 

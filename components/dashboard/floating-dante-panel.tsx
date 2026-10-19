@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 
 import DanteChat from "@/components/dante-chat";
 import { DanteMascot } from "@/components/dante/dante-mascot";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
-import hudStyles from "@/components/dante/holographic-telemetry-pod.module.css";
 
 type FloatingDantePanelProps = {
   open: boolean;
@@ -19,16 +18,15 @@ type FloatingDantePanelProps = {
 function PanelFooter() {
   return (
     <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-      <Link href="/dashboard/ai-coach" className="text-xs font-bold text-[#D4FF00] hover:underline">
-        Expand to Full Biometric HUD →
+      <Link href="/dashboard/ai-coach" className="text-xs font-bold text-mf-glass-dante hover:underline">
+        Open full coach chat →
       </Link>
     </div>
   );
 }
 
 /**
- * Desktop: Holographic Telemetry Pod with 3D Parallax Hover.
- * Reacts organically to user cursor coordinates with constrained 3D tilt.
+ * Desktop: Calm Dante Performance Assistant Panel.
  */
 function DesktopPanel({
   open,
@@ -36,7 +34,6 @@ function DesktopPanel({
   contextualPrompt,
 }: Omit<FloatingDantePanelProps, "isDesktop">) {
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!open) return;
@@ -62,41 +59,20 @@ function DesktopPanel({
 
   if (!open) return null;
 
-  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    if (!panelRef.current) return;
-    const rect = panelRef.current.getBoundingClientRect();
-    const px = (event.clientX - rect.left) / rect.width - 0.5;
-    const py = (event.clientY - rect.top) / rect.height - 0.5;
-    // Constrain tilt between -4deg and 4deg
-    setTilt({
-      x: Math.max(-4, Math.min(4, -py * 8)),
-      y: Math.max(-4, Math.min(4, px * 8)),
-    });
-  }
-
-  function handlePointerLeave() {
-    setTilt({ x: 0, y: 0 });
-  }
-
   return (
-    <div
-      className={hudStyles.parallaxPerspective}
-      onPointerMove={handlePointerMove}
-      onPointerLeave={handlePointerLeave}
-    >
+    <div>
       <div
         ref={panelRef}
         role="dialog"
         aria-label="Ask Dante"
-        style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` }}
-        className={`fixed bottom-24 right-6 z-40 flex max-h-[min(80vh,640px)] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[24px] border border-[#D4FF00]/30 bg-[#0e1014]/92 backdrop-blur-xl p-4 shadow-[0_24px_70px_rgba(0,0,0,0.85)] ${hudStyles.parallaxCard}`}
+        className="fixed bottom-24 right-6 z-40 flex max-h-[min(80vh,640px)] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d111a]/95 backdrop-blur-xl p-4 shadow-2xl"
       >
         <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b border-white/10 pb-3">
           <div className="flex items-center gap-2.5">
             <DanteMascot size="xs" state="idle" />
             <div>
-              <p className="font-mono text-xs font-bold uppercase tracking-wider text-[#D4FF00]">DANTE BIOMETRIC HUD</p>
-              <p className="text-[10px] font-mono text-zinc-400">TELEMETRY POD v4.0</p>
+              <p className="text-xs font-bold text-mf-glass-text">Dante AI Coach</p>
+              <p className="text-[11px] text-mf-glass-text-muted">Evidence-aware performance assistant</p>
             </div>
           </div>
 

@@ -6,7 +6,9 @@ import { useMotionCapabilities } from "@/components/experience/motion-home/motio
 import { CosmicCore } from "@/components/experience/motion-home/hero/CosmicCore";
 import styles from "@/components/experience/motion-home/styles/motion-home.module.css";
 import coreStyles from "@/components/experience/motion-home/styles/cosmic-core.module.css";
-import type { HomepageRoutes } from "@/components/experience/motion-home/data/homepageViewModel";
+import type {
+  MotionHomepageViewModel,
+} from "@/components/experience/motion-home/data/homepageViewModel";
 
 type Tier = "primary" | "secondary";
 
@@ -27,18 +29,23 @@ const HALF = 280;
 const ORBIT_RADIUS_SVG = 195;
 
 /** 8 Satellites evenly spaced at 45-degree intervals along the single circular orbit path */
-const MODULE_DEFS: ModuleDef[] = [
-  { id: "muscle", label: "Muscle Intel", value: "Chest", status: "Active", angle: 0, accentVar: "--mf-brand", tier: "primary" },
-  { id: "training", label: "Training", value: "Push", status: "Today", angle: 45, accentVar: "--mf-brand", tier: "secondary" },
-  { id: "nutrition", label: "Nutrition", value: "154 g", status: "Protein", angle: 90, accentVar: "--mf-brand", tier: "primary" },
-  { id: "adapt", label: "Adapt", value: "Session", status: "Updated", angle: 135, accentVar: "--mf-brand", tier: "primary" },
-  { id: "dante", label: "Dante", value: "AI Coach", status: "Online", angle: 180, accentVar: "--mf-violet", tier: "primary" },
-  { id: "checkin", label: "Check-in", value: "Week 08", status: "Ready", angle: 225, accentVar: "--mf-violet", tier: "secondary" },
-  { id: "progress", label: "Progress", value: "+14.7%", status: "Strength", angle: 270, accentVar: "--mf-cyan", tier: "secondary" },
-  { id: "recovery", label: "Recovery", value: "87", status: "Readiness", angle: 315, accentVar: "--mf-violet", tier: "secondary" },
-];
+function moduleDefs(viewModel: MotionHomepageViewModel): ModuleDef[] {
+  const proteinTarget = viewModel.nutrition.proteinTargetG;
 
-function moduleList(routes: HomepageRoutes): Module[] {
+  return [
+  { id: "muscle", label: "Muscle Intel", value: viewModel.muscle.focusMuscle, status: "Active", angle: 0, accentVar: "--mf-brand", tier: "primary" },
+  { id: "training", label: "Training", value: viewModel.training.sessionName, status: "Today", angle: 45, accentVar: "--mf-brand", tier: "secondary" },
+  { id: "nutrition", label: "Nutrition", value: `${viewModel.nutrition.proteinConsumedG} / ${proteinTarget ?? "—"} g`, status: "Protein", angle: 90, accentVar: "--mf-brand", tier: "primary" },
+  { id: "adapt", label: "Adapt", value: "Session", status: "Updated", angle: 135, accentVar: "--mf-brand", tier: "primary" },
+  { id: "dante", label: "Dante", value: "Coach", status: viewModel.mode === "anonymous" ? "Preview" : "Online", angle: 180, accentVar: "--mf-violet", tier: "primary" },
+  { id: "checkin", label: "Check-in", value: "Daily", status: "Ready", angle: 225, accentVar: "--mf-violet", tier: "secondary" },
+  { id: "progress", label: "Progress", value: "This week", status: "Tracked", angle: 270, accentVar: "--mf-cyan", tier: "secondary" },
+  { id: "recovery", label: "Recovery", value: String(viewModel.recovery.readiness), status: "Readiness", angle: 315, accentVar: "--mf-violet", tier: "secondary" },
+  ];
+}
+
+function moduleList(viewModel: MotionHomepageViewModel): Module[] {
+  const { routes } = viewModel;
   const hrefs: Record<string, string> = {
     recovery: routes.recovery,
     muscle: routes.muscleIntelligence,
@@ -50,7 +57,7 @@ function moduleList(routes: HomepageRoutes): Module[] {
     nutrition: routes.nutrition,
   };
 
-  return MODULE_DEFS.map((mod) => ({ ...mod, href: hrefs[mod.id] }));
+  return moduleDefs(viewModel).map((mod) => ({ ...mod, href: hrefs[mod.id] }));
 }
 
 /** Calculate SVG endpoint coordinates for a node given radius & initial angle (0deg = top). */
@@ -72,12 +79,12 @@ function getSvgPoint(radius: number, angleDeg: number) {
  * and initial position offsets so typography & metric cards remain permanently level,
  * vertical, and 100% readable at all 360 degrees.
  */
-export function Ecosystem({ routes }: { routes: HomepageRoutes }) {
+export function Ecosystem({ viewModel }: { viewModel: MotionHomepageViewModel }) {
   const [active, setActive] = useState<string | null>(null);
   const gradientId = useId();
   const connectorGradientId = useId();
   const { reducedMotion } = useMotionCapabilities();
-  const modules = moduleList(routes);
+  const modules = moduleList(viewModel);
 
   return (
     <div
@@ -246,7 +253,7 @@ export function Ecosystem({ routes }: { routes: HomepageRoutes }) {
       {/* Mobile Restrained Explanatory Cue */}
       <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-center lg:hidden">
         <span className="rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[var(--mf-pub-text-muted)] backdrop-blur-md">
-          8 connected systems
+          {viewModel.mode === "anonymous" ? "Illustrative system preview" : "Your connected systems"}
         </span>
       </div>
     </div>

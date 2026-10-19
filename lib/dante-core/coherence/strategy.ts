@@ -41,7 +41,7 @@ export function composeStrategies(input: {
 
   if (safetyActive) strategies.push("SAFETY_HANDLE");
   if (input.competingCorrections) strategies.push("CLARIFY");
-  if (input.analysis.corrections.some((c) => !c.conflictsWith && c.statement !== "CONFLICT")) {
+  if (input.analysis.explicitCorrection) {
     strategies.push("ACKNOWLEDGE_CORRECTION");
   }
   const hasBoundary = input.analysis.boundaries.length > 0
@@ -76,10 +76,8 @@ export function evaluateGateB(input: {
   if (safetyActive && !input.strategies.includes("SAFETY_HANDLE")) {
     return { passed: false, code: "SAFETY_STRATEGY_MISSING", message: "active safety without SAFETY_HANDLE" };
   }
-  if (input.analysis.corrections.some((c) => !c.conflictsWith) && !input.strategies.includes("ACKNOWLEDGE_CORRECTION") && !input.analysis.competingCorrections) {
-    if (input.analysis.corrections.length > 0 && input.analysis.corrections.every((c) => c.statement !== "CONFLICT")) {
-      return { passed: false, code: "CORRECTION_NOT_ACKED", message: "correction not in strategy set" };
-    }
+  if (input.analysis.explicitCorrection && !input.strategies.includes("ACKNOWLEDGE_CORRECTION") && !input.analysis.competingCorrections) {
+    return { passed: false, code: "CORRECTION_NOT_ACKED", message: "correction not in strategy set" };
   }
   const privacyBoundary = activeBoundaries(input.snapshot).some((b) => b.value.kind === "no_memory_dump")
     || input.analysis.boundaries.some((b) => b.kind === "no_memory_dump");

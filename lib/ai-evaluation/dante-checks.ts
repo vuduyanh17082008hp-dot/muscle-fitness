@@ -186,6 +186,7 @@ function dataStarvedAthleteState(): AthleteState {
     },
     training: { hasAnyLoggedData: false, muscles: [], exerciseNames: {} },
     recovery: {
+      current: null,
       available: false,
       score: null,
       status: null,

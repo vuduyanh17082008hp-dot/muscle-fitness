@@ -62,7 +62,7 @@ export const Slide10AIPipeline: React.FC = () => {
           </div>
 
           <div className="mt-6 pt-4 border-t border-red-500/20 text-[11px] font-mono text-red-400">
-            HIGH RISK • NO EVIDENCE CONTROL • NO CLINICAL SAFETY
+            HIGH RISK • NO EVIDENCE CONTROL • NO SAFETY GUARDRAILS
           </div>
         </motion.div>
 
@@ -79,7 +79,7 @@ export const Slide10AIPipeline: React.FC = () => {
               <ShieldCheck className="w-5 h-5 text-[#C8FF3D]" />
             </div>
             <p className="text-xs text-[#989FAA] mb-6">
-              7-stage deterministic pipeline ensuring telemetry verification, clinical safety boundaries, and evidence gating before advice delivery.
+              7-stage deterministic pipeline applying telemetry verification, safety guardrails, and evidence gating before advice delivery.
             </p>
 
             <div className="grid grid-cols-4 gap-2">

@@ -1,16 +1,16 @@
 # AI and Technology Disclosure
 
-## Groq
+## OpenAI
 
 Purpose:
 
-Runtime inference provider for Dante.
+Sole production LLM provider for Dante.
 
 Runtime:
 
-Yes when `GROQ_API_KEY` is configured.
+Yes when `OPENAI_API_KEY` is configured.
 
-The exact production model must be verified from `GROQ_MODEL`
+The exact production model must be verified from `OPENAI_MODEL`
 before submission.
 
 ## Supabase

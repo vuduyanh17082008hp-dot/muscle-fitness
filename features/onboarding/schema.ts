@@ -44,15 +44,17 @@ export const personalSchema = z.object({
     .max(100),
 })
 
+export const fitnessGoalValues = [
+  "fat_loss",
+  "lean_bulk",
+  "muscle_gain",
+  "body_recomposition",
+  "maintenance",
+  "performance",
+] as const
+
 export const goalSchema = z.object({
-  goal: z.enum([
-    "fat_loss",
-    "lean_bulk",
-    "muscle_gain",
-    "body_recomposition",
-    "maintenance",
-    "performance",
-  ]),
+  goal: z.enum(fitnessGoalValues),
 })
 
 export const trainingStyleValues = [

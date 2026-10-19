@@ -42,8 +42,51 @@ describe("food log calendar validation", () => {
       mealType: "lunch", foodName: "Manual food", source: "user_provided",
       per100g: { calories: 100, protein: 10, carbs: 10, fat: 2 }, quantityGrams: 100,
       logDate: "2026-02-29",
+      idempotencyKey: "11111111-1111-4111-8111-111111111111",
     }) }));
     expect(response.status).toBe(400);
     expect(createFoodLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects a future GET date outside the date-picker window", async () => {
+    const response = await GET(new Request("http://localhost/api/nutrition/log?date=2026-09-16"));
+    expect(response.status).toBe(400);
+    expect(loadFoodLogForDate).not.toHaveBeenCalled();
+  });
+
+  it("rejects POST logDate that is not profile-local today", async () => {
+    const response = await POST(new Request("http://localhost/api/nutrition/log", { method: "POST", body: JSON.stringify({
+      mealType: "lunch", foodName: "Manual food", source: "user_provided",
+      per100g: { calories: 100, protein: 10, carbs: 10, fat: 2 }, quantityGrams: 100,
+      logDate: "2020-01-01",
+      idempotencyKey: "11111111-1111-4111-8111-111111111111",
+    }) }));
+    expect(response.status).toBe(400);
+    expect(createFoodLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed idempotency key", async () => {
+    const response = await POST(new Request("http://localhost/api/nutrition/log", { method: "POST", body: JSON.stringify({
+      mealType: "lunch", foodName: "Manual food", source: "user_provided",
+      per100g: { calories: 100, protein: 10, carbs: 10, fat: 2 }, quantityGrams: 100,
+      idempotencyKey: "not-a-uuid",
+    }) }));
+    expect(response.status).toBe(400);
+    expect(createFoodLog).not.toHaveBeenCalled();
+  });
+
+  it("accepts today with a valid idempotency key", async () => {
+    vi.mocked(createFoodLog).mockResolvedValueOnce({
+      success: true,
+      data: { id: "log-1", calories: 100 },
+    } as never);
+    const response = await POST(new Request("http://localhost/api/nutrition/log", { method: "POST", body: JSON.stringify({
+      mealType: "lunch", foodName: "Manual food", source: "user_provided",
+      per100g: { calories: 100, protein: 10, carbs: 10, fat: 2 }, quantityGrams: 100,
+      logDate: "2026-09-15",
+      idempotencyKey: "11111111-1111-4111-8111-111111111111",
+    }) }));
+    expect(response.status).toBe(200);
+    expect(createFoodLog).toHaveBeenCalledTimes(1);
   });
 });

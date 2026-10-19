@@ -1,0 +1,15 @@
+const dump = (scope) => scope.evaluate((r) => [...r.querySelectorAll('button,input,select,textarea,[role=tab],[role=option]')].filter((e) => e.getBoundingClientRect().width > 0).map((e) => `${e.tagName} ${e.getAttribute('type') ?? ''} [${e.getAttribute('aria-label') ?? ''}] ${(e.innerText || e.getAttribute('placeholder') || e.value || '').trim().replace(/\s+/g, ' ').slice(0, 70)}`))
+export default async ({ page, go, snap, jl, save, d, name }) => {
+  await go('/dashboard/nutrition')
+  const t0 = Date.now()
+  await page.getByRole('button', { name: /track food/i }).first().click()
+  await page.getByRole('button', { name: /search food/i }).click()
+  const dlg = page.locator('[role=dialog]').last()
+  const input = dlg.locator('input[type=search], input[type=text], input:not([type])').first()
+  await input.fill('chicken rice')
+  const tq = Date.now()
+  const resolved = await dlg.getByText(/Searching…/).waitFor({ state: 'hidden', timeout: 60000 }).then(() => Date.now() - tq).catch(() => null); jl({ searchResolvedMs: resolved })
+  await page.screenshot({ path: `${d}/${name}-results.png` })
+  save(`${d}/${name}-results-controls.json`, await dump(dlg))
+  jl({ searchVisibleAfterMs: Date.now() - tq, resultsText: (await dlg.innerText()).slice(0, 1500), sinceOpenMs: Date.now() - t0 })
+}

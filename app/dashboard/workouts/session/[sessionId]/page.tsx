@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Database } from "@/types/app-database.types";
+import type { Database } from "@/database.types.generated";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { buildAdaptiveProgram, type ProgramAdaptation } from "@/lib/dante-core/adaptive-program-engine";
@@ -27,6 +27,12 @@ import { loadAdaptationHistory, type AdaptationHistoryEntry } from "@/lib/dante-
 import type { RecoveryStatusInput, TrainingLoadStateInput } from "@/lib/training/recommendations";
 import type { TraceableDecision } from "@/lib/dante-core/types";
 import { AdaptiveRecommendationCard } from "@/components/training/adaptive-recommendation-card";
+import { WorkoutPlayer } from "@/features/workouts/workout-player";
+import { startWorkoutAction } from "@/app/dashboard/workouts/actions";
+import type {
+  WorkoutPlayerExercise,
+  WorkoutReplacementOption,
+} from "@/features/workouts/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -88,6 +94,34 @@ function formatDuration(seconds: number): string {
   }
 
   return `${minutes} min`;
+}
+
+function sessionLoadError(
+  step: string,
+  error: { message: string },
+): ReactNode {
+  console.error(
+    `[SESSION PAGE] failed to load ${step}:`,
+    error.message,
+  );
+
+  return (
+    <main className="min-h-screen bg-mf-bg px-4 py-8 text-white sm:px-6 lg:px-10">
+      <div
+        role="alert"
+        className="mx-auto max-w-3xl rounded-3xl border border-red-500/20 bg-red-500/5 px-6 py-12 text-center"
+      >
+        <h1 className="text-xl font-black">
+          Workout session is unavailable
+        </h1>
+
+        <p className="mt-2 text-sm text-zinc-500">
+          We could not load this session. Please try again in a
+          moment.
+        </p>
+      </div>
+    </main>
+  );
 }
 
 function getStateLabel(
@@ -184,9 +218,7 @@ export default async function WorkoutSessionPage({
     .maybeSingle();
 
   if (sessionError) {
-    throw new Error(
-      `Failed to load workout session: ${sessionError.message}`,
-    );
+    return sessionLoadError("session", sessionError);
   }
 
   if (!sessionData) {
@@ -211,9 +243,7 @@ export default async function WorkoutSessionPage({
     });
 
   if (sessionExercisesError) {
-    throw new Error(
-      `Failed to load session exercises: ${sessionExercisesError.message}`,
-    );
+    return sessionLoadError("exercises", sessionExercisesError);
   }
 
   const sessionExercises:
@@ -229,18 +259,16 @@ export default async function WorkoutSessionPage({
     } = await supabase
       .from("exercise_sets")
       .select("*")
-      .eq(
-        "workout_session_id",
-        session.id,
+      .in(
+        "session_exercise_id",
+        sessionExercises.map((exercise) => exercise.id),
       )
       .order("set_number", {
         ascending: true,
       });
 
     if (exerciseSetsError) {
-      throw new Error(
-        `Failed to load exercise sets: ${exerciseSetsError.message}`,
-      );
+      return sessionLoadError("sets", exerciseSetsError);
     }
 
     exerciseSets = exerciseSetsData ?? [];
@@ -254,13 +282,13 @@ export default async function WorkoutSessionPage({
   for (const set of exerciseSets) {
     const currentSets =
       setsByExercise.get(
-        set.workout_session_exercise_id,
+        set.session_exercise_id,
       ) ?? [];
 
     currentSets.push(set);
 
     setsByExercise.set(
-      set.workout_session_exercise_id,
+      set.session_exercise_id,
       currentSets,
     );
   }
@@ -274,6 +302,140 @@ export default async function WorkoutSessionPage({
         setsByExercise.get(exercise.id) ??
         [],
     }));
+
+  const backHref =
+    session.workout_plan_id
+      ? `/dashboard/workouts/plans/${session.workout_plan_id}`
+      : "/dashboard/workouts";
+
+  /* =========================================================
+     ACTIVE SESSION — the one interactive logger (WorkoutPlayer).
+     Only `in_progress` is active: it is the only state
+     finish_workout accepts. Every other state falls through to
+     the read-only view below.
+  ========================================================= */
+
+  if (session.session_state === "in_progress") {
+    const exerciseIds = sessionExercises.map(
+      (exercise) => exercise.exercise_id,
+    );
+
+    // Library metadata and the substitution flag only enrich the
+    // player. A failed lookup must never block logging, so both
+    // degrade to "no metadata / no substitution".
+    const { data: libraryRows } =
+      exerciseIds.length > 0
+        ? await supabase
+            .from("exercise_library")
+            .select("id, name, primary_muscle, equipment")
+            .in("id", exerciseIds)
+        : { data: [] };
+
+    const libraryById = new Map(
+      (libraryRows ?? []).map((row) => [row.id, row]),
+    );
+
+    const { data: plan } = session.workout_plan_id
+      ? await supabase
+          .from("workout_plans")
+          .select("allow_client_substitution")
+          .eq("id", session.workout_plan_id)
+          .maybeSingle()
+      : { data: null };
+
+    const allowSubstitution =
+      plan?.allow_client_substitution === true;
+
+    const muscles = [
+      ...new Set(
+        (libraryRows ?? []).map((row) => row.primary_muscle),
+      ),
+    ];
+
+    const { data: replacementRows } =
+      allowSubstitution && muscles.length > 0
+        ? await supabase
+            .from("exercise_library")
+            .select("id, name, primary_muscle, equipment")
+            .eq("is_active", true)
+            .in("primary_muscle", muscles)
+            .order("name", { ascending: true })
+            .limit(300)
+        : { data: [] };
+
+    const replacementOptions: WorkoutReplacementOption[] = (
+      replacementRows ?? []
+    ).map((row) => ({
+      id: row.id,
+      name: row.name,
+      primaryMuscle: row.primary_muscle,
+      equipment: row.equipment,
+    }));
+
+    const playerExercises: WorkoutPlayerExercise[] =
+      exercisesWithSets.map((exercise) => ({
+        id: exercise.id,
+        exerciseId: exercise.exercise_id,
+        name: exercise.display_name,
+        primaryMuscle:
+          libraryById.get(exercise.exercise_id)?.primary_muscle ?? "",
+        equipment:
+          libraryById.get(exercise.exercise_id)?.equipment ?? "",
+        exerciseOrder: exercise.exercise_order,
+        targetSets: exercise.target_sets,
+        repMin: exercise.target_rep_min,
+        repMax: exercise.target_rep_max,
+        targetRir: exercise.target_rir,
+        targetRpe: exercise.target_rpe,
+        restSeconds: exercise.rest_seconds,
+        notes: exercise.notes,
+        isSkipped: exercise.is_skipped,
+        sets: exercise.sets.map((set) => ({
+          id: set.id,
+          setNumber: set.set_number,
+          setType: set.set_type,
+          targetReps: set.target_reps,
+          weightKg:
+            set.weight_kg === null ? null : Number(set.weight_kg),
+          reps: set.reps,
+          rir: set.rir === null ? null : Number(set.rir),
+          rpe: set.rpe === null ? null : Number(set.rpe),
+          completed: set.completed,
+        })),
+        // ponytail: previous-performance panel is not loaded yet; add a
+        // last-completed-session lookup per exercise_id when wanted.
+        previous: null,
+      }));
+
+    return (
+      <main className="min-h-screen bg-mf-bg px-4 py-8 text-white sm:px-6 lg:px-10">
+        <div className="mx-auto max-w-7xl">
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+
+            Back to workout
+          </Link>
+
+          <div className="mt-8">
+            {/* Keyed on the exercise ids so a replaced exercise
+                remounts the player with the refreshed server data. */}
+            <WorkoutPlayer
+              key={exerciseIds.join(",")}
+              sessionId={session.id}
+              sessionName={session.name}
+              startedAt={session.started_at}
+              allowSubstitution={allowSubstitution}
+              initialExercises={playerExercises}
+              replacementOptions={replacementOptions}
+            />
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   /* =========================================================
      ADAPTIVE RECOMMENDATIONS — only computed before the session
@@ -376,11 +538,6 @@ export default async function WorkoutSessionPage({
       },
     ).length;
 
-  const backHref =
-    session.workout_plan_id
-      ? `/dashboard/workouts/plans/${session.workout_plan_id}`
-      : "/dashboard/workouts";
-
   return (
     <main className="min-h-screen bg-mf-bg px-4 py-8 text-white sm:px-6 lg:px-10">
       <div className="mx-auto max-w-7xl">
@@ -430,15 +587,20 @@ export default async function WorkoutSessionPage({
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                <p className="text-xs font-black uppercase tracking-wider text-zinc-600">
-                  Session ID
-                </p>
-
-                <p className="mt-2 max-w-64 break-all font-mono text-xs text-zinc-400">
-                  {session.id}
-                </p>
-              </div>
+              {/* A planned session starts here, keeping its own (possibly adjusted) prescription — start_workout
+                  begins this row rather than cloning the plan template. */}
+              {(session.session_state === "not_started" || session.session_state === null) && session.workout_day_id ? (
+                <form action={startWorkoutAction}>
+                  <input type="hidden" name="workout_day_id" value={session.workout_day_id} />
+                  <button
+                    type="submit"
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 text-sm font-black uppercase tracking-[0.12em] text-black transition hover:bg-amber-300"
+                  >
+                    <PlayCircle aria-hidden="true" className="h-5 w-5" />
+                    Start workout
+                  </button>
+                </form>
+              ) : null}
             </div>
           </div>
         </header>
@@ -476,7 +638,7 @@ export default async function WorkoutSessionPage({
             }
             label="Duration"
             value={formatDuration(
-              session.duration_seconds,
+              (session.duration_minutes ?? 0) * 60,
             )}
           />
         </section>
@@ -652,7 +814,7 @@ function SessionExerciseCard({
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <h3 className="text-xl font-black">
-                  {exercise.exercise_name}
+                  {exercise.display_name}
                 </h3>
 
                 {exercise.is_skipped ? (
@@ -664,8 +826,8 @@ function SessionExerciseCard({
 
               <p className="mt-2 text-xs leading-6 text-zinc-600">
                 {exercise.target_sets} sets ·{" "}
-                {exercise.rep_min}–
-                {exercise.rep_max} reps ·{" "}
+                {exercise.target_rep_min}–
+                {exercise.target_rep_max} reps ·{" "}
                 {exercise.rest_seconds}s rest
                 {exercise.target_rir !== null
                   ? ` · Target RIR ${exercise.target_rir}`
@@ -709,73 +871,101 @@ function SessionExerciseCard({
             </p>
           )
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] border-separate border-spacing-y-2">
-              <thead>
-                <tr className="text-left text-[10px] font-black uppercase tracking-wider text-zinc-600">
-                  <th className="px-4 py-2">
-                    Set
-                  </th>
+          <div>
+            {/* Mobile View: Stacked touch-friendly set cards */}
+            <div className="flex flex-col gap-2.5 sm:hidden">
+              {exercise.sets.map((set) => (
+                <div
+                  key={set.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-xs font-black">
+                      #{set.set_number}
+                    </span>
+                    <div>
+                      <p className="text-sm font-bold text-white">
+                        {set.weight_kg !== null ? `${set.weight_kg} kg` : "Bodyweight"}{" "}
+                        <span className="text-zinc-500">×</span> {set.reps ?? "—"} reps
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        {set.rir !== null ? `RIR ${set.rir}` : "Target effort"}
+                      </p>
+                    </div>
+                  </div>
 
-                  <th className="px-4 py-2">
-                    Weight
-                  </th>
+                  <div className="shrink-0">
+                    {set.completed ? (
+                      <span className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300">
+                        <CheckCircle2 className="size-4" />
+                        Done
+                      </span>
+                    ) : (
+                      <span className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-zinc-400">
+                        <Gauge className="size-4" />
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
 
-                  <th className="px-4 py-2">
-                    Reps
-                  </th>
-
-                  <th className="px-4 py-2">
-                    RIR
-                  </th>
-
-                  <th className="px-4 py-2">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {exercise.sets.map((set) => (
-                  <tr
-                    key={set.id}
-                    className="bg-white/[0.025] text-sm text-zinc-300"
-                  >
-                    <td className="rounded-l-xl px-4 py-3 font-black">
-                      {set.set_number}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {set.weight_kg !== null
-                        ? `${set.weight_kg} kg`
-                        : "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {set.reps ?? "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {set.rir ?? "—"}
-                    </td>
-
-                    <td className="rounded-r-xl px-4 py-3">
-                      {set.completed ? (
-                        <span className="inline-flex items-center gap-2 text-emerald-300">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Completed
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2 text-zinc-600">
-                          <Gauge className="h-4 w-4" />
-                          Pending
-                        </span>
-                      )}
-                    </td>
+            {/* Desktop / Tablet View: Structured Data Table */}
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full min-w-[620px] border-separate border-spacing-y-2">
+                <thead>
+                  <tr className="text-left text-[10px] font-black uppercase tracking-wider text-zinc-600">
+                    <th className="px-4 py-2">Set</th>
+                    <th className="px-4 py-2">Weight</th>
+                    <th className="px-4 py-2">Reps</th>
+                    <th className="px-4 py-2">RIR</th>
+                    <th className="px-4 py-2">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody>
+                  {exercise.sets.map((set) => (
+                    <tr
+                      key={set.id}
+                      className="bg-white/[0.025] text-sm text-zinc-300"
+                    >
+                      <td className="rounded-l-xl px-4 py-3 font-black">
+                        {set.set_number}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {set.weight_kg !== null
+                          ? `${set.weight_kg} kg`
+                          : "—"}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {set.reps ?? "—"}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {set.rir ?? "—"}
+                      </td>
+
+                      <td className="rounded-r-xl px-4 py-3">
+                        {set.completed ? (
+                          <span className="inline-flex items-center gap-2 text-emerald-300">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Completed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2 text-zinc-600">
+                            <Gauge className="h-4 w-4" />
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 const deliverables = [
-  "Working prototype",
+  "Working product demonstration",
   "Deployable web application",
   "Source-code repository",
   "Professional README",
@@ -417,7 +417,7 @@ export default function AIFairPage() {
 
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
-            href="/chatbot"
+            href="/dashboard/ai-coach"
             className="
               inline-flex
 

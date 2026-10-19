@@ -1,3 +1,5 @@
+import { getUtcOffsetMinutes } from "@/lib/training/load-today-session";
+
 /**
  * Shared week-bucketing helpers for Training Intelligence analytics.
  * Monday–Sunday, user-local weeks (spec §13) via a simple UTC-offset
@@ -10,9 +12,13 @@ export const WEEK_MS = 7 * DAY_MS;
 export function toLocalDate(
   isoTimestamp: string,
   timeZoneOffsetMinutes: number,
+  timeZone?: string,
 ): Date {
   const utc = new Date(isoTimestamp);
-  return new Date(utc.getTime() + timeZoneOffsetMinutes * 60_000);
+  const offset = timeZone
+    ? getUtcOffsetMinutes(utc, timeZone)
+    : timeZoneOffsetMinutes;
+  return new Date(utc.getTime() + offset * 60_000);
 }
 
 /** Monday-start week boundary (UTC-anchored) for a "local wall clock" instant. */
@@ -40,6 +46,7 @@ export function weekKey(weekStart: Date): string {
 export function currentWeekStart(
   now: Date,
   timeZoneOffsetMinutes: number,
+  timeZone?: string,
 ): Date {
-  return startOfWeekMonday(toLocalDate(now.toISOString(), timeZoneOffsetMinutes));
+  return startOfWeekMonday(toLocalDate(now.toISOString(), timeZoneOffsetMinutes, timeZone));
 }

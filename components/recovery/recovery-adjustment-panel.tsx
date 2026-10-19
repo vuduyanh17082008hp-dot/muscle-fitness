@@ -34,23 +34,30 @@ export function RecoveryAdjustmentPanel({
   insight,
   proposal,
   hasCheckin,
+  localDate,
+  proposalReady = true,
+  alreadyApplied = false,
 }: {
   recoveryState: RecoveryState;
   insight: string;
   proposal: WorkoutAdjustmentProposal;
   hasCheckin: boolean;
+  localDate: string;
+  proposalReady?: boolean;
+  /** An adjustment to today's session was already applied (workout_mutation_records): never offer a second, stacked cut. */
+  alreadyApplied?: boolean;
 }) {
   const router = useRouter();
   const titleId = useId();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [applied, setApplied] = useState(false);
+  const [applied, setApplied] = useState(alreadyApplied);
   const [kept, setKept] = useState(false);
 
   if (!hasCheckin) return null;
 
-  const canAdjust = proposalMutatesWorkout(proposal);
+  const canAdjust = proposalReady && proposalMutatesWorkout(proposal);
   const readiness = recoveryState.digest.status ?? recoveryState.digest.readiness;
 
   async function apply() {
@@ -60,7 +67,7 @@ export function RecoveryAdjustmentPanel({
       const response = await fetch("/api/recovery/adjustment/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proposal }),
+        body: JSON.stringify({ proposalId: proposal.proposalId, confirm: true }),
       });
       const data = (await response.json()) as { error?: string; alreadyApplied?: boolean };
       if (!response.ok) {
@@ -71,6 +78,8 @@ export function RecoveryAdjustmentPanel({
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to apply today's adjustment.");
+      // The failure message renders on the panel; leaving the dialog open would hide it behind the overlay.
+      setOpen(false);
     } finally {
       setBusy(false);
     }
@@ -131,6 +140,7 @@ export function RecoveryAdjustmentPanel({
       ) : null}
 
       <MotivationLine
+        localDate={localDate}
         contexts={
           applied
             ? ["PLAN_ADJUSTED"]

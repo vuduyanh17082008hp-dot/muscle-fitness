@@ -19,6 +19,10 @@ import {
   saveProfileAction,
   type SaveProfileState,
 } from "@/app/account/actions"
+import {
+  GENDER_OPTIONS,
+  GOAL_OPTIONS,
+} from "@/lib/account/profile-contract"
 
 type ProfileFormProps = {
   initialData: {
@@ -34,6 +38,17 @@ type ProfileFormProps = {
     goal: string
   }
 }
+
+const KNOWN_TIMEZONES = new Set([
+  "Asia/Singapore",
+  "Asia/Ho_Chi_Minh",
+  "Asia/Bangkok",
+  "Asia/Kuala_Lumpur",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+  "Europe/London",
+  "America/New_York",
+])
 
 const initialState: SaveProfileState = {
   success: false,
@@ -142,6 +157,7 @@ export function ProfileForm({
             className={inputClassName}
             name="full_name"
             defaultValue={
+              state.values?.full_name ??
               initialData.fullName
             }
             autoComplete="name"
@@ -164,6 +180,7 @@ export function ProfileForm({
             className={inputClassName}
             name="username"
             defaultValue={
+              state.values?.username ??
               initialData.username
             }
             autoComplete="username"
@@ -205,6 +222,7 @@ export function ProfileForm({
             name="phone"
             type="tel"
             defaultValue={
+              state.values?.phone ??
               initialData.phone
             }
             autoComplete="tel"
@@ -228,7 +246,14 @@ export function ProfileForm({
             name="date_of_birth"
             type="date"
             defaultValue={
+              state.values?.date_of_birth ??
               initialData.dateOfBirth
+            }
+          />
+
+          <FieldError
+            message={
+              state.fieldErrors?.date_of_birth
             }
           />
         </label>
@@ -242,6 +267,7 @@ export function ProfileForm({
             className={inputClassName}
             name="gender"
             defaultValue={
+              state.values?.gender ??
               initialData.gender
             }
           >
@@ -249,21 +275,14 @@ export function ProfileForm({
               Select gender
             </option>
 
-            <option value="male">
-              Male
-            </option>
-
-            <option value="female">
-              Female
-            </option>
-
-            <option value="other">
-              Other
-            </option>
-
-            <option value="prefer_not_to_say">
-              Prefer not to say
-            </option>
+            {GENDER_OPTIONS.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+              >
+                {option.label}
+              </option>
+            ))}
           </select>
 
           <FieldError
@@ -287,6 +306,7 @@ export function ProfileForm({
               max="260"
               step="0.1"
               defaultValue={
+                state.values?.height_cm ??
                 initialData.heightCm ??
                 ""
               }
@@ -319,6 +339,7 @@ export function ProfileForm({
               max="400"
               step="0.1"
               defaultValue={
+                state.values?.weight_kg ??
                 initialData.weightKg ??
                 ""
               }
@@ -346,9 +367,18 @@ export function ProfileForm({
             className={inputClassName}
             name="timezone"
             defaultValue={
+              state.values?.timezone ??
               initialData.timezone
             }
           >
+            {!KNOWN_TIMEZONES.has(
+              initialData.timezone
+            ) && (
+              <option value={initialData.timezone}>
+                {initialData.timezone}
+              </option>
+            )}
+
             <option value="Asia/Singapore">
               Singapore — GMT+8
             </option>
@@ -381,6 +411,12 @@ export function ProfileForm({
               New York
             </option>
           </select>
+
+          <FieldError
+            message={
+              state.fieldErrors?.timezone
+            }
+          />
         </label>
 
         <label>
@@ -392,6 +428,7 @@ export function ProfileForm({
             className={inputClassName}
             name="goal"
             defaultValue={
+              state.values?.goal ??
               initialData.goal
             }
           >
@@ -399,29 +436,14 @@ export function ProfileForm({
               Select your goal
             </option>
 
-            <option value="fat_loss">
-              Fat loss
-            </option>
-
-            <option value="lean_bulk">
-              Lean bulk
-            </option>
-
-            <option value="muscle_gain">
-              Muscle gain
-            </option>
-
-            <option value="body_recomposition">
-              Body recomposition
-            </option>
-
-            <option value="maintenance">
-              Maintenance
-            </option>
-
-            <option value="performance">
-              Performance
-            </option>
+            {GOAL_OPTIONS.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+              >
+                {option.label}
+              </option>
+            ))}
           </select>
 
           <FieldError

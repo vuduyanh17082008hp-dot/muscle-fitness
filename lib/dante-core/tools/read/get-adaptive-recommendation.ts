@@ -48,11 +48,11 @@ export const getAdaptiveRecommendationTool: DanteTool<
   requiresConfirmation: false,
 
   async execute(context, input) {
-    const { supabase, userId } = context;
+    const { supabase, userId, timezone } = context;
 
     const [athleteState, trainingContext] = await Promise.all([
-      cached(context, "athleteState", () => buildAthleteState(supabase, userId)).catch(() => null),
-      cached(context, "trainingContext", () => loadTrainingContext(supabase, userId)).catch(() => null),
+      cached(context, "athleteState", () => buildAthleteState(supabase, userId, { timeZone: timezone ?? "UTC" })).catch(() => null),
+      cached(context, "trainingContext", () => loadTrainingContext(supabase, userId, { timeZone: timezone ?? "UTC" })).catch(() => null),
     ]);
 
     if (!athleteState || !trainingContext) {

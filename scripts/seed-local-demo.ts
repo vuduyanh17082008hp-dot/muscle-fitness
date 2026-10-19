@@ -11,7 +11,6 @@
  *   MF_DEMO_SUPABASE_URL   default http://127.0.0.1:54321
  */
 
-import { spawnSync } from "node:child_process"
 import { createHmac, randomBytes } from "node:crypto"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
@@ -53,6 +52,12 @@ const UPPER_SLUGS = [
   "barbell-curl",
 ] as const
 
+/** Plausible working loads (kg) for an intermediate lifter — a monotone "+8 kg per exercise" pattern reads as fake (audit F-11). */
+const BASE_LOAD_KG: Record<string, number> = {
+  "barbell-bench-press": 70, "seated-cable-row": 60, "overhead-press": 42.5, "lat-pulldown": 55, "barbell-curl": 30,
+  "back-squat": 90, "romanian-deadlift": 80, "leg-press": 140, "seated-leg-curl": 40, "standing-calf-raise": 60,
+}
+
 const LOWER_SLUGS = [
   "back-squat",
   "romanian-deadlift",
@@ -71,23 +76,6 @@ function singaporeDate(offsetDays: number): string {
 
 function singaporeIso(dateIso: string, hour = 18): string {
   return new Date(`${dateIso}T${String(hour).padStart(2, "0")}:00:00+08:00`).toISOString()
-}
-
-function applyLocalLoaderCompat(): void {
-  const sql = `
-    ALTER TABLE public.workout_session_exercises ADD COLUMN IF NOT EXISTS exercise_name text;
-    ALTER TABLE public.workout_session_exercises ADD COLUMN IF NOT EXISTS rep_min smallint;
-    ALTER TABLE public.workout_session_exercises ADD COLUMN IF NOT EXISTS rep_max smallint;
-    NOTIFY pgrst, 'reload schema';
-  `
-  const result = spawnSync(
-    "docker",
-    ["exec", "supabase_db_muscle-fitness-nof1-local", "psql", "-U", "postgres", "-d", "postgres", "-c", sql],
-    { encoding: "utf8" },
-  )
-  if (result.status !== 0) {
-    console.warn("Local loader compat skipped:", result.stderr || result.stdout)
-  }
 }
 
 function throwQuery(label: string, error: { message: string } | null): void {
@@ -386,19 +374,16 @@ async function seedSession(
     if (!exercise) {
       throw new Error(`exercise_library missing slug ${slug}`)
     }
-    const baseWeight = 40 + index * 8 + (input.completed ? 2 : 0)
+    const baseWeight = (BASE_LOAD_KG[slug] ?? 40) + (input.completed ? 2.5 : 0)
 
     const sessionExerciseId = await insertRow(supabase, "workout_session_exercises", {
       workout_session_id: sessionId,
       exercise_id: exercise.id,
       display_name: exercise.name,
-      exercise_name: exercise.name,
       exercise_order: index + 1,
       target_sets: 3,
       target_rep_min: 6,
       target_rep_max: 10,
-      rep_min: 6,
-      rep_max: 10,
       rest_seconds: 120,
       is_skipped: false,
     })
@@ -562,8 +547,6 @@ async function main(): Promise<void> {
   if (!health.ok) {
     throw new Error(`Local Supabase auth is not reachable at ${url}`)
   }
-
-  applyLocalLoaderCompat()
 
   const { supabase, userId, created } = await ensureUser(url, email, password)
 

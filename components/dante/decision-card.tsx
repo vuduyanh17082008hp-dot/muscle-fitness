@@ -21,8 +21,9 @@ const CONFIDENCE_STYLES: Record<string, string> = {
 
 function formatDataValue(value: string | number | null): string {
   if (value === null) return "—";
-  if (typeof value === "number") return String(value);
-  return value;
+  if (typeof value === "number") return String(Math.round(value * 10) / 10);
+  // Engine enums ("significant_deviation") are internal codes, not copy.
+  return /^[a-z]+(?:_[a-z]+)+$/.test(value) ? value.replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase()) : value;
 }
 
 function formatDataLabel(key: string): string {

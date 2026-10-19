@@ -5,6 +5,7 @@ import { motion, useScroll, useTransform, useMotionValue, useSpring } from "fram
 import { useReducedMotion } from "@/lib/useReducedMotion";
 import { ArrowRight, ChevronDown } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 const Hero = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -43,10 +44,13 @@ const Hero = () => {
         className="absolute inset-0 z-0"
         style={{ y: reduced ? 0 : bgY }}
       >
-        <img
+        <Image
           src="/images/hero-gym.jpg"  // Replace with your actual hero image
           alt=""
-          className="w-full h-full object-cover"
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/90" />
         <div className="absolute inset-0 bg-[url('/story/textures/grain.png')] opacity-10 mix-blend-overlay" />
@@ -108,7 +112,7 @@ const Hero = () => {
             <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
-            href="/training"
+            href="/dashboard/workouts"
             className="px-8 py-3 border border-white/20 text-white rounded hover:bg-white/10 transition"
           >
             EXPLORE TRAINING

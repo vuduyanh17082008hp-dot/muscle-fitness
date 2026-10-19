@@ -7,6 +7,10 @@ import type { ExperimentDayObservation } from "@/lib/experiments/engine";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { loadDemoSettings } from "@/lib/demo/settings";
 import { resolveWearableProvider } from "@/lib/wearables/registry";
+import {
+  localDateRangeUtc,
+  localDateTimeParts,
+} from "@/lib/training/load-today-session";
 
 const CAFFEINE_KEYWORDS = ["coffee", "caffeine", "energy drink", "tea", "espresso", "pre-workout", "pre workout"];
 const LATE_HOUR_UTC = 18; // 6pm — see catalog.ts's documented limitation (logged-time proxy, UTC-approximate)
@@ -86,7 +90,7 @@ async function computeOutcomeByDate(
   supabase: SupabaseClient,
   userId: string,
   outcomeType: OutcomeTypeId,
-  range: { startDate: string; endDate: string },
+  range: { startDate: string; endDate: string; timeZone: string },
 ): Promise<Map<string, number>> {
   const values = new Map<string, number>();
 
@@ -107,23 +111,30 @@ async function computeOutcomeByDate(
   }
 
   if (outcomeType === "leg_day_volume_kg") {
+    const startIso = localDateRangeUtc(range.startDate, range.timeZone).startIso;
+    const endIso = localDateRangeUtc(range.endDate, range.timeZone).endIso;
     const [sessionsResponse, trainingContext] = await Promise.all([
       supabase
         .from("workout_sessions")
         .select("id, completed_at")
         .eq("user_id", userId)
         .not("completed_at", "is", null)
-        .gte("completed_at", `${range.startDate}T00:00:00.000Z`)
-        .lte("completed_at", `${range.endDate}T23:59:59.999Z`),
+        .gte("completed_at", startIso)
+        .lte("completed_at", endIso),
       // Broad window so exercise->muscle mapping covers whatever the user has ever done, not just this range.
-      loadTrainingContext(supabase, userId, { windowDays: 365 }),
+      loadTrainingContext(supabase, userId, { windowDays: 365, timeZone: range.timeZone }),
     ]);
 
     const sessions = (sessionsResponse.data as Array<{ id: string; completed_at: string }> | null) ?? [];
 
     if (sessions.length === 0) return values;
 
-    const sessionDateById = new Map(sessions.map((s) => [s.id, s.completed_at.slice(0, 10)]));
+    const sessionDateById = new Map(
+      sessions.map((session) => [
+        session.id,
+        localDateTimeParts(new Date(session.completed_at), range.timeZone).localDate,
+      ]),
+    );
 
     const { data: sessionExerciseRows, error: sessionExerciseError } = await supabase
       .from("workout_session_exercises")
@@ -167,7 +178,10 @@ async function computeOutcomeByDate(
     // Days a leg exercise was NOT trained are a real zero for this outcome, not missing data —
     // but only for days something was logged as a session at all (rest days aren't "zero leg volume", they're not observed).
     for (const session of sessions) {
-      const date = session.completed_at.slice(0, 10);
+      const date = localDateTimeParts(
+        new Date(session.completed_at),
+        range.timeZone,
+      ).localDate;
       if (!values.has(date)) values.set(date, 0);
     }
   }
@@ -185,9 +199,19 @@ async function computeOutcomeByDate(
 export async function loadExperimentObservations(
   supabase: SupabaseClient,
   userId: string,
-  input: { exposureType: ExposureTypeId; outcomeType: OutcomeTypeId; startDate: string; endDate: string },
+  input: {
+    exposureType: ExposureTypeId;
+    outcomeType: OutcomeTypeId;
+    startDate: string;
+    endDate: string;
+    timeZone?: string;
+  },
 ): Promise<ExperimentDayObservation[]> {
-  const range = { startDate: input.startDate, endDate: input.endDate };
+  const range = {
+    startDate: input.startDate,
+    endDate: input.endDate,
+    timeZone: input.timeZone ?? "UTC",
+  };
 
   const [exposureByDate, outcomeByDate] = await Promise.all([
     computeExposureByDate(supabase, userId, input.exposureType, range),

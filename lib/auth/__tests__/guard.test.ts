@@ -40,7 +40,9 @@ function mockClient(options: {
   user?: { id: string; user_metadata?: Record<string, unknown> } | null;
   authError?: { message: string } | null;
   profile?: ProfileRow;
-  profileError?: { message: string } | null;
+  profileError?: { message: string; code?: string } | null;
+  profileStatus?: number;
+  onProfileQuery?: () => void;
 }) {
   const user = options.user === undefined
     ? { id: "user-1", user_metadata: { full_name: "Ada" } }
@@ -58,10 +60,14 @@ function mockClient(options: {
       return {
         select: () => ({
           eq: () => ({
-            maybeSingle: async () => ({
-              data: options.profile ?? null,
-              error: options.profileError ?? null,
-            }),
+            maybeSingle: async () => {
+              options.onProfileQuery?.();
+              return {
+                data: options.profile ?? null,
+                error: options.profileError ?? null,
+                status: options.profileStatus ?? 200,
+              };
+            },
           }),
         }),
       };
@@ -121,6 +127,48 @@ describe("dashboard onboarding guard", () => {
     expect(result.userId).toBe("user-1");
     expect(result.profile.onboarding_completed).toBe(true);
     expect(result.profile.full_name).toBe("Ada");
+  });
+});
+
+describe("profile guard keeps the failure class", () => {
+  beforeEach(() => {
+    vi.mocked(createClient).mockReset();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  it.each([
+    ["future-issued JWT", { code: "PGRST303", message: "JWT issued at future" }, 401, /session could not be verified \(AUTH_CLOCK_SKEW_OR_FUTURE_IAT\)/],
+    ["expired JWT", { code: "PGRST303", message: "JWT expired" }, 401, /session could not be verified \(AUTH_EXPIRED\)/],
+    ["invalid JWT", { code: "PGRST301", message: "JWSError" }, 401, /session could not be verified \(AUTH_INVALID\)/],
+    ["RLS denial", { code: "42501", message: "permission denied" }, 403, /profile \(RLS_DENIED\)/],
+    ["schema error", { code: "42703", message: "column does not exist" }, 400, /profile \(SCHEMA_MISMATCH\)/],
+    ["dependency failure", { code: "", message: "TypeError: fetch failed" }, 0, /profile \(DEPENDENCY_FAILURE\)/],
+  ])("%s throws its own disposition, never an onboarding redirect", async (_label, profileError, profileStatus, expected) => {
+    let queries = 0;
+    mockClient({ profileError, profileStatus, onProfileQuery: () => queries++ });
+    const failure = requireCompletedOnboarding();
+    await expect(failure).rejects.toThrow(expected);
+    await expect(failure).rejects.not.toThrow(/REDIRECT/);
+    // One query per call: no refresh/retry loop on a rejected token.
+    expect(queries).toBe(1);
+  });
+
+  it("logs the disposition without the raw error message", async () => {
+    const log = vi.mocked(console.error);
+    mockClient({ profileError: { code: "PGRST303", message: "JWT issued at future" }, profileStatus: 401 });
+    await expect(requireCompletedOnboarding()).rejects.toThrow();
+    expect(log).toHaveBeenCalledWith("Unable to load dashboard onboarding context:", {
+      disposition: "AUTH_CLOCK_SKEW_OR_FUTURE_IAT",
+      code: "PGRST303",
+      status: 401,
+    });
+  });
+
+  it("repeated requests with the same rejected token stay bounded", async () => {
+    let queries = 0;
+    mockClient({ profileError: { code: "PGRST303", message: "JWT issued at future" }, profileStatus: 401, onProfileQuery: () => queries++ });
+    for (let i = 0; i < 3; i++) await expect(requireCompletedOnboarding()).rejects.toThrow();
+    expect(queries).toBe(3);
   });
 });
 

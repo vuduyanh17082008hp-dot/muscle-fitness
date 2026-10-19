@@ -45,9 +45,12 @@ describe("safeExecuteTool", () => {
       }),
     } as unknown as AnyDanteTool;
 
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const result = await safeExecuteTool(tool, context, {});
+    spy.mockRestore();
 
-    expect(result).toEqual({ ok: false, error: "database unavailable" });
+    // The raw (possibly datastore) message is logged server-side, never returned.
+    expect(result).toEqual({ ok: false, error: "Unexpected tool error." });
   });
 
   it("handles a non-Error throw without crashing", async () => {

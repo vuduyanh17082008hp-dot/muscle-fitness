@@ -14,6 +14,7 @@ import { getExerciseGuidanceTool } from "@/lib/dante-core/tools/read/get-exercis
 import { retrieveKnowledgeTool } from "@/lib/dante-core/tools/read/retrieve-knowledge";
 
 import { logFoodTool } from "@/lib/dante-core/tools/write/log-food";
+import { logMealDraftTool } from "@/lib/dante-core/tools/write/log-meal-draft";
 import { updateFoodLogTool } from "@/lib/dante-core/tools/write/update-food-log";
 import { deleteFoodLogTool } from "@/lib/dante-core/tools/write/delete-food-log";
 import { completeCheckinTool } from "@/lib/dante-core/tools/write/complete-checkin";
@@ -50,7 +51,15 @@ export const DANTE_TOOLS: AnyDanteTool[] = [
   acceptNof1ExperimentTool,
 ] as AnyDanteTool[];
 
-const TOOLS_BY_NAME = new Map<string, AnyDanteTool>(DANTE_TOOLS.map((tool) => [tool.name, tool]));
+/**
+ * Write tools owned by a specialist coach (Nutrition Coach). They are NOT in
+ * DANTE_TOOLS, so Dante's model can never select them (orchestrate.ts also
+ * checks membership), but they stay resolvable by name so the shared
+ * pending-action confirmation path can execute them once a user confirms.
+ */
+export const SPECIALIST_COACH_TOOLS: AnyDanteTool[] = [logMealDraftTool] as AnyDanteTool[];
+
+const TOOLS_BY_NAME = new Map<string, AnyDanteTool>([...DANTE_TOOLS, ...SPECIALIST_COACH_TOOLS].map((tool) => [tool.name, tool]));
 
 /** Returns undefined for any name not in the registry — callers MUST reject unknown tools (Part 10/L) rather than guessing. */
 export function getDanteTool(name: string): AnyDanteTool | undefined {

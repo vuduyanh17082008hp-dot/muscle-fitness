@@ -15,8 +15,6 @@ export const OPENAI_MODEL =
   "gpt-4o-mini";
 
 /** @deprecated Use OPENAI_MODEL */
-export const GROQ_MODEL = OPENAI_MODEL;
-
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 type ChatCompletionResult = {
@@ -52,23 +50,4 @@ export async function createOpenAiChatCompletion(input: {
   }
 
   return data;
-}
-
-/** @deprecated Groq SDK shim — routes to OpenAI. */
-export const groq = {
-  chat: {
-    completions: {
-      create: createOpenAiChatCompletion,
-    },
-  },
-};
-
-/** @deprecated Compatibility name; production requests use OpenAI only. */
-export function isGroqConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
-}
-
-/** @deprecated Compatibility adapter; returns the OpenAI-backed client shim. */
-export function getGroqClient(): typeof groq {
-  return groq;
 }

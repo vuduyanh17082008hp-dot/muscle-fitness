@@ -193,6 +193,8 @@ export function RecoveryCheckinForm({
               onChange={(event) =>
                 update(field.key, Number(event.target.value))
               }
+              aria-label={field.label}
+              aria-valuetext={`${form[field.key]} of 10`}
               className="mt-2 w-full accent-mf-glass-brand"
             />
             <p className="mt-1 text-[11px] text-mf-glass-text-muted">{field.helper}</p>

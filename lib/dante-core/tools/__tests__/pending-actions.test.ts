@@ -37,6 +37,10 @@ vi.mock("@/lib/dante-core/tools/registry", () => ({
   getDanteTool: (name: string) => (name === "fake_write" ? fakeWriteTool : undefined),
 }));
 
+// Writes go through the service-role client; the in-memory fake stands in for it.
+let adminFake: unknown;
+vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => adminFake }));
+
 import { cancelPendingAction, confirmPendingAction, createPendingAction } from "@/lib/dante-core/tools/pending-actions";
 
 type Row = {
@@ -138,7 +142,9 @@ function createFakeSupabase() {
     };
   }
 
-  return { from, rows };
+  const fake = { from, rows };
+  adminFake = fake;
+  return fake;
 }
 
 const USER_A = "user-aaaa";

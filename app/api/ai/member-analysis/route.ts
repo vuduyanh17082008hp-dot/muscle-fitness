@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { analyseMember } from "@/lib/ai/member-analysis";
+import { requireBusinessAdminApi } from "@/lib/business/require-business-admin";
 
 
 export const runtime = "nodejs";
@@ -31,6 +32,11 @@ const requestSchema = z.object({
 export async function POST(
   request: Request
 ) {
+  const auth = await requireBusinessAdminApi();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
 

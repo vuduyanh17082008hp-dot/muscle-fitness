@@ -94,6 +94,14 @@ describe("A. same-turn explicit correction beats the earlier assertion (B1)", ()
     });
   }
 
+  it.each([
+    "My profile says 80 kg but I am actually 60 kg now.",
+    "I'm not 80 kg, actually 60 kg.",
+    "Hồ sơ ghi 80 kg nhưng thực ra mình 60 kg.",
+  ])("a stored value corrected once is not two competing corrections (H1 CR-D): %s", (message) => {
+    expect(turn(message).analysis.competingCorrections).toBe(false);
+  });
+
   it("two DIFFERENT explicit corrections in one message are surfaced, never silently picked", () => {
     const r = turn("hôm qua đau vai phải nhưng tao nhớ lại rồi hôm qua là vai trái, wait actually hôm qua là vai phải");
     expect(r.analysis.competingCorrections).toBe(true);

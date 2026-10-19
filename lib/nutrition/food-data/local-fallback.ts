@@ -20,6 +20,8 @@ function localFood(
 ): NormalizedFood {
   return {
     ...input,
+    // the stable id the server re-resolves a "local" log claim by (lib/nutrition/food-log/provenance.ts)
+    sourceId: input.id,
     source: "local",
     sourceLabel: "Local fallback",
     confidence: "fallback",

@@ -1,6 +1,6 @@
 import { cache } from "react"
 
-import { createClient } from "@/lib/supabase/server"
+import { createTypedClient } from "@/lib/supabase/server"
 
 export type AccountProfile = {
   id: string
@@ -9,24 +9,34 @@ export type AccountProfile = {
   username: string | null
   avatar_url: string | null
   phone: string | null
+  date_of_birth: string | null
+  gender: string | null
+  timezone: string
   provider: string | null
+  onboarding_completed: boolean
   last_login_at: string | null
   created_at: string | null
   updated_at: string | null
 }
 
+/** Columns that exist on public.fitness_profiles (canonical: session_duration_minutes). */
 export type AccountFitnessProfile = {
   user_id: string
-  date_of_birth: string | null
-  gender: string | null
   height_cm: number | null
   weight_kg: number | null
-  timezone: string | null
   goal: string | null
   experience: string | null
   training_days: number | null
-  session_duration: number | null
-  onboarding_completed: boolean
+  session_duration_minutes: number | null
+}
+
+/**
+ * profile: ok | not_found (no row yet) | error (DB read failed)
+ * fitness: ok | not_created (valid: row is created lazily) | error (DB read failed)
+ */
+export type AccountReadStatus = {
+  profile: "ok" | "not_found" | "error"
+  fitness: "ok" | "not_created" | "error"
 }
 
 export type CurrentAccount = {
@@ -37,6 +47,7 @@ export type CurrentAccount = {
   }
   profile: AccountProfile
   fitnessProfile: AccountFitnessProfile | null
+  readStatus: AccountReadStatus
 }
 
 function readString(value: unknown): string | null {
@@ -67,7 +78,7 @@ function getEmailUsername(
 }
 
 async function loadCurrentAccount(): Promise<CurrentAccount | null> {
-  const supabase = await createClient()
+  const supabase = await createTypedClient()
 
   const {
     data: { user },
@@ -81,39 +92,16 @@ async function loadCurrentAccount(): Promise<CurrentAccount | null> {
   const [profileResult, fitnessResult] = await Promise.all([
     supabase
       .from("profiles")
-      .select(`
-        user_id,
-        email,
-        full_name,
-        username,
-        avatar_url,
-        phone,
-        provider,
-        last_login_at,
-        created_at,
-        updated_at,
-        onboarding_completed
-      `)
+      .select(
+        "user_id, email, full_name, username, avatar_url, phone, date_of_birth, gender, timezone, provider, onboarding_completed, last_login_at, created_at, updated_at",
+      )
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase
       .from("fitness_profiles")
-      .select(`
-        user_id,
-        date_of_birth,
-        gender,
-        height_cm,
-        weight_kg,
-        current_weight_kg,
-        timezone,
-        goal,
-        experience,
-        training_experience,
-        training_days,
-        session_duration,
-        session_duration_minutes,
-        onboarding_completed
-      `)
+      .select(
+        "user_id, height_cm, weight_kg, goal, experience, training_days, session_duration_minutes",
+      )
       .eq("user_id", user.id)
       .maybeSingle(),
   ])
@@ -145,10 +133,7 @@ async function loadCurrentAccount(): Promise<CurrentAccount | null> {
     readString(metadata.avatar_url) ??
     readString(metadata.picture)
 
-  const databaseProfile = profileResult.data as Record<
-    string,
-    unknown
-  > | null
+  const databaseProfile = profileResult.data
 
   const profile: AccountProfile = {
     id: user.id,
@@ -166,6 +151,10 @@ async function loadCurrentAccount(): Promise<CurrentAccount | null> {
       readString(databaseProfile?.avatar_url) ??
       fallbackAvatar,
     phone: readString(databaseProfile?.phone),
+    date_of_birth: readString(databaseProfile?.date_of_birth),
+    gender: readString(databaseProfile?.gender),
+    onboarding_completed: databaseProfile?.onboarding_completed ?? false,
+    timezone: readString(databaseProfile?.timezone) ?? "UTC",
     provider:
       readString(databaseProfile?.provider) ??
       readString(user.app_metadata?.provider) ??
@@ -178,43 +167,35 @@ async function loadCurrentAccount(): Promise<CurrentAccount | null> {
     updated_at: readString(databaseProfile?.updated_at),
   }
 
-  const databaseFitness = fitnessResult.data as Record<
-    string,
-    unknown
-  > | null
+  const databaseFitness = fitnessResult.data
 
   const fitnessProfile: AccountFitnessProfile | null =
     databaseFitness
       ? {
           user_id: user.id,
-          date_of_birth: readString(
-            databaseFitness.date_of_birth,
-          ),
-          gender: readString(databaseFitness.gender),
           height_cm: readNumber(databaseFitness.height_cm),
-          weight_kg:
-            readNumber(databaseFitness.weight_kg) ??
-            readNumber(databaseFitness.current_weight_kg),
-          timezone:
-            readString(databaseFitness.timezone) ?? "UTC",
+          weight_kg: readNumber(databaseFitness.weight_kg),
           goal: readString(databaseFitness.goal),
-          experience:
-            readString(databaseFitness.experience) ??
-            readString(databaseFitness.training_experience),
-          training_days: readNumber(
-            databaseFitness.training_days,
-          ),
-          session_duration:
-            readNumber(databaseFitness.session_duration) ??
-            readNumber(
-              databaseFitness.session_duration_minutes,
-            ),
-          onboarding_completed: Boolean(
-            databaseFitness.onboarding_completed ??
-              databaseProfile?.onboarding_completed,
+          experience: readString(databaseFitness.experience),
+          training_days: readNumber(databaseFitness.training_days),
+          session_duration_minutes: readNumber(
+            databaseFitness.session_duration_minutes,
           ),
         }
       : null
+
+  const readStatus: AccountReadStatus = {
+    profile: profileResult.error
+      ? "error"
+      : databaseProfile
+        ? "ok"
+        : "not_found",
+    fitness: fitnessResult.error
+      ? "error"
+      : databaseFitness
+        ? "ok"
+        : "not_created",
+  }
 
   return {
     user: {
@@ -224,6 +205,7 @@ async function loadCurrentAccount(): Promise<CurrentAccount | null> {
     },
     profile,
     fitnessProfile,
+    readStatus,
   }
 }
 

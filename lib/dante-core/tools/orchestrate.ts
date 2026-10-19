@@ -6,6 +6,7 @@ import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { safeExecuteTool } from "@/lib/dante-core/tools/safe-execute";
 import { callDanteAgentTurn, type DanteAgentTurnResult, type DanteChatMessage, type DanteToolCall, type DanteToolSpec } from "@/lib/dante-core/llm-client";
+import type { TurnBudget } from "@/lib/dante-core/turn-budget";
 import { estimateTokenCount, fitTextToTokenBudget } from "@/lib/dante-core/openai/prompt-budget";
 import { formatDanteTemporalContext } from "@/lib/dante-core/temporal-context";
 import { decideDanteLanguage, buildDanteLanguageInstruction } from "@/lib/dante-language";
@@ -25,7 +26,7 @@ import type { DanteResponseEnvelope } from "@/lib/dante-core/tools/response-enve
  */
 export const MAX_TOOL_ROUNDS = 4;
 
-export type ModelCaller = (messages: DanteChatMessage[], tools: DanteToolSpec[]) => Promise<DanteAgentTurnResult>;
+export type ModelCaller = (messages: DanteChatMessage[], tools: DanteToolSpec[], signal?: AbortSignal) => Promise<DanteAgentTurnResult>;
 
 function buildSystemPrompt(context: ToolContext, userMessage: string): string {
   const languageDecision = context.languageDecision ?? decideDanteLanguage({ currentMessage: userMessage });
@@ -49,6 +50,15 @@ complete_checkin, schedule_workout, accept_adaptive_adjustment) always
 requires the user's explicit confirmation before anything is saved —
 calling it here only proposes it, it does not execute it. Read tools
 execute immediately and their result is given back to you.
+
+When the user asks to log or add a food, the one exception to "one tool":
+look the food up with a read tool if you need its id, then CALL the write
+tool (log_food) with your best estimate of the grams (a typical portion
+when they gave a count, e.g. 3 eggs ≈ 150 g). That call creates the
+confirmation card the user approves or edits — it is the only way to
+propose a write. Never ask the user to type "confirm", never say you will
+save it after they reply, and never present a write as done. If the food
+is genuinely ambiguous, ask the one question that resolves it instead.
 
 A direct question about the current time/date ("what time is it?",
 "what day is it?", "is my workout today?") needs no tool at all — the
@@ -140,7 +150,8 @@ function sourcesFromKnowledgeToolResult(data: unknown): EnvelopeSource[] {
 export async function runDanteAgentTurn(
   context: ToolContext,
   userMessage: string,
-  options?: { callModel?: ModelCaller },
+  /** H0 WP1: `budget` bounds the rounds (one provider attempt each) and carries the turn's signal. */
+  options?: { callModel?: ModelCaller; budget?: Pick<TurnBudget, "tryStart" | "signal"> },
 ): Promise<DanteResponseEnvelope> {
   const callModel = options?.callModel ?? callDanteAgentTurn;
 
@@ -157,7 +168,8 @@ export async function runDanteAgentTurn(
   const seenCalls = new Set<string>();
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    const decision = await callModel(messages, specs);
+    if (options?.budget && !options.budget.tryStart("provider")) break;
+    const decision = await callModel(messages, specs, options?.budget?.signal);
 
     if (decision.type === "final") {
       return { reply: decision.reply, sources, toolTraceSummary };
@@ -169,7 +181,9 @@ export async function runDanteAgentTurn(
       return { reply: "I wasn't able to determine what to check — could you rephrase that?", toolTraceSummary };
     }
 
-    const tool = getDanteTool(call.name);
+    // Specialist-coach tools resolve by name for confirmation, but are never model-selectable here.
+    const registered = getDanteTool(call.name);
+    const tool = registered && DANTE_TOOLS.includes(registered) ? registered : undefined;
 
     if (!tool) {
       messages.push(assistantToolCallMessage(call), toolResultMessage(call, { error: `Unknown tool "${call.name}".` }));
@@ -198,8 +212,13 @@ export async function runDanteAgentTurn(
       const summary = tool.summarize ? tool.summarize(parsed.data) : `Run ${tool.name}`;
       const pending = await createPendingAction(context.supabase, context.userId, tool.name, parsed.data, summary, context.now);
 
+      // The proposal speaks the turn's language: an English line inside a Vietnamese turn was degraded to a neutral
+      // acknowledgement by the language gate, hiding the proposal the user has to confirm (H0 cluster C).
+      const vi = (context.languageDecision ?? decideDanteLanguage({ currentMessage: userMessage })).language === "vi";
       return {
-        reply: `I'd like to: **${summary}**. Confirm to proceed, or cancel — nothing has been saved yet.`,
+        reply: vi
+          ? `Mình đề xuất: **${summary}**. Bấm Xác nhận để lưu hoặc Hủy — chưa có gì được lưu.`
+          : `I'd like to: **${summary}**. Confirm to proceed, or cancel — nothing has been saved yet.`,
         sources,
         pendingConfirmation: { actionId: pending.actionId, toolName: tool.name, summary: pending.summary },
         toolTraceSummary,

@@ -42,6 +42,8 @@ export type WeeklyAnalyticsOptions = {
   now?: Date;
   /** Minutes to add to UTC to get the user's local wall-clock time. Defaults to 0 (UTC). */
   timeZoneOffsetMinutes?: number;
+  /** Persisted IANA timezone; when present, handles each instant's DST offset. */
+  timeZone?: string;
 };
 
 type WeekBucket = {
@@ -52,11 +54,12 @@ type WeekBucket = {
 function bucketByWeek(
   sets: DatedExerciseSetLog[],
   timeZoneOffsetMinutes: number,
+  timeZone?: string,
 ): Map<string, WeekBucket> {
   const buckets = new Map<string, WeekBucket>();
 
   for (const set of sets) {
-    const localDate = toLocalDate(set.completedAt, timeZoneOffsetMinutes);
+    const localDate = toLocalDate(set.completedAt, timeZoneOffsetMinutes, timeZone);
     const weekStart = startOfWeekMonday(localDate);
     const key = weekKey(weekStart);
 
@@ -99,15 +102,16 @@ export function computeWeeklyMuscleAnalytics(
   options: WeeklyAnalyticsOptions = {},
 ): Map<CanonicalMuscle, WeeklyMuscleAnalytics> {
   const timeZoneOffsetMinutes = options.timeZoneOffsetMinutes ?? 0;
+  const timeZone = options.timeZone;
   const now = options.now ?? new Date();
 
-  const currentWeekStart = computeCurrentWeekStart(now, timeZoneOffsetMinutes);
+  const currentWeekStart = computeCurrentWeekStart(now, timeZoneOffsetMinutes, timeZone);
   const currentWeekKey = weekKey(currentWeekStart);
 
   const previousWeekStart = new Date(currentWeekStart.getTime() - WEEK_MS);
   const previousWeekKey = weekKey(previousWeekStart);
 
-  const buckets = bucketByWeek(sets, timeZoneOffsetMinutes);
+  const buckets = bucketByWeek(sets, timeZoneOffsetMinutes, timeZone);
 
   const breakdownByWeek = new Map<
     string,
@@ -182,7 +186,9 @@ export function computeWeeklyMuscleAnalytics(
         continue;
       }
 
-      const date = set.completedAt.slice(0, 10);
+      const date = toLocalDate(set.completedAt, timeZoneOffsetMinutes, timeZone)
+        .toISOString()
+        .slice(0, 10);
 
       if (!latest || date > latest) {
         latest = date;

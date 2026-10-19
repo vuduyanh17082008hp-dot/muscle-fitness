@@ -46,7 +46,7 @@ export function ProfileGateway() {
                 Have a question first? Ask Dante. Your profile adds personal context.
               </p>
               <Link
-                href="/chatbot"
+                href="/dashboard/ai-coach"
                 aria-describedby="profile-gateway-dante"
                 className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-md text-sm font-bold uppercase tracking-wider text-zinc-200 underline decoration-zinc-600 underline-offset-4 transition hover:text-[var(--mf-brand)] hover:decoration-[var(--mf-brand)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--mf-brand)]"
               >

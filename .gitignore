@@ -44,3 +44,13 @@ next-env.d.ts
 .vercel
 output/
 video/
+
+# raw evaluation run output (recordings, screenshots, logs, captured
+# responses) stays local; reports and harness scripts are kept.
+docs/evaluation/**
+!docs/evaluation/**/
+!docs/evaluation/**/*.md
+!docs/evaluation/**/*.mjs
+!docs/evaluation/**/*.mts
+!docs/evaluation/**/*.ts
+!docs/evaluation/**/*.sh

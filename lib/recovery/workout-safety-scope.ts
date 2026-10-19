@@ -24,6 +24,7 @@ const EMERGENCY_CATEGORIES = new Set([
   "chest_pain_cardiac",
   "fainting_dizziness",
   "neurological_symptoms",
+  "medical_red_flag",
   "severe_pain",
   "self_harm_crisis",
   "eating_disorder_indicator",

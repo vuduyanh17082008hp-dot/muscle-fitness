@@ -4,6 +4,8 @@
  * GENERAL / SAFETY guidance never requires telemetry.
  */
 
+import { mapSentencesKeepingLists } from "@/lib/intelligence/performance-core/claim-revision";
+
 export type ClaimGroundingNeed =
   | "GENERAL_GUIDANCE"
   | "USER_STATE_DEPENDENT"
@@ -54,16 +56,16 @@ export function applyEvidenceLite(input: {
   const keptParas: string[] = [];
   let blockedDiagnosis = false;
   for (const para of paras) {
-    const kept: string[] = [];
-    for (const part of para.split(/(?<=[.!?…])\s+/).map((item) => item.trim()).filter(Boolean)) {
+    // Line by line, list-safe: a list item keeps its marker, and one whose subject sentence is removed goes whole.
+    const kept = mapSentencesKeepingLists(para, (part) => {
       const need = classifyClaimGrounding(part);
       if (need === "DIAGNOSTIC_OR_MEDICAL_CLAIM") {
         blockedDiagnosis = true;
-        continue;
+        return null;
       }
-      if (keepSentence(part, need, { hasVerifiedData, hasUserState })) kept.push(part);
-    }
-    if (kept.length > 0) keptParas.push(kept.join(" "));
+      return keepSentence(part, need, { hasVerifiedData, hasUserState }) ? part : null;
+    });
+    if (kept.trim()) keptParas.push(kept);
   }
   if (blockedDiagnosis) {
     keptParas.push(input.language === "vi"

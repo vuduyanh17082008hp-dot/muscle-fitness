@@ -39,7 +39,7 @@ export function NextMealCard({
       setState("loading")
 
       try {
-        const response = await fetch("/api/nutrition/next-action")
+        const response = await fetch("/api/nutrition/next-action", { signal: AbortSignal.timeout(8000) })
         const data = await response.json()
 
         if (cancelled) return

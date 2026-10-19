@@ -441,7 +441,7 @@ export function buildCurrentStateCoachingResponse(state: CurrentTurnState, langu
     return [
       `ĐIỀU ĐƯỢC ỦNG HỘ MẠNH: ${supported}.`,
       `ĐIỀU KIỆN: ${conditional}`,
-      `CHƯA BIẾT: ${unknownParts.join("; ")}. Không đổ Squat/Deadlift/Lat Pulldown/Seated Row nếu chúng không nằm trong ngữ cảnh lịch tập hiện tại — nếu cần bài thay thế cụ thể, cho biết buổi nào đang được lên lịch.`,
+      `CHƯA BIẾT: ${unknownParts.join("; ")}. Nếu cho mình biết hôm nay đang lên lịch buổi nào, mình sẽ gợi ý bài thay thế cụ thể thay vì đoán.`,
     ].join("\n\n");
   }
 
@@ -473,7 +473,7 @@ export function buildCurrentStateCoachingResponse(state: CurrentTurnState, langu
   return [
     `STRONGLY SUPPORTED: ${supportedEn}.`,
     `CONDITIONAL: ${conditionalEn}`,
-    `UNKNOWN: ${unknownEn.join("; ")}. Do not dump Squats/Deadlifts/Leg Press/Lat Pulldowns/Seated Rows/Lateral Raises/Face Pulls or generic mobility/stretching as default substitutes without schedule context — ask what session is planned if a concrete substitute is required.`,
+    `UNKNOWN: ${unknownEn.join("; ")}. If you tell me which session is planned today, I can suggest a specific substitute instead of guessing.`,
   ].join("\n\n");
 }
 

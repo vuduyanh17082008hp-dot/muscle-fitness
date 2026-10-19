@@ -1,4 +1,5 @@
 import type { AthleteState } from "@/lib/athlete-state/types";
+import { recoverySpeech, type RecoverySpeech } from "@/lib/recovery/current-recovery";
 import type { DanteMemory } from "@/lib/dante-core/memory";
 import { MUSCLE_DISPLAY_NAME, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
 
@@ -56,6 +57,12 @@ export type DanteContext = {
   currentState: {
     readinessScore: number | null;
     recoveryStatus: string | null;
+    /** CURRENT / STALE / MISSING + recorded date + provenance. A STALE score is never today's. */
+    recoveryCurrent: AthleteState["recovery"]["current"];
+    /** Same accessor as the recovery page. Present-tense wording is allowed only when mayDescribeAsCurrent. */
+    recoverySpeech: RecoverySpeech | null;
+    /** Canonical calorie target from Athlete State. A user claim is not this number. */
+    canonicalCalories: number | null;
     nutritionAdherencePercent: number | null;
   } | null;
 
@@ -155,8 +162,15 @@ export function buildDanteContext(
 
     currentState: includeRecoveryDetail
       ? {
-          readinessScore: athleteState.recovery.score,
-          recoveryStatus: athleteState.recovery.status,
+          readinessScore: athleteState.recovery.current && athleteState.recovery.current.status !== "CURRENT"
+            ? null
+            : athleteState.recovery.score,
+          recoveryStatus: athleteState.recovery.current && athleteState.recovery.current.status !== "CURRENT"
+            ? null
+            : athleteState.recovery.status,
+          recoveryCurrent: athleteState.recovery.current,
+          recoverySpeech: athleteState.recovery.current ? recoverySpeech(athleteState.recovery.current) : null,
+          canonicalCalories: athleteState.nutrition.calorieTarget,
           nutritionAdherencePercent: null, // populated by the caller from today's food log when relevant — not duplicated here
         }
       : null,

@@ -20,6 +20,10 @@ import {
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import {
+  GENDER_OPTIONS,
+  labelFor,
+} from "@/lib/account/profile-contract"
 import { getCurrentAccount } from "@/lib/auth/current-account"
 
 export const dynamic = "force-dynamic"
@@ -43,13 +47,6 @@ const goalLabels: Record<string, string> = {
   body_recomposition: "Body recomposition",
   maintenance: "Maintenance",
   performance: "Performance",
-}
-
-const genderLabels: Record<string, string> = {
-  male: "Male",
-  female: "Female",
-  other: "Other",
-  prefer_not_to_say: "Prefer not to say",
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -133,9 +130,8 @@ export default async function AccountPage({
     ? goalLabels[fitnessProfile.goal] ?? fitnessProfile.goal
     : "Not selected"
 
-  const gender = fitnessProfile?.gender
-    ? genderLabels[fitnessProfile.gender] ?? fitnessProfile.gender
-    : "Not provided"
+  const gender =
+    labelFor(GENDER_OPTIONS, profile.gender) ?? "Not provided"
 
   return (
     <main className="min-h-screen bg-mf-bg px-4 py-6 text-white sm:px-6 lg:px-8">
@@ -174,6 +170,17 @@ export default async function AccountPage({
           <div className="mb-6 flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-4 text-sm font-semibold text-emerald-300">
             <CheckCircle2 size={18} />
             Your profile was updated successfully.
+          </div>
+        )}
+
+        {(account.readStatus.profile === "error" ||
+          account.readStatus.fitness === "error") && (
+          <div
+            role="alert"
+            className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-4 text-sm font-semibold text-amber-300"
+          >
+            Some of your profile details couldn&apos;t be loaded right now.
+            What&apos;s shown may be incomplete — please refresh to try again.
           </div>
         )}
 
@@ -222,7 +229,7 @@ export default async function AccountPage({
 
                 <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-zinc-300">
                   Onboarding:{" "}
-                  {fitnessProfile?.onboarding_completed
+                  {profile.onboarding_completed
                     ? "Completed"
                     : "Incomplete"}
                 </span>
@@ -274,7 +281,7 @@ export default async function AccountPage({
               <InformationItem
                 icon={<CalendarDays size={18} />}
                 label="Date of birth"
-                value={formatDate(fitnessProfile?.date_of_birth)}
+                value={formatDate(profile.date_of_birth)}
               />
 
               <InformationItem
@@ -328,7 +335,7 @@ export default async function AccountPage({
                 icon={<Clock3 size={18} />}
                 label="Session duration"
                 value={displayValue(
-                  fitnessProfile?.session_duration,
+                  fitnessProfile?.session_duration_minutes,
                   " min"
                 )}
               />
@@ -336,9 +343,7 @@ export default async function AccountPage({
               <InformationItem
                 icon={<MapPin size={18} />}
                 label="Timezone"
-                value={displayValue(
-                  fitnessProfile?.timezone ?? "Asia/Singapore"
-                )}
+                value={displayValue(profile.timezone)}
               />
             </div>
           </section>

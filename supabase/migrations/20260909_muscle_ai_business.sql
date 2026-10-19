@@ -421,7 +421,7 @@ create table if not exists public.ai_audit_logs (
 
   provider text
     not null
-    default 'groq',
+    default 'openai',
 
   model_name text,
 

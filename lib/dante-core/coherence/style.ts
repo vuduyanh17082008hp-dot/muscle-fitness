@@ -213,7 +213,7 @@ export const CS_DRIFT_PATTERNS: Array<[RegExp, string]> = [
   // English
   [/i['’]?m happy to help[^.!\n]*[.!]?\s*/giu, ""],
   [/i hope (?:this|that|it) helps[^.!\n]*[.!]?\s*/giu, ""],
-  [/(?:please )?feel free to (?:ask|reach out)[^.!\n]*[.!]?\s*/giu, ""],
+  [/(?:please )?feel free to (?:ask|reach out|share|let me know)[^.!\n]*[.!]?\s*/giu, ""],
   [/(?:please )?don['’]?t hesitate to[^.!\n]*[.!]?\s*/giu, ""],
   [/if you have any (?:other |further )?questions[^.!\n]*[.!]?\s*/giu, ""],
   [/i understand (?:that )?you (?:may|might|could) (?:be )?feel[^.!\n]*[.!]?\s*/giu, ""],
@@ -233,8 +233,26 @@ export const CS_DRIFT_PATTERNS: Array<[RegExp, string]> = [
   [/(?:my|dante['’]?s) (?:goal|purpose|role|mission) is (?:to )?[^.!\n]{20,}[.!]?\s*/giu, ""],
 ];
 
+/**
+ * What a macro removal left behind is no sentence when it ends on a comma / dash or is only a conditional frame
+ * ("If you have any questions about recovery,"). H0 cluster G: those fragments reached users as truncated endings.
+ */
+export function isDanglingFragment(leftover: string): boolean {
+  const text = leftover.trim();
+  if (!text) return false;
+  return /[,;:—–-]\s*$/u.test(text) || (/^(?:if|when|whenever|should you|nếu|khi)\b/iu.test(text) && !/[.!?…]\s*$/u.test(text));
+}
+
 export function stripCustomerService(text: string): string {
-  return CS_DRIFT_PATTERNS.reduce((out, [pattern, repl]) => out.replace(pattern, repl), text)
+  // Per sentence, line by line: a macro inside a sentence takes the whole sentence with it when only a fragment would remain.
+  const stripSentence = (sentence: string) => {
+    const stripped = CS_DRIFT_PATTERNS.reduce((out, [pattern, repl]) => out.replace(pattern, repl), sentence);
+    return stripped !== sentence && isDanglingFragment(stripped) ? "" : stripped;
+  };
+  return text
+    .split("\n")
+    .map((line) => line.split(/(?<=[.!?…])\s+/u).map(stripSentence).filter((sentence) => sentence.trim()).join(" "))
+    .join("\n")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

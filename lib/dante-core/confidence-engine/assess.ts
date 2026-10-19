@@ -82,6 +82,17 @@ function asksCausalAttribution(message: string): boolean {
 
 function asksInjuryDiagnosis(message: string): boolean {
   const text = normalizeSafetyText(message);
+  // A diagnosis a clinician already made is a disclosure, not a request for Dante to diagnose (H0 B01): it is context
+  // the working set carries forward. Only a question that asks Dante to confirm or predict stays a diagnosis request.
+  // H1-LM: clinician shorthand is a report too — "Physio: rotator cuff tear, …", "Rotator cuff tear, physio says …",
+  // "my physiotherapist found …", "Torn cuff, no painful overhead work".
+  const reportedDiagnosis = /\b(?:diagnosed|(?:physio\w*|doctor|dr|gp|surgeon|ortho\w*|specialist|clinician|physical therapist|pt)\b[^.?!]{0,40}\b(?:found|says?|said|told|confirmed|thinks|diagnosed|advised|recommends?)|mri (?:showed|shows|confirmed)|was told|i (?:have|had|got) (?:a |an )?(?:diagnosed |partial |full )?(?:torn|tear)|i tore|torn (?:rotator\s+)?cuff|chan doan|bac si (?:noi|bao))\b/i.test(text)
+    || /\b(?:physio\w*|doctor|dr|gp|surgeon|ortho\w*|specialist|pt)\s*:/i.test(text)
+    || (/(?:^|[.!;]\s*)(?:(?:partial|full)\s+)?(?:rotator[\s-]+cuff|cuff)\s+tear\b/i.test(text) && !/\?/.test(message));
+  const asksToConfirm = /\b(?:do i have|is (?:it|this|that) (?:a )?(?:tear|torn)|am i (?:tearing|developing)|will i|chance|likely|risk|co phai|chac (?:toi|minh|tao) sap)\b|\d{2,3}\s*%/i.test(text);
+  if (reportedDiagnosis && !asksToConfirm) return false;
+  // "My mum tore her rotator cuff last year." is someone else's history, not a request to diagnose the user.
+  if (!/\?/.test(message) && /\b(?:my|our)\s+(?:mum|mom|mother|dad|father|friend|brother|sister|wife|husband|partner|son|daughter|coach|client|teammate)\b[^.?!]{0,30}\b(?:tore|torn|tear|has|had)\b/i.test(text)) return false;
   return /(?:rotator\s+cuff|rach\s+(?:vai|rotator)|sap\s+rach|tear(?:ing)?|developing\s+(?:an?\s+)?injury|chan\s+thuong|injury\s+risk|\d{2,3}\s*%|chac\s+(?:toi|tôi)\s+sap)/i.test(
     text,
   );

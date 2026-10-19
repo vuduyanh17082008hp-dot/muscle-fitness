@@ -39,7 +39,7 @@ export const Slide01Opening: React.FC = () => {
             <span className="text-[#C8FF3D]">GOOD DECISIONS AREN&apos;T.</span>
           </h1>
           <p className="deck-subhead max-w-2xl">
-            Empowering everyday athletes with evidence-informed, clinically-safe, context-aware AI coaching.
+            Empowering everyday athletes with evidence-informed, safety-aware, context-aware AI coaching.
           </p>
         </motion.div>
       </div>

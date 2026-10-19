@@ -94,7 +94,7 @@ export function MuscleIntelligenceScene({
           </h2>
 
           <p className="muscle-fade mt-6 max-w-lg text-base leading-7 text-[var(--mf-pub-text-secondary)]">
-            Explore 3D muscle taxonomy, volume exposure, recovery status, and fatigue distribution modeled from your logged workouts — direct and indirect effective sets per muscle group.
+            Explore muscle taxonomy, volume exposure, recovery status, and fatigue distribution modeled from your logged workouts — direct and indirect effective sets per muscle group.
           </p>
 
           <div className="muscle-fade mt-8 flex flex-wrap items-center gap-3">
@@ -128,14 +128,14 @@ export function MuscleIntelligenceScene({
                 <h3 className="mt-0.5 text-lg font-black text-white">Target Muscle Distribution</h3>
               </div>
               <span className="rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-brand-soft)] px-3 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-[var(--mf-brand)]">
-                Optimal Volume
+                {muscle.hasLiveData ? "Modeled exposure" : "Illustrative distribution"}
               </span>
             </div>
 
             {/* Muscle exposure bars */}
             <div className="mt-6 space-y-4">
               {[
-                { name: "Pectoralis Major (Chest)", sets: 16, target: 18, color: "var(--mf-brand)" },
+                { name: muscle.focusMuscle, sets: muscle.weeklyEffectiveSets, target: muscle.weeklyEffectiveSets + 4, color: "var(--mf-brand)" },
                 { name: "Deltoids (Shoulders)", sets: 14, target: 16, color: "var(--mf-cyan)" },
                 { name: "Triceps Brachii", sets: 12, target: 14, color: "var(--mf-violet)" },
                 { name: "Latissimus Dorsi (Back)", sets: 18, target: 20, color: "var(--mf-brand)" },
@@ -161,7 +161,9 @@ export function MuscleIntelligenceScene({
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--mf-violet)]">Dante ({dante.statusLabel})</p>
                 <p className="mt-0.5 text-xs font-semibold leading-relaxed text-zinc-300">
-                  Chest recovery at 94%. Optimal window for progressive overload on incline bench today.
+                  {muscle.hasLiveData
+                    ? `${muscle.focusMuscle} has ${muscle.weeklyEffectiveSets} effective sets logged this week. Dante can explain what that means for your next session.`
+                    : "Illustrative volume preview. Dante uses your logged training and recovery state before making a recommendation."}
                 </p>
               </div>
             </div>

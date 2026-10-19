@@ -1,5 +1,6 @@
 import "server-only"
 
+import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { addDaysIso } from "@/lib/nutrition/date-utils"
@@ -31,7 +32,7 @@ export async function loadProgressRecords(
   const today = localDateTimeParts(now, timezone).localDate
   const fromDate = addDaysIso(today, -83)
 
-  const [planResponse, sessionResponse, checkinResponse, foodResponse, fitnessResponse] = await Promise.all([
+  const [planResponse, sessionResponse, checkinResponse, foodResponse, nutritionContext] = await Promise.all([
     supabase
       .from("workout_plans")
       .select("id, created_at, days_per_week, weeks, name")
@@ -60,7 +61,8 @@ export async function loadProgressRecords(
       .gte("log_date", fromDate)
       .lte("log_date", today)
       .limit(400),
-    supabase.from("fitness_profiles").select("protein_target_g").eq("user_id", userId).maybeSingle(),
+    // Canonical protein target (lib/nutrition/targets.ts), not a column read.
+    loadNutritionContext(supabase, userId).catch(() => null),
   ])
 
   const planRow = planResponse.data as {
@@ -101,7 +103,7 @@ export async function loadProgressRecords(
     }
   }
 
-  const proteinTarget = (fitnessResponse.data as { protein_target_g: number | null } | null)?.protein_target_g ?? null
+  const proteinTarget = nutritionContext?.targets.protein ?? null
   const foodRows =
     (foodResponse.data as Array<{ log_date: string; protein_g: number | null }> | null) ?? []
   const nutritionByDate = new Map<string, { entryCount: number; proteinG: number }>()

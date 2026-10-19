@@ -837,20 +837,20 @@ export default function MealPlanPage() {
         <nav className={styles.nav}>
           <Link href="/">HOME</Link>
 
-          <Link href="/story">
-            MY STORY
+          <Link href="/dashboard/nutrition">
+            NUTRITION
           </Link>
 
-          <Link href="/meal-plan">
-            MEAL PLAN
-          </Link>
-
-          <Link href="/training">
+          <Link href="/dashboard/workouts">
             TRAINING
           </Link>
 
-          <Link href="/dashboard">
-            DASHBOARD
+          <Link href="/dashboard/progress">
+            PROGRESS
+          </Link>
+
+          <Link href="/dashboard/ai-coach">
+            DANTE
           </Link>
         </nav>
       </header>
@@ -862,11 +862,11 @@ export default function MealPlanPage() {
           <div className={styles.chapter}>
             <span>03</span>
             <i />
-            <span>NUTRITION SYSTEM</span>
+            <span>NUTRITION</span>
           </div>
 
           <p className={styles.eyebrow}>
-            BUILT AROUND YOUR BODY
+            PUBLIC NUTRITION CALCULATOR
           </p>
 
           <h1>
@@ -882,8 +882,8 @@ export default function MealPlanPage() {
               styles.heroDescription
             }
           >
-            A sex-specific and age-aware
-            starting nutrition system built
+            An illustrative, sex-specific and age-aware
+            starting nutrition calculator built
             around your body, activity,
             objective and meal preference.
           </p>
@@ -1671,19 +1671,19 @@ export default function MealPlanPage() {
 
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-white/90">
-              Need help adjusting your plan?
+              Need help with your saved nutrition?
             </p>
             <p className="mt-1 text-sm text-white/55">
-              Dante knows your profile, targets and current meals.
+              Sign in to ask Dante about your saved profile, targets and nutrition logs.
             </p>
           </div>
         </div>
 
         <Link
-          href="/chatbot"
+          href="/dashboard/ai-coach"
           className="inline-flex shrink-0 items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-5 py-3 text-xs font-black uppercase tracking-[0.14em] text-amber-400 transition hover:border-amber-400/50 hover:bg-amber-400/16"
         >
-          Ask Dante about your nutrition →
+          Open Dante →
         </Link>
       </section>
     </main>

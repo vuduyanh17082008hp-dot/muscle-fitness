@@ -26,8 +26,25 @@ describe("getSupabaseEnvironment", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", PUBLIC_KEY)
 
     expect(() => getSupabaseEnvironment()).toThrow(
-      /loopback HTTP URL outside production/,
+      /HTTP URL outside production/,
     )
+  })
+
+  it("accepts the local dev host during development only", () => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://26.169.20.28:54331")
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", PUBLIC_KEY)
+    expect(getSupabaseEnvironment().url).toBe("http://26.169.20.28:54331")
+
+    vi.stubEnv("NODE_ENV", "production")
+    expect(() => getSupabaseEnvironment()).toThrow(/HTTP URL outside production/)
+  })
+
+  it("rejects arbitrary HTTP hosts during development", () => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://10.0.0.5:54331")
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", PUBLIC_KEY)
+    expect(() => getSupabaseEnvironment()).toThrow(/HTTP URL outside production/)
   })
 
   it("accepts a hosted Supabase HTTPS project URL", () => {

@@ -11,7 +11,7 @@ export const Slide17Impact: React.FC = () => {
     { title: "IMPROVED LITERACY", desc: "Translating complex sports science into actionable everyday steps.", icon: Eye, color: "#59A9FF" },
     { title: "ATHLETIC CONTINUITY", desc: "Reducing workout abandonment rates through persistent motivation.", icon: Repeat, color: "#8D7CFF" },
     { title: "MULTILINGUAL REACH", desc: "Empowering non-English speakers with localized fitness intelligence.", icon: Globe, color: "#38BDF8" },
-    { title: "SAFER AI USE", desc: "Pioneering clinical safety boundaries for generative AI in consumer health.", icon: ShieldCheck, color: "#10B981" },
+    { title: "SAFER AI USE", desc: "Applying deterministic safety guardrails to generative AI fitness guidance.", icon: ShieldCheck, color: "#10B981" },
   ];
 
   return (

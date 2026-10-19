@@ -11,7 +11,7 @@ create extension if not exists pgcrypto;
 -- =========================================================
 
 create or replace function public.can_manage_workout_client(
-  p_client_id uuid
+  target_client_id uuid
 )
 returns boolean
 language sql
@@ -22,9 +22,9 @@ as $$
   select
     (select auth.uid()) is not null
     and (
-      (select auth.uid()) = p_client_id
+      (select auth.uid()) = target_client_id
       or public.is_admin()
-      or public.is_assigned_coach(p_client_id)
+      or public.is_assigned_coach(target_client_id)
     );
 $$;
 

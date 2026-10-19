@@ -169,7 +169,11 @@ describe("applyDanteAction", () => {
     expect(result.ok).toBe(true);
     expect(result.status).toBe("applied");
     expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0].values).toMatchObject({ target_sets: 3, rep_min: 6, rep_max: 8 });
+    expect(updateCalls[0].values).toMatchObject({
+      target_sets: 3,
+      target_rep_min: 6,
+      target_rep_max: 8,
+    });
     expect(insertCalls).toHaveLength(1);
     expect(insertCalls[0].row.status).toBe("applied");
   });

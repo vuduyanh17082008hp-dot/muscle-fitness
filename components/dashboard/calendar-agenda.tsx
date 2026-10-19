@@ -20,24 +20,29 @@ function StatusIcon({ status }: { status: DailyAction["status"] }) {
 function formatDayLabel(dateKey: string, isToday: boolean): string {
   if (isToday) return "Today";
 
-  const date = new Date(`${dateKey}T00:00:00`);
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return dateKey;
 
   return date.toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
-function formatTime(scheduledAt: string | null): string | null {
+function formatTime(scheduledAt: string | null, timeZone: string): string | null {
   if (!scheduledAt) return null;
   const date = new Date(scheduledAt);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
 }
 
-export function CalendarAgenda({ days }: { days: CalendarDay[] }) {
+export function CalendarAgenda({ days, timeZone }: { days: CalendarDay[]; timeZone: string }) {
   return (
     <div className="flex flex-col gap-4">
       {days.map((day) => (
@@ -62,7 +67,7 @@ export function CalendarAgenda({ days }: { days: CalendarDay[] }) {
           ) : (
             <div className="mt-3 flex flex-col gap-2">
               {day.actions.map((action) => {
-                const time = formatTime(action.scheduledAt);
+                const time = formatTime(action.scheduledAt, timeZone);
 
                 return (
                   <Link
