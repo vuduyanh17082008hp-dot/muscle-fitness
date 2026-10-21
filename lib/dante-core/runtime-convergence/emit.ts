@@ -9,7 +9,7 @@ import {
   buildAuthoritativeResponseState,
   type AuthoritativeResponseState,
 } from "@/lib/dante-core/runtime-convergence/authoritative-state";
-import { finalizeDanteResponse } from "@/lib/dante-core/runtime-convergence/finalize";
+import { finalizeDanteResponse, protectCodeBlocks } from "@/lib/dante-core/runtime-convergence/finalize";
 import { applyHardSafetySurfaceContract } from "@/lib/dante-core/runtime-convergence/hard-safety-surface";
 import type {
   DanteResponseBranch,
@@ -237,7 +237,8 @@ export function finalizeProviderReply(input: {
   coherence?: CoherenceOverlayOptions;
 }): { text: string; fingerprint: string; finalizerApplied: true; phase2Trace: string[] } {
   const phase2Trace: string[] = [];
-  let draft = input.draft;
+  const code = protectCodeBlocks(input.draft);
+  let draft = code.prose;
   let overlayFinished: CoherenceTurnResult | null = null;
   const authoritativeState = buildAuthoritativeResponseState({
     interpretation: input.semanticState ?? null,
@@ -255,7 +256,7 @@ export function finalizeProviderReply(input: {
   });
   if (input.coherence) {
     // A provider reply is provider prose by construction: its blocks are born UNVERIFIED (P-10).
-    const overlay = applyCoherenceOverlay(input.coherence, input.draft, authoritativeState, "PROVIDER_OUTPUT");
+    const overlay = applyCoherenceOverlay(input.coherence, draft, authoritativeState, "PROVIDER_OUTPUT");
     draft = overlay.draft;
     overlayFinished = overlay.finished;
     phase2Trace.push(overlay.trace);
@@ -281,6 +282,7 @@ export function finalizeProviderReply(input: {
     text = enforced.text;
     phase2Trace.push(enforced.trace);
   }
+  text = code.restore(text);
   return {
     text,
     fingerprint: result.audit.routeMetadata.responseFingerprint,

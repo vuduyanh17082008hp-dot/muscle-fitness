@@ -48,10 +48,52 @@ function applySemanticsPreservingSurfaceTransform(text: string, language: "en" |
   return out;
 }
 
+// A fenced block is user content (code, a LeetCode answer) unless it carries context/prompt material.
+// ponytail: key-name heuristic for context dumps; widen CONTEXT_DUMP_KEY if new context families are added.
+const CONTEXT_DUMP_KEY =
+  /"(?:profile|fitnessProfile|preferences|currentNutritionPlan|recovery|trainingIntelligence|todayFoodLog|digitalTwin|dailyPlan|adaptiveTraining|danteMemory|coachingPreference)"\s*:/;
+const CODE_FENCE = /```[\s\S]*?```/g;
+const CODE_SLOT = /⟦DANTE_CODE_(\d+)⟧/g;
+
+function isLeakingCodeBlock(block: string): boolean {
+  return RAW_CONTEXT_LEAK.test(block)
+    || INSTRUCTION_LEAK.test(block)
+    || CONTEXT_DUMP_KEY.test(block)
+    || /DANTE_PRIVATE_CONTEXT_CANARY_|\buser_id\s*[:=]/i.test(block);
+}
+
+/**
+ * Prose transforms (sentence rewrites, whitespace collapse) never touch code: fenced blocks become opaque slots and
+ * come back verbatim at the end, except a block carrying context/prompt material, which is dropped (fail closed).
+ * A slot a transform removed (a degraded/template reply) simply does not come back.
+ */
+export function protectCodeBlocks(text: string): { prose: string; restore: (out: string) => string } {
+  const blocks: string[] = [];
+  const prose = text.replace(CODE_FENCE, (block) => {
+    blocks.push(block);
+    return `\n\n⟦DANTE_CODE_${blocks.length - 1}⟧\n\n`;
+  });
+  return {
+    prose,
+    restore: (out) =>
+      out
+        // prose transforms collapse the slot's newlines; a fence only renders at the start of a line
+        .replace(/[ \t]*(⟦DANTE_CODE_\d+⟧)[ \t]*/g, "\n\n$1\n\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim()
+        .replace(CODE_SLOT, (_, i: string) => {
+          const block = blocks[Number(i)];
+          return block && !isLeakingCodeBlock(block) ? block : "";
+        })
+        .replace(/\n{3,}/g, "\n\n")
+        .trim(),
+  };
+}
+
 function enforceContextPrivacy(text: string): string {
   return scrubRawContextLeaks(
     text
-      .replace(/```[\s\S]*?```/g, "")
+      .replace(CODE_FENCE, "")
       .replace(RAW_CONTEXT_LEAK, "")
       .replace(/\buser_id\s*[:=]\s*\S+/gi, "")
       .replace(/[ \t]{2,}/g, " ")

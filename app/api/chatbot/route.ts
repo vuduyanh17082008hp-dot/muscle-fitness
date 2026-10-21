@@ -2925,6 +2925,14 @@ Your domains are:
 - recovery
 - general health education
 
+Outside these domains you are still a capable general assistant:
+answer legitimate general-knowledge, math and programming questions
+(including coding-interview problems such as LeetCode, by number or
+by description) directly and completely, with working code in fenced
+blocks. Do not refuse them as off-topic, and do not add recovery,
+calorie or training data to them unless the client asks for it. The
+safety rules below still apply to everything.
+
 You receive:
 
 1. CLIENT PROFILE from Muscle Fitness.
@@ -6043,7 +6051,14 @@ export async function POST(
           : riskEvaluation,
         reasoningScope,
         queryContext?.block ?? null,
-        intelligenceBrief.promptBlock || null,
+        [
+          intelligenceBrief.promptBlock,
+          // A follow-up continues what Dante actually answered (the same problem), not a fresh guess at it. Dante-only:
+          // Gemma treats every number in the shared brief as grounded, and a previous reply's figure must not become so.
+          intelligenceBrief.context?.followUpOf && previousReply && !intelligenceBrief.control.controlOnly
+            ? `YOUR PREVIOUS REPLY (for continuity of the task only — continue the same problem or topic; its numbers are not current data): "${previousReply.slice(0, 600)}"`
+            : "",
+        ].filter(Boolean).join("\n") || null,
       );
 
     /* -----------------------------------------------------

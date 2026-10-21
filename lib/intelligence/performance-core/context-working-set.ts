@@ -454,7 +454,8 @@ function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, last
 
 /* ---------- resolution ---------- */
 
-const FOLLOW_UP = /^(?:and|but|so|ok(?:ay)?|what about|how about|how much|how many|how often|when|which|why|is it|is that|are they|should i|can i|do i|then|also|con|the con|bao nhieu|vay|the|sao)\b|\b(?:it|that|this|those|them|these|then|instead|cai do|cai nay)\??$/;
+const FOLLOW_UP = /^(?:and|but|so|ok(?:ay)?|what about|how about|how much|how many|how often|when|which|why|is it|is that|are they|should i|can i|do i|then|also|con|the con|bao nhieu|vay|the|sao|continue|go on|tiep(?: tuc)?)\b|\b(?:it|that|this|those|them|these|then|instead|above|earlier|again|cai do|cai nay|o tren)[?.!]*$/;
+const isFollowUp = (folded: string) => folded.split(/\s+/).length <= 8 && FOLLOW_UP.test(folded);
 
 /**
  * Prior USER messages (oldest → newest) plus the current one → the bounded working set. Pure and deterministic.
@@ -502,9 +503,15 @@ export function buildContextWorkingSet(input: { priorUserMessages?: readonly str
       facts.push(fact);
     }
   });
-  const current = fold(input.message).trim();
-  const prior = input.priorUserMessages?.at(-1)?.trim() ?? null;
-  const followUpOf = prior && current.split(/\s+/).length <= 8 && FOLLOW_UP.test(current) ? clip(prior, 220) : null;
+  const priors = (input.priorUserMessages ?? []).map((text) => text.trim()).filter(Boolean);
+  let followUpOf: string | null = null;
+  if (priors.length > 0 && isFollowUp(fold(input.message).trim())) {
+    // A follow-up to a follow-up still continues the task that set the topic: walk back (≤3) to that message.
+    let anchor = priors.length - 1;
+    while (anchor > 0 && priors.length - anchor <= 3 && isFollowUp(fold(priors[anchor]))) anchor--;
+    const last = priors.length - 1;
+    followUpOf = anchor === last ? clip(priors[last], 220) : `${clip(priors[anchor], 160)}" → then: "${clip(priors[last], 100)}`;
+  }
   return { facts, followUpOf };
 }
 

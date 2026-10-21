@@ -143,11 +143,14 @@ function createFakeSupabase(timezone = "UTC") {
 
         delete: () => ({
           eq: (_c1: string, id: string) => ({
-            eq: async (_c2: string, userId: string) => {
-              const existing = rows.get(id)
-              if (existing && existing.user_id === userId) rows.delete(id)
-              return { error: null }
-            },
+            eq: (_c2: string, userId: string) => ({
+              select: async () => {
+                const existing = rows.get(id)
+                if (!existing || existing.user_id !== userId) return { data: [], error: null }
+                rows.delete(id)
+                return { data: [{ id }], error: null }
+              },
+            }),
           }),
         }),
 
@@ -355,9 +358,11 @@ describe("deleteFoodLog", () => {
     })
     if (!created.success) throw new Error("setup failed")
 
-    await deleteFoodLog(client as never, "attacker", created.data.id)
+    const result = await deleteFoodLog(client as never, "attacker", created.data.id)
 
     expect(rows.has(created.data.id)).toBe(true)
+    // nothing was deleted, so nothing may be reported as deleted (the route answered 200 ok:true before)
+    expect(result).toEqual({ success: false, error: "Food log entry not found.", status: 404 })
   })
 })
 

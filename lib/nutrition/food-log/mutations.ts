@@ -58,7 +58,7 @@ export type CreateFoodLogInput = {
 
 export type MutationResult<T> =
   | { success: true; data: T }
-  | { success: false; error: string; status?: 400 | 500 }
+  | { success: false; error: string; status?: 400 | 404 | 500 }
 
 export async function createFoodLog(
   supabase: SupabaseClient,
@@ -200,7 +200,7 @@ export async function updateFoodLogQuantity(
 
   if (fetchError || !existing) {
     if (fetchError) console.error("[FOOD LOG] updateFoodLogQuantity fetch failed:", fetchError.message)
-    return { success: false, error: "Food log entry not found." }
+    return { success: false, error: "Food log entry not found.", status: 404 }
   }
 
   const originalGrams = Number(existing.quantity_grams)
@@ -250,15 +250,20 @@ export async function deleteFoodLog(
   userId: string,
   id: string,
 ): Promise<MutationResult<{ id: string }>> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("food_logs")
     .delete()
     .eq("id", id)
     .eq("user_id", userId)
+    .select("id")
 
   if (error) {
     console.error("[FOOD LOG] deleteFoodLog failed:", error.message)
     return { success: false, error: "Nutrition data couldn't be deleted. Please try again." }
+  }
+  // Zero rows (someone else's entry, or already gone) is not a deletion: never report success for it.
+  if (!data?.length) {
+    return { success: false, error: "Food log entry not found.", status: 404 }
   }
 
   return { success: true, data: { id } }
