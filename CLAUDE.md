@@ -118,6 +118,12 @@ must show 0 errors; a handful of pre-existing low-risk warnings (unused
 `<img>` vs `next/image`, one `useMemo` dependency nit) are tracked, not
 blocking.
 
+Report task completion in the terminal, not as a new Markdown/report file in
+the repo (unless the user asks for one or something depends on it). Live
+browser/API harnesses stay at `docs/evaluation/hackathon-repair-2026-10-18/harness/`
+and `docs/evaluation/h1-truth-closure-2026-10-18/harness/` (absolute paths
+inside — don't move them); their run output is git-ignored.
+
 ## Dante Core
 
 `lib/dante-core/` — deterministic readiness/autoregulation engines, a

@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # next.js
 /.next/
@@ -29,6 +33,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+/lint-errors.txt
+/eslint-errors.json
 
 # env files — never commit secrets. Template is the only exception.
 .env*
@@ -41,15 +48,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
 output/
 video/
 
-# raw evaluation run output (recordings, screenshots, logs, captured
-# responses) stays local; reports and harness scripts are kept.
+# evaluation run output and reports (recordings, screenshots, logs, captured
+# responses, REPORT.md) stay local; only harness scripts and the rubric are kept.
 docs/evaluation/**
 !docs/evaluation/**/
-!docs/evaluation/**/*.md
+!docs/evaluation/h0-release-rubric.md
 !docs/evaluation/**/*.mjs
 !docs/evaluation/**/*.mts
 !docs/evaluation/**/*.ts
