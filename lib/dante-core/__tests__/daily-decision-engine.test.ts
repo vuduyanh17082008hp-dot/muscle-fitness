@@ -161,6 +161,38 @@ describe("buildDailyDecision", () => {
     expect(proposedActions).toHaveLength(0);
   });
 
+  it("does not tell a low-readiness athlete the session is consistent with their recovery (F-07)", () => {
+    const state = baseAthleteState({
+      recovery: { ...baseAthleteState().recovery, score: 30, status: "Priority recovery", recoveryStatusCode: "priority" },
+      derived: {
+        ...baseAthleteState().derived,
+        muscleRecoveryMap: [muscleEntry({ muscle: "chest", score: 90, confidence: 0.8 })],
+      },
+    });
+    const context = baseTrainingContext(contributionsFor("exercise-1", "chest"));
+
+    const { decision, proposedActions } = buildDailyDecision(state, context, session([exercise()]));
+
+    expect(decision.decision.decisionCode).toBe("proceed_as_planned");
+    expect(proposedActions).toHaveLength(0);
+    expect(decision.recommendation).not.toMatch(/as planned/);
+    expect(decision.recommendation).toMatch(/readiness check-in is low/);
+    expect(decision.why.join(" ")).not.toMatch(/consistent with your recent recovery/);
+    expect(decision.why.join(" ")).toMatch(/30\/100/);
+  });
+
+  it("does not claim consistency when there is not enough muscle data to assess", () => {
+    const state = baseAthleteState({
+      derived: { ...baseAthleteState().derived, muscleRecoveryMap: [] },
+    });
+    const context = baseTrainingContext(contributionsFor("exercise-1", "chest"));
+
+    const { decision } = buildDailyDecision(state, context, session([exercise()]));
+
+    expect(decision.decision.decisionCode).toBe("insufficient_data");
+    expect(decision.why.join(" ")).not.toMatch(/consistent with your recent recovery/);
+  });
+
   it("proposes postponing an exercise when its primary muscle recovery is below 30 with sufficient confidence", () => {
     const state = baseAthleteState({
       derived: {

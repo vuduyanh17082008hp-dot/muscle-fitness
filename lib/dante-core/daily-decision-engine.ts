@@ -257,12 +257,38 @@ export function buildDailyDecision(
         ? "insufficient_data"
         : "proceed_as_planned";
 
+  // Wording only: the overall readiness check-in (lib/recovery) must not be
+  // contradicted by a per-muscle "proceed" — decisionCode/actions are unchanged.
+  const readinessCode = athleteState.recovery.recoveryStatusCode;
+  const lowReadiness = readinessCode === "priority" || readinessCode === "moderate";
+  const readinessScore = athleteState.recovery.score;
+  const readinessCaveat =
+    readinessCode === "priority"
+      ? " Today's readiness check-in is low, though — keep effort conservative or choose a lighter session."
+      : readinessCode === "moderate"
+        ? " Readiness is moderate today, so consider trimming optional volume."
+        : "";
+
   const recommendation =
     decisionCode === "modify_session"
       ? `Adjust today's session — ${affectedExercises.map((e) => e.exerciseName).join(", ")} need attention.`
       : decisionCode === "insufficient_data"
-        ? "Not enough training history yet to give a confident recommendation — proceed with today's planned session using your own judgment on effort."
-        : "Proceed with today's session as planned.";
+        ? `Not enough training history yet to give a confident recommendation — proceed with today's planned session using your own judgment on effort.${readinessCaveat}`
+        : lowReadiness
+          ? `No planned exercise is flagged by muscle recovery.${readinessCaveat}`
+          : "Proceed with today's session as planned.";
+
+  if (lowReadiness) {
+    why.push(
+      readinessScore !== null
+        ? `Overall readiness is ${readinessScore}/100 (${athleteState.recovery.status ?? readinessCode}) — see Recovery for what's driving it.`
+        : `Overall readiness is ${athleteState.recovery.status ?? readinessCode} today — see Recovery for what's driving it.`,
+    );
+  }
+  const fallbackWhy =
+    decisionCode === "insufficient_data"
+      ? "No exercise in today's session has enough muscle-recovery history to assess yet."
+      : "Today's session looks consistent with your recent recovery and training data.";
 
   const decisionConfidenceFraction =
     consideredConfidences.length > 0
@@ -283,7 +309,7 @@ export function buildDailyDecision(
     decision: {
       recommendation,
       decision,
-      why: why.length > 0 ? why : ["Today's session looks consistent with your recent recovery and training data."],
+      why: why.length > 0 ? why : [fallbackWhy],
       dataUsed,
       confidence: confidenceLevelFromFraction(decisionConfidenceFraction),
       sources: [],
