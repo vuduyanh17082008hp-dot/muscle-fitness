@@ -54,7 +54,10 @@ export type ChatStreamErrorEvent = {
   partial: boolean;
 };
 
-export type ChatStreamEvent = ChatStreamDeltaEvent | ChatStreamDoneEvent | ChatStreamErrorEvent;
+/** Appended by lib/dante-core/conversation-store.ts after the turn's history row was finalized; ok=false means it is NOT in history. */
+export type ChatStreamSavedEvent = { type: "saved"; ok: boolean };
+
+export type ChatStreamEvent = ChatStreamDeltaEvent | ChatStreamDoneEvent | ChatStreamErrorEvent | ChatStreamSavedEvent;
 
 export const CHAT_STREAM_CONTENT_TYPE = "application/x-ndjson; charset=utf-8";
 
@@ -142,7 +145,7 @@ function isChatStreamEvent(value: unknown): value is ChatStreamEvent {
     value !== null &&
     "type" in value &&
     (value as { type: unknown }).type !== undefined &&
-    ["delta", "done", "error"].includes((value as { type: unknown }).type as string)
+    ["delta", "done", "error", "saved"].includes((value as { type: unknown }).type as string)
   );
 }
 

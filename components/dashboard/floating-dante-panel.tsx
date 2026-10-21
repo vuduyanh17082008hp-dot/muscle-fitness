@@ -87,7 +87,7 @@ function DesktopPanel({
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden">
-          <DanteChat compact heroSubtitle={contextualPrompt} />
+          <DanteChat compact heroSubtitle={contextualPrompt} restoreHistory />
         </div>
 
         <div className="shrink-0">
@@ -105,7 +105,7 @@ export function FloatingDantePanel({ open, onOpenChange, isDesktop, contextualPr
 
   return (
     <BottomSheet open={open} onOpenChange={onOpenChange} title="Dante">
-      <DanteChat compact heroSubtitle={contextualPrompt} />
+      <DanteChat compact heroSubtitle={contextualPrompt} restoreHistory />
       <PanelFooter />
     </BottomSheet>
   );

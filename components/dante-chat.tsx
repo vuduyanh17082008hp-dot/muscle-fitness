@@ -43,6 +43,7 @@ import {
   type ChatStreamEvent,
   type ChatStreamSource,
 } from "@/lib/dante-core/chat-stream-protocol";
+import type { StoredDanteMessage } from "@/lib/dante-core/conversation-store";
 
 /* =========================================================
    TYPES
@@ -63,10 +64,38 @@ type ChatMessage = {
   insight?: DanteInsight | null;
   sources?: ChatStreamSource[] | null;
   pendingConfirmation?: PendingConfirmation | null;
-  confirmationResolution?: "confirmed" | "cancelled" | "failed" | "unknown" | null;
+  confirmationResolution?: ConfirmationResolution;
   isComplete?: boolean;
   wasAborted?: boolean;
+  /** Client id of the turn (user message + its reply) — what a retry resends so the server never duplicates it. */
+  turnId?: string;
+  /** Set when the reply was never confirmed complete (refresh/disconnect mid-stream, or a failure). */
+  historyStatus?: "pending" | "interrupted" | "error";
+  /** The server said this turn did NOT reach conversation history. */
+  notSaved?: boolean;
 };
+
+type ConfirmationResolution = "confirmed" | "cancelled" | "failed" | "expired" | "unknown" | null;
+
+type ThreadSummary = { id: string; title: string; updatedAt: string };
+
+function fromStoredMessage(message: StoredDanteMessage): ChatMessage {
+  if (message.role === "user") {
+    return { id: message.id, role: "user", content: message.content, createdAt: message.createdAt, turnId: message.clientMessageId ?? undefined };
+  }
+  return {
+    id: message.id,
+    role: "assistant",
+    content: message.status === "error" ? resolveStreamErrorContent(message.content, false, DANTE_UNAVAILABLE_MESSAGE) : message.content,
+    insight: message.insight ?? null,
+    sources: message.sources ?? [],
+    pendingConfirmation: message.pendingConfirmation,
+    confirmationResolution: message.confirmationResolution,
+    isComplete: true,
+    turnId: message.clientMessageId ?? undefined,
+    historyStatus: message.status === "complete" ? undefined : message.status,
+  };
+}
 
 export type QuickPrompt = {
   tag?: string;
@@ -125,6 +154,11 @@ export type DanteChatProps = {
    * rather than trusting it blindly.
    */
   contextPayload?: Record<string, unknown>;
+  /**
+   * Restore the saved conversation on mount (`?c=<id>` when not compact, otherwise the most recent one) and show
+   * the history picker. Contextual embeds leave this off: their turns are still saved, each embed starts fresh.
+   */
+  restoreHistory?: boolean;
 };
 
 const DEFAULT_WELCOME_MESSAGE =
@@ -285,11 +319,20 @@ function PendingConfirmationPanel({
   onCancel,
 }: {
   pendingConfirmation: PendingConfirmation;
-  resolution: "confirmed" | "cancelled" | "failed" | "unknown" | null | undefined;
+  resolution: ConfirmationResolution | undefined;
   isBusy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  // Restored from history: dante_tool_actions says it was never claimed before it expired.
+  if (resolution === "expired") {
+    return (
+      <p className="mt-3 text-xs font-semibold text-zinc-500">
+        This proposal expired — nothing was changed.
+      </p>
+    );
+  }
+
   if (resolution === "confirmed") {
     return (
       <p className="mt-3 text-xs font-semibold text-emerald-400">
@@ -360,6 +403,7 @@ export default function DanteChat({
   compact = false,
   className,
   contextPayload,
+  restoreHistory = false,
 }: DanteChatProps = {}) {
   const emptyStatePrompts: QuickPrompt[] =
     contextualSuggestions && contextualSuggestions.length > 0
@@ -385,6 +429,13 @@ export default function DanteChat({
 
   const [isLoading, setIsLoading] =
     useState(false);
+
+  // The conversation every turn is saved into; null until the first send (or a restore) picks one.
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [isRestoring, setIsRestoring] = useState(restoreHistory);
+  // Once the user has sent something, a late restore must never replace that conversation.
+  const sendStartedRef = useRef(false);
 
   const [activity, setActivity] = useState<DanteActivity>("idle");
   const [hoveredPromptIndex, setHoveredPromptIndex] = useState<number | null>(null);
@@ -459,10 +510,62 @@ export default function DanteChat({
      them, and confirm re-checks atomically).
   ======================================================= */
 
+  function syncThreadUrl(id: string | null) {
+    if (!restoreHistory || compact) return;
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("c", id);
+    else url.searchParams.delete("c");
+    window.history.replaceState(window.history.state, "", url);
+  }
+
+  async function refreshThreads() {
+    const response = await fetch("/api/dante/conversations").catch(() => null);
+    const data = response?.ok ? ((await response.json()) as { threads?: ThreadSummary[] }) : null;
+    if (data?.threads) setThreads(data.threads);
+    return data?.threads ?? [];
+  }
+
+  /** Loads a saved conversation from the server; false when it doesn't exist for this user. */
+  async function openThread(id: string, isMountRestore = false): Promise<boolean> {
+    const response = await fetch(`/api/dante/conversations?id=${encodeURIComponent(id)}`).catch(() => null);
+    if (!response?.ok) return false;
+    const data = (await response.json()) as { messages?: StoredDanteMessage[] };
+    // Only the automatic mount restore yields to a send already in progress; a picked conversation always opens.
+    if (isMountRestore && sendStartedRef.current) return true;
+    setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }, ...(data.messages ?? []).map(fromStoredMessage)]);
+    setThreadId(id);
+    syncThreadUrl(id);
+    return true;
+  }
+
+  function startNewConversation() {
+    abortControllerRef.current?.abort();
+    setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }]);
+    setThreadId(null);
+    syncThreadUrl(null);
+  }
+
+  async function selectThread(id: string) {
+    if (!id) return startNewConversation();
+    setIsRestoring(true);
+    if (!(await openThread(id))) startNewConversation();
+    setIsRestoring(false);
+  }
+
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/dante/tools/pending")
-      .then((response) => (response.ok ? response.json() : null))
+    async function restore() {
+      if (!restoreHistory) return;
+      const fromUrl = compact ? null : new URLSearchParams(window.location.search).get("c");
+      const list = await refreshThreads();
+      const target = fromUrl ?? list[0]?.id ?? null;
+      if (!cancelled && target && !sendStartedRef.current && !(await openThread(target, true))) syncThreadUrl(null);
+    }
+    void restore()
+      .catch(() => {})
+      .finally(() => !cancelled && setIsRestoring(false))
+      .then(() => (cancelled ? null : fetch("/api/dante/tools/pending")))
+      .then((response) => (response?.ok ? response.json() : null))
       .then((data: { pending?: Array<PendingConfirmation & { expiresAt: string }> } | null) => {
         const pending = data?.pending ?? [];
         if (cancelled || pending.length === 0) return;
@@ -485,6 +588,8 @@ export default function DanteChat({
     return () => {
       cancelled = true;
     };
+    // Mount-only: restore, then proposals still pending anywhere (deduped against the restored ones).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* =======================================================
@@ -536,7 +641,8 @@ export default function DanteChat({
     );
   }
 
-  async function sendMessage(override?: string) {
+  /** `retry` resends an unfinished turn under its original id: the server reuses its rows (or replays a stored reply). */
+  async function sendMessage(override?: string, retry?: { turnId: string; assistantId: string }) {
     const trimmed =
       (override ?? input).trim();
 
@@ -547,25 +653,33 @@ export default function DanteChat({
       return;
     }
 
+    sendStartedRef.current = true;
+    const activeThreadId = threadId ?? crypto.randomUUID();
+    if (!threadId) {
+      setThreadId(activeThreadId);
+      syncThreadUrl(activeThreadId);
+    }
+
+    const turnId = retry?.turnId ?? crypto.randomUUID();
     const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: turnId,
       role: "user",
       content: trimmed,
       createdAt: new Date().toISOString(),
+      turnId,
     };
 
-    const assistantId = crypto.randomUUID();
+    const assistantId = retry?.assistantId ?? crypto.randomUUID();
+    const streamingReply: ChatMessage = { id: assistantId, role: "assistant", content: "", isComplete: false, turnId };
+    // History sent to the server: everything before this turn (a retried turn's own question is already in `messages`).
+    const retryIndex = retry ? messages.findIndex((message) => message.turnId === retry.turnId) : -1;
+    const priorMessages = retryIndex >= 0 ? messages.slice(0, retryIndex) : messages;
 
-    setMessages((previous) => [
-      ...previous,
-      userMessage,
-      {
-        id: assistantId,
-        role: "assistant",
-        content: "",
-        isComplete: false,
-      },
-    ]);
+    setMessages((previous) =>
+      retry
+        ? previous.map((message) => (message.id === assistantId ? streamingReply : message))
+        : [...previous, userMessage, streamingReply]
+    );
 
     shouldAutoScrollRef.current = true;
 
@@ -595,7 +709,7 @@ export default function DanteChat({
               // Recent user turns only — the server selects a bounded context
               // working set from them (H0 cluster A); never dumped into a prompt.
               messages: [
-                ...messages
+                ...priorMessages
                   .filter((entry) => entry.role === "user" && entry.content.trim())
                   .map((entry) => ({
                     role: "user" as const,
@@ -609,6 +723,8 @@ export default function DanteChat({
                 },
               ].slice(-20),
               ...contextPayload,
+              threadId: activeThreadId,
+              clientMessageId: turnId,
             }),
 
           signal:
@@ -646,6 +762,7 @@ export default function DanteChat({
         let appendedText = "";
         let doneEvent: Extract<ChatStreamEvent, { type: "done" }> | null = null;
         let errorEvent: Extract<ChatStreamEvent, { type: "error" }> | null = null;
+        let savedEvent: Extract<ChatStreamEvent, { type: "saved" }> | null = null;
 
         for (const event of parsed.events) {
           if (event.type === "delta") {
@@ -654,6 +771,8 @@ export default function DanteChat({
             doneEvent = event;
           } else if (event.type === "error") {
             errorEvent = event;
+          } else if (event.type === "saved") {
+            savedEvent = event;
           }
         }
 
@@ -689,9 +808,14 @@ export default function DanteChat({
             ...message,
             content: resolveStreamErrorContent(message.content, finalError.partial, UNAVAILABLE_MESSAGE),
             isComplete: true,
+            historyStatus: "error",
           }));
 
           setActivity("error");
+        }
+
+        if (savedEvent && !savedEvent.ok) {
+          updateStreamingMessage(assistantId, (message) => ({ ...message, notSaved: true }));
         }
       }
     } catch (error: unknown) {
@@ -704,8 +828,8 @@ export default function DanteChat({
       );
 
       setActivity(wasAborted ? "idle" : "error");
-      // The message stays in the conversation, and back in the composer so retrying is one tap (never auto-resent).
-      if (!wasAborted) setInput((current) => current || trimmed);
+      // The message stays in the conversation; retrying is the reply's own Retry button (same turn id, never
+      // auto-resent) — refilling the composer would send it again as a second, duplicate turn.
 
       /*
        * Reassuring, non-technical failure state (spec: "Failure
@@ -730,10 +854,12 @@ export default function DanteChat({
           : message.content || failureCopy,
         isComplete: true,
         wasAborted,
+        historyStatus: wasAborted ? "interrupted" : "error",
       }));
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      if (restoreHistory) void refreshThreads();
       // A turn may have published or withdrawn a disclosure (allergy, low intake): surfaces derived from it re-fetch.
       window.dispatchEvent(new Event(COACH_CONTEXT_CHANGED_EVENT));
     }
@@ -860,6 +986,34 @@ export default function DanteChat({
       <span aria-live="polite" className="sr-only">
         {DANTE_STATE_LABEL[visualState]}
       </span>
+
+      {/* CONVERSATION HISTORY — server-backed; a native select stays usable on phones. */}
+      {restoreHistory ? (
+        <div className="relative z-30 mb-2 flex shrink-0 items-center gap-2">
+          <select
+            aria-label="Dante conversations"
+            value={threadId ?? ""}
+            disabled={isLoading || isRestoring}
+            onChange={(event) => void selectThread(event.target.value)}
+            className="h-9 min-w-0 flex-1 truncate rounded-xl border border-white/10 bg-[#0e1016]/80 px-3 font-mono text-[11px] text-zinc-300 disabled:opacity-50"
+          >
+            <option value="">{isRestoring ? "Loading conversations…" : "New conversation"}</option>
+            {threads.map((thread) => (
+              <option key={thread.id} value={thread.id}>
+                {thread.title} · {new Date(thread.updatedAt).toLocaleDateString()}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={startNewConversation}
+            disabled={isLoading || isRestoring || threadId === null}
+            className="h-9 shrink-0 rounded-xl border border-white/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wider text-zinc-300 transition hover:bg-white/5 disabled:opacity-40"
+          >
+            New chat
+          </button>
+        </div>
+      ) : null}
 
       {/* ===================================================
           DANTE SUPERVISOR HEADER (IN-PLACE FLUID MORPH)
@@ -1214,6 +1368,33 @@ export default function DanteChat({
                         </ReactMarkdown>
                       </div>
                     )}
+
+                    {message.historyStatus === "pending" || message.historyStatus === "interrupted" ? (
+                      <p className="text-xs font-semibold text-amber-400">
+                        {message.historyStatus === "pending"
+                          ? "This reply was never confirmed as finished — it may have been cut off by a refresh or lost connection."
+                          : "This reply was interrupted before Dante finished."}
+                      </p>
+                    ) : null}
+
+                    {message.notSaved ? (
+                      <p className="text-xs font-semibold text-amber-400">
+                        This reply couldn&apos;t be saved to your conversation history.
+                      </p>
+                    ) : null}
+
+                    {message.historyStatus && message.turnId && !isLoading ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const question = messages.find((entry) => entry.role === "user" && entry.turnId === message.turnId);
+                          if (question) void sendMessage(question.content, { turnId: message.turnId!, assistantId: message.id });
+                        }}
+                        className="self-start rounded-lg border border-white/15 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-zinc-300 transition hover:bg-white/5"
+                      >
+                        Retry
+                      </button>
+                    ) : null}
 
                     {message.insight ? (
                       <DanteInsightPanel insight={message.insight} />

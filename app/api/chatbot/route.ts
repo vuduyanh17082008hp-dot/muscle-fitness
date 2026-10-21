@@ -154,6 +154,7 @@ import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
 import { guardActionResponse, buildSuggestedWorkoutChangeReply, isWorkoutMutationRequest, needsTrainingCountClarification, proposalLanguage, resolveActionStatus, trainingCountClarification } from "@/lib/dante-core/tools/action-response-guard";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { createChatStreamResponse } from "@/lib/dante-core/chat-stream-protocol";
+import { beginDanteTurn, finalizeDanteTurn, persistChatStream, readTurnIds, type DanteTurn } from "@/lib/dante-core/conversation-store";
 import {
   emitConvergedSingleShot as emitConvergedCore,
   extractCausalTargetFromText,
@@ -4217,8 +4218,21 @@ export async function GET() {
    POST
 ========================================================= */
 
+// Dante conversation history: every response a persisted turn produces (stream, error JSON, 499) finalizes its
+// assistant row here — the one exit all of handleChatbotPost's many return paths share.
 export async function POST(
   request: Request,
+) {
+  const persisted: { turn?: DanteTurn; saved?: boolean; supabase?: Awaited<ReturnType<typeof createClient>> } = {};
+  const response = await handleChatbotPost(request, persisted);
+  const { turn, supabase } = persisted;
+  if (!turn || !supabase) return response;
+  return persistChatStream(response, (outcome) => finalizeDanteTurn(supabase, turn, outcome, persisted.saved ?? false), turn.threadId);
+}
+
+async function handleChatbotPost(
+  request: Request,
+  persisted: { turn?: DanteTurn; saved?: boolean; supabase?: Awaited<ReturnType<typeof createClient>> },
 ) {
   // H0 WP1: the ONE authoritative deadline for this turn, started at request arrival. Client disconnect aborts it too.
   const budget = createTurnBudget(request);
@@ -4405,6 +4419,21 @@ export async function POST(
           status: 400,
         },
       );
+    }
+
+    /* -----------------------------------------------------
+       CONVERSATION HISTORY — the user turn (and a pending assistant row) is saved BEFORE any model work. A turn
+       whose reply is already stored is replayed, never re-run; another user's thread id is a 404.
+    ----------------------------------------------------- */
+    // Bounded like every early read: a hung history write never holds the turn; finalize re-creates the rows instead.
+    const historyStartedAt = Date.now();
+    const begun = await boundedDependency(budget, "history", () => beginDanteTurn(supabase, user.id, body, userMessage, historyStartedAt));
+    const history = begun.status === "OK" ? begun.value : null;
+    if (history?.kind === "respond") return history.response;
+    if (history?.kind === "turn") Object.assign(persisted, { turn: history.turn, saved: history.saved, supabase });
+    else if (!history && readTurnIds(body)) {
+      const ids = readTurnIds(body)!;
+      Object.assign(persisted, { turn: { userId: user.id, ...ids, userMessage, startedAt: historyStartedAt }, saved: false, supabase });
     }
 
     /* -----------------------------------------------------

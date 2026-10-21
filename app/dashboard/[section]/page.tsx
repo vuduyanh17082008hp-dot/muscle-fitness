@@ -282,7 +282,7 @@ export default async function DashboardSectionPage({
         // Persistent "Dante learned" pattern memory is intentionally not
         // mounted on the Phase 2C chat surface — that table/migration is
         // optional adaptive-intelligence work, not required for chat UX.
-        <DanteChat contextualSuggestions={aiCoachSuggestions ?? undefined} />
+        <DanteChat contextualSuggestions={aiCoachSuggestions ?? undefined} restoreHistory />
       )}
 
       {sectionKey === "settings" && (
