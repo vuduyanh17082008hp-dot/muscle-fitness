@@ -4361,38 +4361,6 @@ async function handleChatbotPost(
         body,
       );
 
-    // Decided once per request, from the real client message — never
-    // a static default. Both response paths below (legacy Q&A and the
-    // agent tool loop) must use this SAME decision.
-    /* -----------------------------------------------------
-       CONVERSATION CONTROL (ICH-1) — resolved HERE, at pipeline level,
-       before safety copy, domain routing, persona or any prompt.
-       SAFETY > EXPLICIT CURRENT-TURN CONTROL > USER CORRECTION >
-       DOMAIN INTENT > CONVERSATIONAL CONTEXT > PERSONA.
-       An explicit language request (this turn, or an earlier one still
-       in force) decides the response language for every branch below;
-       no route, stored session language or persona may override it.
-    ----------------------------------------------------- */
-    // H0 cluster A: up to 20 prior user turns feed the context working set (bounded selection, never the raw transcript).
-    const priorUserMessages = getPriorUserMessagesChronological(body, userMessage, 20);
-    const languageControl = resolveConversationControl({ message: userMessage, priorUserMessages });
-    const detectedLanguage = decideDanteLanguage({
-      currentMessage: userMessage,
-      recentMessages: getRecentUserMessages(body, 3),
-    });
-    const languageDecision: DanteLanguageDecision =
-      languageControl.responseLanguage === "MATCH_USER"
-        ? detectedLanguage
-        : {
-            language: languageControl.responseLanguage === "EN" ? "en" : "vi",
-            languageName: languageControl.responseLanguage === "EN" ? "English" : "Vietnamese",
-            source: "explicit_request",
-            confidence: "high",
-          };
-
-    const selectedMuscle = getSelectedMuscle(body);
-    const selectedExercise = getSelectedExercise(body);
-
     if (!userMessage) {
       return Response.json(
         {
@@ -4435,6 +4403,51 @@ async function handleChatbotPost(
       const ids = readTurnIds(body)!;
       Object.assign(persisted, { turn: { userId: user.id, ...ids, userMessage, startedAt: historyStartedAt }, saved: false, supabase });
     }
+    // A persisted conversation's context comes from storage, not from the client: every history helper below reads
+    // `body.messages`, so it is replaced here with this thread's own finished turns (+ the current message, as the
+    // client used to send it). The client's copy is ignored — it can't splice another thread's or invented turns in.
+    // A storage timeout/failure yields no history rather than the unverifiable copy.
+    if (persisted.turn && isRecord(body)) {
+      body = {
+        ...body,
+        messages: [
+          ...(history?.kind === "turn" ? history.history : []),
+          { role: "user", content: userMessage, createdAt: new Date(historyStartedAt).toISOString() },
+        ],
+      };
+    }
+
+    // Decided once per request, from the real client message — never
+    // a static default. Both response paths below (legacy Q&A and the
+    // agent tool loop) must use this SAME decision.
+    /* -----------------------------------------------------
+       CONVERSATION CONTROL (ICH-1) — resolved HERE, at pipeline level,
+       before safety copy, domain routing, persona or any prompt.
+       SAFETY > EXPLICIT CURRENT-TURN CONTROL > USER CORRECTION >
+       DOMAIN INTENT > CONVERSATIONAL CONTEXT > PERSONA.
+       An explicit language request (this turn, or an earlier one still
+       in force) decides the response language for every branch below;
+       no route, stored session language or persona may override it.
+    ----------------------------------------------------- */
+    // H0 cluster A: up to 20 prior user turns feed the context working set (bounded selection, never the raw transcript).
+    const priorUserMessages = getPriorUserMessagesChronological(body, userMessage, 20);
+    const languageControl = resolveConversationControl({ message: userMessage, priorUserMessages });
+    const detectedLanguage = decideDanteLanguage({
+      currentMessage: userMessage,
+      recentMessages: getRecentUserMessages(body, 3),
+    });
+    const languageDecision: DanteLanguageDecision =
+      languageControl.responseLanguage === "MATCH_USER"
+        ? detectedLanguage
+        : {
+            language: languageControl.responseLanguage === "EN" ? "en" : "vi",
+            languageName: languageControl.responseLanguage === "EN" ? "English" : "Vietnamese",
+            source: "explicit_request",
+            confidence: "high",
+          };
+
+    const selectedMuscle = getSelectedMuscle(body);
+    const selectedExercise = getSelectedExercise(body);
 
     /* -----------------------------------------------------
        TEMPORAL CONTEXT (bug fix: Dante was previously given no real

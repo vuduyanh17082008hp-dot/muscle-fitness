@@ -29,10 +29,56 @@ export type AssistantMetadata = {
   error?: string;
 };
 
+/** One prior turn as the chat route's history helpers read it (same shape the client used to send). */
+export type HistoryMessage = { role: "user" | "assistant"; content: string; createdAt: string };
+
 export type BeginTurnResult =
   | { kind: "none" }
-  | { kind: "turn"; turn: DanteTurn; saved: boolean }
+  | { kind: "turn"; turn: DanteTurn; saved: boolean; history: HistoryMessage[] }
   | { kind: "respond"; response: Response };
+
+// Same id must mean same question. NFC so a re-encoded but identical string is still "the same"; the route trims.
+const sameQuestion = (stored: string, incoming: string) => stored.trim().normalize("NFC") === incoming.trim().normalize("NFC");
+
+const turnConflict = () =>
+  Response.json(
+    { ok: false, code: "TURN_CONFLICT", error: "This message id was already used for a different message." },
+    { status: 409 },
+  );
+
+/** Bounds for the server-loaded context: ~20 user turns with their replies, oldest dropped first. */
+const HISTORY_ROWS = 40;
+const HISTORY_ITEM_CHARS = 4_000;
+const HISTORY_TOTAL_CHARS = 24_000;
+
+/**
+ * The thread's own prior turns, from storage — never the client's copy, so another thread's (or invented) text
+ * can't be passed off as this conversation. Only finished rows: a pending/interrupted/failed reply never becomes
+ * "what Dante said". Excludes the current turn. Ownership is checked by the caller and again by `user_id`.
+ */
+export async function loadTurnHistory(supabase: SupabaseClient, userId: string, threadId: string, excludeClientMessageId: string): Promise<HistoryMessage[]> {
+  const { data, error } = await supabase
+    .from("ai_messages")
+    .select("role, content, created_at, client_message_id")
+    .eq("thread_id", threadId)
+    .eq("user_id", userId)
+    .eq("status", "complete")
+    .in("role", ["user", "assistant"])
+    .order("created_at", { ascending: false })
+    .limit(HISTORY_ROWS + 2);
+  if (error) throw error;
+  const out: HistoryMessage[] = [];
+  let total = 0;
+  for (const row of data ?? []) {
+    if (row.client_message_id === excludeClientMessageId) continue;
+    const content = String(row.content ?? "").slice(0, HISTORY_ITEM_CHARS);
+    if (!content.trim()) continue;
+    if (out.length >= HISTORY_ROWS || total + content.length > HISTORY_TOTAL_CHARS) break;
+    total += content.length;
+    out.push({ role: row.role as HistoryMessage["role"], content, createdAt: row.created_at as string });
+  }
+  return out.reverse();
+}
 
 /** Persistence ids from the request body; absent ids (legacy callers, harnesses) mean "don't persist". */
 export function readTurnIds(body: unknown): { threadId: string; clientMessageId: string } | null {
@@ -41,6 +87,12 @@ export function readTurnIds(body: unknown): { threadId: string; clientMessageId:
   if (typeof threadId !== "string" || typeof clientMessageId !== "string") return null;
   if (!UUID.test(threadId) || !UUID.test(clientMessageId)) return null;
   return { threadId, clientMessageId };
+}
+
+class TurnConflictError extends Error {
+  constructor() {
+    super("client_message_id already holds a different message");
+  }
 }
 
 async function ensureTurnRows(supabase: SupabaseClient, turn: DanteTurn): Promise<void> {
@@ -53,6 +105,16 @@ async function ensureTurnRows(supabase: SupabaseClient, turn: DanteTurn): Promis
       { onConflict: "thread_id,client_message_id,role", ignoreDuplicates: true },
     );
   if (user.error) throw user.error;
+  const stored = await supabase
+    .from("ai_messages")
+    .select("content")
+    .eq("thread_id", turn.threadId)
+    .eq("client_message_id", turn.clientMessageId)
+    .eq("role", "user")
+    .maybeSingle();
+  if (stored.error) throw stored.error;
+  // Never attach a reply to a different question that already owns this id.
+  if (!stored.data || !sameQuestion(stored.data.content, turn.userMessage)) throw new TurnConflictError();
   // +1 ms keeps the reply ordered after its question when both rows share a created_at ordering.
   const assistant = await supabase
     .from("ai_messages")
@@ -90,6 +152,17 @@ export async function beginDanteTurn(
     if (!owned.data) {
       return { kind: "respond", response: Response.json({ ok: false, error: "Conversation not found." }, { status: 404 }) };
     }
+
+    // Checked BEFORE replay or model work: an id already bound to another question is a conflict, never a re-answer.
+    const question = await supabase
+      .from("ai_messages")
+      .select("content")
+      .eq("thread_id", ids.threadId)
+      .eq("client_message_id", ids.clientMessageId)
+      .eq("role", "user")
+      .maybeSingle();
+    if (question.error) throw question.error;
+    if (question.data && !sameQuestion(question.data.content, userMessage)) return { kind: "respond", response: turnConflict() };
 
     const existing = await supabase
       .from("ai_messages")
@@ -129,10 +202,13 @@ export async function beginDanteTurn(
       if (reset.error) throw reset.error;
     }
     await supabase.from("ai_threads").update({ updated_at: new Date(now).toISOString() }).eq("id", ids.threadId);
-    return { kind: "turn", turn, saved: true };
+    return { kind: "turn", turn, saved: true, history: await loadTurnHistory(supabase, userId, ids.threadId, ids.clientMessageId) };
   } catch (error) {
+    // A conflict can only surface here through a race (another request bound the id between the check and the write).
+    if (error instanceof TurnConflictError) return { kind: "respond", response: turnConflict() };
     console.error("[DANTE HISTORY] begin turn failed", error);
-    return { kind: "turn", turn, saved: false };
+    // Storage unavailable: no history rather than the client's unverifiable copy.
+    return { kind: "turn", turn, saved: false, history: [] };
   }
 }
 

@@ -24,7 +24,9 @@ Client (end user), business (coach/gym operator), and platform-admin are
 - `/dashboard/*`, `/account*`, `/onboarding`, `/coach`, `/chatbot` — end
   user, gated by `lib/auth/permissions.ts` / per-page `supabase.auth.getUser()`
   checks, role resolved via `lib/auth/permissions.ts::resolveActorRole` (`user_roles`
-  table first, `profiles.role` fallback, defaults to `"client"`).
+  only, missing/malformed row → `"client"`; SQL `private.current_app_role()`
+  matches). `profiles.role` is a display mirror, never an authority, and
+  clients can't write it (`profiles_guard_role` trigger).
 - `/business/*` — coach/gym-owner portal, gated by
   `requireBusinessAdmin()` (`lib/business/require-business-admin.ts`), backed
   by the `businesses` / `business_staff` tables. `/admin/login` is actually
