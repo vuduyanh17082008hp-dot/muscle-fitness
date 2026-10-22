@@ -1,9 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, Loader2, Pencil, Trash2, UtensilsCrossed } from "lucide-react"
+import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Pencil, RotateCw, Trash2, UtensilsCrossed } from "lucide-react"
 
-import { TrackFoodModal } from "@/components/nutrition/track-food-modal"
+import { TrackFoodModal, type SaveItemResult } from "@/components/nutrition/track-food-modal"
 import { NextMealCard } from "@/components/nutrition/next-meal-card"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { AnimatedNumber } from "@/components/ui/animated-number"
@@ -26,11 +26,17 @@ type NutritionTrackerProps = {
   target: DailyMacroTotals
   /** The server's own resolved local-today date (profile timezone, not UTC) — the entries above were fetched for THIS date, so the initial view must open on it too, not a possibly-different client-computed "today". */
   initialDate: string
+  /** The server's read of this day failed — totals are unknown, not zero. */
+  initialUnavailable?: boolean
 }
 
-export function NutritionTracker({ initialEntries, target, initialDate }: NutritionTrackerProps) {
+export function NutritionTracker({ initialEntries, target, initialDate, initialUnavailable = false }: NutritionTrackerProps) {
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [entries, setEntries] = useState<FoodLogEntry[]>(initialEntries)
+  // While true, `entries` is not the day's log and must never be summed into totals.
+  const [logUnavailable, setLogUnavailable] = useState(initialUnavailable)
+  const [reloadKey, setReloadKey] = useState(0)
+  const skipInitialFetch = useRef(true)
   const [loadingDate, setLoadingDate] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
@@ -66,8 +72,9 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
   }, [loadRecentFoods])
 
   useEffect(() => {
-    if (selectedDate === todayIso() && entries === initialEntries) {
-      return // initial server-rendered data already covers today — skip the redundant fetch.
+    if (skipInitialFetch.current) {
+      skipInitialFetch.current = false
+      return // the server already read initialDate (or reported it unavailable) — retry is explicit.
     }
 
     let cancelled = false
@@ -82,13 +89,20 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
 
         if (cancelled) return
 
-        if (data.ok) {
+        if (response.ok && data.ok) {
           setEntries(data.entries ?? [])
+          setLogUnavailable(false)
         } else {
+          setEntries([])
+          setLogUnavailable(true)
           setError(data.error ?? "Unable to load this day's food log.")
         }
       } catch {
-        if (!cancelled) setError("Network error — unable to load this day's food log.")
+        if (!cancelled) {
+          setEntries([])
+          setLogUnavailable(true)
+          setError("Network error — unable to load this day's food log.")
+        }
       } finally {
         if (!cancelled) setLoadingDate(false)
       }
@@ -99,11 +113,16 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate])
+  }, [selectedDate, reloadKey])
 
-  async function handleAddFood(food: ConfirmedFood): Promise<boolean> {
-    setError(null)
+  /** Re-reads the day from the server — the only source of truth after a save we can't fully account for. */
+  const reloadLog = useCallback(() => {
+    setReloadKey((key) => key + 1)
+    setNextActionRefreshKey((key) => key + 1)
+    loadRecentFoods()
+  }, [loadRecentFoods])
+
+  async function saveFood(food: ConfirmedFood): Promise<SaveItemResult> {
     const idempotencyKey = food.idempotencyKey ?? crypto.randomUUID()
 
     try {
@@ -116,32 +135,48 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
       const data = await response.json()
 
       if (!response.ok || !data.ok) {
-        setError(data.error ?? "Unable to save this food.")
-        return false
+        return { ok: false, error: data.error ?? "Unable to save this food." }
       }
 
-      setEntries((current) => [...current, data.entry as FoodLogEntry])
-      loadRecentFoods()
-      setNextActionRefreshKey((key) => key + 1)
-      return true
+      const entry = data.entry as FoodLogEntry
+      // An idempotent replay returns the row that was already saved — never show it twice.
+      setEntries((current) => (current.some((e) => e.id === entry.id) ? current : [...current, entry]))
+      return { ok: true }
     } catch {
-      setError("Network error — unable to save this food.")
-      return false
+      return { ok: false, error: "Network error — unable to save this food." }
     }
   }
 
-  async function handleAddFoods(foods: ConfirmedFood[]): Promise<boolean> {
-    let anySucceeded = false
+  async function handleAddFood(food: ConfirmedFood): Promise<boolean> {
+    setError(null)
+    const result = await saveFood(food)
 
-    for (const food of foods) {
-      // Sequential on purpose — food_logs rows don't need a shared
-      // transaction, but sequential requests keep this simple and
-      // avoid surprising ordering in the saved list.
-      const success = await handleAddFood(food)
-      anySucceeded = anySucceeded || success
+    if (!result.ok) {
+      setError(result.error)
+      return false
     }
 
-    return anySucceeded
+    if (logUnavailable) {
+      reloadLog() // the list we hold isn't the whole day — read it back instead of summing a fragment.
+    } else {
+      loadRecentFoods()
+      setNextActionRefreshKey((key) => key + 1)
+    }
+    return true
+  }
+
+  async function handleAddFoods(foods: ConfirmedFood[]): Promise<SaveItemResult[]> {
+    setError(null)
+    const results: SaveItemResult[] = []
+
+    // Sequential on purpose: one row per item, no shared transaction, so
+    // each item gets its own outcome and the modal can retry only failures.
+    for (const food of foods) {
+      results.push(await saveFood(food))
+    }
+
+    if (results.some((result) => result.ok)) reloadLog()
+    return results
   }
 
   async function handleAddAgain(item: FoodHistoryItem) {
@@ -242,7 +277,7 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
           <h2 className="mt-1 text-2xl font-black text-mf-glass-text">{formatDateLabel(selectedDate)}</h2>
         </div>
 
-        {isToday ? <TrackFoodModal onAddFood={handleAddFood} onAddFoods={handleAddFoods} /> : null}
+        {isToday ? <TrackFoodModal onAddFood={handleAddFood} onAddFoods={handleAddFoods} onLogChanged={reloadLog} /> : null}
       </div>
 
       <DateNav
@@ -252,16 +287,33 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
         onNext={() => setSelectedDate((d) => addDaysIso(d, 1))}
       />
 
-      {error ? (
+      {error && !logUnavailable ? (
         <p className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">{error}</p>
+      ) : null}
+
+      {logUnavailable && !loadingDate ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3">
+          <p className="flex items-start gap-2 text-sm text-amber-200">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            This day&apos;s food log couldn&apos;t be loaded, so consumed and remaining totals are unknown — not zero.
+          </p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
+          >
+            <RotateCw className="size-3.5" />
+            Retry
+          </button>
+        </div>
       ) : null}
 
       <NutritionResultGlow>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MacroCard label="Calories" consumed={comparison.calories.consumed} target={comparison.calories.target} remaining={comparison.calories.remaining} unit="kcal" accent />
-        <MacroCard label="Protein" consumed={comparison.protein.consumed} target={comparison.protein.target} remaining={comparison.protein.remaining} unit="g" />
-        <MacroCard label="Carbs" consumed={comparison.carbs.consumed} target={comparison.carbs.target} remaining={comparison.carbs.remaining} unit="g" />
-        <MacroCard label="Fat" consumed={comparison.fat.consumed} target={comparison.fat.target} remaining={comparison.fat.remaining} unit="g" />
+        <MacroCard label="Calories" unavailable={logUnavailable} consumed={comparison.calories.consumed} target={comparison.calories.target} remaining={comparison.calories.remaining} unit="kcal" accent />
+        <MacroCard label="Protein" unavailable={logUnavailable} consumed={comparison.protein.consumed} target={comparison.protein.target} remaining={comparison.protein.remaining} unit="g" />
+        <MacroCard label="Carbs" unavailable={logUnavailable} consumed={comparison.carbs.consumed} target={comparison.carbs.target} remaining={comparison.carbs.remaining} unit="g" />
+        <MacroCard label="Fat" unavailable={logUnavailable} consumed={comparison.fat.consumed} target={comparison.fat.target} remaining={comparison.fat.remaining} unit="g" />
       </div>
       </NutritionResultGlow>
 
@@ -286,6 +338,13 @@ export function NutritionTracker({ initialEntries, target, initialDate }: Nutrit
             <Loader2 className="size-4 animate-spin" />
             Loading…
           </div>
+        ) : logUnavailable ? (
+          <EmptyState
+            glass
+            icon={AlertTriangle}
+            title="Food log unavailable"
+            description="We couldn't read this day's entries. Use Retry above — nothing has been assumed."
+          />
         ) : entries.length === 0 ? (
           <EmptyState
             glass
@@ -419,6 +478,7 @@ function MacroCard({
   remaining,
   unit,
   accent = false,
+  unavailable = false,
 }: {
   label: string
   consumed: number
@@ -426,6 +486,7 @@ function MacroCard({
   remaining: number
   unit: string
   accent?: boolean
+  unavailable?: boolean
 }) {
   return (
     <div
@@ -433,11 +494,13 @@ function MacroCard({
     >
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-mf-glass-text-muted">{label}</p>
       <p className={`mt-3 text-2xl font-black ${accent ? "text-mf-glass-brand" : "text-mf-glass-text"}`}>
-        <AnimatedNumber value={consumed} />
+        {unavailable ? "—" : <AnimatedNumber value={consumed} />}
         <span className="text-base font-semibold text-mf-glass-text-muted"> / {target} {unit}</span>
       </p>
       <p className="mt-2 text-xs text-mf-glass-text-muted">
-        {remaining >= 0 ? `${remaining} ${unit} remaining` : `${Math.abs(remaining)} ${unit} over target`}
+        {unavailable
+          ? "Unavailable — log not loaded"
+          : remaining >= 0 ? `${remaining} ${unit} remaining` : `${Math.abs(remaining)} ${unit} over target`}
       </p>
     </div>
   )

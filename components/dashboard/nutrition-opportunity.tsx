@@ -5,7 +5,8 @@ import type { DailyMacroTotals } from "@/lib/nutrition/food-log/types";
 
 export type NutritionOpportunityProps = {
   plan: NutritionPlan | null;
-  totals: DailyMacroTotals;
+  /** Null when today's food log could not be read. */
+  totals: DailyMacroTotals | null;
 };
 
 const CRAVING_SHORTCUTS = [
@@ -18,6 +19,25 @@ const CRAVING_SHORTCUTS = [
 export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps) {
   const targetCalories = plan?.target.calories ?? null;
   const targetProtein = plan?.target.protein ?? null;
+
+  if (!totals) {
+    return (
+      <article className="rounded-2xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Utensils className="size-4 text-emerald-400" />
+          <h3 className="text-sm font-bold uppercase tracking-wider text-mf-glass-text">
+            Nutrition Opportunity
+          </h3>
+        </div>
+        <p role="status" className="mt-4 text-sm text-mf-glass-text-muted">
+          Today&apos;s food log couldn&apos;t be loaded, so remaining calories and protein are unknown.{" "}
+          <Link href="/dashboard/nutrition" className="font-semibold text-mf-glass-brand hover:underline">
+            Open Food Log to retry
+          </Link>
+        </p>
+      </article>
+    );
+  }
 
   const remainingCalories = targetCalories !== null ? Math.max(0, targetCalories - totals.calories) : null;
   const remainingProtein = targetProtein !== null ? Math.max(0, targetProtein - Math.round(totals.protein)) : null;

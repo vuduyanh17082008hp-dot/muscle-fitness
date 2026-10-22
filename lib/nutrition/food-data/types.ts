@@ -88,10 +88,30 @@ export type NormalizedFood = {
 
 export type FoodSearchCategory = "raw" | "packaged" | "any"
 
+/**
+ * What one external provider actually did. "no_match" is only ever claimed
+ * when the provider answered; a timeout or error says nothing about whether
+ * the food exists.
+ */
+export type ProviderStatus = "results" | "no_match" | "timeout" | "error" | "unconfigured"
+
+/** Overall outcome of the external providers for one search or barcode lookup. */
+export type FoodSearchStatus = "results" | "no_match" | "provider_timeout" | "provider_error" | "invalid_input"
+
+export type ProviderOutcome<T> = { status: ProviderStatus; value: T }
+
+export function classifyProviderError(error: unknown): "timeout" | "error" {
+  const name = (error as { name?: unknown } | null)?.name
+  return name === "TimeoutError" || name === "AbortError" ? "timeout" : "error"
+}
+
 export type FoodSearchResult = {
   foods: NormalizedFood[]
   source: FoodSource
   /** True when an external API call could not be made or failed and a fallback was used instead. */
   usedFallback: boolean
   warning?: string
+  /** External-provider outcome; with usedFallback, `foods` are local data, not provider results. */
+  status: FoodSearchStatus
+  providers: Partial<Record<"usda" | "open-food-facts", ProviderStatus>>
 }

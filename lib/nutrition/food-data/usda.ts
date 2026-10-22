@@ -20,7 +20,7 @@ import "server-only"
  * whether to fall back to local data.
  */
 
-import type { FoodPreparationState, NormalizedFood } from "./types"
+import { classifyProviderError, type FoodPreparationState, type NormalizedFood, type ProviderOutcome } from "./types"
 
 const USDA_BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 
@@ -303,18 +303,24 @@ export async function searchFood(
   query: string,
   options: UsdaSearchOptions = {},
 ): Promise<NormalizedFood[]> {
+  return (await searchFoodWithStatus(query, options)).value
+}
+
+export async function searchFoodWithStatus(
+  query: string,
+  options: UsdaSearchOptions = {},
+): Promise<ProviderOutcome<NormalizedFood[]>> {
   const apiKey = getApiKey()
   const trimmedQuery = query.trim()
 
-  if (!apiKey || !trimmedQuery) {
-    return []
-  }
+  if (!apiKey) return { status: "unconfigured", value: [] }
+  if (!trimmedQuery) return { status: "no_match", value: [] }
 
   const preferRawFoodTypes = options.preferRawFoodTypes ?? true
   const limit = Math.min(Math.max(options.limit ?? 5, 1), 20)
   const cacheKey = `search:${trimmedQuery.toLowerCase()}:${preferRawFoodTypes}:${limit}`
   const cached = getCachedSearch(cacheKey)
-  if (cached) return cached
+  if (cached) return { status: "results", value: cached }
 
   const url = new URL(`${USDA_BASE_URL}/foods/search`)
   url.searchParams.set("api_key", apiKey)
@@ -332,13 +338,13 @@ export async function searchFood(
 
     if (!response.ok) {
       console.warn(`[USDA] search failed: HTTP ${response.status}`)
-      return []
+      return { status: "error", value: [] }
     }
 
     const data: unknown = await response.json()
 
     if (!isRecord(data) || !Array.isArray(data.foods)) {
-      return []
+      return { status: "error", value: [] }
     }
 
     const queryWords = trimmedQuery
@@ -368,10 +374,10 @@ export async function searchFood(
     }
 
     if (normalized.length > 0) setCachedSearch(cacheKey, normalized)
-    return normalized
+    return { status: normalized.length > 0 ? "results" : "no_match", value: normalized }
   } catch (error) {
     console.warn("[USDA] search error:", error)
-    return []
+    return { status: classifyProviderError(error), value: [] }
   }
 }
 

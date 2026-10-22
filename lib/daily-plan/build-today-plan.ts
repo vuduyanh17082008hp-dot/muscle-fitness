@@ -21,7 +21,8 @@ export type BuildTodayPlanInput = {
   hasCheckinToday: boolean;
   /** Null when the user has no nutrition target set — never defaulted to 0. */
   proteinTargetG: number | null;
-  proteinLoggedG: number;
+  /** Null when today's food log could not be read — the item is omitted, never treated as 0 g. */
+  proteinLoggedG: number | null;
   /** Optional — omitted entirely (rather than defaulted) when the caller hasn't computed adaptive state, so the workout item still renders correctly without it. */
   adaptive?: TodayAdaptiveContext;
 };
@@ -105,7 +106,7 @@ export function buildTodayPlan(input: BuildTodayPlanInput): DailyAction[] {
     });
   }
 
-  if (input.proteinTargetG !== null) {
+  if (input.proteinTargetG !== null && input.proteinLoggedG !== null) {
     const remaining = Math.max(
       0,
       Math.round(input.proteinTargetG - input.proteinLoggedG),

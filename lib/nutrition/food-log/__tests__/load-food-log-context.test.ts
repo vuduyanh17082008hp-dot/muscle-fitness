@@ -87,12 +87,20 @@ describe("loadFoodLogForDate — queries the correct canonical table", () => {
 
     expect(context.entries).toHaveLength(1);
     expect(context.entries[0].foodName).toBe("Chicken Rice");
-    expect(context.totals.calories).toBe(680);
+    expect(context.totals?.calories).toBe(680);
+  });
+
+  it("a successful empty day is a verified 0, not unavailable", async () => {
+    const supabase = fakeSupabase("food_logs", { data: [], error: null });
+    const context = await loadFoodLogForDate(supabase, "user-1", "2026-01-01");
+
+    expect(context.unavailable).toBeFalsy();
+    expect(context.totals).toEqual({ calories: 0, protein: 0, carbs: 0, fat: 0 });
   });
 });
 
 describe("loadFoodLogForDate — graceful degradation (never crashes the caller)", () => {
-  it("returns an empty, valid context instead of throwing if the table is unavailable", async () => {
+  it("a failed read is unavailable with null totals — never a fake 0 kcal day", async () => {
     const supabase = fakeSupabase("food_logs", {
       data: null,
       error: { message: "Could not find the table 'public.food_logs' in the schema cache" },
@@ -101,7 +109,7 @@ describe("loadFoodLogForDate — graceful degradation (never crashes the caller)
     const context = await loadFoodLogForDate(supabase, "user-1", "2026-01-01");
 
     expect(context.entries).toEqual([]);
-    expect(context.totals.calories).toBe(0);
+    expect(context.totals).toBeNull();
     expect(context.unavailable).toBe(true);
   });
 

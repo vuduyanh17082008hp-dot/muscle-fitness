@@ -24,7 +24,7 @@ import "server-only"
  *   section.
  */
 
-import type { FoodPreparationState, NormalizedFood } from "./types"
+import { classifyProviderError, type FoodPreparationState, type NormalizedFood, type ProviderOutcome } from "./types"
 import { fillMissingMacrosFromUsda, type PartialMacros } from "./estimate"
 
 const SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl"
@@ -130,12 +130,19 @@ export async function searchPackagedFood(
   query: string,
   limit = 5,
 ): Promise<NormalizedFood[]> {
+  return (await searchPackagedFoodWithStatus(query, limit)).value
+}
+
+export async function searchPackagedFoodWithStatus(
+  query: string,
+  limit = 5,
+): Promise<ProviderOutcome<NormalizedFood[]>> {
   const trimmedQuery = query.trim()
-  if (!trimmedQuery) return []
+  if (!trimmedQuery) return { status: "no_match", value: [] }
 
   const cacheKey = `search:${trimmedQuery.toLowerCase()}:${limit}`
   const cached = getCached<NormalizedFood[]>(cacheKey)
-  if (cached) return cached
+  if (cached) return { status: cached.length > 0 ? "results" : "no_match", value: cached }
 
   const url = new URL(SEARCH_URL)
   url.searchParams.set("search_terms", trimmedQuery)
@@ -151,17 +158,16 @@ export async function searchPackagedFood(
   try {
     const response = await fetchWithTimeout(url.toString())
 
+    // Failures are never cached: a provider outage must not read as "no such food" for the cache TTL.
     if (!response.ok) {
       console.warn(`[OpenFoodFacts] search failed: HTTP ${response.status}`)
-      setCached(cacheKey, [])
-      return []
+      return { status: "error", value: [] }
     }
 
     const data: unknown = await response.json()
 
     if (!isRecord(data) || !Array.isArray(data.products)) {
-      setCached(cacheKey, [])
-      return []
+      return { status: "error", value: [] }
     }
 
     const results: NormalizedFood[] = []
@@ -178,10 +184,10 @@ export async function searchPackagedFood(
     }
 
     setCached(cacheKey, results)
-    return results
+    return { status: results.length > 0 ? "results" : "no_match", value: results }
   } catch (error) {
     console.warn("[OpenFoodFacts] search error:", error)
-    return []
+    return { status: classifyProviderError(error), value: [] }
   }
 }
 
@@ -227,12 +233,16 @@ function extractPartialProduct(product: Record<string, unknown>): PartialProduct
 }
 
 export async function getProductByBarcode(barcode: string): Promise<NormalizedFood | null> {
+  return (await getProductByBarcodeWithStatus(barcode)).value
+}
+
+export async function getProductByBarcodeWithStatus(barcode: string): Promise<ProviderOutcome<NormalizedFood | null>> {
   const trimmedBarcode = barcode.trim()
-  if (!trimmedBarcode) return null
+  if (!trimmedBarcode) return { status: "no_match", value: null }
 
   const cacheKey = `barcode:${trimmedBarcode}`
   const cached = getCached<NormalizedFood | null>(cacheKey)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) return { status: cached ? "results" : "no_match", value: cached }
 
   const url = new URL(`${PRODUCT_URL_V3}/${encodeURIComponent(trimmedBarcode)}.json`)
   url.searchParams.set(
@@ -243,24 +253,30 @@ export async function getProductByBarcode(barcode: string): Promise<NormalizedFo
   try {
     const response = await fetchWithTimeout(url.toString())
 
+    // 404 is OFF's real "unknown product" answer; any other failure is an
+    // outage and is neither cached nor reported as not-found.
+    if (response.status === 404) {
+      setCached(cacheKey, null)
+      return { status: "no_match", value: null }
+    }
+
     if (!response.ok) {
       console.warn(`[OpenFoodFacts] barcode lookup failed: HTTP ${response.status}`)
-      setCached(cacheKey, null)
-      return null
+      return { status: "error", value: null }
     }
 
     const data: unknown = await response.json()
 
     if (!isRecord(data) || !isRecord(data.product)) {
       setCached(cacheKey, null)
-      return null
+      return { status: "no_match", value: null }
     }
 
     const partial = extractPartialProduct(data.product)
 
     if (!partial) {
       setCached(cacheKey, null)
-      return null
+      return { status: "no_match", value: null }
     }
 
     // Missing Macro Data fallback: fill gaps from a comparable USDA
@@ -269,7 +285,7 @@ export async function getProductByBarcode(barcode: string): Promise<NormalizedFo
 
     if (!estimation) {
       setCached(cacheKey, null)
-      return null
+      return { status: "no_match", value: null }
     }
 
     const normalized: NormalizedFood = {
@@ -292,9 +308,9 @@ export async function getProductByBarcode(barcode: string): Promise<NormalizedFo
     }
 
     setCached(cacheKey, normalized)
-    return normalized
+    return { status: "results", value: normalized }
   } catch (error) {
     console.warn("[OpenFoodFacts] barcode lookup error:", error)
-    return null
+    return { status: classifyProviderError(error), value: null }
   }
 }

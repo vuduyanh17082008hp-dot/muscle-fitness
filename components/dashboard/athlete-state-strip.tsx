@@ -4,9 +4,10 @@ import { HeartPulse, Flame, Beef, Scale } from "lucide-react";
 export type AthleteStateStripProps = {
   recoveryScore: number | null;
   recoveryStatus: string | null;
-  caloriesConsumed: number;
+  /** Null when today's food log could not be read — shown as unavailable, never 0. */
+  caloriesConsumed: number | null;
   caloriesTarget: number | null;
-  proteinConsumed: number;
+  proteinConsumed: number | null;
   proteinTarget: number | null;
   weightKg: number | null;
 };
@@ -61,6 +62,9 @@ export function AthleteStateStrip({
           <Flame className="size-3.5 text-amber-400" />
         </div>
         <div className="mt-2 flex items-baseline gap-1">
+          {caloriesConsumed === null ? (
+            <span className="text-xs font-semibold text-mf-glass-warning">Log unavailable</span>
+          ) : (<>
           <span className="text-lg font-black text-mf-glass-text">
             {caloriesConsumed.toLocaleString()}
           </span>
@@ -71,6 +75,7 @@ export function AthleteStateStrip({
           ) : (
             <span className="text-[10px] text-mf-glass-text-muted">kcal</span>
           )}
+          </>)}
         </div>
       </Link>
 
@@ -84,12 +89,16 @@ export function AthleteStateStrip({
           <Beef className="size-3.5 text-emerald-400" />
         </div>
         <div className="mt-2 flex items-baseline gap-1">
+          {proteinConsumed === null ? (
+            <span className="text-xs font-semibold text-mf-glass-warning">Log unavailable</span>
+          ) : (<>
           <span className="text-lg font-black text-mf-glass-text">{Math.round(proteinConsumed)}</span>
           {proteinTarget ? (
             <span className="text-[10px] text-mf-glass-text-muted">/ {proteinTarget}g</span>
           ) : (
             <span className="text-[10px] text-mf-glass-text-muted">g</span>
           )}
+          </>)}
         </div>
       </Link>
 

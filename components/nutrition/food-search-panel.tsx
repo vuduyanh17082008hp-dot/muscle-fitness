@@ -23,6 +23,7 @@ export function FoodSearchPanel({ mealType, onMealTypeChange, onConfirm, onClose
   const [query, setQuery] = useState("")
   const [state, setState] = useState<SearchState>("idle")
   const [results, setResults] = useState<NormalizedFood[]>([])
+  const [notice, setNotice] = useState<{ text: string; degraded: boolean } | null>(null)
   const [selected, setSelected] = useState<NormalizedFood | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -47,13 +48,17 @@ export function FoodSearchPanel({ mealType, onMealTypeChange, onConfirm, onClose
         const data = await response.json()
 
         if (!response.ok || !data.ok) {
+          setNotice(null)
           setState("error")
           return
         }
 
         const foods: NormalizedFood[] = data.foods ?? []
+        const degraded = data.status === "provider_timeout" || data.status === "provider_error"
         setResults(foods)
-        setState(foods.length > 0 ? "results" : "empty")
+        setNotice(data.warning ? { text: data.warning, degraded } : null)
+        // An outage with no fallback hit is "couldn't search", never "no matches".
+        setState(foods.length > 0 ? "results" : degraded ? "error" : "empty")
       } catch (error) {
         if ((error as Error).name === "AbortError") return
         setState("error")
@@ -102,6 +107,12 @@ export function FoodSearchPanel({ mealType, onMealTypeChange, onConfirm, onClose
         </div>
       ) : null}
 
+      {notice && effectiveState === "results" ? (
+        <p role="status" className={`rounded-xl border px-3 py-2 text-xs leading-5 ${notice.degraded ? "border-amber-400/30 bg-amber-400/5 text-amber-200" : "border-white/10 text-zinc-400"}`}>
+          {notice.text}
+        </p>
+      ) : null}
+
       {effectiveState === "empty" ? (
         <p className="py-8 text-center text-sm text-zinc-500">
           No matches found. Try a different term, or use Manual Entry.
@@ -110,7 +121,7 @@ export function FoodSearchPanel({ mealType, onMealTypeChange, onConfirm, onClose
 
       {effectiveState === "error" ? (
         <p className="py-8 text-center text-sm text-red-400">
-          Food lookup is temporarily unavailable. Try again, or use Manual Entry.
+          {notice?.degraded ? notice.text : "Food lookup is temporarily unavailable. Try again, or use Manual Entry."}
         </p>
       ) : null}
 

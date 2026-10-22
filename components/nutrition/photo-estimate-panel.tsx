@@ -1,10 +1,12 @@
 "use client"
 
 import { useId, useRef, useState } from "react"
-import { Camera, Loader2, Upload } from "lucide-react"
+import { AlertTriangle, Camera, Loader2, Upload } from "lucide-react"
 
 import { scaleMacrosToGrams } from "@/lib/nutrition/food-log-calculator"
 import { MEAL_TYPES, MEAL_TYPE_LABEL, type MealType } from "@/lib/nutrition/food-log/types"
+import type { FoodSearchStatus, NormalizedFood } from "@/lib/nutrition/food-data/types"
+import { reviewFoodMatch } from "@/lib/nutrition/photo-match-review"
 import type { ConfirmedFood } from "@/components/nutrition/types"
 
 type DetectedItem = {
@@ -12,13 +14,20 @@ type DetectedItem = {
   estimatedGrams: number
   detectionConfidence: "high" | "medium" | "low"
   notes?: string
-  groundedFood: {
-    name: string
-    source: ConfirmedFood["source"]
-    sourceId?: string | null
-    per100g: ConfirmedFood["per100g"]
-  } | null
+  groundedFood: NormalizedFood | null
+  candidates?: NormalizedFood[]
+  searchStatus?: FoodSearchStatus
 }
+
+type ReviewItem = DetectedItem & {
+  candidates: NormalizedFood[]
+  grams: number
+  included: boolean
+  /** Index into candidates the user has chosen; null when there is no usable match. */
+  matchIndex: number | null
+}
+
+const selectedFood = (item: ReviewItem) => (item.matchIndex === null ? null : item.candidates[item.matchIndex] ?? null)
 
 type PhotoEstimateApiResult =
   | { status: "unconfigured" }
@@ -45,7 +54,7 @@ export function PhotoEstimatePanel({
 }: PhotoEstimatePanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<PanelPhase>("idle")
-  const [items, setItems] = useState<Array<DetectedItem & { grams: number; included: boolean }>>([])
+  const [items, setItems] = useState<ReviewItem[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const mealSelectId = useId()
 
@@ -95,7 +104,16 @@ export function PhotoEstimatePanel({
       }
 
       setItems(
-        result.items.map((item) => ({ ...item, grams: item.estimatedGrams, included: item.groundedFood !== null })),
+        result.items.map((item) => {
+          const candidates = item.candidates?.length ? item.candidates : item.groundedFood ? [item.groundedFood] : []
+          return {
+            ...item,
+            candidates,
+            grams: item.estimatedGrams,
+            included: candidates.length > 0,
+            matchIndex: candidates.length > 0 ? 0 : null,
+          }
+        }),
       )
       setPhase("results")
     } catch {
@@ -108,24 +126,32 @@ export function PhotoEstimatePanel({
     setItems((current) => current.map((item, i) => (i === index ? { ...item, grams: Math.max(1, grams) } : item)))
   }
 
+  function chooseMatch(index: number, matchIndex: number) {
+    setItems((current) => current.map((item, i) => (i === index ? { ...item, matchIndex } : item)))
+  }
+
   function toggleIncluded(index: number) {
     setItems((current) => current.map((item, i) => (i === index ? { ...item, included: !item.included } : item)))
   }
 
   function handleConfirmAll() {
-    const confirmed: ConfirmedFood[] = items
-      .filter((item) => item.included && item.groundedFood)
-      .map((item) => ({
-        foodName: item.groundedFood!.name,
-        source: item.groundedFood!.source,
-        sourceId: item.groundedFood!.sourceId,
-        per100g: item.groundedFood!.per100g,
+    const confirmed: ConfirmedFood[] = items.flatMap((item) => {
+      const food = selectedFood(item)
+      if (!item.included || !food) return []
+      return [{
+        foodName: food.name,
+        brand: food.brand ?? null,
+        source: food.source,
+        sourceId: food.sourceId,
+        barcode: food.barcode ?? null,
+        per100g: food.per100g,
         quantityGrams: item.grams,
         mealType,
         isEstimated: true,
         estimationConfidence: item.detectionConfidence,
-        estimationReason: `Portion estimated from a photo (${item.detectionConfidence} confidence)${item.notes ? ` — ${item.notes}` : ""}.`,
-      }))
+        estimationReason: `Photo detected "${item.detectedName}" (${item.detectionConfidence} confidence), user-confirmed match "${food.name}" (${food.sourceLabel}, ${food.preparationState}); portion estimated${item.notes ? ` — ${item.notes}` : ""}.`,
+      }]
+    })
 
     if (confirmed.length > 0) {
       onConfirmMultiple(confirmed)
@@ -133,10 +159,10 @@ export function PhotoEstimatePanel({
   }
 
   const totals = items
-    .filter((item) => item.included && item.groundedFood)
+    .filter((item) => item.included && selectedFood(item))
     .reduce(
       (acc, item) => {
-        const scaled = scaleMacrosToGrams(item.groundedFood!.per100g, item.grams)
+        const scaled = scaleMacrosToGrams(selectedFood(item)!.per100g, item.grams)
         return {
           calories: acc.calories + scaled.calories,
           protein: acc.protein + scaled.protein,
@@ -230,36 +256,30 @@ export function PhotoEstimatePanel({
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-400">AI-detected meal</p>
 
           <ul className="space-y-3">
-            {items.map((item, index) => (
+            {items.map((item, index) => {
+              const food = selectedFood(item)
+              const flags = food ? reviewFoodMatch(item.detectedName, food, item.searchStatus) : []
+              return (
               <li key={`${item.detectedName}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={item.included}
-                        disabled={!item.groundedFood}
+                        disabled={!food}
                         onChange={() => toggleIncluded(index)}
                         className="size-4"
                       />
                       <span className="font-semibold capitalize text-white">{item.detectedName}</span>
                     </label>
                     <p className="mt-1 text-xs text-zinc-500">
-                      Confidence: {item.detectionConfidence}
+                      Detection confidence: {item.detectionConfidence}
                       {item.notes ? ` · ${item.notes}` : ""}
                     </p>
-                    {!item.groundedFood ? (
-                      <button
-                        type="button"
-                        onClick={() => onSwitchToManual(item.detectedName)}
-                        className="mt-1 text-xs font-semibold text-amber-400 underline underline-offset-4"
-                      >
-                        No nutrition match — add manually
-                      </button>
-                    ) : null}
                   </div>
 
-                  {item.groundedFood ? (
+                  {food ? (
                     <div className="flex shrink-0 items-center gap-1">
                       <span className="text-xs text-zinc-500">~</span>
                       <input
@@ -273,8 +293,58 @@ export function PhotoEstimatePanel({
                     </div>
                   ) : null}
                 </div>
+
+                {food ? (
+                  <div className="mt-3 border-t border-white/5 pt-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500">Nutrition from</p>
+                    <p className="mt-0.5 text-xs text-zinc-300">
+                      {food.name}
+                      {food.brand ? ` (${food.brand})` : ""}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {food.sourceLabel} · {food.preparationState} · {Math.round(food.per100g.calories)} kcal / 100 g
+                    </p>
+
+                    {flags.length > 0 ? (
+                      <ul className="mt-2 space-y-1">
+                        {flags.map((flag) => (
+                          <li key={flag.kind} className="flex items-start gap-1.5 text-xs text-amber-300">
+                            <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                            {flag.message}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+
+                    {item.candidates.length > 1 ? (
+                      <label className="mt-2 block">
+                        <span className="sr-only">Choose a different nutrition match for {item.detectedName}</span>
+                        <select
+                          value={item.matchIndex ?? 0}
+                          onChange={(event) => chooseMatch(index, Number(event.target.value))}
+                          className="h-9 w-full rounded-lg border border-white/10 bg-black/30 px-2 text-xs text-white"
+                        >
+                          {item.candidates.map((candidate, candidateIndex) => (
+                            <option key={candidate.id} value={candidateIndex}>
+                              {candidate.name} — {candidate.sourceLabel}, {candidate.preparationState}, {Math.round(candidate.per100g.calories)} kcal/100 g
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => onSwitchToManual(item.detectedName)}
+                  className="mt-2 text-xs font-semibold text-amber-400 underline underline-offset-4"
+                >
+                  {food ? "None of these — add manually" : "No nutrition match — add manually"}
+                </button>
               </li>
-            ))}
+              )
+            })}
           </ul>
 
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
@@ -288,7 +358,7 @@ export function PhotoEstimatePanel({
           <button
             type="button"
             onClick={handleConfirmAll}
-            disabled={!items.some((item) => item.included && item.groundedFood)}
+            disabled={!items.some((item) => item.included && selectedFood(item))}
             className="min-h-12 rounded-xl bg-amber-500 text-sm font-black uppercase tracking-wide text-black hover:bg-amber-400 disabled:opacity-40"
           >
             Confirm & Add

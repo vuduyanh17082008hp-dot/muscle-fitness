@@ -201,6 +201,7 @@ export default async function NutritionPlanPage() {
           <NutritionTracker
             initialEntries={foodLog.entries}
             initialDate={localDate}
+            initialUnavailable={foodLog.unavailable === true}
             target={{
               calories: target.calories,
               protein: target.protein,

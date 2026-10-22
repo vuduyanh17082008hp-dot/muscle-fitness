@@ -18,12 +18,23 @@ import type { MealType } from "@/lib/nutrition/food-log/types"
 
 type Mode = "menu" | "barcode" | "barcode_confirm" | "search" | "photo" | "manual" | "hawkerlens"
 
-type TrackFoodModalProps = {
-  onAddFood: (food: ConfirmedFood) => Promise<boolean>
-  onAddFoods: (foods: ConfirmedFood[]) => Promise<boolean>
+export type SaveItemResult = { ok: true } | { ok: false; error: string }
+
+/** What a multi-item save actually did — never collapsed into one success flag. */
+type MultiOutcome = {
+  saved: ConfirmedFood[]
+  failed: Array<{ food: ConfirmedFood; error: string }>
 }
 
-export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
+type TrackFoodModalProps = {
+  onAddFood: (food: ConfirmedFood) => Promise<boolean>
+  /** One result per input food, in order. */
+  onAddFoods: (foods: ConfirmedFood[]) => Promise<SaveItemResult[]>
+  /** Something was written outside onAddFood/onAddFoods (HawkerLens) — re-read the day. */
+  onLogChanged: () => void
+}
+
+export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged }: TrackFoodModalProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<Mode>("menu")
   const [mealType, setMealType] = useState<MealType>(() => suggestMealType())
@@ -33,15 +44,23 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
   const [savedFlash, setSavedFlash] = useState(false)
   const confirmLock = useRef(false)
   const pendingKey = useRef<string | null>(null)
-  const pendingKeys = useRef<string[] | null>(null)
+  const [multiOutcome, setMultiOutcome] = useState<MultiOutcome | null>(null)
 
   function reset() {
     setMode("menu")
     setScannedFood(null)
     setManualPrefillName(undefined)
+    setMultiOutcome(null)
     pendingKey.current = null
-    pendingKeys.current = null
     confirmLock.current = false
+  }
+
+  function flashAndClose() {
+    setSavedFlash(true)
+    setTimeout(() => {
+      setSavedFlash(false)
+      handleOpenChange(false)
+    }, 900)
   }
 
   function handleOpenChange(next: boolean) {
@@ -60,32 +79,36 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
 
     if (success) {
       pendingKey.current = null
-      setSavedFlash(true)
-      setTimeout(() => {
-        setSavedFlash(false)
-        handleOpenChange(false)
-      }, 900)
+      flashAndClose()
     }
   }
 
+  /**
+   * Saves each food under its own idempotency key. Keys travel with the food,
+   * so "Retry failed items" resends only the failures under the SAME keys —
+   * a request that actually committed before its response was lost comes back
+   * as the existing row instead of a duplicate.
+   */
   async function handleConfirmMultiple(foods: ConfirmedFood[]) {
     if (confirmLock.current) return
     confirmLock.current = true
-    pendingKeys.current ??= foods.map((food) => food.idempotencyKey ?? crypto.randomUUID())
+    const keyed = foods.map((food) => ({ ...food, idempotencyKey: food.idempotencyKey ?? crypto.randomUUID() }))
     setSaving(true)
-    const success = await onAddFoods(
-      foods.map((food, index) => ({ ...food, idempotencyKey: pendingKeys.current![index] })),
-    )
+    const results = await onAddFoods(keyed)
     setSaving(false)
     confirmLock.current = false
 
-    if (success) {
-      pendingKeys.current = null
-      setSavedFlash(true)
-      setTimeout(() => {
-        setSavedFlash(false)
-        handleOpenChange(false)
-      }, 900)
+    const saved = [...(multiOutcome?.saved ?? []), ...keyed.filter((_, index) => results[index]?.ok)]
+    const failed = keyed.flatMap((food, index) => {
+      const result = results[index]
+      return result?.ok ? [] : [{ food, error: result?.error ?? "Not saved." }]
+    })
+
+    if (failed.length === 0) {
+      setMultiOutcome(null)
+      flashAndClose()
+    } else {
+      setMultiOutcome({ saved, failed })
     }
   }
 
@@ -127,6 +150,12 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-sm text-mf-glass-text-muted">
               Saving…
             </div>
+          ) : multiOutcome ? (
+            <MultiOutcomePanel
+              outcome={multiOutcome}
+              onRetryFailed={() => void handleConfirmMultiple(multiOutcome.failed.map((item) => item.food))}
+              onDone={() => handleOpenChange(false)}
+            />
           ) : mode === "menu" ? (
             <div className="flex flex-col gap-3">
               <MenuButton icon={Barcode} label="Scan Barcode" onClick={() => setMode("barcode")} />
@@ -179,13 +208,8 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
             <HawkerLensPanel
               mealType={mealType}
               onMealTypeChange={setMealType}
-              onSaved={() => {
-                setSavedFlash(true)
-                setTimeout(() => {
-                  setSavedFlash(false)
-                  handleOpenChange(false)
-                }, 900)
-              }}
+              onLogChanged={onLogChanged}
+              onSaved={flashAndClose}
               onSwitchToPhotoEstimate={() => setMode("photo")}
               onClose={() => setMode("menu")}
             />
@@ -201,6 +225,69 @@ export function TrackFoodModal({ onAddFood, onAddFoods }: TrackFoodModalProps) {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  )
+}
+
+function MultiOutcomePanel({
+  outcome,
+  onRetryFailed,
+  onDone,
+}: {
+  outcome: MultiOutcome
+  onRetryFailed: () => void
+  onDone: () => void
+}) {
+  const partial = outcome.saved.length > 0
+
+  return (
+    <div role="alert" className="flex flex-col gap-4">
+      <div className="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4">
+        <p className="text-sm font-bold text-amber-300">
+          {partial
+            ? `Partially saved — ${outcome.saved.length} of ${outcome.saved.length + outcome.failed.length} items added`
+            : "Nothing was saved"}
+        </p>
+        <p className="mt-1 text-xs leading-5 text-zinc-400">
+          {partial
+            ? "Today's totals include only the items marked saved."
+            : "Today's totals are unchanged."}{" "}
+          Retrying resends only the failed items and can&apos;t create duplicates.
+        </p>
+      </div>
+
+      <ul className="space-y-2 text-sm">
+        {outcome.saved.map((food) => (
+          <li key={food.idempotencyKey} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+            <span className="truncate text-white">{food.foodName}</span>
+            <span className="shrink-0 text-xs font-bold text-emerald-400">Saved</span>
+          </li>
+        ))}
+        {outcome.failed.map(({ food, error }) => (
+          <li key={food.idempotencyKey} className="rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="truncate text-white">{food.foodName}</span>
+              <span className="shrink-0 text-xs font-bold text-red-400">Not saved</span>
+            </div>
+            <p className="mt-0.5 text-xs text-zinc-400">{error}</p>
+          </li>
+        ))}
+      </ul>
+
+      <button
+        type="button"
+        onClick={onRetryFailed}
+        className="min-h-12 rounded-xl bg-amber-500 text-sm font-black uppercase tracking-wide text-black hover:bg-amber-400"
+      >
+        Retry failed items ({outcome.failed.length})
+      </button>
+      <button
+        type="button"
+        onClick={onDone}
+        className="min-h-11 rounded-xl border border-white/10 text-sm font-semibold text-zinc-400 hover:bg-white/5"
+      >
+        {partial ? "Done — keep saved items only" : "Discard"}
+      </button>
+    </div>
   )
 }
 

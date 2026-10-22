@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest"
 import { expandUpcEToUpcA, normalizeBarcode } from "@/lib/nutrition/barcode"
 
 describe("normalizeBarcode", () => {
-  it("accepts a 13-digit EAN-13 code as-is", () => {
-    const result = normalizeBarcode("7622210951353")
-    expect(result).toEqual({ code: "7622210951353", format: "EAN-13" })
+  it("accepts a 13-digit EAN-13 code as-is (fixture check digit corrected: GS1 sum 91 → 9)", () => {
+    const result = normalizeBarcode("7622210951359")
+    expect(result).toEqual({ code: "7622210951359", format: "EAN-13" })
   })
 
   it("accepts an 8-digit EAN-8 code as-is", () => {
@@ -18,14 +18,14 @@ describe("normalizeBarcode", () => {
   })
 
   it("strips spaces and hyphens before validating", () => {
-    const result = normalizeBarcode(" 762-2210-951353 ")
-    expect(result).toEqual({ code: "7622210951353", format: "EAN-13" })
+    const result = normalizeBarcode(" 762-2210-951359 ")
+    expect(result).toEqual({ code: "7622210951359", format: "EAN-13" })
   })
 
   it("normalizes a 14-digit GTIN by trimming to 13 digits", () => {
-    const result = normalizeBarcode("07622210951353")
+    const result = normalizeBarcode("07622210951359")
     expect(result?.format).toBe("EAN-13")
-    expect(result?.code).toBe("7622210951353")
+    expect(result?.code).toBe("7622210951359")
   })
 
   it("expands a 6-digit UPC-E code to a 12-digit UPC-A code", () => {
@@ -70,3 +70,32 @@ it("validates explicit UPC-E check digits", () => {
   expect(expandUpcEToUpcA("04252615")).toBeNull();
   expect(expandUpcEToUpcA("0425261x")).toBeNull();
 });
+
+describe("normalizeBarcode — GS1 check digit (rejected before any provider lookup)", () => {
+  it.each([
+    ["7622210951359", "EAN-13"],
+    ["5000112637922", "EAN-13"],
+    ["96385074", "EAN-8"],
+    ["036000291452", "UPC-A"],
+    ["07622210951359", "EAN-13"],
+  ])("accepts valid %s", (code, format) => {
+    expect(normalizeBarcode(code)?.format).toBe(format)
+  })
+
+  it.each(["7622210951354", "5000112637923", "96385075", "036000291453", "07622210951354"])(
+    "rejects %s (wrong check digit)",
+    (code) => {
+      expect(normalizeBarcode(code)).toBeNull()
+    },
+  )
+
+  it("keeps scanner formatting tolerant: spaced/hyphenated valid codes still pass", () => {
+    expect(normalizeBarcode("0 36000 29145 2")).toEqual({ code: "036000291452", format: "UPC-A" })
+    expect(normalizeBarcode("0 36000 29145 3")).toBeNull()
+  })
+
+  it("an 8-digit code that is not a valid EAN-8 but is a valid UPC-E is expanded as UPC-E", () => {
+    expect(normalizeBarcode("04252614")).toEqual({ code: "042100005264", format: "UPC-E" })
+    expect(normalizeBarcode("04252615")).toBeNull()
+  })
+})

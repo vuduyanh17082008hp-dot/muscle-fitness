@@ -47,7 +47,7 @@ async function loadAiCoachSuggestions(
     ])
 
   const proteinTargetG = nutritionContext?.targets.protein ?? null
-  const proteinLoggedG = foodLog?.totals.protein ?? 0
+  const proteinLoggedG = foodLog?.totals?.protein ?? null
 
   return buildChatSuggestions({
     recoveryScore: recoveryContext?.todayScoreResult.score ?? null,
@@ -55,7 +55,7 @@ async function loadAiCoachSuggestions(
     todayWorkoutName: todaySession?.name ?? null,
     todayWorkoutSessionId: todaySession?.id ?? null,
     proteinRemainingG:
-      proteinTargetG !== null ? Math.max(0, Math.round(proteinTargetG - proteinLoggedG)) : null,
+      proteinTargetG !== null && proteinLoggedG !== null ? Math.max(0, Math.round(proteinTargetG - proteinLoggedG)) : null,
     proteinTargetG,
   })
 }

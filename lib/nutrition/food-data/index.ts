@@ -18,12 +18,14 @@ import "server-only"
  * this ordering.
  */
 
-import { isUsdaConfigured, searchFood as searchUsda } from "./usda"
-import { getProductByBarcode, searchPackagedFood } from "./open-food-facts"
+import { isUsdaConfigured, searchFoodWithStatus as searchUsda } from "./usda"
+import { getProductByBarcodeWithStatus, searchPackagedFoodWithStatus as searchPackagedFood } from "./open-food-facts"
 import { searchLocalFallback } from "./local-fallback"
-import type { FoodSearchCategory, FoodSearchResult, NormalizedFood } from "./types"
+import type { FoodSearchCategory, FoodSearchResult, FoodSearchStatus, NormalizedFood, ProviderStatus } from "./types"
 
-export type { FoodSearchCategory, FoodSearchResult, NormalizedFood } from "./types"
+export type { FoodSearchCategory, FoodSearchResult, FoodSearchStatus, NormalizedFood, ProviderStatus } from "./types"
+
+const PROVIDER_LABEL = { usda: "USDA", "open-food-facts": "Open Food Facts" } as const
 export { isUsdaConfigured } from "./usda"
 
 /**
@@ -57,49 +59,67 @@ export async function searchFood(
   const trimmedQuery = query.trim()
 
   if (!trimmedQuery) {
-    return { foods: [], source: "local", usedFallback: true, warning: "Empty query." }
+    return { foods: [], source: "local", usedFallback: true, warning: "Empty query.", status: "invalid_input", providers: {} }
   }
 
   const preferPackagedFirst = category === "packaged" || (category === "any" && looksPackaged(trimmedQuery))
+  const order: Array<keyof typeof PROVIDER_LABEL> = preferPackagedFirst
+    ? category === "packaged" ? ["open-food-facts"] : ["open-food-facts", "usda"]
+    : category === "raw" ? ["usda"] : ["usda", "open-food-facts"]
 
-  if (preferPackagedFirst) {
-    const packaged = await searchPackagedFood(trimmedQuery)
-    if (packaged.length > 0) {
-      return { foods: packaged, source: "open-food-facts", usedFallback: false }
-    }
+  const providers: FoodSearchResult["providers"] = {}
 
-    if (category !== "packaged") {
-      const raw = await searchUsda(trimmedQuery)
-      if (raw.length > 0) {
-        return { foods: raw, source: "usda", usedFallback: false }
-      }
-    }
-  } else {
-    const raw = await searchUsda(trimmedQuery)
-    if (raw.length > 0) {
-      return { foods: raw, source: "usda", usedFallback: false }
-    }
+  for (const provider of order) {
+    const outcome = provider === "usda" ? await searchUsda(trimmedQuery) : await searchPackagedFood(trimmedQuery)
+    providers[provider] = outcome.status
 
-    if (category !== "raw") {
-      const packaged = await searchPackagedFood(trimmedQuery)
-      if (packaged.length > 0) {
-        return { foods: packaged, source: "open-food-facts", usedFallback: false }
+    if (outcome.value.length > 0) {
+      // A provider tried earlier may have failed; the results are real, but say what was skipped.
+      const degraded = order.filter((p) => isFailure(providers[p]))
+      return {
+        foods: outcome.value,
+        source: provider,
+        usedFallback: false,
+        status: "results",
+        providers,
+        ...(degraded.length > 0
+          ? { warning: `${degraded.map((p) => PROVIDER_LABEL[p]).join(" and ")} didn't respond — results may be incomplete.` }
+          : {}),
       }
     }
   }
 
-  const local = searchLocalFallback(trimmedQuery)
+  const failed = order.filter((p) => isFailure(providers[p]))
+  const status: FoodSearchStatus = failed.some((p) => providers[p] === "timeout")
+    ? "provider_timeout"
+    : failed.length > 0
+      ? "provider_error"
+      : "no_match"
 
   return {
-    foods: local,
+    foods: searchLocalFallback(trimmedQuery),
     source: "local",
     usedFallback: true,
-    warning: isUsdaConfigured()
-      ? "No external match found — showing local fallback data."
-      : "USDA_FDC_API_KEY is not configured — showing local fallback data.",
+    status,
+    providers,
+    warning:
+      failed.length > 0
+        ? `${failed.map((p) => `${PROVIDER_LABEL[p]} ${providers[p] === "timeout" ? "timed out" : "returned an error"}`).join(" and ")} — this isn't a confirmed "no match". Showing local fallback data; try again shortly.`
+        : isUsdaConfigured()
+          ? "No external match found — showing local fallback data."
+          : "USDA_FDC_API_KEY is not configured — showing local fallback data.",
   }
 }
 
-export async function lookupBarcode(barcode: string): Promise<NormalizedFood | null> {
-  return getProductByBarcode(barcode)
+function isFailure(status: ProviderStatus | undefined): boolean {
+  return status === "timeout" || status === "error"
+}
+
+export async function lookupBarcode(
+  barcode: string,
+): Promise<{ status: Exclude<FoodSearchStatus, "invalid_input">; food: NormalizedFood | null }> {
+  const outcome = await getProductByBarcodeWithStatus(barcode)
+  const status =
+    outcome.status === "timeout" ? "provider_timeout" : outcome.status === "error" ? "provider_error" : outcome.value ? "results" : "no_match"
+  return { status, food: outcome.value }
 }

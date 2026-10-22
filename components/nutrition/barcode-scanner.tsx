@@ -47,6 +47,8 @@ export function BarcodeScanner({ onFound, onSwitchToSearch, onSwitchToManual, on
   const [torchOn, setTorchOn] = useState(false)
   const [torchSupported, setTorchSupported] = useState(false)
   const [notFoundCode, setNotFoundCode] = useState<string | null>(null)
+  const [manualError, setManualError] = useState<string | null>(null)
+  const [lookupError, setLookupError] = useState<string | null>(null)
 
   const lockedRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -69,6 +71,7 @@ export function BarcodeScanner({ onFound, onSwitchToSearch, onSwitchToManual, on
         const data = await response.json()
 
         if (!response.ok || !data.ok) {
+          setLookupError(data.error ?? null)
           setPhase("network_error")
           return
         }
@@ -82,6 +85,7 @@ export function BarcodeScanner({ onFound, onSwitchToSearch, onSwitchToManual, on
         setPhase("found")
         onFound(data.food as NormalizedFood, normalized.code)
       } catch {
+        setLookupError(null)
         setPhase("network_error")
       }
     },
@@ -167,6 +171,9 @@ export function BarcodeScanner({ onFound, onSwitchToSearch, onSwitchToManual, on
   }
 
   function handleUserMediaError(error: string | DOMException) {
+    // A lookup owns the panel (looking_up re-mounts <Webcam>); a late camera
+    // error must not overwrite its found / not-found / outage result.
+    if (lockedRef.current) return
     const name = typeof error === "string" ? error : error.name
 
     if (name === "NotAllowedError" || name === "PermissionDeniedError") {
@@ -198,7 +205,13 @@ export function BarcodeScanner({ onFound, onSwitchToSearch, onSwitchToManual, on
 
   function handleManualSubmit(event: React.FormEvent) {
     event.preventDefault()
-    void runLookup(manualCode)
+    // Camera frames that fail validation are silently skipped (misreads); typed input gets told why.
+    if (!normalizeBarcode(manualCode.trim())) {
+      setManualError("Not a valid barcode — check the digits (the last digit is a checksum).")
+      return
+    }
+    setManualError(null)
+    void runLookup(manualCode.trim())
   }
 
   const showCameraView = phase === "scanning" || phase === "requesting_camera" || phase === "looking_up"
@@ -285,8 +298,8 @@ export function BarcodeScanner({ onFound, onSwitchToSearch, onSwitchToManual, on
 
       {phase === "network_error" ? (
         <StatusPanel
-          title="Network error"
-          message="Food lookup is temporarily unavailable. Try again, or use search / manual entry."
+          title="Couldn't check this barcode"
+          message={`${lookupError ?? "Food lookup is temporarily unavailable."} This doesn't mean the product isn't in the database.`}
         />
       ) : null}
 
@@ -331,6 +344,11 @@ export function BarcodeScanner({ onFound, onSwitchToSearch, onSwitchToManual, on
             Look up
           </button>
         </div>
+        {manualError ? (
+          <p role="alert" className="text-xs text-red-400">
+            {manualError}
+          </p>
+        ) : null}
       </form>
 
       <button

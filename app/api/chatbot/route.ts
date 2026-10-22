@@ -1368,7 +1368,7 @@ async function loadUserContext(
 
       loadFoodLogForDate(supabase, userId, localDate).catch((error: unknown) => {
         console.warn("[DANTE FOOD LOG]", error);
-        return { date: localDate, entries: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 }, unavailable: true };
+        return { date: localDate, entries: [], totals: null, unavailable: true as const };
       }),
 
       loadDanteMemory(supabase, userId),
@@ -1425,7 +1425,7 @@ async function loadUserContext(
     todaySession,
     hasCheckinToday: recoveryContext ? recoveryContext.today !== null : false,
     proteinTargetG: nutritionContext.targets.protein,
-    proteinLoggedG: todayFoodLog.totals.protein,
+    proteinLoggedG: todayFoodLog.totals?.protein ?? null,
   });
 
   /* -----------------------------------------------------
@@ -1477,7 +1477,7 @@ async function loadUserContext(
     chatInsight = buildNutritionInsight({
       hasTarget: nutritionContext.plan !== null,
       proteinTargetG: nutritionContext.targets.protein,
-      proteinConsumedG: todayFoodLog.totals.protein,
+      proteinConsumedG: todayFoodLog.totals?.protein ?? null,
     });
   }
 

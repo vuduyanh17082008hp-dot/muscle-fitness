@@ -21,7 +21,7 @@ beforeEach(() => {
 
 describe("food log calendar validation", () => {
   it("returns 503 when authoritative totals cannot be loaded", async () => {
-    vi.mocked(loadFoodLogForDate).mockResolvedValueOnce({ date: "2026-09-15", entries: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 }, unavailable: true });
+    vi.mocked(loadFoodLogForDate).mockResolvedValueOnce({ date: "2026-09-15", entries: [], totals: null, unavailable: true });
     const response = await GET(new Request("http://localhost/api/nutrition/log"));
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ ok: false });

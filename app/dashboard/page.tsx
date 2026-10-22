@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
-import { computeDailyTotals } from "@/lib/nutrition/food-log/totals";
 import { loadReadinessForUser } from "@/lib/dante-core/server/load-readiness-for-user";
 import { getOrBuildDailyIntelligence, type DailyIntelligence } from "@/lib/dante-core/daily-intelligence";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
@@ -150,7 +149,8 @@ export default async function DashboardPage() {
   const foodLog = unwrap(foodLogResult, "loadFoodLogForDate") ?? {
     date: localDate,
     entries: [],
-    totals: computeDailyTotals([]),
+    totals: null,
+    unavailable: true as const,
   };
   const todaySession = unwrap(todaySessionResult, "loadTodaySession");
   const plannedDay = unwrap(plannedDayResult, "loadPlannedDay");
@@ -246,7 +246,7 @@ export default async function DashboardPage() {
     });
   }
 
-  if (nutritionTargets?.protein) {
+  if (nutritionTargets?.protein && foodLog.totals) {
     const proteinRemaining = Math.max(0, nutritionTargets.protein - Math.round(foodLog.totals.protein));
     if (proteinRemaining > 0 && foodLog.totals.protein > 0) {
       whatMattersItems.push({
@@ -300,9 +300,9 @@ export default async function DashboardPage() {
           <AthleteStateStrip
             recoveryScore={recoveryContext?.todayScoreResult.score ?? null}
             recoveryStatus={recoveryContext?.todayScoreResult.status ?? null}
-            caloriesConsumed={foodLog.totals.calories}
+            caloriesConsumed={foodLog.totals?.calories ?? null}
             caloriesTarget={nutritionTargets?.calories ?? null}
-            proteinConsumed={foodLog.totals.protein}
+            proteinConsumed={foodLog.totals?.protein ?? null}
             proteinTarget={nutritionTargets?.protein ?? null}
             weightKg={athleteState?.profile.weightKg ?? null}
           />

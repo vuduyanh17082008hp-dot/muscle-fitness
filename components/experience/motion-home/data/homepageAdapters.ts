@@ -130,7 +130,7 @@ async function loadNutritionPreview(
 
     const target = nutritionContext.targets.protein;
 
-    if (!nutritionContext.plan || target === null) {
+    if (!nutritionContext.plan || target === null || !foodLog.totals) {
       return { ...FALLBACK_VIEW_MODEL.nutrition, hasLiveTarget: false };
     }
 

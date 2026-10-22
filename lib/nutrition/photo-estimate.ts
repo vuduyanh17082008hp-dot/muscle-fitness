@@ -14,7 +14,7 @@ import "server-only"
 
 import { identifyFoodsInImage, isVisionConfigured } from "@/lib/ai/vision-client"
 import { searchFood } from "@/lib/nutrition/food-data"
-import type { NormalizedFood } from "@/lib/nutrition/food-data/types"
+import type { FoodSearchStatus, NormalizedFood } from "@/lib/nutrition/food-data/types"
 import { scaleMacrosToGrams, type ScaledMacros } from "@/lib/nutrition/food-log-calculator"
 
 export type PhotoEstimateItem = {
@@ -26,6 +26,10 @@ export type PhotoEstimateItem = {
   /** The grounding database match, or null if nothing comparable was found (spec: "user can add manually"). */
   groundedFood: NormalizedFood | null
   scaledMacros: ScaledMacros | null
+  /** Other records the same search returned (groundedFood first) — the user can switch before logging. */
+  candidates: NormalizedFood[]
+  /** External-provider outcome of the grounding search; a failure means better matches may exist. */
+  searchStatus: FoodSearchStatus
 }
 
 export type PhotoEstimateResult =
@@ -61,6 +65,8 @@ export async function estimateMealFromPhoto(imageDataUrl: string): Promise<Photo
         notes: item.notes,
         groundedFood: bestMatch,
         scaledMacros: bestMatch ? scaleMacrosToGrams(bestMatch.per100g, item.estimatedGrams) : null,
+        candidates: searchResult.foods.slice(0, 5),
+        searchStatus: searchResult.status,
       }
     }),
   )
