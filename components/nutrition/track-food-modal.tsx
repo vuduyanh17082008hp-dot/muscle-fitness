@@ -15,16 +15,17 @@ import { HawkerLensPanel } from "@/components/nutrition/hawkerlens-panel"
 import type { ConfirmedFood } from "@/components/nutrition/types"
 import type { NormalizedFood } from "@/lib/nutrition/food-data/types"
 import type { MealType } from "@/lib/nutrition/food-log/types"
+import {
+  describeMultiOutcome,
+  isCompleteOutcome,
+  mergeMultiOutcome,
+  type MultiOutcome as FoodLogMultiOutcome,
+  type SaveItemResult,
+} from "@/lib/nutrition/food-log/client-save"
 
 type Mode = "menu" | "barcode" | "barcode_confirm" | "search" | "photo" | "manual" | "hawkerlens"
 
-export type SaveItemResult = { ok: true } | { ok: false; error: string }
-
-/** What a multi-item save actually did — never collapsed into one success flag. */
-type MultiOutcome = {
-  saved: ConfirmedFood[]
-  failed: Array<{ food: ConfirmedFood; error: string }>
-}
+type MultiOutcome = FoodLogMultiOutcome<ConfirmedFood>
 
 type TrackFoodModalProps = {
   onAddFood: (food: ConfirmedFood) => Promise<boolean>
@@ -32,9 +33,11 @@ type TrackFoodModalProps = {
   onAddFoods: (foods: ConfirmedFood[]) => Promise<SaveItemResult[]>
   /** Something was written outside onAddFood/onAddFoods (HawkerLens) — re-read the day. */
   onLogChanged: () => void
+  /** Every dismissal path (X, Escape, overlay, Discard/Done, success) — closing never cancels a write that may have landed. */
+  onClosed?: () => void
 }
 
-export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged }: TrackFoodModalProps) {
+export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged, onClosed }: TrackFoodModalProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<Mode>("menu")
   const [mealType, setMealType] = useState<MealType>(() => suggestMealType())
@@ -65,7 +68,10 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged }: TrackFoo
 
   function handleOpenChange(next: boolean) {
     setOpen(next)
-    if (!next) reset()
+    if (!next) {
+      reset()
+      onClosed?.()
+    }
   }
 
   async function handleConfirm(food: ConfirmedFood) {
@@ -85,7 +91,7 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged }: TrackFoo
 
   /**
    * Saves each food under its own idempotency key. Keys travel with the food,
-   * so "Retry failed items" resends only the failures under the SAME keys —
+   * so a retry resends only failed / unconfirmed items under the SAME keys —
    * a request that actually committed before its response was lost comes back
    * as the existing row instead of a duplicate.
    */
@@ -98,17 +104,12 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged }: TrackFoo
     setSaving(false)
     confirmLock.current = false
 
-    const saved = [...(multiOutcome?.saved ?? []), ...keyed.filter((_, index) => results[index]?.ok)]
-    const failed = keyed.flatMap((food, index) => {
-      const result = results[index]
-      return result?.ok ? [] : [{ food, error: result?.error ?? "Not saved." }]
-    })
-
-    if (failed.length === 0) {
+    const outcome = mergeMultiOutcome(multiOutcome?.saved ?? [], keyed, results)
+    if (isCompleteOutcome(outcome)) {
       setMultiOutcome(null)
       flashAndClose()
     } else {
-      setMultiOutcome({ saved, failed })
+      setMultiOutcome(outcome)
     }
   }
 
@@ -153,7 +154,9 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged }: TrackFoo
           ) : multiOutcome ? (
             <MultiOutcomePanel
               outcome={multiOutcome}
-              onRetryFailed={() => void handleConfirmMultiple(multiOutcome.failed.map((item) => item.food))}
+              onRetryFailed={() =>
+                void handleConfirmMultiple([...multiOutcome.unknown, ...multiOutcome.failed].map((item) => item.food))
+              }
               onDone={() => handleOpenChange(false)}
             />
           ) : mode === "menu" ? (
@@ -237,22 +240,14 @@ function MultiOutcomePanel({
   onRetryFailed: () => void
   onDone: () => void
 }) {
-  const partial = outcome.saved.length > 0
+  const copy = describeMultiOutcome(outcome)
+  const retryCount = outcome.failed.length + outcome.unknown.length
 
   return (
     <div role="alert" className="flex flex-col gap-4">
       <div className="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4">
-        <p className="text-sm font-bold text-amber-300">
-          {partial
-            ? `Partially saved — ${outcome.saved.length} of ${outcome.saved.length + outcome.failed.length} items added`
-            : "Nothing was saved"}
-        </p>
-        <p className="mt-1 text-xs leading-5 text-zinc-400">
-          {partial
-            ? "Today's totals include only the items marked saved."
-            : "Today's totals are unchanged."}{" "}
-          Retrying resends only the failed items and can&apos;t create duplicates.
-        </p>
+        <p className="text-sm font-bold text-amber-300">{copy.title}</p>
+        <p className="mt-1 text-xs leading-5 text-zinc-400">{copy.detail}</p>
       </div>
 
       <ul className="space-y-2 text-sm">
@@ -271,6 +266,15 @@ function MultiOutcomePanel({
             <p className="mt-0.5 text-xs text-zinc-400">{error}</p>
           </li>
         ))}
+        {outcome.unknown.map(({ food, error }) => (
+          <li key={food.idempotencyKey} className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="truncate text-white">{food.foodName}</span>
+              <span className="shrink-0 text-xs font-bold text-amber-300">Not confirmed</span>
+            </div>
+            <p className="mt-0.5 text-xs text-zinc-400">{error}</p>
+          </li>
+        ))}
       </ul>
 
       <button
@@ -278,14 +282,14 @@ function MultiOutcomePanel({
         onClick={onRetryFailed}
         className="min-h-12 rounded-xl bg-amber-500 text-sm font-black uppercase tracking-wide text-black hover:bg-amber-400"
       >
-        Retry failed items ({outcome.failed.length})
+        {outcome.unknown.length > 0 ? `Retry / confirm items (${retryCount})` : `Retry failed items (${retryCount})`}
       </button>
       <button
         type="button"
         onClick={onDone}
         className="min-h-11 rounded-xl border border-white/10 text-sm font-semibold text-zinc-400 hover:bg-white/5"
       >
-        {partial ? "Done — keep saved items only" : "Discard"}
+        {copy.dismissLabel}
       </button>
     </div>
   )

@@ -3,7 +3,8 @@ import { z } from "zod"
 
 import { createClient } from "@/lib/supabase/server"
 import { loadFoodLogForDate, resolveLocalToday } from "@/lib/nutrition/food-log/load-food-log-context"
-import { createFoodLog } from "@/lib/nutrition/food-log/mutations"
+import { createFoodLog, findFoodLogByIdempotencyKey } from "@/lib/nutrition/food-log/mutations"
+import { isIdempotencyKey } from "@/lib/nutrition/food-log/idempotency-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -60,6 +61,20 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url)
+
+  // ?idempotencyKey=<uuid>: did a save whose response was lost actually commit? Read-only, own rows only.
+  const idempotencyKey = url.searchParams.get("idempotencyKey")
+  if (idempotencyKey !== null) {
+    if (!isIdempotencyKey(idempotencyKey)) {
+      return NextResponse.json({ ok: false, error: "Invalid idempotency key." }, { status: 400 })
+    }
+    const lookup = await findFoodLogByIdempotencyKey(supabase, user.id, idempotencyKey)
+    if (!lookup.ok) {
+      return NextResponse.json({ ok: false, error: "Food log is temporarily unavailable." }, { status: 503 })
+    }
+    return NextResponse.json({ ok: true, entry: lookup.entry })
+  }
+
   const requestedDate = url.searchParams.get("date")
   const today = await resolveLocalToday(supabase, user.id)
   if (requestedDate !== null && !isSupportedFoodLogViewDate(requestedDate, today)) {

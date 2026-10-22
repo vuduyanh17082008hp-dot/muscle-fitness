@@ -199,6 +199,7 @@ export default async function NutritionPlanPage() {
       <div id="today" className="scroll-mt-24">
         <NutritionSectionReveal>
           <NutritionTracker
+            userId={user.id}
             initialEntries={foodLog.entries}
             initialDate={localDate}
             initialUnavailable={foodLog.unavailable === true}

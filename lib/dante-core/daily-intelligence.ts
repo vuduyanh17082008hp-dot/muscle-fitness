@@ -76,14 +76,21 @@ async function resolveTrainingFocus(
   return (data[0] as { name: string | null }).name;
 }
 
+/**
+ * Always read live, never from the cached row: food-log edits/deletes don't
+ * trigger a recompute, and a failed current read must surface as null, not
+ * as the last cached percentage.
+ */
 async function resolveNutritionAdherence(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<number | null> {
-  const [nutritionContext, foodLog] = await Promise.all([
+  const loaded = await Promise.all([
     loadNutritionContext(supabase, userId),
     loadFoodLogForDate(supabase, userId),
-  ]);
+  ]).catch(() => null);
+  if (!loaded) return null;
+  const [nutritionContext, foodLog] = loaded;
 
   const targetCalories = nutritionContext.targets.calories;
 
@@ -94,7 +101,11 @@ async function resolveNutritionAdherence(
   return round((foodLog.totals.calories / targetCalories) * 100);
 }
 
-function deterministicNarrative(intel: Omit<DailyIntelligence, "narrative" | "generatedAt">): string {
+const NARRATIVE_INTAKE_CLAIM = /%|calori|kcal|nutrition|intake|protein|carb|eaten|meal/i;
+
+function deterministicNarrative(
+  intel: Omit<DailyIntelligence, "narrative" | "generatedAt" | "nutritionAdherencePercent">,
+): string {
   const parts: string[] = [];
 
   if (intel.readinessScore !== null) {
@@ -117,15 +128,13 @@ function deterministicNarrative(intel: Omit<DailyIntelligence, "narrative" | "ge
     );
   }
 
-  if (intel.nutritionAdherencePercent !== null) {
-    parts.push(`Nutrition is at ${intel.nutritionAdherencePercent}% of today's calorie target so far.`);
-  }
-
+  // No intake sentence: the narrative is cached for the day and would outlive
+  // food-log edits and failed reads. Live nutrition is shown by its own card.
   return parts.join(" ");
 }
 
 async function generateNarrative(
-  intel: Omit<DailyIntelligence, "narrative" | "generatedAt">,
+  intel: Omit<DailyIntelligence, "narrative" | "generatedAt" | "nutritionAdherencePercent">,
 ): Promise<string> {
   const fallback = deterministicNarrative(intel);
 
@@ -164,13 +173,12 @@ export async function buildDailyIntelligence(
     summaryDate: day.localDate,
     readinessScore: readiness.readinessScore,
     trainingFocus,
-    nutritionAdherencePercent,
     recoveryStatus: recoveryContext.todayScoreResult.status,
   };
 
   const narrative = await generateNarrative(base);
 
-  return { ...base, narrative, generatedAt: now.toISOString() };
+  return { ...base, nutritionAdherencePercent, narrative, generatedAt: now.toISOString() };
 }
 
 /**
@@ -235,13 +243,17 @@ export async function getOrBuildDailyIntelligence(
     .maybeSingle();
 
   if (data) {
-    return {
+    const cached = {
       summaryDate: data.summary_date,
       readinessScore: data.readiness_score,
       trainingFocus: data.training_focus,
-      nutritionAdherencePercent: data.nutrition_adherence_percent,
       recoveryStatus: data.recovery_status,
-      narrative: data.narrative,
+    };
+    return {
+      ...cached,
+      nutritionAdherencePercent: await resolveNutritionAdherence(supabase, userId),
+      // Rows cached before intake left the narrative may still state a (now stale) intake figure.
+      narrative: NARRATIVE_INTAKE_CLAIM.test(data.narrative ?? "") ? deterministicNarrative(cached) : data.narrative,
       generatedAt: data.generated_at,
     };
   }

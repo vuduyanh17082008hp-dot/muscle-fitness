@@ -17,7 +17,7 @@ vi.mock("@/lib/nutrition/food-data/open-food-facts", () => ({ getProductByBarcod
 import { emitEvent } from "@/lib/events/emit"
 import { getProductByBarcode } from "@/lib/nutrition/food-data/open-food-facts"
 import { getFoodById } from "@/lib/nutrition/food-data/usda"
-import { createFoodLog, deleteFoodLog, updateFoodLogQuantity } from "@/lib/nutrition/food-log/mutations"
+import { createFoodLog, deleteFoodLog, findFoodLogByIdempotencyKey, updateFoodLogQuantity } from "@/lib/nutrition/food-log/mutations"
 
 const KEY_A = "11111111-1111-4111-8111-111111111111"
 const KEY_B = "22222222-2222-4222-8222-222222222222"
@@ -617,5 +617,30 @@ describe("createFoodLog provenance trust boundary", () => {
     const { client, rows } = createFakeSupabase()
     await createFoodLog(client as never, USER_ID, { ...base, foodName: "Draft", source: "local", sourceId: "meal:abc", per100g: { calories: 150, protein: 12, carbs: 15, fat: 4 }, serverComputedProfile: true })
     expect(stored(rows)).toMatchObject({ source: "local", is_estimated: false })
+  })
+})
+
+describe("findFoodLogByIdempotencyKey (lost-response reconciliation)", () => {
+  const stub = (result: { data: unknown; error: unknown }, seen: Array<[string, string]> = []) =>
+    ({
+      from: () => {
+        const chain = {
+          select: () => chain,
+          eq: (column: string, value: string) => (seen.push([column, value]), chain),
+          maybeSingle: async () => result,
+        }
+        return chain
+      },
+    }) as never
+
+  it("scopes the read to the authenticated user and the key", async () => {
+    const seen: Array<[string, string]> = []
+    await findFoodLogByIdempotencyKey(stub({ data: null, error: null }, seen), "user-1", KEY_A)
+    expect(seen).toEqual([["user_id", "user-1"], ["idempotency_key", KEY_A]])
+  })
+
+  it("distinguishes 'no row' from 'read failed' — a failed read proves nothing", async () => {
+    expect(await findFoodLogByIdempotencyKey(stub({ data: null, error: null }), "user-1", KEY_A)).toEqual({ ok: true, entry: null })
+    expect(await findFoodLogByIdempotencyKey(stub({ data: null, error: { message: "timeout" } }), "user-1", KEY_A)).toEqual({ ok: false })
   })
 })

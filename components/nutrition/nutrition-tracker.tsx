@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Pencil, RotateCw, Trash2, UtensilsCrossed } from "lucide-react"
 
-import { TrackFoodModal, type SaveItemResult } from "@/components/nutrition/track-food-modal"
+import { TrackFoodModal } from "@/components/nutrition/track-food-modal"
+import {
+  classifyRecheck,
+  lookupFoodLogByKey,
+  readPendingSaves,
+  saveFoodLogWithReconcile,
+  writePendingSaves,
+  type SaveItemResult,
+} from "@/lib/nutrition/food-log/client-save"
 import { NextMealCard } from "@/components/nutrition/next-meal-card"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { AnimatedNumber } from "@/components/ui/animated-number"
@@ -28,9 +36,14 @@ type NutritionTrackerProps = {
   initialDate: string
   /** The server's read of this day failed — totals are unknown, not zero. */
   initialUnavailable?: boolean
+  /** Scopes the per-tab pending-save record, so another account in this tab never inherits it. */
+  userId: string
 }
 
-export function NutritionTracker({ initialEntries, target, initialDate, initialUnavailable = false }: NutritionTrackerProps) {
+/** foodName is null for a save restored after a refresh — only its key was kept. */
+type UnconfirmedSave = { key: string; foodName: string | null; sentAt: number }
+
+export function NutritionTracker({ initialEntries, target, initialDate, initialUnavailable = false, userId }: NutritionTrackerProps) {
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [entries, setEntries] = useState<FoodLogEntry[]>(initialEntries)
   // While true, `entries` is not the day's log and must never be summed into totals.
@@ -48,6 +61,9 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
   const [recentFoods, setRecentFoods] = useState<FoodHistoryItem[]>([])
   const [frequentFoods, setFrequentFoods] = useState<FoodHistoryItem[]>([])
   const [nextActionRefreshKey, setNextActionRefreshKey] = useState(0)
+  // Saves sent today whose commit couldn't be confirmed — totals aren't verified while any remain.
+  const [unconfirmed, setUnconfirmed] = useState<UnconfirmedSave[]>([])
+  const totalsUnverified = unconfirmed.length > 0 && selectedDate === initialDate
 
   const isToday = selectedDate === todayIso()
 
@@ -122,37 +138,67 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     loadRecentFoods()
   }, [loadRecentFoods])
 
+  function forgetPending(keys: Set<string>) {
+    setUnconfirmed((current) => current.filter((item) => !keys.has(item.key)))
+    writePendingSaves(userId, readPendingSaves(userId).filter((p) => !keys.has(p.key)))
+  }
+
   async function saveFood(food: ConfirmedFood): Promise<SaveItemResult> {
     const idempotencyKey = food.idempotencyKey ?? crypto.randomUUID()
+    const sentAt = Date.now()
+    // Recorded BEFORE sending, so a refresh mid-request still re-checks this key on the next load.
+    writePendingSaves(userId, [...readPendingSaves(userId).filter((p) => p.key !== idempotencyKey), { key: idempotencyKey, logDate: initialDate, sentAt }])
+    const result = await saveFoodLogWithReconcile({ ...food, idempotencyKey })
 
-    try {
-      const response = await fetch("/api/nutrition/log", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...food, idempotencyKey }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok || !data.ok) {
-        return { ok: false, error: data.error ?? "Unable to save this food." }
-      }
-
-      const entry = data.entry as FoodLogEntry
+    if (result.status === "saved") {
+      const entry = result.entry
       // An idempotent replay returns the row that was already saved — never show it twice.
       setEntries((current) => (current.some((e) => e.id === entry.id) ? current : [...current, entry]))
-      return { ok: true }
-    } catch {
-      return { ok: false, error: "Network error — unable to save this food." }
     }
+    if (result.status === "unknown") {
+      setUnconfirmed((current) =>
+        current.some((item) => item.key === idempotencyKey) ? current : [...current, { key: idempotencyKey, foodName: food.foodName, sentAt }],
+      )
+    } else {
+      forgetPending(new Set([idempotencyKey]))
+    }
+    return result
   }
+
+  /**
+   * Read-only re-check of saves whose outcome is unknown. Runs on mount (saves
+   * left pending by a refresh), on demand, and when the Track Food modal
+   * closes — never on a timer, never re-sends a write.
+   */
+  async function recheckUnconfirmed(pending: UnconfirmedSave[] = unconfirmed) {
+    if (pending.length === 0) return
+    const checks = await Promise.all(pending.map((item) => lookupFoodLogByKey(item.key)))
+    const settled = new Set(pending.filter((item, index) => classifyRecheck(item.sentAt, checks[index]) !== "unknown").map((item) => item.key))
+    if (settled.size > 0) forgetPending(settled)
+    reloadLog()
+  }
+
+  useEffect(() => {
+    const all = readPendingSaves(userId)
+    const today = all.filter((p) => p.logDate === initialDate)
+    if (today.length !== all.length) writePendingSaves(userId, today) // other days can't be on this view
+    if (today.length === 0) return
+    const restored = today.map((p) => ({ key: p.key, foodName: null, sentAt: p.sentAt }))
+    void Promise.resolve().then(() => {
+      setUnconfirmed(restored)
+      return recheckUnconfirmed(restored)
+    })
+    // mount-only: re-entry recovery for saves a refresh/navigation left unresolved
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleAddFood(food: ConfirmedFood): Promise<boolean> {
     setError(null)
     const result = await saveFood(food)
 
-    if (!result.ok) {
+    if (result.status !== "saved") {
       setError(result.error)
+      if (result.status === "unknown") reloadLog()
       return false
     }
 
@@ -175,7 +221,8 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
       results.push(await saveFood(food))
     }
 
-    if (results.some((result) => result.ok)) reloadLog()
+    // An unknown item may have committed too — re-read rather than trust local entries.
+    if (results.some((result) => result.status !== "failed")) reloadLog()
     return results
   }
 
@@ -277,7 +324,14 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
           <h2 className="mt-1 text-2xl font-black text-mf-glass-text">{formatDateLabel(selectedDate)}</h2>
         </div>
 
-        {isToday ? <TrackFoodModal onAddFood={handleAddFood} onAddFoods={handleAddFoods} onLogChanged={reloadLog} /> : null}
+        {isToday ? (
+          <TrackFoodModal
+            onAddFood={handleAddFood}
+            onAddFoods={handleAddFoods}
+            onLogChanged={reloadLog}
+            onClosed={() => void recheckUnconfirmed()}
+          />
+        ) : null}
       </div>
 
       <DateNav
@@ -308,12 +362,32 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
         </div>
       ) : null}
 
+      {totalsUnverified && !logUnavailable && !loadingDate ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3">
+          <p className="flex items-start gap-2 text-sm text-amber-200">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            {unconfirmed.length === 1
+              ? `Saving ${unconfirmed[0].foodName ? `"${unconfirmed[0].foodName}"` : "a food"} couldn't be confirmed — it may already be logged.`
+              : `${unconfirmed.length} food saves couldn't be confirmed — they may already be logged.`}{" "}
+            Totals below are unverified until the server confirms.
+          </p>
+          <button
+            type="button"
+            onClick={() => void recheckUnconfirmed()}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
+          >
+            <RotateCw className="size-3.5" />
+            Check again
+          </button>
+        </div>
+      ) : null}
+
       <NutritionResultGlow>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MacroCard label="Calories" unavailable={logUnavailable} consumed={comparison.calories.consumed} target={comparison.calories.target} remaining={comparison.calories.remaining} unit="kcal" accent />
-        <MacroCard label="Protein" unavailable={logUnavailable} consumed={comparison.protein.consumed} target={comparison.protein.target} remaining={comparison.protein.remaining} unit="g" />
-        <MacroCard label="Carbs" unavailable={logUnavailable} consumed={comparison.carbs.consumed} target={comparison.carbs.target} remaining={comparison.carbs.remaining} unit="g" />
-        <MacroCard label="Fat" unavailable={logUnavailable} consumed={comparison.fat.consumed} target={comparison.fat.target} remaining={comparison.fat.remaining} unit="g" />
+        <MacroCard label="Calories" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.calories.consumed} target={comparison.calories.target} remaining={comparison.calories.remaining} unit="kcal" accent />
+        <MacroCard label="Protein" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.protein.consumed} target={comparison.protein.target} remaining={comparison.protein.remaining} unit="g" />
+        <MacroCard label="Carbs" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.carbs.consumed} target={comparison.carbs.target} remaining={comparison.carbs.remaining} unit="g" />
+        <MacroCard label="Fat" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.fat.consumed} target={comparison.fat.target} remaining={comparison.fat.remaining} unit="g" />
       </div>
       </NutritionResultGlow>
 
@@ -479,6 +553,7 @@ function MacroCard({
   unit,
   accent = false,
   unavailable = false,
+  unverified = false,
 }: {
   label: string
   consumed: number
@@ -487,6 +562,8 @@ function MacroCard({
   unit: string
   accent?: boolean
   unavailable?: boolean
+  /** A save's outcome is unknown, so this figure may be missing it. */
+  unverified?: boolean
 }) {
   return (
     <div
@@ -500,7 +577,9 @@ function MacroCard({
       <p className="mt-2 text-xs text-mf-glass-text-muted">
         {unavailable
           ? "Unavailable — log not loaded"
-          : remaining >= 0 ? `${remaining} ${unit} remaining` : `${Math.abs(remaining)} ${unit} over target`}
+          : unverified
+            ? "Unverified — a save is unconfirmed"
+            : remaining >= 0 ? `${remaining} ${unit} remaining` : `${Math.abs(remaining)} ${unit} over target`}
       </p>
     </div>
   )
