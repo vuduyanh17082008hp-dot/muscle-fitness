@@ -297,7 +297,7 @@ describe("conversation edits are deterministic", () => {
     const today = await (await post({ message: "What did I eat today?", coachMode: "nutrition" })).json()
     expect(today.reply).toContain("Oatmeal (200 g): 300 kcal")
     expect(today.reply).toContain("Chicken Rice (200 g): 620 kcal")
-    expect((await (await post({ message: "What about my last meal?", coachMode: "nutrition" })).json()).reply).toContain("Chicken Rice (200 g) (lunch)")
+    expect((await (await post({ message: "What about my last meal?", coachMode: "nutrition" })).json()).reply).toBe("Your last logged meal today was lunch: Chicken Rice (200 g): 620 kcal, 38 g protein.")
     // The planner fails but the fallback model is up: it never answers the intake question itself...
     vi.mocked(callOpenAiWithFallback).mockReset().mockResolvedValue({ reply: "not a plan", model: "test" })
     expect((await (await post({ message: "What did I eat today?", coachMode: "nutrition" })).json()).reply).toContain("Oatmeal")
@@ -310,6 +310,72 @@ describe("conversation edits are deterministic", () => {
     vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 } } as never)
     vi.mocked(callOpenAiWithFallback).mockResolvedValue(null as never)
     expect((await (await post({ message: "What did I eat today?", coachMode: "nutrition" })).json()).reply).toBe("Nothing is logged for today yet, so I can't say what you've eaten.")
+  })
+
+  it("planner failure: follow-ups about a logged meal resolve from the log, never invent a food, goal or number", async () => {
+    const entry = (id: string, mealType: string, foodName: string, calories: number, proteinG: number) => ({ id, logDate: "2026-10-07", mealType, foodName, quantityGrams: 200, servingName: null, servingsConsumed: null, calories, proteinG, carbsG: 0, fatG: 0 })
+    const log = (...entries: ReturnType<typeof entry>[]) => vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries, totals: { calories: entries.reduce((s, e) => s + e.calories, 0), protein: entries.reduce((s, e) => s + e.proteinG, 0), carbs: 0, fat: 0 } } as never)
+    const ask = async (message: string, lastCoach?: string) => (await post({ message, coachMode: "nutrition", conversation: lastCoach ? { recentMessages: [{ role: "coach", text: lastCoach }] } : undefined })).json()
+    const ambiguousCalls = () => vi.mocked(callOpenAiWithFallback).mock.calls.filter(([prompt]) => prompt.startsWith("Handle one ambiguous")).length
+    log(entry("1", "breakfast", "Oatmeal", 300, 10), entry("2", "lunch", "Chicken Rice", 620, 38))
+    const LUNCH = "Your lunch (Chicken Rice (200 g)) had 38 g protein and 620 kcal, from your food log."
+
+    for (const providerDown of [true, false]) {
+      // Planner unavailable (null) vs. planner returns malformed output with the fallback model up.
+      vi.mocked(callOpenAiWithFallback).mockReset().mockResolvedValue((providerDown ? null : { reply: "not a plan", model: "test" }) as never)
+      const last = (await ask("What about my last meal?")).reply
+      expect((await ask("How much protein was in it?", last)).reply).toBe(LUNCH)
+      const suitable = (await ask("Was that meal suitable for my goal?", last)).reply
+      expect(suitable).toBe(`${LUNCH} The goal on your profile is fat loss, but I can't give a proper judgement of how it fits right now because the coaching model is unavailable. Try again in a moment.`)
+      expect(suitable).not.toMatch(/left today/)
+      expect((await ask("How much protein was in my breakfast?")).reply).toBe("Your breakfast (Oatmeal (200 g)) had 10 g protein and 300 kcal, from your food log.")
+      expect(ambiguousCalls()).toBe(0)
+    }
+
+    // Ambiguous pronoun: the last coach turn named two meals.
+    const today = (await ask("What did I eat today?")).reply
+    expect((await ask("How much protein was in it?", today)).reply).toBe("Which meal do you mean — breakfast or lunch?")
+    // A model-written intake reply rephrases portions but keeps the meal names.
+    expect((await ask("How much protein was in it?", "Today, you had: - **Breakfast**: 200 g of oatmeal (300 kcal) - **Lunch**: 200 g of chicken rice (620 kcal)")).reply).toBe("Which meal do you mean — breakfast or lunch?")
+    expect((await ask("How much protein was in it?", "Your last meal was lunch, which included 200 g of chicken rice.")).reply).toBe(LUNCH)
+    // Deleted meal: the coach named lunch, then it was removed from the log.
+    const last = (await ask("What about my last meal?")).reply
+    log(entry("1", "breakfast", "Oatmeal", 300, 10))
+    expect((await ask("How much protein was in it?", last)).reply).toBe("I can't find that meal in today's log anymore, so I can't give its numbers. Today's log has breakfast.")
+    expect((await ask("How much protein was in it?", "Your last meal was lunch, which included 200 g of chicken rice.")).reply).toContain("I can't find that meal in today's log anymore")
+    expect((await ask("what's a good snack for my dinner?")).route).not.toBe("food_log")
+    expect((await ask("Was my dinner ok?")).reply).toBe("Nothing is logged under dinner today, so I can't give its numbers. Today's log has breakfast.")
+
+    // Goal unavailable: said plainly, never filled in.
+    vi.mocked(loadNutritionContext).mockImplementation((async (_s: unknown, userId: string) => { const p = plan(userId); return { ...p, fitnessGoal: null, plan: { ...p.plan, input: { ...p.plan.input, goal: null } } } }) as never)
+    expect((await ask("Was my breakfast suitable for my goal?")).reply).toContain("There is no goal on your profile yet, and I can't give a proper judgement")
+    mockData()
+    log(entry("1", "breakfast", "Oatmeal", 300, 10))
+
+    // "it" that never pointed at the log (a food fact) still goes to the fallback model.
+    vi.mocked(callOpenAiWithFallback).mockReset().mockResolvedValue({ reply: "not a plan", model: "test" })
+    await ask("How much protein is in it?", "Greek yogurt is a solid high-protein snack.")
+    expect(ambiguousCalls()).toBe(1)
+
+    // Fallback model invents an unlogged food: replaced; a logged food or a hypothetical survives.
+    const fallback = (reply: string) => vi.mocked(callOpenAiWithFallback).mockReset().mockImplementation((async (prompt: string) => ({ reply: prompt.startsWith("Handle one ambiguous") ? JSON.stringify({ topic: { type: "GENERAL_NUTRITION", food: null, sensoryTargets: [] }, reply }) : "not a plan", model: "test" })) as never)
+    fallback("You had oatmeal and a protein shake this morning, nice start.")
+    expect((await ask("how's my day looking?")).reply).not.toMatch(/protein shake/)
+    fallback("You had oatmeal this morning, nice start.")
+    expect((await ask("how's my day looking?")).reply).toBe("You had oatmeal this morning, nice start.")
+    fallback("If you had pizza tonight, a thin crust with chicken would fit better.")
+    expect((await ask("could pizza work tonight?")).reply).toContain("pizza")
+
+    // Food-log read unavailable: no coaching answer at all.
+    vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries: [], totals: null, unavailable: true } as never)
+    const unavailable = await post({ message: "How much protein was in it?", coachMode: "nutrition", conversation: { recentMessages: [{ role: "coach", text: LUNCH }] } })
+    expect(unavailable.status).toBe(422)
+
+    // Cravings stay cravings, even right after a food-log answer.
+    log(entry("1", "breakfast", "Oatmeal", 300, 10))
+    vi.mocked(callOpenAiWithFallback).mockReset().mockResolvedValue(null as never)
+    expect((await ask("I'm craving chocolate cereal", last)).intent).toBe("NEW_CRAVING_REQUEST")
+    expect((await ask("what about pizza?", last)).intent).toBe("NEW_CRAVING_REQUEST")
   })
 
   it("uses the LLM only for open conversation, with structured context", async () => {

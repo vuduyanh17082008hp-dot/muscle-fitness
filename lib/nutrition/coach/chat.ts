@@ -28,6 +28,7 @@ import { renderKnowledgeContext } from "@/lib/nutrition/knowledge/context"
 import { decideMealBuildKnowledgeNeed, decideNutritionKnowledgeNeed } from "@/lib/nutrition/knowledge/need"
 import { getOptionalNutritionKnowledgeContext } from "@/lib/nutrition/knowledge/retrieve"
 import { resolveUncertainNeed } from "@/lib/nutrition/knowledge/semantic-gate"
+import type { MealSummary } from "@/lib/nutrition/food-log/totals"
 import type { KnowledgeNeedDecision, NutritionKnowledgeContext } from "@/lib/nutrition/knowledge/types"
 
 import { classifyTargetUtterance, guardCanonicalTargetClaim, targetTruthReply } from "@/lib/nutrition/targets"
@@ -197,12 +198,63 @@ function lastResortReply(ctx: CoachContext | null, options: { message?: string; 
   // "What did I eat today?" / "my last meal" with no model: the food log answers it verbatim (absent = not loaded, skip).
   if (options.message && ctx?.todayMeals && isLoggedIntakeQuestion(options.message)) {
     if (!ctx.todayMeals.length) return "Nothing is logged for today yet, so I can't say what you've eaten."
-    if (/\b(?:last|latest|previous) meal\b/i.test(options.message) && ctx.lastLogged) return `The last thing you logged today was ${ctx.lastLogged.food} (${ctx.lastLogged.meal}).`
+    // The last meal is the whole meal the latest row was logged under, so a follow-up "it" means the same thing.
+    const last = ctx.lastLogged && ctx.todayMeals.find((meal) => meal.meal === ctx.lastLogged!.meal)
+    if (/\b(?:last|latest|previous) meal\b/i.test(options.message) && last) return `Your last logged meal today was ${mealLabel(last)}: ${last.foods.join("; ")}.`
     return `Here's what you've logged today: ${ctx.todayMeals.map((meal) => `${meal.meal} — ${meal.foods.join("; ")}`).join(". ")}.`
   }
   if (options.lastMealName) return `I can show the ingredients or macros for ${options.lastMealName}, suggest a change to it, or we can switch to something else. What would you like?`
   if (ctx && ctx.snapshot.caloriesRemaining > 0) return `You've got about ${left(ctx)} left today. Want a meal that fits that, a craving worked in, or a nutrition question answered?`
   return "What are we solving — a meal, a craving, or a nutrition question?"
+}
+
+const mealLabel = (meal: MealSummary) => meal.meal.replace("_", "-")
+const portionOf = (food: string) => food.slice(0, food.lastIndexOf(":"))
+const MEAL_QUESTION = /\b(?:protein|calories|kcal|macros?|suitable|good|fit|ok(?:ay)?|right|healthy)\b/i
+const MEAL_BACKREF = /\b(?:in it|was it|is it|that meal|this meal|that one)\b/i
+// "in/was/is my lunch" asks about the logged meal; "a snack for my dinner" asks for a new one.
+const MY_MEAL = /\b(?:in|was|is|of) my (breakfast|lunch|dinner|snacks?|pre[- ]?workout|post[- ]?workout)(?: meal)?\b/i
+const ASKS_NUMBERS = /\b(?:protein|calories|kcal|macros?)\b/i
+
+/**
+ * Planner failed on "how much protein was in it?" / "was that meal suitable for my goal?" / "my lunch": the meal is resolved
+ * only from today's log (by name, or by what the last coach turn named) and answered from its logged row totals, never by a
+ * free model reply. Null = not a question about a logged meal.
+ */
+function loggedMealReply(message: string, ctx: CoachContext, recent: Array<{ role: "user" | "coach"; text: string }>): string | null {
+  const meals = ctx.todayMeals
+  if (!meals || !MEAL_QUESTION.test(message)) return null
+  const listed = meals.length ? `Today's log has ${meals.map(mealLabel).join(", ")}.` : "Nothing is logged for today yet."
+  let meal: MealSummary | undefined
+  const named = message.match(MY_MEAL)?.[1]
+  if (named) {
+    const key = named.toLowerCase().replace(/s$/, "").replace(/(pre|post)[- ]?workout/, "$1_workout")
+    meal = meals.find((item) => item.meal === key)
+    if (!meal) return `Nothing is logged under ${named.toLowerCase()} today, so I can't give its numbers. ${listed}`
+  } else {
+    if (!MEAL_BACKREF.test(message)) return null
+    const lastCoach = recent.findLast((turn) => turn.role === "coach")?.text ?? ""
+    // A model-written intake reply rephrases portions ("150 g of cooked white rice") but keeps the meal names.
+    const namesPortion = (item: MealSummary) => item.foods.some((food) => lastCoach.includes(portionOf(food)))
+    const matched = meals.filter((item) => new RegExp(`\\b${mealLabel(item)}\\b`, "i").test(lastCoach) || namesPortion(item))
+    // "it" points at something that was never about the food log (a food fact, a craving): not ours to answer.
+    if (!/\b(?:logged|food log|you (?:had|ate)|you've had|your last meal)\b/i.test(lastCoach) && !meals.some(namesPortion)) return null
+    if (matched.length > 1) return `Which meal do you mean — ${matched.map(mealLabel).join(" or ")}?`
+    if (!matched.length) return `I can't find that meal in today's log anymore, so I can't give its numbers. ${listed}`
+    meal = matched[0]
+  }
+  const facts = `Your ${mealLabel(meal)} (${meal.foods.map(portionOf).join(", ")}) had ${meal.protein} g protein and ${Math.round(meal.calories)} kcal, from your food log.`
+  if (ASKS_NUMBERS.test(message)) return facts
+  const goal = ctx.snapshot.goal ? `The goal on your profile is ${ctx.snapshot.goal.replace(/_/g, " ")}, but I` : "There is no goal on your profile yet, and I"
+  return `${facts} ${goal} can't give a proper judgement of how it fits right now because the coaching model is unavailable. Try again in a moment.`
+}
+
+// A fallback reply may discuss any food, but may only say the user ATE one that is in today's log.
+const INTAKE_CLAIM = /(?<!\bif )\byou(?:'ve| have)? (?:ate|eaten|had|logged)\b([^.,;:!?\n]*)/gi
+const CLAIM_FILLER = new Set(["and", "the", "for", "with", "some", "today", "far", "your", "meal", "meals", "about", "around", "kcal", "calories", "protein", "carbs", "fat", "total", "breakfast", "lunch", "dinner", "snack", "workout", "pre", "post", "plus", "also", "then", "this", "that", "morning", "afternoon", "evening", "tonight", "earlier", "already", "just", "only", "from", "log", "yet"])
+function claimsUnloggedFood(reply: string, ctx: CoachContext): boolean {
+  const logged = (ctx.todayMeals ?? []).flatMap((meal) => meal.foods).join(" ").toLowerCase()
+  return [...reply.matchAll(INTAKE_CLAIM)].some(([, clause]) => (clause.toLowerCase().match(/\p{L}{3,}/gu) ?? []).some((word) => !CLAIM_FILLER.has(word) && !logged.includes(word)))
 }
 
 /** Used when no model is configured (or its reply is unsafe/ungrounded). Built from structured topic + Athlete State only. */
@@ -401,7 +453,7 @@ ${knowledgeBlock(knowledge)}${intelligenceBlock(ctx)}${history ? `RECENT CONVERS
     ]
     const reply = isUnsafeCoachReply(data.reply)
       ? SAFETY_REPLY
-      : hasUngroundedMacros(data.reply, allowed)
+      : hasUngroundedMacros(data.reply, allowed) || claimsUnloggedFood(data.reply, ctx)
         ? lastResortReply(ctx, { message })
         : data.reply
     const sensoryTargets = (data.topic.sensoryTargets ?? []).filter(
@@ -1132,6 +1184,8 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
       }
       if (orchestration) recordOrchestrationEvent(orchestration)
 
+      const loggedMeal = loggedMealReply(message, ctx, recent)
+      if (loggedMeal) return respond("GENERAL_NUTRITION_QUESTION", "food_log", loggedMeal, { orchestration, clarified: loggedMeal.startsWith("Which meal") })
       // Planner failed on "what did I eat?": the food log answers it verbatim (lastResortReply), never a free model reply.
       const ambiguous = ctx.todayMeals && isLoggedIntakeQuestion(message) ? null : await resolveAmbiguousTurn(message, ctx, recent, priorSignals, newTopicFlag ? undefined : lastMealName, turnBudget)
       const topic: NutritionTopic = ambiguous?.topic ?? { type: "GENERAL_NUTRITION" }
