@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  classifyRecheck,
+  isStalePending,
+  PENDING_STALE_MS,
   readPendingSaves,
-  SAVE_SETTLE_MS,
+  reconcileDayPendingSaves,
+  recheckPendingSaves,
   writePendingSaves,
   describeMultiOutcome,
   isCompleteOutcome,
@@ -186,12 +188,98 @@ describe("refresh / re-entry: pending saves survive the page and settle by key",
     expect(() => writePendingSaves("user-1", [{ key: KEY_A, logDate: "d", sentAt: 1 }], blocked)).not.toThrow()
   })
 
-  it("recheck: row found → saved; missing within the settle window → still unknown; missing after it → not written", () => {
+  it("recheck: only a read-back row settles a key; a missing row stays pending at any age, labelled stale past 5 min", async () => {
+    const server = fakeServer()
+    await postFoodLog(food(KEY_A), server.fetchImpl)
+    const result = await recheckPendingSaves([{ key: KEY_A }, { key: KEY_B }], server.fetchImpl)
+    expect([...result.saved]).toEqual([KEY_A])
+    expect(result.checkFailed).toBe(false)
     const sentAt = 1_000_000
-    expect(classifyRecheck(sentAt, { entry: { id: "row-1" } as never }, sentAt + 10)).toBe("saved")
-    expect(classifyRecheck(sentAt, { entry: null }, sentAt + 10_000)).toBe("unknown")
-    expect(classifyRecheck(sentAt, { entry: null }, sentAt + SAVE_SETTLE_MS + 1)).toBe("not_written")
-    expect(classifyRecheck(sentAt, null, sentAt + SAVE_SETTLE_MS + 1)).toBe("unknown") // a failed check never settles
+    expect(isStalePending(sentAt, sentAt + 10_000)).toBe(false)
+    expect(isStalePending(sentAt, sentAt + PENDING_STALE_MS + 1)).toBe(true)
+  })
+})
+
+describe("aged pending saves (the old 300 s 'not written' inference)", () => {
+  const memoryStorage = () => {
+    const data = new Map<string, string>()
+    return {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+      removeItem: (k: string) => void data.delete(k),
+      data,
+    } as unknown as Storage & { data: Map<string, string> }
+  }
+  const DAY = "2026-10-23"
+  const LONG_AGO = Date.now() - 60 * 60_000
+
+  it("C/D. pending beyond 300 s with no row stays pending; a commit landing later is then confirmed", async () => {
+    const server = fakeServer()
+    const storage = memoryStorage()
+    writePendingSaves("user-1", [{ key: KEY_A, logDate: DAY, sentAt: LONG_AGO }], storage)
+
+    const before = await reconcileDayPendingSaves("user-1", DAY, server.fetchImpl, storage)
+    expect(before).toEqual({ unresolved: [{ key: KEY_A, logDate: DAY, sentAt: LONG_AGO }], savedAny: false, checkFailed: false })
+    expect(readPendingSaves("user-1", storage)).toHaveLength(1) // not silently dropped as "failed"
+
+    server.rows.push({ id: "row-late", userId: "user-1", key: KEY_A, foodName: "Rice", calories: 200 }) // late commit
+    const after = await reconcileDayPendingSaves("user-1", DAY, server.fetchImpl, storage)
+    expect(after).toEqual({ unresolved: [], savedAny: true, checkFailed: false })
+    expect(readPendingSaves("user-1", storage)).toEqual([])
+  })
+
+  it("pending under 300 s with no row also stays pending", async () => {
+    const storage = memoryStorage()
+    writePendingSaves("user-1", [{ key: KEY_A, logDate: DAY, sentAt: Date.now() }], storage)
+    expect((await reconcileDayPendingSaves("user-1", DAY, fakeServer().fetchImpl, storage)).unresolved).toHaveLength(1)
+  })
+
+  it("J. readback fails → still pending, flagged; readback recovers → confirmed", async () => {
+    const server = fakeServer()
+    const storage = memoryStorage()
+    await postFoodLog(food(KEY_A), server.fetchImpl)
+    writePendingSaves("user-1", [{ key: KEY_A, logDate: DAY, sentAt: LONG_AGO }], storage)
+
+    server.faults.push("lookup-fail")
+    expect(await reconcileDayPendingSaves("user-1", DAY, server.fetchImpl, storage)).toMatchObject({ savedAny: false, checkFailed: true })
+    expect(readPendingSaves("user-1", storage)).toHaveLength(1)
+
+    expect(await reconcileDayPendingSaves("user-1", DAY, server.fetchImpl, storage)).toEqual({ unresolved: [], savedAny: true, checkFailed: false })
+  })
+
+  it("K/L. retry with the original key after the old expiry → one row, and the day's total counts it once", async () => {
+    const server = fakeServer()
+    server.faults.push("lose-response")
+    expect((await postFoodLog(food(KEY_A), server.fetchImpl)).status).toBe("unknown")
+    const retried = await saveFoodLogWithReconcile(food(KEY_A), server.fetchImpl)
+    expect(retried).toMatchObject({ status: "saved", entry: { id: "row-1" } })
+    expect(server.rowsFor(KEY_A)).toBe(1)
+    expect(server.rows.reduce((sum, row) => sum + row.calories, 0)).toBe(200)
+  })
+
+  it("passive reconciliation (Dashboard mount / history load) never POSTs and never touches other days or users", async () => {
+    const server = fakeServer()
+    const storage = memoryStorage()
+    writePendingSaves("user-1", [{ key: KEY_A, logDate: DAY, sentAt: LONG_AGO }, { key: KEY_B, logDate: "2026-10-22", sentAt: LONG_AGO }], storage)
+    writePendingSaves("user-2", [{ key: KEY_A, logDate: DAY, sentAt: LONG_AGO }], storage)
+
+    await reconcileDayPendingSaves("user-1", DAY, server.fetchImpl, storage)
+    await reconcileDayPendingSaves("user-1", DAY, server.fetchImpl, storage)
+    expect(server.posts()).toBe(0)
+    expect(server.rows).toHaveLength(0)
+    expect(readPendingSaves("user-1", storage)).toHaveLength(2)
+    expect(readPendingSaves("user-2", storage)).toHaveLength(1)
+  })
+
+  it("G. user B in the same tab sees none of user A's pending saves", async () => {
+    const storage = memoryStorage()
+    writePendingSaves("user-a", [{ key: KEY_A, logDate: DAY, sentAt: LONG_AGO }], storage)
+    expect(await reconcileDayPendingSaves("user-b", DAY, fakeServer("user-b").fetchImpl, storage)).toEqual({ unresolved: [], savedAny: false, checkFailed: false })
+  })
+
+  it("H. storage unavailable → nothing known pending, no throw (a stated limitation, not a freshness claim)", async () => {
+    const blocked = { getItem: () => { throw new Error("denied") }, setItem: () => { throw new Error("denied") }, removeItem: () => {} } as unknown as Storage
+    expect(await reconcileDayPendingSaves("user-1", DAY, fakeServer().fetchImpl, blocked)).toEqual({ unresolved: [], savedAny: false, checkFailed: false })
   })
 })
 

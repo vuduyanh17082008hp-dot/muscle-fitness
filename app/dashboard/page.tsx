@@ -24,6 +24,7 @@ import { loadPlannedDay } from "@/lib/training/planned-day";
 import { AthleteStateStrip } from "@/components/dashboard/athlete-state-strip";
 import { WhatMattersNow, type WhatMattersItem } from "@/components/dashboard/what-matters-now";
 import { NutritionOpportunity } from "@/components/dashboard/nutrition-opportunity";
+import { FoodLogFreshnessNotice } from "@/components/dashboard/food-log-freshness-notice";
 import { DanteDailyBrief } from "@/components/dashboard/dante-daily-brief";
 import { NewUserDashboard } from "@/components/dashboard/new-user-dashboard";
 import { MuscleIntelligenceCard } from "@/components/dashboard/glass/muscle-intelligence-card";
@@ -297,6 +298,7 @@ export default async function DashboardPage() {
           <DailyActionHero todaySession={todaySession} plannedDay={plannedDay} hasCheckinToday={Boolean(recoveryContext?.today)} />
 
           {/* 2. Athlete State Strip (Compact Horizontal Row) */}
+          <FoodLogFreshnessNotice userId={user.id} logDate={localDate} />
           <AthleteStateStrip
             recoveryScore={recoveryContext?.todayScoreResult.score ?? null}
             recoveryStatus={recoveryContext?.todayScoreResult.status ?? null}

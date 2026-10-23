@@ -67,20 +67,31 @@ export async function saveFoodLogWithReconcile(
 }
 
 /**
- * Upper bound on how long one save can still be running server-side (the
- * platform function timeout is 300 s). Past it, a key with no row will never
- * get one — the only point where absence proves "not written".
+ * Age after which a still-unconfirmed save is shown as stale. A LABEL only:
+ * a timed-out function doesn't roll back a write already handed to Postgres,
+ * and absence of a row never proves "not written". A key leaves the pending
+ * list only when its row is read back.
  */
-export const SAVE_SETTLE_MS = 5 * 60_000
+export const PENDING_STALE_MS = 5 * 60_000
 
-export function classifyRecheck(
-  sentAt: number,
-  check: { entry: FoodLogEntry | null } | null,
-  now = Date.now(),
-): "saved" | "not_written" | "unknown" {
-  if (check?.entry) return "saved"
-  if (check && now - sentAt > SAVE_SETTLE_MS) return "not_written"
-  return "unknown"
+export function isStalePending(sentAt: number, now = Date.now()): boolean {
+  return now - sentAt > PENDING_STALE_MS
+}
+
+/**
+ * Read-only re-check of pending keys by their ORIGINAL key — never re-sends a
+ * write. `saved` holds only keys whose row was read back; every other key
+ * stays pending. `checkFailed` means at least one readback itself failed.
+ */
+export async function recheckPendingSaves(
+  pending: Array<{ key: string }>,
+  fetchImpl: FetchLike = fetch,
+): Promise<{ saved: Set<string>; checkFailed: boolean }> {
+  const checks = await Promise.all(pending.map((item) => lookupFoodLogByKey(item.key, fetchImpl)))
+  return {
+    saved: new Set(pending.filter((_, index) => checks[index]?.entry).map((item) => item.key)),
+    checkFailed: checks.some((check) => check === null),
+  }
 }
 
 /**
@@ -118,6 +129,28 @@ export function writePendingSaves(userId: string, saves: PendingSave[], storage 
   } catch {
     // Storage blocked: in-memory tracking still applies for this mount.
   }
+}
+
+export function forgetPendingSaves(userId: string, keys: Set<string>, storage = browserSession()) {
+  writePendingSaves(userId, readPendingSaves(userId, storage).filter((p) => !keys.has(p.key)), storage)
+}
+
+/**
+ * The Dashboard's view of one day's unconfirmed saves: re-checks them
+ * read-only, forgets only the ones read back, and returns what's left.
+ * Never writes a food log and never prunes other days (the tracker owns that).
+ */
+export async function reconcileDayPendingSaves(
+  userId: string,
+  logDate: string,
+  fetchImpl: FetchLike = fetch,
+  storage = browserSession(),
+): Promise<{ unresolved: PendingSave[]; savedAny: boolean; checkFailed: boolean }> {
+  const day = readPendingSaves(userId, storage).filter((p) => p.logDate === logDate)
+  if (day.length === 0) return { unresolved: [], savedAny: false, checkFailed: false }
+  const { saved, checkFailed } = await recheckPendingSaves(day, fetchImpl)
+  if (saved.size > 0) forgetPendingSaves(userId, saved, storage)
+  return { unresolved: day.filter((p) => !saved.has(p.key)), savedAny: saved.size > 0, checkFailed }
 }
 
 type Keyed = { idempotencyKey?: string }

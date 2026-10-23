@@ -5,9 +5,10 @@ import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Pencil, RotateCw, Tr
 
 import { TrackFoodModal } from "@/components/nutrition/track-food-modal"
 import {
-  classifyRecheck,
-  lookupFoodLogByKey,
+  forgetPendingSaves,
+  isStalePending,
   readPendingSaves,
+  recheckPendingSaves,
   saveFoodLogWithReconcile,
   writePendingSaves,
   type SaveItemResult,
@@ -140,7 +141,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
 
   function forgetPending(keys: Set<string>) {
     setUnconfirmed((current) => current.filter((item) => !keys.has(item.key)))
-    writePendingSaves(userId, readPendingSaves(userId).filter((p) => !keys.has(p.key)))
+    forgetPendingSaves(userId, keys)
   }
 
   async function saveFood(food: ConfirmedFood): Promise<SaveItemResult> {
@@ -168,13 +169,13 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
   /**
    * Read-only re-check of saves whose outcome is unknown. Runs on mount (saves
    * left pending by a refresh), on demand, and when the Track Food modal
-   * closes — never on a timer, never re-sends a write.
+   * closes — never on a timer, never re-sends a write. Only a read-back row
+   * settles a key; a missing row stays unconfirmed however old it is.
    */
   async function recheckUnconfirmed(pending: UnconfirmedSave[] = unconfirmed) {
     if (pending.length === 0) return
-    const checks = await Promise.all(pending.map((item) => lookupFoodLogByKey(item.key)))
-    const settled = new Set(pending.filter((item, index) => classifyRecheck(item.sentAt, checks[index]) !== "unknown").map((item) => item.key))
-    if (settled.size > 0) forgetPending(settled)
+    const { saved } = await recheckPendingSaves(pending)
+    if (saved.size > 0) forgetPending(saved)
     reloadLog()
   }
 
@@ -369,6 +370,9 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
             {unconfirmed.length === 1
               ? `Saving ${unconfirmed[0].foodName ? `"${unconfirmed[0].foodName}"` : "a food"} couldn't be confirmed — it may already be logged.`
               : `${unconfirmed.length} food saves couldn't be confirmed — they may already be logged.`}{" "}
+            {unconfirmed.some((item) => isStalePending(item.sentAt))
+              ? "Still unconfirmed after 5+ minutes — check today's log before adding it again. "
+              : null}
             Totals below are unverified until the server confirms.
           </p>
           <button
