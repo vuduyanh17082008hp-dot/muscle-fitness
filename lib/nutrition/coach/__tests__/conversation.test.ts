@@ -67,4 +67,10 @@ describe("macro provenance", () => {
     expect(hasUngroundedMacros("It has 368 kcal and 35g protein.", [368, 35])).toBe(false)
     expect(hasUngroundedMacros("Keep a measured portion of the real cereal.", [])).toBe(false)
   })
+
+  it("reads thousands separators as one number (live: a correct 1,326 kcal answer was rejected as 326)", () => {
+    expect(hasUngroundedMacros("You've consumed 1,326 calories today.", [1326])).toBe(false)
+    expect(hasUngroundedMacros("You've consumed 1,362 calories today.", [1326])).toBe(true)
+    expect(hasUngroundedMacros("That's 3,126 kcal and 129.6 g of protein.", [3126, 129.6])).toBe(false)
+  })
 })

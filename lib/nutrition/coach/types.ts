@@ -99,6 +99,10 @@ export type CoachContext = {
   snapshot: ContextSnapshot
   guards: ProfileGuards
   cookingAbility: string | null
+  /** Today's food log by the meal each row was logged under (food-log/totals.ts::summarizeMeals). Absent = not loaded. */
+  todayMeals?: import("@/lib/nutrition/food-log/totals").MealSummary[]
+  /** The most recently logged row today ("what about my last meal?"), with the meal it was logged under. */
+  lastLogged?: { meal: string; food: string }
   /** AI-R1E.2: read-only cross-coach (Dante) context. Absent = exactly the pre-R1E.2 behaviour. Never a nutrition fact. */
   coordination?: import("@/lib/intelligence/gemma-consumer").GemmaCoordination
   /**

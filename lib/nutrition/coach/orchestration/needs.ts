@@ -15,6 +15,9 @@ const PERSONAL_STATE = /(?<![\p{L}\p{N}])(?:my|mine|left|remaining|today|tonight
 const FIT_OFFER = /(?<![\p{L}\p{N}])fit(?:ting)?\b[^?]{0,60}\b(?:macros?|calories|left|remaining|budget|today)|(?:vừa|nhét|xếp)[^?]{0,40}(?:calo|macro|còn lại)/iu
 
 export const isPersonalStateQuestion = (message: string) => PERSONAL_STATE.test(message)
+// "What have I eaten today?", "calories I've had", "my last meal": the food log answers these, so state is always read.
+const LOGGED_INTAKE = /(?<![\p{L}\p{N}])(?:(?:have|did) i (?:eat|eaten|had|have|log(?:ged)?)|i(?:'ve| have) (?:eaten|had|logged)|i ate|my (?:last|latest|previous) meal|(?:eaten|logged|consumed) (?:today|so far))(?![\p{L}\p{N}])|đã ăn|ăn gì hôm nay/iu
+export const isLoggedIntakeQuestion = (message: string) => LOGGED_INTAKE.test(message)
 export const offerAsksForFit = (offer: string | null) => Boolean(offer && FIT_OFFER.test(offer))
 
 const CONTINUITY_TARGETS: ContinuationTarget[] = ["PRIOR_OFFER", "PENDING_CHOICE", "ACTIVE_MODIFICATION", "LAST_ASSISTANT_REFERENT", "ACTIVE_DRAFT", "PENDING_CLARIFICATION"]
@@ -57,7 +60,9 @@ export function decideNeeds(input: NeedInput): { toolNeed: ToolNeedDecision; con
 
   // Nutrition state (remaining/targets): exact calculations always; otherwise only for a personal state question.
   const plannerWantsState = need.needAthleteState && !continuity && personal
-  const needNutritionState = !idle && input.nutritionStateAvailable && (needMacroCalculation || plannerWantsState)
+  const loggedIntake = message !== undefined && isLoggedIntakeQuestion(message)
+  const needNutritionState = !idle && input.nutritionStateAvailable && (needMacroCalculation || plannerWantsState || loggedIntake)
+  if (loggedIntake && !needMacroCalculation && !plannerWantsState) reasons.push("logged_intake_question")
   if (need.needAthleteState && !continuity && !personal && !needMacroCalculation) reasons.push("general_question_no_state")
   if (needNutritionState && !needMacroCalculation) reasons.push("personal_state_question")
 

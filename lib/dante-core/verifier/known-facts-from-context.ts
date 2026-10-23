@@ -1,4 +1,4 @@
-import type { VerifierFact } from "@/lib/dante-core/verifier/types";
+import type { MealIntakeFact, VerifierFact, VerifierInput } from "@/lib/dante-core/verifier/types";
 
 // "protein" / "calories" also name targets and g/kg guidelines: only a mention worded as what was eaten states these facts.
 const CONSUMED = /\b(?:consumed|logged|eaten|ate|so far|intake (?:today|so far)|you'?ve had|have had)\b/i;
@@ -22,6 +22,8 @@ function getNumber(value: unknown): number | null {
 export type KnownFactsContextInput = {
   recovery: unknown;
   todayFoodLog: unknown;
+  /** Its dailyTargets are day-level figures a reply may state even when the food log can't be read. */
+  currentNutritionPlan?: unknown;
 };
 
 /**
@@ -76,4 +78,91 @@ export function buildKnownFactsFromContext(context: KnownFactsContextInput): Ver
   }
 
   return facts;
+}
+
+const MACROS = ["calories", "protein", "carbs", "fat"] as const;
+const numbersInText = (text: string) => (text.replace(/(\d),(\d{3})/g, "$1$2").match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+
+/**
+ * The meal-level side of todayFoodLog (route.ts::summarizeTodayFoodLog's `meals`): what checkMealLevelClaims lets a
+ * sentence naming a meal state. Undefined when there is no food-log summary at all (that path is not checked).
+ * `userMessage`: a figure the user stated this turn may be echoed ("eating only 500 calories a day is far too low").
+ */
+export function buildMealIntakeFromContext(context: KnownFactsContextInput, userMessage = ""): VerifierInput["mealIntake"] {
+  const log = context.todayFoodLog;
+  if (!isRecord(log)) return undefined;
+  const plan = isRecord(context.currentNutritionPlan) && isRecord(context.currentNutritionPlan.dailyTargets) ? context.currentNutritionPlan.dailyTargets : {};
+  const givenValues = [...MACROS.map((macro) => getNumber(plan[macro])).filter((value): value is number => value !== null), ...numbersInText(userMessage)];
+  if (log.available === false) return { meals: null, dayValues: givenValues };
+
+  const dayValues = givenValues.concat(MACROS.flatMap((macro) => {
+    const comparison = log[macro];
+    return isRecord(comparison)
+      // |remaining|: over target reads as "200 kcal over".
+      ? [comparison.consumed, comparison.target, comparison.remaining].map(getNumber).flatMap((value) => (value === null ? [] : [value, Math.abs(value)]))
+      : [];
+  }));
+  const itemCount = getNumber(log.itemsLoggedToday);
+  if (itemCount !== null) dayValues.push(itemCount);
+
+  const meals: MealIntakeFact[] = (Array.isArray(log.meals) ? log.meals : []).filter(isRecord).map((meal) => ({
+    meal: meal.meal as MealIntakeFact["meal"],
+    values: [
+      ...MACROS.map((macro) => getNumber(meal[macro])).filter((value): value is number => value !== null),
+      // Portions and any number in a food's own name ("Coke 330ml", "2 eggs").
+      ...(Array.isArray(meal.foods) ? meal.foods : []).flatMap((food) => (typeof food === "string" ? numbersInText(food) : [])),
+    ],
+  }));
+
+  return { meals, dayValues };
+}
+
+const MEAL_NAME: Record<MealIntakeFact["meal"], { en: string; vi: string }> = {
+  breakfast: { en: "breakfast", vi: "bữa sáng" },
+  lunch: { en: "lunch", vi: "bữa trưa" },
+  dinner: { en: "dinner", vi: "bữa tối" },
+  snack: { en: "snack", vi: "bữa phụ" },
+  pre_workout: { en: "pre-workout", vi: "trước tập" },
+  post_workout: { en: "post-workout", vi: "sau tập" },
+};
+
+/**
+ * Bounded deterministic answer when the model kept stating intake figures the log doesn't support: today's verified
+ * totals (and per-meal totals as logged), or that the log can't be read. Never a number the summary doesn't hold.
+ * Null when there is no food-log summary to answer from.
+ */
+export function verifiedIntakeAnswer(context: KnownFactsContextInput, language: "en" | "vi"): string | null {
+  const log = context.todayFoodLog;
+  if (!isRecord(log)) return null;
+  const vi = language === "vi";
+  if (log.available === false) {
+    return vi
+      ? "Mình không đọc được nhật ký ăn uống của bạn lúc này, nên không thể nói hôm nay bạn đã ăn bao nhiêu. Thử lại sau một lát nhé."
+      : "I can't read your food log right now, so I can't tell you what you've eaten today. Try again in a moment.";
+  }
+  const n = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  const macro = (key: (typeof MACROS)[number]) => (isRecord(log[key]) ? (log[key] as Record<string, unknown>) : null);
+  const meals = (Array.isArray(log.meals) ? log.meals : []).filter(isRecord);
+  if (meals.length === 0) return vi ? "Hôm nay bạn chưa log món nào." : "Nothing is logged in your food log yet today.";
+
+  const calories = macro("calories");
+  const protein = macro("protein");
+  const lines: string[] = [];
+  if (calories && protein && getNumber(calories.consumed) !== null && getNumber(protein.consumed) !== null) {
+    lines.push(vi
+      ? `Theo nhật ký hôm nay bạn đã log ${n(calories.consumed as number)} kcal và ${n(protein.consumed as number)} g protein.`
+      : `Your food log shows ${n(calories.consumed as number)} kcal and ${n(protein.consumed as number)} g protein logged today.`);
+    const calLeft = getNumber(calories.remaining);
+    const proLeft = getNumber(protein.remaining);
+    if (calLeft !== null && proLeft !== null) {
+      lines.push(vi
+        ? `Mục tiêu là ${n(calories.target as number)} kcal / ${n(protein.target as number)} g protein, còn ${n(Math.max(0, calLeft))} kcal và ${n(Math.max(0, proLeft))} g protein.`
+        : `Against your ${n(calories.target as number)} kcal / ${n(protein.target as number)} g protein target, that leaves ${n(Math.max(0, calLeft))} kcal and ${n(Math.max(0, proLeft))} g protein.`);
+    }
+  }
+  const byMeal = meals
+    .map((meal) => `${MEAL_NAME[meal.meal as MealIntakeFact["meal"]]?.[language] ?? String(meal.meal)}: ${n(getNumber(meal.calories) ?? 0)} kcal, ${n(getNumber(meal.protein) ?? 0)} g protein`)
+    .join("; ");
+  lines.push(vi ? `Theo từng bữa — ${byMeal}.` : `By meal — ${byMeal}.`);
+  return lines.join(" ");
 }

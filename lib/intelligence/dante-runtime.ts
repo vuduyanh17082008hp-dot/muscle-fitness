@@ -320,6 +320,10 @@ export function buildDisclosureSignals(a: { userScope: UserScopeRef; context: Co
     const out: CoachSignal[] = [];
     for (const fact of activeFacts(a.context)) {
       if (fact.relevance !== "SAFETY" || fact.temporal !== "CURRENT" || fact.turnsAgo !== 0) continue;
+      // A restriction PLAN ("I want to eat 500 a day") is not a disclosure of what they eat: published, it reached the
+      // other coach as "reported eating dangerously little" for 24 h, against a food log that says otherwise. The plan
+      // request itself is refused where it is made (this turn's posture; the nutrition coach's own safety screen).
+      if (fact.kind === "LOW_ENERGY_INTAKE" && fact.label.startsWith("wants to eat")) continue;
       const id = fact.key.split(":")[1] ?? "";
       const directive =
         fact.kind === "PED_USE" ? (/insulin/.test(fact.label) ? "INSULIN_HYPO_RISK" : "NO_DRUG_OPTIMISED_DIET")

@@ -1,4 +1,4 @@
-import type { VerifierFact, VerifierFinding, VerifierInput } from "@/lib/dante-core/verifier/types";
+import type { MealIntakeFact, VerifierFact, VerifierFinding, VerifierInput } from "@/lib/dante-core/verifier/types";
 
 export const EVIDENCE_LANGUAGE =
   /\b(?:research|studies|evidence|science)\s+(?:shows?|suggests?|indicates?|says?)\b|\baccording to (?:research|studies|a study)\b/i;
@@ -189,4 +189,137 @@ export function checkCitationMismatch(input: VerifierInput): VerifierFinding[] {
   }
 
   return [];
+}
+
+const MEAL_NAMES: Array<[MealIntakeFact["meal"], RegExp]> = [
+  ["breakfast", /(?<!\p{L})(?:breakfast|bữa sáng)/iu],
+  ["lunch", /(?<!\p{L})(?:lunch|bữa trưa)/iu],
+  ["dinner", /(?<!\p{L})(?:dinner|supper|bữa tối)/iu],
+  ["snack", /(?<!\p{L})(?:snacks?|bữa phụ|ăn vặt)(?!\p{L})/iu],
+  ["pre_workout", /(?<!\p{L})(?:pre[- ]?workout|trước (?:buổi )?tập)/iu],
+  ["post_workout", /(?<!\p{L})(?:post[- ]?workout|sau (?:buổi )?tập)/iu],
+];
+// About food at all, so "train two hours after breakfast" is not a meal claim.
+const NUTRITION_WORDING = /kcal|calor|(?<!\p{L})cals?(?!\p{L})|protein|carb|(?<!\p{L})fats?(?!\p{L})|macro|\d\s*g(?!\p{L})|grams?|đạm|tinh bột|chất béo/iu;
+// Advice, not the log: "aim for 600 kcal at dinner", "30–40 g carbs pre-workout". Deliberately strong words only — a
+// claim with a stray "if" or "target" in it must still be checked.
+const HYPOTHETICAL =
+  /(?<!\p{L})(?:aim|try|should|could|consider|suggest\p{L}*|recommend\p{L}*|e\.g|for example|ideas?|options?|instead|swap|tonight|tomorrow|want me|would you like|shall i|(?:log|add) (?:it|this|that)|estimat\p{L}*|nên|có thể|thử|gợi ý|ví dụ|tối nay|ngày mai)(?!\p{L})|\d\s*(?:-|–|to)\s*\d/iu;
+// Worded as what the log holds ("you had", "your lunch", "so far", "the breakdown") — not food knowledge that happens
+// to name a meal ("for lunch, chicken rice is about 600 kcal").
+// A meal said to contain, or be counted in, food — and that claim not denied ("nothing logged for breakfast").
+const FOLDS_IN = /(?<!\p{L})(?:includ\p{L}*|part of|consist\p{L}*|counted|made up of|came from|had|ate|eaten)(?!\p{L})/iu;
+const NEGATED = /(?<!\p{L})(?:no|not|nothing|none|never|without|yet to|chưa|không)(?!\p{L})|n['’]t\b/iu;
+// Worded as the day's intake, with no meal named.
+// A bare "Total: 690 kcal" also sums a suggested meal, so "total" counts only when tied to the day or the log.
+const DAY_TOTAL = String.raw`totals?[^.\n]{0,25}(?:today|for the day|so far|logged|consumed)`;
+const DAY_INTAKE = new RegExp(String.raw`(?<!\p{L})(?:intake|consumed|eaten|ate|logged|so far|you'?ve had|you have had|${DAY_TOTAL}|đã ăn|đã nạp|đã log)(?!\p{L})`, "iu");
+const LOG_CUE = new RegExp(String.raw`(?<!\p{L})(?:had|ate|eaten|logged|consumed|recorded|your|so far|was|were|${DAY_TOTAL}|breakdown|đã ăn|đã log|đã nạp|của bạn)(?!\p{L})`, "iu");
+// After "Here's a dinner suggestion:", lines are advice until one is worded as the log again.
+const STRONG_LOG = /(?<!\p{L})(?:consumed|logged|eaten|so far|breakdown|intake|you'?ve had|you had|you ate|đã ăn|đã log)(?!\p{L})/iu;
+
+/** A figure attached to the meal itself: "Breakfast: 920 kcal", "breakfast 920", "lunch (579 kcal)", "a 900 kcal breakfast". */
+function attachesFigure(sentence: string, name: RegExp): boolean {
+  const match = name.exec(sentence);
+  if (!match) return false;
+  const after = sentence.slice(match.index + match[0].length);
+  const before = sentence.slice(0, match.index);
+  return /^\s*[:=—–(-]?\s*[~≈]?\s*\d/u.test(after) || /\d\s*(?:kcal|calories?|cals?|g)(?:\s+(?:of\s+)?protein)?\s+(?:(?:at|for|from|in|during)\s+(?:your\s+)?)?$/iu.test(before);
+}
+// Clock times, dates and percentages are not intake amounts.
+const NOT_AN_AMOUNT = /\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}|\d{1,2}\s*(?:am|pm)(?!\p{L})|\d+(?:\.\d+)?\s*%/giu;
+const LIST_ITEM = /^\s*(?:[-*•+]|\d+[.)])\s+/;
+
+const supports = (values: number[], stated: number) =>
+  values.some((value) => [value, Math.round(value), Math.round(value * 10) / 10].some((candidate) => Math.abs(candidate - stated) < 0.05));
+
+/**
+ * A correct daily total does not authorize per-meal numbers, and a day-level intake figure must be the log's own. A sentence that names a meal, states an amount and is
+ * worded as the log (LOG_CUE, or the figure attached to the meal) is a claim about that meal today, so each of its
+ * numbers must be one the log holds for the meals named, or a day-level figure. A meal with no rows supports only 0; an
+ * unreadable log supports nothing. List items are read with the line that introduces them ("Breakfast:", "Here's your
+ * breakdown:"), so a per-item kcal under a meal is checked too.
+ */
+export function checkMealLevelClaims(input: VerifierInput): VerifierFinding[] {
+  const intake = input.mealIntake;
+  if (!intake) return [];
+
+  const findings: VerifierFinding[] = [];
+  let header = "";
+  let advice = false;
+  for (const rawLine of input.replyText.replace(/[*_#>`]/g, "").split("\n")) {
+    const isItem = LIST_ITEM.test(rawLine);
+    const line = rawLine.replace(LIST_ITEM, "").trim();
+    const mealsIn = (text: string) => MEAL_NAMES.filter(([, name]) => name.test(text)).map(([meal]) => meal);
+    const underAdvice = advice && !STRONG_LOG.test(line);
+    if (!isItem && HYPOTHETICAL.test(line)) advice = true;
+    else if (STRONG_LOG.test(line)) advice = false;
+    if (underAdvice) continue;
+
+    // Only a list item or a meal-led line ("Breakfast: 920 kcal") belongs to the line above it.
+    const lead = isItem || MEAL_NAMES.some(([, name]) => name.exec(line)?.index === 0) ? header : "";
+
+    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+      const named = mealsIn(sentence);
+      const meals = named.length > 0 ? named : mealsIn(lead);
+      const context = `${lead} ${sentence}`;
+      if (!NUTRITION_WORDING.test(context) || HYPOTHETICAL.test(context)) continue;
+
+      if (meals.length === 0) {
+        // A day-level intake figure ("your total calorie intake so far is 393 kcal") must be one the log holds too.
+        if (!DAY_INTAKE.test(context)) continue;
+        const allowed = [...intake.dayValues.filter(Number.isFinite), ...(intake.meals ?? []).flatMap((logged) => [0, ...logged.values])];
+        const unsupported = numbersIn(sentence.replace(NOT_AN_AMOUNT, " ")).filter((stated) => !supports(allowed, stated));
+        if (unsupported.length > 0) {
+          findings.push({
+            code: "unsupported_intake_claim",
+            severity: "blocker",
+            message: intake.meals
+              ? `Reply states ${unsupported.join(", ")} as today's intake, which today's food log does not support. Use todayFoodLog's consumed/target/remaining figures exactly.`
+              : `Reply states ${unsupported.join(", ")} as today's intake, but the food log could not be read. State no intake figure; say it is unavailable.`,
+          });
+        }
+        continue;
+      }
+      // No number needed to invent a meal: "breakfast is part of your snack", "includes the foods you had at breakfast".
+      const unlogged = intake.meals ? named.filter((meal) => !intake.meals!.some((logged) => logged.meal === meal)) : [];
+      const stated = numbersIn(sentence);
+      // "You had 0 kcal at breakfast" is true.
+      if (unlogged.length > 0 && FOLDS_IN.test(sentence) && !NEGATED.test(sentence) && !(stated.length > 0 && stated.every((n) => n === 0))) {
+        findings.push({
+          code: "unsupported_intake_claim",
+          severity: "blocker",
+          message: `Reply says food was eaten at ${unlogged.join("/")}, but nothing is logged under ${unlogged.join("/")} today. Say plainly that it has nothing logged; never fold one meal into another.`,
+        });
+        continue;
+      }
+      const underMealHeading = isItem && named.length === 0 && lead.endsWith(":");
+      const claim = LOG_CUE.test(context) || underMealHeading || MEAL_NAMES.some(([meal, name]) => named.includes(meal) && attachesFigure(sentence, name));
+      if (!claim) continue;
+
+      const allowed = [
+        ...intake.dayValues.filter(Number.isFinite),
+        ...(intake.meals ? [0] : []),
+        ...meals.flatMap((meal) => intake.meals?.find((logged) => logged.meal === meal)?.values ?? []),
+      ];
+      const unsupported = numbersIn(sentence.replace(NOT_AN_AMOUNT, " ")).filter((stated) => !supports(allowed, stated));
+      if (unsupported.length === 0) continue;
+
+      const logged = meals.map((meal) => {
+        if (!intake.meals) return `${meal}: food log unavailable`;
+        const row = intake.meals.find((candidate) => candidate.meal === meal);
+        return row ? `${meal}: ${row.values[0]} kcal logged` : `${meal}: nothing logged`;
+      });
+      findings.push({
+        code: "unsupported_intake_claim",
+        severity: "blocker",
+        message: `Reply states ${unsupported.join(", ")} for ${meals.join("/")}, which today's food log does not support (${logged.join("; ")}). State per-meal figures only from todayFoodLog.meals and never split the daily total across meals; otherwise give the day's total.`,
+      });
+    }
+
+    // A list is read with the line that introduced it; a meal-led line ("Breakfast: 920 kcal") keeps the one above it.
+    if (line && !isItem && (line.endsWith(":") || mealsIn(line).length === 0)) header = line;
+  }
+
+  return findings;
 }

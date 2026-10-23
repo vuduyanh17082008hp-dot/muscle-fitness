@@ -113,6 +113,29 @@ describe("A/H. prior offer + exact macros use deterministic state", () => {
     expect(results.fit).toBeUndefined()
   })
 
+  // "What foods have I eaten today?" / "what about my last meal?": answered from the log as logged, never guessed.
+  it("state carries consumed intake and today's meals as logged, and their numbers are allowed in the reply", () => {
+    const ctx = { ...makeCtx({ caloriesRemaining: 520, proteinRemaining: 54 }), todayMeals: [{ meal: "lunch" as const, calories: 1680, protein: 106, carbs: 150, fat: 50, foods: ["Chicken rice (350 g)"] }], lastLogged: { meal: "lunch", food: "Chicken rice (350 g)" } }
+    const { plan: built } = plan("yes", recent, exact)
+    const results = runDeterministicTools(built, ctx)
+    expect(results.athleteState?.consumed).toEqual({ calories: 1680, protein: 106 })
+    expect(results.athleteState?.meals).toEqual([{ meal: "lunch", calories: 1680, protein: 106, foods: ["Chicken rice (350 g)"] }])
+    expect(results.numbers).toEqual(expect.arrayContaining([1680, 106, 350]))
+    expect(results.athleteState?.lastLogged).toEqual({ meal: "lunch", food: "Chicken rice (350 g)" })
+  })
+
+  it.each(["What foods have I eaten today?", "How many calories have I eaten today?", "What about my last meal?"])("a logged-intake question reads state even when the planner skipped it: %s", (message) => {
+    const { context, output } = plannerOutput(message, [], { clarification: { question: "What foods have you eaten today?", affects: "calculation" } })
+    const built = buildPlan(output, context, guards, { athleteStateAvailable: true, message })
+    expect(built.toolNeed.needNutritionState).toBe(true)
+    expect(built.clarification).toBeNull()
+  })
+
+  it("no meals loaded → no meal entries in state (nothing to fabricate from)", () => {
+    const results = runDeterministicTools(plan("yes", recent, exact).plan, makeCtx())
+    expect(results.athleteState?.meals).toBeUndefined()
+  })
+
   it("computes fit arithmetic only from verified foods and known grams", () => {
     const ctx = makeCtx({ caloriesRemaining: 520, proteinRemaining: 54 })
     const { plan: built } = plan("fit 150g chicken in", [], { ...exact, foods: [{ text: "chicken breast", grams: 150 }] })

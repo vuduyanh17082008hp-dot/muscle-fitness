@@ -26,6 +26,10 @@ export type ToolResults = {
     goal: string | null
     remaining: { calories: number; protein: number }
     targets: { calories: number; protein: number }
+    /** Today's logged intake, and per meal exactly as logged — "what have I eaten today" is answered from these, never guessed. */
+    consumed?: { calories: number; protein: number }
+    meals?: Array<{ meal: string; calories: number; protein: number; foods: string[] }>
+    lastLogged?: { meal: string; food: string }
   }
   foods?: Array<{
     asked: string
@@ -120,8 +124,12 @@ export function runDeterministicTools(plan: OrchestrationPlan, ctx: CoachContext
         goal: plan.toolNeed.needGoalContext ? snapshot.goal : null,
         remaining: { calories: round(snapshot.caloriesRemaining), protein: round(snapshot.proteinRemaining) },
         targets: { calories: round(snapshot.caloriesTarget), protein: round(snapshot.proteinTarget) },
+        consumed: { calories: round(snapshot.caloriesConsumed), protein: gram(snapshot.proteinConsumed) },
+        meals: ctx.todayMeals?.map((meal) => ({ meal: meal.meal, calories: meal.calories, protein: meal.protein, foods: meal.foods })),
+        lastLogged: ctx.lastLogged,
       }
-      results.numbers.push(round(snapshot.caloriesRemaining), round(snapshot.proteinRemaining), round(snapshot.caloriesTarget), round(snapshot.proteinTarget))
+      results.numbers.push(round(snapshot.caloriesRemaining), round(snapshot.proteinRemaining), round(snapshot.caloriesTarget), round(snapshot.proteinTarget), round(snapshot.caloriesConsumed), gram(snapshot.proteinConsumed))
+      for (const meal of ctx.todayMeals ?? []) results.numbers.push(meal.calories, meal.protein, ...(meal.foods.join(" ").match(/\d+(?:\.\d+)?/g) ?? []).map(Number))
     }
 
     if (step.tool === "food_lookup") {

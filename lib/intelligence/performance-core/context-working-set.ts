@@ -376,8 +376,12 @@ function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, last
     // One day said as one day (today / yesterday) is not called a habit; a daily figure is.
     const day = /\b(?:a day|per day|daily|each day|every day|moi ngay|mot ngay|for (?:a|the past|\d+) (?:week|days|weeks))\b/.test(text) ? null
       : /\b(?:yesterday|hom qua)\b/.test(text) ? "yesterday" : /\b(?:today|hom nay|so far)\b/.test(text) ? "today" : null;
-    out.push({ key: "ENERGY_INTAKE", kind: "LOW_ENERGY_INTAKE", relevance: low ? "SAFETY" : "DOMAIN", op: "ASSERT", value: kcalValue, unit: "kcal/day",
-      label: !low ? `reports eating about ${kcalValue} kcal/day`
+    // "I want to eat only 500 a day": the plan is the same safety risk, but it is not what they eat — no intake figure
+    // (the food log owns that), so no reminder can voice "at about 500 kcal a day" as their current intake.
+    const planned = low && /\b(?:wants? to|going to|gonna|plan(?:ning)? to|i'?ll|i will|muon|dinh)\b[^.?!]{0,20}\b(?:eat|an|cut|diet|stick)\b/.test(text);
+    out.push({ key: "ENERGY_INTAKE", kind: "LOW_ENERGY_INTAKE", relevance: low ? "SAFETY" : "DOMAIN", op: "ASSERT", value: planned ? undefined : kcalValue, unit: "kcal/day",
+      label: planned ? `wants to eat only about ${kcalValue} kcal/day — a dangerously low intake to plan`
+        : !low ? `reports eating about ${kcalValue} kcal/day`
         : day ? `ate only about ${kcalValue} kcal ${day} (a single-day report) — dangerously low energy intake for training on`
           : `eats only about ${kcalValue} kcal/day — dangerously low energy intake` });
   } else if (active.has("ENERGY_INTAKE") && /\b(?:eating (?:normally|properly|enough|more) (?:again|now)|back to (?:eating )?(?:normal(?:ly)?|maintenance|my usual)|an (?:uong )?binh thuong lai)\b/.test(text)) {

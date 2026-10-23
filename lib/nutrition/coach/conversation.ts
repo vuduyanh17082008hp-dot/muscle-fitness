@@ -354,14 +354,16 @@ export { QUICK_ACTIONS } from "./quick-actions"
    MACRO PROVENANCE
 ========================================================= */
 
+// A number as written: "1,326" is 1326, not 326 (live: a correct "You've consumed 1,326 calories" was rejected).
+const AMOUNT = String.raw`(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)`
 const MACRO_NUMBER = [
-  /(\d+(?:\.\d+)?)\s*(?:k?cal(?:ories)?\b)/gi,
-  /(\d+(?:\.\d+)?)\s*(?:g|grams?)\s+(?:of\s+)?(?:protein|carbs?|carbohydrates?|fat)\b/gi,
-  /\b(?:protein|carbs?|carbohydrates?|fat)\s*(?:of|:|is|are)?\s*(?:about|around|~)?\s*(\d+(?:\.\d+)?)\s*g\b/gi,
+  new RegExp(String.raw`${AMOUNT}\s*(?:k?cal(?:ories)?\b)`, "gi"),
+  new RegExp(String.raw`${AMOUNT}\s*(?:g|grams?)\s+(?:of\s+)?(?:protein|carbs?|carbohydrates?|fat)\b`, "gi"),
+  new RegExp(String.raw`\b(?:protein|carbs?|carbohydrates?|fat)\s*(?:of|:|is|are)?\s*(?:about|around|~)?\s*${AMOUNT}\s*g\b`, "gi"),
 ]
 
 /** True when a model reply states an exact calorie/macro number that did not come from structured data or the user's own message. */
 export function hasUngroundedMacros(reply: string, allowed: Iterable<number>): boolean {
   const ok = new Set([...allowed].map((n) => Math.round(n)))
-  return MACRO_NUMBER.some((pattern) => [...reply.matchAll(pattern)].some((match) => !ok.has(Math.round(Number(match[1])))))
+  return MACRO_NUMBER.some((pattern) => [...reply.matchAll(pattern)].some((match) => !ok.has(Math.round(Number(match[1].replace(/,/g, ""))))))
 }

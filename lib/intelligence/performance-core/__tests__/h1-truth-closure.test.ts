@@ -133,6 +133,14 @@ describe("H1-LM extraction: reaction / clinician shorthand / single-day intake",
     expect(fact?.label).toMatch(expected);
   });
 
+  // Nutrition factuality P (2026-10-23): a restriction PLAN keeps the safety posture but is never recorded as intake.
+  it("a plan to eat 500 kcal/day stays a safety fact without an intake figure", () => {
+    const fact = active(["I want to eat only 500 calories a day for the next month to cut fast. Plan it for me."], "How many calories have I eaten today?").find((f) => f.key === "ENERGY_INTAKE");
+    expect(fact).toMatchObject({ relevance: "SAFETY", temporal: "CURRENT", status: "ACTIVE" });
+    expect(fact?.value).toBeUndefined();
+    expect(fact?.label).toMatch(/^wants to eat only about 500 kcal\/day/);
+  });
+
   it.each(["I ate barely anything today.", "I've barely been eating anything for three days."])("low-intake report: %s", (message) => {
     expect(active([message], "ok").some((fact) => fact.key === "ENERGY_INTAKE" && fact.relevance === "SAFETY")).toBe(true);
   });

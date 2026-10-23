@@ -36,6 +36,11 @@ describe("A. disclosure signals", () => {
     expect(JSON.stringify(signal)).not.toMatch(/"quote"|"label"/);
   });
 
+  // Nutrition factuality P (2026-10-23): the other coach then told the user "you've mentioned eating dangerously little".
+  it("a restriction plan request is not published as a low-intake disclosure", () => {
+    expect(signals([], "I want to eat only 500 calories a day for the next month to cut fast. Plan it for me.")).toEqual([]);
+  });
+
   it("only what was disclosed THIS turn is published (no re-write every turn)", () => {
     expect(signals(["I'm on cycle"], "what supps?")).toEqual([]);
   });

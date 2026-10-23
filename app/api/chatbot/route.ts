@@ -23,7 +23,7 @@ import {
 } from "@/lib/training/muscle-taxonomy";
 import { LOCAL_EXERCISE_LIBRARY } from "@/lib/workouts/exercise-library";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
-import { compareToTargets } from "@/lib/nutrition/food-log/totals";
+import { compareToTargets, describePortion, summarizeMeals } from "@/lib/nutrition/food-log/totals";
 import { checkSafety } from "@/lib/dante-core/safety-layer";
 import { buildCurrentStateCoachingResponse, extractCurrentTurnState, formatCurrentStatePrompt } from "@/lib/dante-core/current-turn-state";
 import {
@@ -120,7 +120,7 @@ import {
 } from "@/lib/dante-core/reasoning-scope";
 import { DANTE_TOOLS } from "@/lib/dante-core/tools/registry";
 import { verifyFinalResponse, runVerifiedGeneration, buildFallbackMessage, salvageUnsourcedResearchClaims } from "@/lib/dante-core/verifier";
-import { buildKnownFactsFromContext } from "@/lib/dante-core/verifier/known-facts-from-context";
+import { buildKnownFactsFromContext, buildMealIntakeFromContext, verifiedIntakeAnswer } from "@/lib/dante-core/verifier/known-facts-from-context";
 import {
   buildCommunicationPromptHints,
   buildProfileFromRecentMessages,
@@ -1097,12 +1097,14 @@ function summarizeNutritionPlan(
     dailyTargets:
       plan.target,
 
-    meals:
+    // The plan's per-meal TARGETS. Named so they can't be read as eaten: as "meals"/"totals" they were voiced as
+    // today's per-meal intake ("Breakfast: 920 kcal") — logged meals are todayFoodLog.meals only.
+    plannedMealTargets:
       plan.meals.map(
         (meal) => ({
           name: meal.name,
           purpose: meal.purpose,
-          totals: meal.totals,
+          targetTotals: meal.totals,
         }),
       ),
 
@@ -1222,11 +1224,9 @@ function summarizeTodayFoodLog(
     return { available: false, note: "Food log unavailable. Do not infer consumed or remaining nutrients." };
   }
 
-  const foodsLoggedToday = foodLog.entries.slice(-8).map((entry) =>
-    entry.servingName && entry.servingsConsumed
-      ? `${entry.foodName} (${entry.servingsConsumed} ${entry.servingName}${entry.servingsConsumed === 1 ? "" : "s"} / ${entry.quantityGrams} g)`
-      : `${entry.foodName} (${entry.quantityGrams} g)`,
-  );
+  const foodsLoggedToday = foodLog.entries.slice(-8).map(describePortion);
+  // Per-meal totals by the meal each row was logged under — the only source a per-meal number may come from.
+  const meals = summarizeMeals(foodLog.entries);
 
   if (!target) {
     // H0 final closure: no target hides only the comparison — what was actually logged is still the truth
@@ -1237,6 +1237,7 @@ function summarizeTodayFoodLog(
       date: foodLog.date,
       itemsLoggedToday: foodLog.entries.length,
       foodsLoggedToday,
+      meals,
     };
   }
 
@@ -1251,6 +1252,7 @@ function summarizeTodayFoodLog(
     fat: comparison.fat,
     itemsLoggedToday: foodLog.entries.length,
     foodsLoggedToday,
+    meals,
   };
 }
 
@@ -3078,7 +3080,8 @@ Relevant fields may include:
 - priority muscles
 - currentNutritionPlan (the client's active training style, activity
   level, goal, estimated maintenance calories, daily macro targets,
-  gram-based meals and training-specific notes — already computed by
+  plannedMealTargets (what each planned meal SHOULD contain — never
+  what was eaten) and training-specific notes — already computed by
   the Muscle Fitness nutrition engine, so use it directly instead of
   recalculating)
 - recovery (today's recovery score, status, lowest-scoring drivers,
@@ -3276,6 +3279,18 @@ foodsLoggedToday lists what was logged with its portion (e.g. "Whey
 Protein (1 scoop / 30 g)") — use it for context ("you've had oats and
 chicken today") but never restate per-item macros from memory; only
 todayFoodLog's calories/protein/carbs/fat totals are authoritative.
+foodsLoggedToday is in logging order: its last item is the most recent
+thing logged.
+
+meals lists today's totals per meal, grouped by the meal each food was
+logged under (breakfast, lunch, dinner, snack, pre_workout,
+post_workout). A per-meal number may come ONLY from meals —
+currentNutritionPlan.plannedMealTargets are targets, never intake. A meal not
+in meals has nothing logged — never split or allocate the daily total
+across meals, and never guess a meal from the time of day. If asked
+for a breakdown, give the meals that exist exactly as listed. Each
+entry in a meal's foods carries that food's own kcal and protein; a
+meal's total is never one food's value.
 
 ============================================================
 TODAY'S PLAN
@@ -3886,7 +3901,10 @@ function buildDantePrompt(
         ? riskEvaluation
         : null;
   const instructions = fitInstructionSections(DANTE_INSTRUCTIONS, 4400, (header) => MANDATORY_INSTRUCTION_SECTION.test(header));
-  const profileJson = fitJsonToTokenBudget(eligibleContext, 1800);
+  // todayFoodLog first: the budget cuts from the end, and as the last-but-two key it was cut on data-rich accounts —
+  // Dante then answered intake from the plan's per-meal targets ("Breakfast: 920 kcal").
+  const { todayFoodLog: eligibleFoodLog, ...eligibleRest } = eligibleContext;
+  const profileJson = fitJsonToTokenBudget({ todayFoodLog: eligibleFoodLog, ...eligibleRest }, 1800);
   const evidenceJson = fitJsonToTokenBudget(evidence, 1100);
   const communicationSignals = detectCommunicationSignals(
     userMessage,
@@ -6155,6 +6173,7 @@ async function handleChatbotPost(
       });
 
     const knownFacts = buildKnownFactsFromContext(userContext);
+    const mealIntake = buildMealIntakeFromContext(userContext, userMessage);
     const availableSourceTitles = [...sources, ...canonicalSourceItems()].map((source) => source.title);
     let usedModel = "dante";
     let bufferedPartial = "";
@@ -6293,7 +6312,11 @@ async function handleChatbotPost(
       knownFacts,
       availableSources: availableSourceTitles,
       safety: { triggered: false, responseOverride: null },
+      mealIntake,
     });
+    // Every blocker is a figure about today's intake: answer from the log itself rather than "ask me one part at a time".
+    const intakeOnly = (findings: { code: string; message: string }[]) =>
+      findings.length > 0 && findings.every((finding) => finding.code === "unsupported_intake_claim" || (/mutation|invented/.test(finding.code) && /calor|kcal|protein/i.test(finding.message)));
 
     // H0 WP1 measurement: duration, attempts per counter and every retrieval source's terminal status for this turn.
     const runtimeTrace = () =>
@@ -6306,6 +6329,7 @@ async function handleChatbotPost(
           buildVerifierInput,
           (outcome, findings, lastDraft) =>
             (reasoningScope.mode === "NONE" ? salvageUnsourcedResearchClaims(lastDraft, findings, boundaryLang) : null)
+            ?? (reasoningScope.mode === "NONE" && intakeOnly(findings) ? verifiedIntakeAnswer(userContext, boundaryLang) : null)
             ?? (reasoningScope.mode === "NONE" ? buildFallbackMessage(outcome) : scopedFallback(reasoningScope, boundaryLang)),
           budget,
         );
