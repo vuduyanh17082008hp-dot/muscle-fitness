@@ -326,7 +326,7 @@ describe("conversation edits are deterministic", () => {
       const last = (await ask("What about my last meal?")).reply
       expect((await ask("How much protein was in it?", last)).reply).toBe(LUNCH)
       const suitable = (await ask("Was that meal suitable for my goal?", last)).reply
-      expect(suitable).toBe(`${LUNCH} The goal on your profile is fat loss, but I can't give a proper judgement of how it fits right now because the coaching model is unavailable. Try again in a moment.`)
+      expect(suitable).toBe(`${LUNCH} The goal on your profile is fat loss, but I can't give a proper judgement of how it fits right now. Try again in a moment.`)
       expect(suitable).not.toMatch(/left today/)
       expect((await ask("How much protein was in my breakfast?")).reply).toBe("Your breakfast (Oatmeal (200 g)) had 10 g protein and 300 kcal, from your food log.")
       expect(ambiguousCalls()).toBe(0)

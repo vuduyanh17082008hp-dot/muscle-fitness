@@ -63,7 +63,7 @@ export function decideNeeds(input: NeedInput): { toolNeed: ToolNeedDecision; con
 
   // Nutrition state (remaining/targets): exact calculations always; otherwise only for a personal state question.
   const plannerWantsState = need.needAthleteState && !continuity && personal
-  const loggedIntake = message !== undefined && isLoggedIntakeQuestion(message)
+  const loggedIntake = (message !== undefined && isLoggedIntakeQuestion(message)) || Boolean(extras.loggedMealReferent)
   const ownGoal = message !== undefined && namesOwnGoal(message)
   const needNutritionState = !idle && input.nutritionStateAvailable && (needMacroCalculation || plannerWantsState || loggedIntake || ownGoal)
   if (loggedIntake && !needMacroCalculation && !plannerWantsState) reasons.push("logged_intake_question")

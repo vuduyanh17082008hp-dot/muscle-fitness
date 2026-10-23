@@ -197,6 +197,8 @@ export async function composeReply(params: {
   budget: ContextBudget
   knowledgeText: string | null
   call: ModelCall
+  /** The turn asks about today's food log: only current state may supply a number, never an earlier turn (the meal may be edited or deleted since). */
+  currentFactsOnly?: boolean
 }): Promise<ComposedReply | null> {
   const { message, plan, ctx, results, budget, knowledgeText, call } = params
   // ICH-1 conversation control: an explicit language request outranks the language the message happens to be written in.
@@ -243,7 +245,7 @@ export async function composeReply(params: {
   // earlier turns may belong to a different (or since-edited) meal, so they cannot pass as the answer.
   // The same holds when the user names a NEW amount and no tool ran for it: an earlier turn's "23 g protein" described a different
   // quantity, so it may not be re-attached to this one (live defect: 100 g = 23 g protein, then "150 g = about 23 g").
-  const fromTurns = plan.toolNeed.needMacroCalculation || STATES_AMOUNT.test(message) ? [] : context.turns.flatMap((turn) => (turn.text.match(/\d+(?:\.\d+)?/g) ?? []).map(Number))
+  const fromTurns = params.currentFactsOnly || plan.toolNeed.needMacroCalculation || STATES_AMOUNT.test(message) ? [] : context.turns.flatMap((turn) => (turn.text.match(/\d+(?:\.\d+)?/g) ?? []).map(Number))
   const allowed = [...results.numbers, ...(message.match(/\d+(?:\.\d+)?/g) ?? []).map(Number), ...fromTurns, ...(ctx.intelligence?.numbers ?? [])]
   if (hasUngroundedMacros(raw, allowed)) return lookup()
   if (mentionsBlockedFood(raw, ctx.guards)) return null
