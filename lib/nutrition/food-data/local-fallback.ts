@@ -163,6 +163,15 @@ function normalize(value: string): string {
   return value.toLowerCase().trim()
 }
 
+// Preparation/serving words say HOW a food was made, not WHICH food — "steamed chicken" should still find chicken.
+const PREP_WORDS = new Set(["cooked", "steamed", "boiled", "grilled", "roasted", "baked", "fried", "stir", "poached", "braised", "stewed", "sauteed", "pan", "deep", "raw", "fresh", "plain", "sliced", "slices", "chopped", "diced", "shredded", "piece", "pieces", "of", "and", "with", "a"])
+const COOKED_QUERY = /\b(cooked|steamed|boiled|grilled|roasted|baked|fried|stir|poached|braised|stewed|sauteed)\b/
+const stem = (word: string) => word.replace(/(es|s)$/, "")
+
+/**
+ * Every food-identifying query word must appear in the name ("cooked rice" → "White Rice — cooked").
+ * When the query says the food is cooked, cooked records come first.
+ */
 export function searchLocalFallback(query: string): NormalizedFood[] {
   const normalizedQuery = normalize(query)
 
@@ -170,9 +179,17 @@ export function searchLocalFallback(query: string): NormalizedFood[] {
     return LOCAL_FALLBACK_FOODS
   }
 
-  return LOCAL_FALLBACK_FOODS.filter((food) =>
-    normalize(food.name).includes(normalizedQuery),
-  )
+  const words = normalizedQuery.split(/[^a-z]+/).filter((word) => word && !PREP_WORDS.has(word)).map(stem)
+  if (words.length === 0) {
+    return LOCAL_FALLBACK_FOODS.filter((food) => normalize(food.name).includes(normalizedQuery))
+  }
+
+  const matches = LOCAL_FALLBACK_FOODS.filter((food) => {
+    const nameWords = normalize(food.name).split(/[^a-z]+/).map(stem)
+    return words.every((word) => nameWords.includes(word))
+  })
+  const wantsCooked = COOKED_QUERY.test(normalizedQuery)
+  return wantsCooked ? [...matches].sort((a, b) => Number(b.preparationState === "cooked") - Number(a.preparationState === "cooked")) : matches
 }
 
 export function getLocalFallbackById(id: string): NormalizedFood | null {

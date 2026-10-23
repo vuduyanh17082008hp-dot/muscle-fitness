@@ -41,6 +41,15 @@ describe("searchLocalFallback", () => {
     expect(searchLocalFallback("").length).toBeGreaterThan(0)
   })
 
+  it("matches by food words, not substring, and puts cooked records first for a cooked query (photo names)", () => {
+    expect(searchLocalFallback("cooked rice")[0]?.id).toBe("local-white-rice-cooked")
+    expect(searchLocalFallback("steamed chicken")[0]?.id).toBe("local-chicken-breast-cooked")
+    expect(searchLocalFallback("poached chicken")[0]?.id).toBe("local-chicken-breast-cooked")
+    expect(searchLocalFallback("cooked white rice")[0]?.id).toBe("local-white-rice-cooked")
+    expect(searchLocalFallback("bananas").map((food) => food.id)).toEqual(["local-banana-raw"])
+    expect(searchLocalFallback("beef slices")).toEqual([])
+  })
+
   it("returns an empty list for a query matching nothing", () => {
     expect(searchLocalFallback("nonexistent-food-xyz")).toEqual([])
   })
