@@ -7,16 +7,18 @@ import { estimateMealFromPhoto } from "@/lib/nutrition/photo-estimate"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-// ~6MB base64 ceiling keeps this well under typical serverless body limits.
-const MAX_IMAGE_LENGTH = 8_000_000
+// The panel re-encodes photos to a <=1280px JPEG (~0.3 MB), so ~3 MB of base64 is generous and
+// stays under the 4.5 MB serverless request-body limit.
+const MAX_IMAGE_LENGTH = 4_000_000
+const IMAGE_DATA_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/
 
 const requestSchema = z.object({
   image: z
     .string()
     .min(1)
     .max(MAX_IMAGE_LENGTH)
-    .refine((value) => value.startsWith("data:image/"), {
-      message: "Image must be a data URL (data:image/...).",
+    .refine((value) => IMAGE_DATA_URL.test(value), {
+      message: "Image must be a JPEG, PNG or WebP data URL.",
     }),
 })
 
@@ -49,9 +51,10 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(body)
 
   if (!parsed.success) {
+    const tooLarge = typeof (body as { image?: unknown })?.image === "string" && (body as { image: string }).image.length > MAX_IMAGE_LENGTH
     return NextResponse.json(
-      { ok: false, error: "Invalid image payload.", details: parsed.error.flatten() },
-      { status: 400 },
+      { ok: false, error: tooLarge ? "That image is too large. Try a smaller photo." : "Unsupported image. Use a JPEG, PNG or WebP photo." },
+      { status: tooLarge ? 413 : 400 },
     )
   }
 

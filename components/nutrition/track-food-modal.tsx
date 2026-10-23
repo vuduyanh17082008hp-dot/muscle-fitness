@@ -42,7 +42,6 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged, onClosed }
   const [mode, setMode] = useState<Mode>("menu")
   const [mealType, setMealType] = useState<MealType>(() => suggestMealType())
   const [scannedFood, setScannedFood] = useState<{ food: NormalizedFood; code: string } | null>(null)
-  const [manualPrefillName, setManualPrefillName] = useState<string | undefined>(undefined)
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   const confirmLock = useRef(false)
@@ -52,7 +51,6 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged, onClosed }
   function reset() {
     setMode("menu")
     setScannedFood(null)
-    setManualPrefillName(undefined)
     setMultiOutcome(null)
     pendingKey.current = null
     confirmLock.current = false
@@ -201,10 +199,6 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged, onClosed }
               mealType={mealType}
               onMealTypeChange={setMealType}
               onConfirmMultiple={handleConfirmMultiple}
-              onSwitchToManual={(name) => {
-                setManualPrefillName(name)
-                setMode("manual")
-              }}
               onClose={() => setMode("menu")}
             />
           ) : mode === "hawkerlens" ? (
@@ -222,7 +216,6 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged, onClosed }
               onMealTypeChange={setMealType}
               onConfirm={handleConfirm}
               onClose={() => setMode("menu")}
-              initialName={manualPrefillName}
             />
           ) : null}
         </Dialog.Content>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { reviewFoodMatch } from "@/lib/nutrition/photo-match-review"
+import { dropDecomposedComposites, eatenGrams, needsCookingQuestion, reviewFoodMatch, suggestedOilGrams } from "@/lib/nutrition/photo-match-review"
 import type { NormalizedFood } from "@/lib/nutrition/food-data/types"
 
 const food = (overrides: Partial<NormalizedFood>): NormalizedFood => ({
@@ -47,5 +47,48 @@ describe("reviewFoodMatch", () => {
   it("never produces a number or accuracy score", () => {
     const flags = reviewFoodMatch("laksa", food({ name: "Beef stew", preparationState: "raw", confidence: "low" }), "provider_error")
     for (const flag of flags) expect(flag.message).not.toMatch(/\d+\s*%|accura/i)
+  })
+})
+
+describe("photo review: cooking method, eaten %, mixed dishes", () => {
+  it("added-oil default follows the cooking method and is 0 when nothing implies oil", () => {
+    const chicken = { name: "Chicken breast, roasted", rawDescription: null }
+    expect(suggestedOilGrams("boiled", 200, chicken)).toBe(0)
+    expect(suggestedOilGrams("steamed", 200, chicken)).toBe(0)
+    expect(suggestedOilGrams("raw", 200, chicken)).toBe(0)
+    expect(suggestedOilGrams("unknown", 200, chicken)).toBe(0)
+    expect(suggestedOilGrams("grilled", 200, chicken)).toBe(6)
+    expect(suggestedOilGrams("stir_fried", 200, chicken)).toBe(12)
+    expect(suggestedOilGrams("deep_fried", 200, chicken)).toBe(24)
+  })
+
+  it("a record that already includes cooking fat never gets extra oil (no double count)", () => {
+    expect(suggestedOilGrams("fried", 300, { name: "Fried rice", rawDescription: null })).toBe(0)
+    expect(suggestedOilGrams("stir_fried", 150, { name: "Vegetables, stir-fried in oil", rawDescription: null })).toBe(0)
+  })
+
+  it("eaten grams scale the served portion; 0 % logs nothing; out-of-range is clamped", () => {
+    expect(eatenGrams(200, 100)).toBe(200)
+    expect(eatenGrams(200, 50)).toBe(100)
+    expect(eatenGrams(155, 33)).toBe(51.15)
+    expect(eatenGrams(200, 0)).toBe(0)
+    expect(eatenGrams(200, 150)).toBe(200)
+    expect(eatenGrams(200, -5)).toBe(0)
+  })
+
+  it("an uncertain or unknown preparation asks one question; a certain one does not", () => {
+    expect(needsCookingQuestion("grilled", false)).toBe(true)
+    expect(needsCookingQuestion("unknown", true)).toBe(true)
+    expect(needsCookingQuestion("steamed", true)).toBe(false)
+  })
+
+  it("a composite listed alongside its own components is dropped; an undecomposed dish stays", () => {
+    const items = [
+      { name: "Chicken Rice", dish: null },
+      { name: "steamed chicken", dish: "chicken rice" },
+      { name: "cooked white rice", dish: "Chicken  rice" },
+      { name: "pho", dish: null },
+    ]
+    expect(dropDecomposedComposites(items).map((item) => item.name)).toEqual(["steamed chicken", "cooked white rice", "pho"])
   })
 })

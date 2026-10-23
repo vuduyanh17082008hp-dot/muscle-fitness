@@ -14,14 +14,20 @@ import "server-only"
 
 import { identifyFoodsInImage, isVisionConfigured } from "@/lib/ai/vision-client"
 import { searchFood } from "@/lib/nutrition/food-data"
+import { getLocalFallbackById, searchLocalFallback } from "@/lib/nutrition/food-data/local-fallback"
 import type { FoodSearchStatus, NormalizedFood } from "@/lib/nutrition/food-data/types"
 import { scaleMacrosToGrams, type ScaledMacros } from "@/lib/nutrition/food-log-calculator"
+import { dropDecomposedComposites, reviewFoodMatch, type CookingMethod } from "@/lib/nutrition/photo-match-review"
 
 export type PhotoEstimateItem = {
   detectedName: string
   estimatedGrams: number
   detectionConfidence: "high" | "medium" | "low"
   notes?: string
+  preparation: CookingMethod
+  preparationCertain: boolean
+  /** Mixed dish this item is a component of, or null. */
+  dish: string | null
 
   /** The grounding database match, or null if nothing comparable was found (spec: "user can add manually"). */
   groundedFood: NormalizedFood | null
@@ -36,7 +42,8 @@ export type PhotoEstimateResult =
   | { status: "unconfigured" }
   | { status: "no_foods_detected" }
   | { status: "error"; message: string }
-  | { status: "ok"; items: PhotoEstimateItem[] }
+  /** `cookingOil` is the database record any added-oil line is priced from (never detected — the user sets the amount). */
+  | { status: "ok"; items: PhotoEstimateItem[]; cookingOil: NormalizedFood | null }
 
 export async function estimateMealFromPhoto(imageDataUrl: string): Promise<PhotoEstimateResult> {
   if (!isVisionConfigured()) {
@@ -54,22 +61,33 @@ export async function estimateMealFromPhoto(imageDataUrl: string): Promise<Photo
   }
 
   const grounded = await Promise.all(
-    detection.items.map(async (item): Promise<PhotoEstimateItem> => {
+    dropDecomposedComposites(detection.items).map(async (item): Promise<PhotoEstimateItem> => {
       const searchResult = await searchFood(item.name, "any")
-      const bestMatch = searchResult.foods[0] ?? null
+      // A provider hit can be an unrelated or branded product ("broth" → bouillon powder, "banana" → banana
+      // yogurt); keep the local records alongside and default to a name-matching, unbranded whole food.
+      const local = searchResult.usedFallback ? [] : searchLocalFallback(item.name)
+      const pool = [...searchResult.foods, ...local.filter((food) => !searchResult.foods.some((hit) => hit.id === food.id))]
+      const rank = (food: NormalizedFood) =>
+        (reviewFoodMatch(item.name, food).some((flag) => flag.kind === "name_mismatch") ? 2 : 0) +
+        (food.brand || food.preparationState === "packaged" ? 1 : 0)
+      const candidates = pool.map((food, index) => ({ food, index })).sort((a, b) => rank(a.food) - rank(b.food) || a.index - b.index).map(({ food }) => food).slice(0, 6)
+      const bestMatch = candidates[0] ?? null
 
       return {
         detectedName: item.name,
         estimatedGrams: item.estimatedGrams,
         detectionConfidence: item.confidence,
         notes: item.notes,
+        preparation: item.preparation,
+        preparationCertain: item.preparationCertain,
+        dish: item.dish,
         groundedFood: bestMatch,
         scaledMacros: bestMatch ? scaleMacrosToGrams(bestMatch.per100g, item.estimatedGrams) : null,
-        candidates: searchResult.foods.slice(0, 5),
+        candidates,
         searchStatus: searchResult.status,
       }
     }),
   )
 
-  return { status: "ok", items: grounded }
+  return { status: "ok", items: grounded, cookingOil: getLocalFallbackById("local-olive-oil") }
 }

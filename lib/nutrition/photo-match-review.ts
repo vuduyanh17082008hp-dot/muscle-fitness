@@ -64,3 +64,63 @@ export function reviewFoodMatch(
 
   return flags
 }
+
+/** How a photographed food was prepared. "unknown" means the photo doesn't show it. */
+export const COOKING_METHODS = ["boiled", "steamed", "grilled", "roasted", "baked", "stir_fried", "fried", "deep_fried", "raw", "unknown"] as const
+export type CookingMethod = (typeof COOKING_METHODS)[number]
+
+export const COOKING_METHOD_LABEL: Record<CookingMethod, string> = {
+  boiled: "Boiled",
+  steamed: "Steamed",
+  grilled: "Grilled",
+  roasted: "Roasted",
+  baked: "Baked",
+  stir_fried: "Stir-fried",
+  fried: "Pan-fried",
+  deep_fried: "Deep-fried",
+  raw: "Raw",
+  unknown: "Not sure",
+}
+
+// ponytail: flat oil-absorption guesses per method (share of the food's weight). Only a default the
+// user edits — the photo never shows how much oil was used. Swap for per-food data if one is ever sourced.
+const OIL_SHARE: Record<CookingMethod, number> = {
+  boiled: 0, steamed: 0, raw: 0, unknown: 0,
+  grilled: 0.03, roasted: 0.03, baked: 0.03,
+  stir_fried: 0.06, fried: 0.08, deep_fried: 0.12,
+}
+
+/** The matched record already includes the fat from cooking (e.g. "fried rice"), so adding oil would count it twice. */
+export function recordIncludesCookingFat(food: Pick<NormalizedFood, "name" | "rawDescription">): boolean {
+  return /\b(fried|oil|butter|ghee|lard|margarine|tempura|battered|crispy|curry)\b/i.test(`${food.name} ${food.rawDescription ?? ""}`)
+}
+
+/** Default grams of added cooking oil for a food of `grams` cooked by `method`; 0 when none is implied. */
+export function suggestedOilGrams(method: CookingMethod, grams: number, food: Pick<NormalizedFood, "name" | "rawDescription">): number {
+  if (recordIncludesCookingFat(food)) return 0
+  const oil = grams * OIL_SHARE[method]
+  return oil > 0 ? Math.max(1, Math.round(oil)) : 0
+}
+
+/** Preparation the photo can't confirm changes the oil default, so it is worth one question. */
+export function needsCookingQuestion(method: CookingMethod, certain: boolean): boolean {
+  return !certain || method === "unknown"
+}
+
+/** Grams actually eaten from a served portion. 0 % means nothing is logged. */
+export function eatenGrams(servedGrams: number, eatenPercent: number): number {
+  const pct = Math.min(100, Math.max(0, eatenPercent))
+  return Math.round(servedGrams * pct) / 100
+}
+
+type DishPart = { name: string; dish: string | null }
+
+/**
+ * A whole dish and its own components must not both count. When the model lists
+ * "chicken rice" AND components tagged dish "chicken rice", the components win.
+ */
+export function dropDecomposedComposites<T extends DishPart>(items: T[]): T[] {
+  const norm = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+  const decomposed = new Set(items.flatMap((item) => (item.dish ? [norm(item.dish)] : [])))
+  return items.filter((item) => item.dish !== null || !decomposed.has(norm(item.name)))
+}

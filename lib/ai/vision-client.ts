@@ -8,6 +8,7 @@ import "server-only";
  */
 
 import { getOpenAiApiKey, OPENAI_CHAT_BASE_URL } from "@/lib/dante-core/openai/config";
+import { COOKING_METHODS, type CookingMethod } from "@/lib/nutrition/photo-match-review";
 
 export function isVisionConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
@@ -26,6 +27,12 @@ export type DetectedFoodItem = {
   estimatedGrams: number;
   confidence: "high" | "medium" | "low";
   notes?: string;
+  /** How it looks prepared; "unknown" when the photo doesn't show it. */
+  preparation: CookingMethod;
+  /** False when the preparation is a guess (e.g. can't tell grilled-with-oil from boiled). */
+  preparationCertain: boolean;
+  /** The mixed dish this is one component of ("chicken rice", "pho"), or null for a standalone food. */
+  dish: string | null;
 };
 
 export type VisionEstimateResult = {
@@ -38,33 +45,67 @@ const SYSTEM_PROMPT = `
 You identify foods visible in a photo of a meal.
 
 You do NOT know exact calories, protein, carbs or fat — a separate
-nutrition database provides those. Only report:
+nutrition database provides those. For each food report only:
 
-- the food's common name (e.g. "grilled chicken breast", "cooked white rice", "steamed broccoli")
-- a rough estimated portion weight in grams
-- your confidence in that identification: "high", "medium", or "low"
-- optionally, a short note about uncertainty (e.g. "partially hidden", "unclear if oiled")
-
-Return ONLY valid JSON in exactly this shape, nothing else:
-
-{
-  "items": [
-    { "name": "string", "estimatedGrams": number, "confidence": "high" | "medium" | "low", "notes": "string (optional)" }
-  ]
-}
+- name: the food's common name including how it is cooked when visible (e.g. "grilled chicken breast", "cooked white rice", "steamed broccoli")
+- estimatedGrams: a rough portion weight in grams of what is on the plate
+- confidence: "high", "medium" or "low" for the identification
+- preparation: one of ${COOKING_METHODS.join(", ")} ("unknown" if you cannot tell)
+- preparationCertain: give your best guess for preparation; set false only when the photo cannot tell methods apart that differ in added oil or fat (e.g. grilled-with-oil vs boiled chicken). Plain rice or noodles are boiled/steamed and certain.
+- dish: when the foods together form a known dish (Hainanese chicken rice, pho, fried rice, nasi lemak, com tam, mixed rice plate, noodles with meat), that dish name on EVERY one of its components; otherwise null
+- notes: a short uncertainty note, or "" (e.g. "partially hidden", "sauce amount unclear")
 
 Rules:
-- List each distinct food separately. Do not merge a whole plate into one item.
-- If you cannot identify any food, return { "items": [] }.
+- Break a mixed dish into its visible components (rice or noodles, protein, vegetables, sauce/broth), each tagged with the same dish name. Do NOT also list the whole dish.
+- If a dish cannot be broken down reliably, list it once as a single item with dish null and say so in notes.
+- List a sauce, dressing or broth only if it is visible; never invent unseen oil or sauce.
+- If there is no food in the photo, return { "items": [] }.
 - Never invent a brand name that isn't visibly legible on packaging.
-- Do not include calories or macronutrients in your response — you are not the source of that data.
+- Do not include calories or macronutrients — you are not the source of that data.
 `.trim();
+
+// Strict structured output; the parser below still treats the reply as untrusted.
+const RESPONSE_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "meal_photo_items",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["items"],
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["name", "estimatedGrams", "confidence", "preparation", "preparationCertain", "dish", "notes"],
+            properties: {
+              name: { type: "string" },
+              estimatedGrams: { type: "number" },
+              confidence: { type: "string", enum: ["high", "medium", "low"] },
+              preparation: { type: "string", enum: [...COOKING_METHODS] },
+              preparationCertain: { type: "boolean" },
+              dish: { type: ["string", "null"] },
+              notes: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+// A plate never holds more than this many separate foods; anything beyond is noise.
+const MAX_ITEMS = 12;
+const MAX_GRAMS = 2000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseItems(raw: unknown): DetectedFoodItem[] {
+export function parseItems(raw: unknown): DetectedFoodItem[] {
   if (!isRecord(raw) || !Array.isArray(raw.items)) {
     return [];
   }
@@ -81,17 +122,24 @@ function parseItems(raw: unknown): DetectedFoodItem[] {
         ? entry.confidence
         : "medium";
 
-    if (!name || estimatedGrams === null || estimatedGrams <= 0) continue;
+    if (!name || estimatedGrams === null || !Number.isFinite(estimatedGrams) || estimatedGrams <= 0) continue;
+
+    const preparation = COOKING_METHODS.find((method) => method === entry.preparation) ?? "unknown";
+    const dish = typeof entry.dish === "string" && entry.dish.trim() ? entry.dish.trim().slice(0, 80) : null;
+    const notes = typeof entry.notes === "string" && entry.notes.trim() ? entry.notes.trim().slice(0, 160) : undefined;
 
     items.push({
-      name,
-      estimatedGrams: Math.round(estimatedGrams),
+      name: name.slice(0, 80),
+      estimatedGrams: Math.min(MAX_GRAMS, Math.round(estimatedGrams)),
       confidence,
-      notes: typeof entry.notes === "string" ? entry.notes : undefined,
+      notes,
+      preparation,
+      preparationCertain: entry.preparationCertain === true && preparation !== "unknown",
+      dish,
     });
   }
 
-  return items;
+  return items.slice(0, MAX_ITEMS);
 }
 
 export async function identifyFoodsInImage(imageDataUrl: string): Promise<VisionEstimateResult | null> {
@@ -117,7 +165,7 @@ export async function identifyFoodsInImage(imageDataUrl: string): Promise<Vision
         model,
         temperature: 0.2,
         max_tokens: 1024,
-        response_format: { type: "json_object" },
+        response_format: RESPONSE_FORMAT,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
