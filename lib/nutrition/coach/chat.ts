@@ -216,7 +216,7 @@ const MEAL_QUESTION = /\b(?:protein|calories|kcal|macros?|suitable|good|fit|ok(?
 const MEAL_BACKREF = /\b(?:in it|(?:was|is) it(?![^?.!]*\bto\b)|that meal|this meal|that one)\b/i
 // "in/was/is my lunch" asks about the logged meal; "a snack for my dinner" asks for a new one.
 const MY_MEAL = /\b(?:in|was|is|of) my (breakfast|lunch|dinner|snacks?|pre[- ]?workout|post[- ]?workout)(?: meal)?\b/i
-const ASKS_NUMBERS = /\b(?:protein|calories|kcal|macros?)\b/i
+const ASKS_NUMBERS = /\b(?:protein|calories|kcal|macros?)\b|\bwhat(?:'s| is| was) in\b/i
 // "what did that meal have before I deleted it?" asks about the past, which the current log cannot answer.
 const HISTORICAL = /\bbefore (?:i|you|it was) (?:delet|remov|chang|edit)/i
 const LOG_TALK = /\b(?:logged|food log|you (?:had|ate)|you've had|your (?:last |latest )?(?:meal|breakfast|lunch|dinner|snack))\b/i
@@ -233,7 +233,7 @@ const words = (text: string) => (text.toLowerCase().match(/\p{L}{3,}/gu) ?? []).
 function loggedMealReply(message: string, ctx: CoachContext, recent: Array<{ role: "user" | "coach"; text: string }>): { reply: string; judge: boolean } | null {
   const meals = ctx.todayMeals
   const historical = HISTORICAL.test(message)
-  if (!meals || !(MEAL_QUESTION.test(message) || historical)) return null
+  if (!meals || !(MEAL_QUESTION.test(message) || historical || MY_MEAL.test(message))) return null
   const listed = meals.length ? `Today's log has ${meals.map(mealLabel).join(", ")}.` : "Nothing is logged for today yet."
   const lastCoach = recent.findLast((turn) => turn.role === "coach")?.text ?? ""
   const answer = (meal: MealSummary, note = ""): { reply: string; judge: boolean } => {
@@ -268,11 +268,16 @@ function loggedMealReply(message: string, ctx: CoachContext, recent: Array<{ rol
     return { reply: `Which meal do you mean — ${(present.length > 1 ? present.map(mealLabel) : labels.map(mealLabel)).join(" or ")}?${present.length > 1 ? "" : ` ${listed}`}`, judge: false }
   }
   if (labels.length === 1) {
+    // The slot alone is not the meal's identity (Codex P1: chicken lunch deleted, salmon logged as lunch, "it" became the
+    // salmon). It is the discussed meal only while it still holds a food the chat named.
+    // ponytail: name-word overlap, not row ids — the chat carries no row ids; a deleted-and-re-added identical food still matches.
     const meal = meals.find((item) => item.meal === labels[0])
-    if (meal) return answer(meal)
+    if (meal && meal.foods.some((food) => words(portionOf(food).replace(/\(.*$/, "")).some((word) => coachWords.has(word)))) return answer(meal)
     // The named meal is gone. The same food logged under another meal is said as such, never passed off as "it".
     const moved = meals.filter(namesFood)
-    return moved.length === 1 ? answer(moved[0], `That meal is no longer logged as ${mealLabel(labels[0])}. `) : missing()
+    if (moved.length === 1) return answer(moved[0], `That meal is no longer logged as ${mealLabel(labels[0])}. `)
+    if (!meal || historical) return missing()
+    return { reply: `Your ${mealLabel(meal)} has changed since we discussed it: it now has ${meal.foods.map(portionOf).join(", ")}, not the food from earlier in this chat, so that earlier food isn't in your log anymore. Do you want the numbers for your ${mealLabel(meal)} as it is now?`, judge: false }
   }
   const matched = meals.filter(namesFood)
   if (matched.length > 1) return { reply: `Which meal do you mean — ${matched.map(mealLabel).join(" or ")}?`, judge: false }

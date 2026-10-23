@@ -231,3 +231,103 @@ describe("stale meal facts on the healthy planner path", () => {
     expect(json.reply).not.toMatch(/\b62\b/)
   })
 })
+
+/**
+ * Meal identity (Codex P1): the meal slot alone is not the discussed meal. Chicken lunch discussed, deleted, Salmon logged as
+ * lunch: "it" must not become the Salmon. A match must be on a food the chat named, checked against current rows.
+ */
+describe("meal identity: a slot match is not the discussed meal", () => {
+  const SALMON = row("5", "lunch", "Salmon — cooked", 150, 310, 33)
+  const changed = /changed since we discussed it/i
+
+  it("C. same-slot replacement: Salmon's numbers are never given as the discussed lunch's (the Codex repro)", async () => {
+    setLog([RICE, SALMON])
+    for (const last of [LAST, IT]) {
+      const json = await ask("How much protein was in it?", last)
+      expect(json.route).toBe("food_log")
+      expect(json.reply).not.toMatch(/\b33\b|\b310\b|\b62\b|\b330\b/)
+      expect(json.reply).not.toMatch(/from your food log/)
+    }
+    const slot = await ask("How much protein was in it?", LAST)
+    expect(slot.reply).toMatch(changed)
+    expect(slot.reply).toMatch(/Salmon/)
+    // "Was that meal suitable?" about the replaced lunch never reaches the composer as if it were the same meal.
+    expect((await ask("Was that meal suitable for my goal?", LAST)).reply).toMatch(changed)
+    expect(composed).toHaveLength(0)
+  })
+
+  it("A/I. still logged, and an explicit current-lunch question answers the current lunch", async () => {
+    expect((await ask("How much protein was in it?", LAST)).reply).toMatch(/62 g protein/)
+    setLog([RICE, SALMON])
+    for (const message of ["How much protein is in my lunch now?", "What is in my lunch now?"]) {
+      const json = await ask(message, LAST)
+      expect(json.route).toBe("food_log")
+      expect(json.reply).toMatch(/Salmon — cooked \(150 g\)\) had 33 g protein and 310 kcal/)
+      expect(json.reply).not.toMatch(/\b62\b|chicken/i)
+    }
+  })
+
+  it("B/D. deleted with lunch empty, or Salmon added under dinner: said missing, Salmon never swapped in", async () => {
+    for (const log of [[RICE], [RICE, row("5", "dinner", "Salmon — cooked", 150, 310, 33)]]) {
+      setLog(log)
+      const json = await ask("How much protein was in it?", LAST)
+      expect(json.reply).toMatch(/can't find that meal/i)
+      expect(json.reply).not.toMatch(/\b33\b|\b62\b/)
+    }
+  })
+
+  it("E. same row edited 200 g -> 300 g: the current row's values", async () => {
+    setLog([RICE, row("2", "lunch", "Chicken Breast — cooked", 300, 495, 93)])
+    const json = await ask("How much protein was in it?", LAST)
+    expect(json.reply).toMatch(/Chicken Breast — cooked \(300 g\)\) had 93 g protein and 495 kcal/)
+  })
+
+  it("F/G. re-added as a new row, or two chicken rows: numbers come from the current rows only", async () => {
+    setLog([RICE, row("9", "lunch", "Chicken Breast — cooked", 200, 330, 62)])
+    expect((await ask("How much protein was in it?", LAST)).reply).toMatch(/62 g protein/)
+    setLog([RICE, row("2", "lunch", "Chicken Breast — cooked", 200, 330, 62), row("3", "lunch", "Chicken Breast — cooked", 100, 165, 31)])
+    expect((await ask("How much protein was in it?", LAST)).reply).toMatch(/93 g protein and 495 kcal/)
+  })
+
+  it("H. multi-food lunch with one component deleted: the remaining verified components, named", async () => {
+    setLog([row("1", "lunch", "White Rice — cooked", 150, 195, 4.1)])
+    const json = await ask("How much protein was in it?", "Your lunch was 150 g of cooked white rice and 200 g of cooked chicken breast: 525 kcal and 66.1 g of protein.")
+    expect(json.reply).toMatch(/White Rice — cooked \(150 g\)\) had 4\.1 g protein/)
+    expect(json.reply).not.toMatch(/\b66\.1\b|\b62\b/)
+  })
+
+  it("K. a historical question about the replaced food is attributed to the earlier chat", async () => {
+    setLog([RICE, SALMON])
+    const json = await ask("What did that meal contain before I deleted it?", LAST)
+    expect(json.reply).toMatch(/earlier in this chat/i)
+    expect(json.reply).not.toMatch(/from your food log|\b33\b/)
+  })
+
+  it("L/M/N. log unavailable, planner malformed, provider down: never Salmon as the discussed meal", async () => {
+    vi.mocked(loadFoodLogForDate).mockResolvedValueOnce({ date: "2026-10-23", entries: [], totals: null, unavailable: true } as never)
+    const unavailable = await ask("How much protein was in it?", LAST)
+    expect(JSON.stringify(unavailable)).not.toMatch(/\b62\b|\b33\b/)
+    setLog([RICE, SALMON])
+    planner = "malformed"
+    composer(STALE)
+    expect((await ask("How much protein was in it?", LAST)).reply).toMatch(changed)
+    vi.mocked(callOpenAiWithFallback).mockRejectedValue(new Error("provider down"))
+    const down = await ask("How much protein was in it?", LAST)
+    expect(down.reply).toMatch(changed)
+    expect(down.reply).not.toMatch(/\b33\b|\b62\b/)
+  })
+
+  it("O/P. user B's log and a refresh never inherit the discussed lunch", async () => {
+    setLog([SALMON], USER_B)
+    user = USER_B
+    expect((await ask("How much protein was in it?", LAST)).reply).toMatch(changed)
+    expect((await ask("How much protein was in it?")).reply).not.toMatch(/\b62\b|chicken/i)
+  })
+
+  it("Q. craving and hypothetical turns are unaffected", async () => {
+    setLog([RICE, SALMON])
+    composer("200 g of salmon would be a solid dinner.")
+    expect((await ask("If I had 200 g of salmon for dinner, would that be a good choice?", LAST)).route).not.toBe("food_log")
+    expect((await ask("I'm craving chocolate cereal", LAST)).intent).toBe("NEW_CRAVING_REQUEST")
+  })
+})
