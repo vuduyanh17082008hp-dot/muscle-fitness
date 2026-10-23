@@ -33,6 +33,7 @@ import type { KnowledgeNeedDecision, NutritionKnowledgeContext } from "@/lib/nut
 import { classifyTargetUtterance, guardCanonicalTargetClaim, targetTruthReply } from "@/lib/nutrition/targets"
 import { loadCoachContext } from "./context"
 import { buildContextBudget, commitEmitted, composeReply, durableConstraints, fallbackDiagnostics, legacySnapshot, listMatchesEngine, orchestrateTurn, OTHER_REF, parseOptions, pendingFromPlan, planDiagnostics, recordOrchestrationEvent, safetyReply, screenSafety, supplementEducationReply, validateSnapshot, type ModelCall, type OrchestrationDiagnostics, type PendingClarification, type PresentedOptionSnapshot } from "./orchestration"
+import { isLoggedIntakeQuestion } from "./orchestration/needs"
 import { decideProposal, executeFollowUp, presentOptions, type FollowUpExec } from "./followup-actions"
 import {
   FOLLOW_UP_INTENTS,
@@ -193,6 +194,12 @@ const GREETING = /^\s*(?:yo+|hi+|hey+|hello+|sup|hiya|what'?s up|good (?:morning
  */
 function lastResortReply(ctx: CoachContext | null, options: { message?: string; lastMealName?: string } = {}): string {
   if (options.message && GREETING.test(options.message)) return "Hey 👋 What are we solving — your next meal, a craving, or just a nutrition question?"
+  // "What did I eat today?" / "my last meal" with no model: the food log answers it verbatim (absent = not loaded, skip).
+  if (options.message && ctx?.todayMeals && isLoggedIntakeQuestion(options.message)) {
+    if (!ctx.todayMeals.length) return "Nothing is logged for today yet, so I can't say what you've eaten."
+    if (/\b(?:last|latest|previous) meal\b/i.test(options.message) && ctx.lastLogged) return `The last thing you logged today was ${ctx.lastLogged.food} (${ctx.lastLogged.meal}).`
+    return `Here's what you've logged today: ${ctx.todayMeals.map((meal) => `${meal.meal} — ${meal.foods.join("; ")}`).join(". ")}.`
+  }
   if (options.lastMealName) return `I can show the ingredients or macros for ${options.lastMealName}, suggest a change to it, or we can switch to something else. What would you like?`
   if (ctx && ctx.snapshot.caloriesRemaining > 0) return `You've got about ${left(ctx)} left today. Want a meal that fits that, a craving worked in, or a nutrition question answered?`
   return "What are we solving — a meal, a craving, or a nutrition question?"
@@ -352,6 +359,10 @@ async function resolveAmbiguousTurn(
     sessionPreferences: signals.map((signal) => ({ kind: signal.kind, value: signal.value })),
     // Name only (no numbers): lets the reply understand "I'm not feeling that anymore" without anchoring on the meal.
     lastDiscussedMeal: lastMealName ?? null,
+    // Today's food log, exactly as logged: the only source for "what did I eat" when the planner failed.
+    consumedToday: { calories: Math.round(ctx.snapshot.caloriesConsumed), protein: Math.round(ctx.snapshot.proteinConsumed) },
+    todayFoodLog: ctx.todayMeals?.map((meal) => ({ meal: meal.meal, calories: meal.calories, protein: meal.protein, foods: meal.foods })) ?? null,
+    lastLogged: ctx.lastLogged ?? null,
     ...crossCoachField(ctx),
   }
   const history = recent.slice(-4).map((item) => `${item.role === "user" ? "USER" : "COACH"}: ${item.text}`).join("\n")
@@ -364,6 +375,7 @@ The current message is a fresh conversational topic. lastDiscussedMeal is only t
 If the user greets you or asks what you can do, answer briefly and naturally (meals, cravings, macros, swaps, nutrition questions) instead of reciting commands. Answer the actual question first and keep it casual, not robotic.
 Never infer an edit, build, log, or macro calculation. Never say anything was logged.
 Use ONLY the numbers in CONTEXT. Never calculate, estimate or invent calories, macros or totals.
+What the user ate today comes ONLY from todayFoodLog and lastLogged. Never name a food they did not log; if todayFoodLog is null, say you can't see their log right now.
 Allergies and exclusions always win. Never prescribe compensation, restriction, or exercise.
 Supplements: general evidence education only. If the user mentions a medical condition, pregnancy or any medication, never give a dose, timing, stack or cycle; say that is a question for their doctor or pharmacist.${crossCoachRule(ctx)}
 CONTEXT: ${JSON.stringify(context)}
@@ -381,6 +393,9 @@ ${knowledgeBlock(knowledge)}${intelligenceBlock(ctx)}${history ? `RECENT CONVERS
       context.remaining.protein,
       context.targets.calories,
       context.targets.protein,
+      context.consumedToday.calories,
+      context.consumedToday.protein,
+      ...(ctx.todayMeals ?? []).flatMap((meal) => [meal.calories, meal.protein, ...(meal.foods.join(" ").match(/\d+(?:\.\d+)?/g) ?? []).map(Number)]),
       ...(message.match(/\d+(?:\.\d+)?/g) ?? []).map(Number),
       ...knowledgeNumbers(ctx),
     ]
@@ -1117,7 +1132,8 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
       }
       if (orchestration) recordOrchestrationEvent(orchestration)
 
-      const ambiguous = await resolveAmbiguousTurn(message, ctx, recent, priorSignals, newTopicFlag ? undefined : lastMealName, turnBudget)
+      // Planner failed on "what did I eat?": the food log answers it verbatim (lastResortReply), never a free model reply.
+      const ambiguous = ctx.todayMeals && isLoggedIntakeQuestion(message) ? null : await resolveAmbiguousTurn(message, ctx, recent, priorSignals, newTopicFlag ? undefined : lastMealName, turnBudget)
       const topic: NutritionTopic = ambiguous?.topic ?? { type: "GENERAL_NUTRITION" }
       if (topic.type === "CRAVING") {
         const buildable = Boolean(topic.food && detectCravingKey(topic.food))

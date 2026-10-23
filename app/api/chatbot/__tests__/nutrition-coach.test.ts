@@ -289,6 +289,29 @@ describe("conversation edits are deterministic", () => {
     expect(craving.intent).toBe("NEW_CRAVING_REQUEST")
   })
 
+  it("planner failure: 'what did I eat?' is answered from the food log, and the fallback model sees the log", async () => {
+    const entry = (id: string, mealType: string, foodName: string, calories: number, proteinG: number) => ({ id, logDate: "2026-10-07", mealType, foodName, quantityGrams: 200, servingName: null, servingsConsumed: null, calories, proteinG, carbsG: 0, fatG: 0 })
+    vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries: [entry("1", "breakfast", "Oatmeal", 300, 10), entry("2", "lunch", "Chicken Rice", 620, 38)], totals: { calories: 920, protein: 48, carbs: 0, fat: 0 } } as never)
+    // Every provider call fails: the planner, its retry and the fallback all return nothing.
+    vi.mocked(callOpenAiWithFallback).mockResolvedValue(null as never)
+    const today = await (await post({ message: "What did I eat today?", coachMode: "nutrition" })).json()
+    expect(today.reply).toContain("Oatmeal (200 g): 300 kcal")
+    expect(today.reply).toContain("Chicken Rice (200 g): 620 kcal")
+    expect((await (await post({ message: "What about my last meal?", coachMode: "nutrition" })).json()).reply).toContain("Chicken Rice (200 g) (lunch)")
+    // The planner fails but the fallback model is up: it never answers the intake question itself...
+    vi.mocked(callOpenAiWithFallback).mockReset().mockResolvedValue({ reply: "not a plan", model: "test" })
+    expect((await (await post({ message: "What did I eat today?", coachMode: "nutrition" })).json()).reply).toContain("Oatmeal")
+    expect(vi.mocked(callOpenAiWithFallback).mock.calls.some(([prompt]) => prompt.startsWith("Handle one ambiguous"))).toBe(false)
+    // ...and a follow-up it does answer carries today's log as context.
+    await post({ message: "Was that meal suitable for my goal?", coachMode: "nutrition" })
+    const fallbackPrompt = vi.mocked(callOpenAiWithFallback).mock.calls.map(([prompt]) => prompt).find((prompt) => prompt.startsWith("Handle one ambiguous"))
+    expect(fallbackPrompt).toContain("Chicken Rice (200 g): 620 kcal")
+    // An empty log is said plainly, never filled in.
+    vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 } } as never)
+    vi.mocked(callOpenAiWithFallback).mockResolvedValue(null as never)
+    expect((await (await post({ message: "What did I eat today?", coachMode: "nutrition" })).json()).reply).toBe("Nothing is logged for today yet, so I can't say what you've eaten.")
+  })
+
   it("uses the LLM only for open conversation, with structured context", async () => {
     await post({ message: "is greek yogurt a good snack?", coachMode: "nutrition" })
     // N1.6.4: planner call + its one reduced retry (default mock is not a plan -> safe fallback) + the unchanged single answer call.
