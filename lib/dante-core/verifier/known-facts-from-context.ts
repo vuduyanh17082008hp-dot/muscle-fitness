@@ -52,7 +52,11 @@ export function buildKnownFactsFromContext(context: KnownFactsContextInput): Ver
     if (readiness !== null) facts.push({ label: "readiness score", value: readiness });
   }
 
-  if (isRecord(context.todayFoodLog)) {
+  if (isRecord(context.todayFoodLog) && context.todayFoodLog.available === false) {
+    // The log couldn't be read: no number may be stated as eaten today. NaN matches nothing, so any
+    // intake-worded figure near "calories"/"protein" is a mismatch (checks.ts::cuedValueMismatch).
+    facts.push({ label: "calories", value: Number.NaN, cue: CONSUMED }, { label: "protein", value: Number.NaN, cue: CONSUMED });
+  } else if (isRecord(context.todayFoodLog)) {
     const calories = isRecord(context.todayFoodLog.calories)
       ? getNumber(context.todayFoodLog.calories.consumed)
       : null;

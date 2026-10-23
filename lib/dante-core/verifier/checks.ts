@@ -80,7 +80,11 @@ export function checkSafetyAdherence(input: VerifierInput): VerifierFinding[] {
 function cuedValueMismatch(reply: string, normalized: string, fact: VerifierFact): boolean {
   const lower = reply.toLowerCase();
   for (let index = lower.indexOf(normalized); index !== -1; index = lower.indexOf(normalized, index + 1)) {
-    const window = reply.slice(Math.max(0, index - 40), index + normalized.length + 40);
+    const start = Math.max(0, index - 40);
+    // Kept to the label's own sentence: "…what you've eaten today. Your target is 3,220 calories" states no intake.
+    const before = reply.slice(start, index).split(/[.!?](?=\s)|\n/).pop() ?? "";
+    const after = reply.slice(index, index + normalized.length + 40).split(/[.!?](?=\s)|\n/)[0];
+    const window = before + after;
     if (!fact.cue!.test(window)) continue;
     const numbers = numbersIn(window);
     if (numbers.length > 0 && !numbers.some((stated) => Math.abs(stated - fact.value) < 0.05 || Math.abs(stated - Math.round(fact.value)) < 0.05)) return true;
@@ -129,8 +133,10 @@ export function checkDeterministicValueMutation(input: VerifierInput): VerifierF
 export function checkInventedAthleteMetric(input: VerifierInput): VerifierFinding[] {
   const findings: VerifierFinding[] = [];
 
+  // Markdown emphasis ("**3,146 calories**") must not hide an assertion from the patterns.
+  const plain = input.replyText.replace(/[*_]/g, "");
   for (const { pattern, factLabelHints } of ATHLETE_METRIC_ASSERTIONS) {
-    const match = input.replyText.match(pattern);
+    const match = plain.match(pattern);
     if (!match) continue;
 
     const isTraceable = input.knownFacts.some((fact) => {

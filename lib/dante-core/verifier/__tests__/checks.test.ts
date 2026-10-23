@@ -6,6 +6,7 @@ import {
   checkSafetyAdherence,
 } from "@/lib/dante-core/verifier/checks";
 import type { VerifierInput } from "@/lib/dante-core/verifier/types";
+import { buildKnownFactsFromContext } from "@/lib/dante-core/verifier/known-facts-from-context";
 
 function baseInput(overrides: Partial<VerifierInput> = {}): VerifierInput {
   return {
@@ -164,7 +165,7 @@ describe("today's intake claims (live acceptance repros)", () => {
     { label: "calories", value: 1885, cue: remainingCue },
     { label: "protein", value: 60.6, cue: remainingCue },
   ];
-  const verify = (replyText: string, knownFacts = facts) => [
+  const verify = (replyText: string, knownFacts: VerifierInput["knownFacts"] = facts) => [
     ...checkDeterministicValueMutation(baseInput({ replyText, knownFacts })),
     ...checkInventedAthleteMetric(baseInput({ replyText, knownFacts })),
   ];
@@ -185,5 +186,20 @@ describe("today's intake claims (live acceptance repros)", () => {
 
   it("an intake total with filler words is an invented metric when the food log is unavailable", () => {
     expect(verify("You have consumed a total of 3,146 calories today.", [])).not.toEqual([]);
+    expect(verify("You have consumed a total of **3,146 calories** so far today.", [])).not.toEqual([]);
+  });
+
+  it("food log unavailable: any figure worded as today's intake is blocked, however it is phrased", () => {
+    const unavailable = buildKnownFactsFromContext({ recovery: null, todayFoodLog: { available: false, note: "Food log unavailable." } });
+    for (const replyText of [
+      "Your total calorie intake today is 3,126 calories, which includes breakfast: 920 calories.",
+      "Your calorie intake today is 2,126 calories.",
+      "You have consumed a total of **3,146 calories** so far today.",
+    ]) expect(verify(replyText, unavailable)).not.toEqual([]);
+    expect(verify("I can't read your food log right now, so I don't know what you've eaten today. Your target is 3,220 calories.", unavailable)).toEqual([]);
+  });
+
+  it("markdown emphasis does not hide a wrong remaining figure", () => {
+    expect(verify("You have **95.4 grams of protein** remaining today.")).not.toEqual([]);
   });
 });
