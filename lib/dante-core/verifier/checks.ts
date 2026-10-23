@@ -34,11 +34,17 @@ const ATHLETE_METRIC_ASSERTIONS: Array<{ pattern: RegExp; factLabelHints: string
   { pattern: /\byou(?:'ve| have)?\s+slept\s+\d+(?:\.\d+)?\s*(?:hours?|h)\b/i, factLabelHints: ["sleep"] },
   { pattern: /\byour hrv\s+(?:is|was)\s+\d+(?:\.\d+)?/i, factLabelHints: ["hrv"] },
   {
-    pattern: /\byou(?:'ve| have)?\s+(?:eaten|consumed|had)\s+\d+(?:\.\d+)?\s*(?:calories|kcal|g protein|grams? of protein)/i,
+    // Up to three filler words ("a total of", "about") and a thousands separator ("3,146").
+    pattern: /\byou(?:'ve| have)?\s+(?:eaten|consumed|had)\s+(?:[a-z]+\s+){0,3}\d[\d,]*(?:\.\d+)?\s*(?:calories|kcal|g protein|grams? of protein)/i,
     factLabelHints: ["calorie", "protein"],
   },
   { pattern: /\byour (?:training )?load\s+(?:is|was)\s+\d+(?:\.\d+)?/i, factLabelHints: ["load"] },
 ];
+
+/** Numbers as written, with "1,335" read as 1335 rather than 1 and 335. */
+function numbersIn(text: string): number[] {
+  return (text.match(/-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?/g) ?? []).map((n) => Number(n.replace(/,/g, "")));
+}
 
 function normalizeLabel(label: string): string {
   return label
@@ -76,7 +82,7 @@ function cuedValueMismatch(reply: string, normalized: string, fact: VerifierFact
   for (let index = lower.indexOf(normalized); index !== -1; index = lower.indexOf(normalized, index + 1)) {
     const window = reply.slice(Math.max(0, index - 40), index + normalized.length + 40);
     if (!fact.cue!.test(window)) continue;
-    const numbers = (window.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    const numbers = numbersIn(window);
     if (numbers.length > 0 && !numbers.some((stated) => Math.abs(stated - fact.value) < 0.05 || Math.abs(stated - Math.round(fact.value)) < 0.05)) return true;
   }
   return false;
@@ -98,10 +104,9 @@ export function checkDeterministicValueMutation(input: VerifierInput): VerifierF
     if (labelIndex === -1) continue;
 
     const window = input.replyText.slice(labelIndex, labelIndex + normalized.length + 40);
-    const numberMatch = window.match(/-?\d+(?:\.\d+)?/);
-    if (!numberMatch) continue;
+    const [stated] = numbersIn(window);
+    if (stated === undefined) continue;
 
-    const stated = Number.parseFloat(numberMatch[0]);
     const acceptable = [fact.value, Math.round(fact.value), Number(fact.value.toFixed(1))];
     // A fraction (e.g. 0.05) may legitimately be voiced as a percent (5).
     if (fact.value > -1 && fact.value < 1) acceptable.push(Math.round(fact.value * 100));

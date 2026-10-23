@@ -2,6 +2,8 @@ import type { VerifierFact } from "@/lib/dante-core/verifier/types";
 
 // "protein" / "calories" also name targets and g/kg guidelines: only a mention worded as what was eaten states these facts.
 const CONSUMED = /\b(?:consumed|logged|eaten|ate|so far|intake (?:today|so far)|you'?ve had|have had)\b/i;
+// What is left of today's target is its own fact, so a consumed figure voiced as "remaining" is caught.
+const REMAINING = /\b(?:remaining|left|to go)\b/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -60,6 +62,13 @@ export function buildKnownFactsFromContext(context: KnownFactsContextInput): Ver
       ? getNumber(context.todayFoodLog.protein.consumed)
       : null;
     if (protein !== null) facts.push({ label: "protein", value: protein, cue: CONSUMED });
+
+    for (const label of ["calories", "protein"] as const) {
+      const macro = context.todayFoodLog[label];
+      const remaining = isRecord(macro) ? getNumber(macro.remaining) : null;
+      // Over target reads as "0 left", never as a negative amount remaining.
+      if (remaining !== null) facts.push({ label, value: Math.max(0, remaining), cue: REMAINING });
+    }
   }
 
   return facts;

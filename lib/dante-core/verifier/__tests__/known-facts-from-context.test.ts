@@ -61,3 +61,15 @@ describe("buildKnownFactsFromContext", () => {
     expect(facts).toEqual([]);
   });
 });
+
+describe("buildKnownFactsFromContext — remaining", () => {
+  it("adds remaining calories/protein as facts cued by remaining-wording", () => {
+    const facts = buildKnownFactsFromContext({
+      recovery: null,
+      todayFoodLog: { calories: { consumed: 1335, target: 3220, remaining: 1885 }, protein: { consumed: 95.4, target: 156, remaining: 60.6 } },
+    });
+    const remaining = facts.filter((f) => f.cue?.test("remaining"))
+    expect(remaining.map((f) => [f.label, f.value])).toEqual([["calories", 1885], ["protein", 60.6]]);
+    expect(facts.filter((f) => f.cue?.test("consumed")).map((f) => f.value)).toEqual([1335, 95.4]);
+  });
+});
