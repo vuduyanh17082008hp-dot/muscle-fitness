@@ -390,7 +390,7 @@ export function classifyFollowUp(t: string): Fast | null {
 
 const NEW_TOPIC_WANT = /^(?:actually|wait|hold on|hmm+|ok(?:ay)?|no|nah)[ ,]+(?:i )?(?:want|feel like|'?d (?:like|rather have)|am craving|crave)\s+(.+)$|^(?:i )?(?:'?d rather (?:have|eat)|feel like|how about|what about|let'?s (?:have|do|try|eat)|can we (?:do|try|have)|i changed my mind[, ]+(?:i )?want)\s+(.+)$/
 const NEW_TOPIC_PHRASE = /\b(?:forget (?:that|it|this)|different meal|something (?:else|different)|change of plans|changed my mind|let'?s do something else|try something (?:else|different|new)|not feeling (?:that|this|it)|something new)\b/
-const NOT_A_FOOD_HINT = /^(?:(?:the |its )?(?:macros?|ingredients?|calories|protein|carbs|fat|nutrition|portions?)\b|cheaper\b|lighter\b|tastier\b|faster\b|quicker\b|healthier\b|spicier\b|sweeter\b|saltier\b|\w+ing\b|to\b|it\b|this\b|that\b|more\b|less\b|some(?:thing)?\b|any(?:thing)?\b|a (?:bit|little|lot)\b|extra\b|fewer\b|the (?:same|original|first|second|third|other)\b|another\b|one\b|lots\b)/
+const NOT_A_FOOD_HINT = /^(?:(?:the |its )?(?:macros?|ingredients?|calories|protein|carbs|fat|nutrition|portions?)\b|cheaper\b|lighter\b|tastier\b|faster\b|quicker\b|healthier\b|spicier\b|sweeter\b|saltier\b|\w+ing\b|to\b|it\b|this\b|that\b|more\b|less\b|some(?:thing)?\b|any(?:thing)?\b|a (?:bit|little|lot)\b|extra\b|fewer\b|the (?:same|original|first|second|third|other)\b|another\b|one\b|lots\b|my\b)/
 
 export type NewTopic = { hint?: string; food?: string }
 

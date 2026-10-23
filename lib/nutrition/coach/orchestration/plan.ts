@@ -1,7 +1,7 @@
 import type { ProfileGuards } from "../types"
 
 import { chooseDepth, clarificationMode, effectiveConfidence, isMaterial, referentQuestion, resolveContinuation } from "./continuation"
-import { decideNeeds, isLoggedIntakeQuestion } from "./needs"
+import { decideNeeds, isLoggedIntakeQuestion, namesOwnGoal } from "./needs"
 import { deriveActiveEntity, groundEntities, hasProvenance } from "./provenance"
 import { buildToolPlan } from "./toolplan"
 import type { Clarification, ContextInvalidation, ConversationContext, OrchestrationPlan, OrchestrationTool, PlanningExtras, PlannerOutput } from "./types"
@@ -49,6 +49,8 @@ function gateClarification(proposed: Clarification | null, message: string, cont
     else if (context.mealSlot && KNOWN_SLOT.test(clarification.question)) clarification = null
     // "What have I eaten?" is answered from the food log, never asked back.
     else if (hasState && isLoggedIntakeQuestion(message)) clarification = null
+    // Nor "what is your goal?" when the user said "my goal": the saved goal is read instead (needs.ts).
+    else if (hasState && namesOwnGoal(message) && /\bgoals?\b/i.test(clarification.question)) clarification = null
   }
   if (!clarification && isAmbiguousReferent(context)) return { question: referentQuestion(context), affects: "option" }
   return clarification

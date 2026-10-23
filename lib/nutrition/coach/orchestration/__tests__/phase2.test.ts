@@ -136,6 +136,14 @@ describe("context / tool decision policy", () => {
     expect(p.contextNeed).toMatchObject({ athleteState: false, nutritionState: false })
   })
 
+  it("'was that meal suitable for my goal?' reads the saved goal instead of asking for it", () => {
+    const recent: RecentMessage[] = [{ role: "user", text: "What about my last meal?" }, { role: "coach", text: "Your last meal was lunch: 200 g of chicken breast." }]
+    const { plan: p } = plan("Was that meal suitable for my goal?", recent, { clarification: { question: "What is your specific goal?", affects: "recommendation" } })
+    expect(p.clarification).toBeNull()
+    expect(p.toolNeed).toMatchObject({ needNutritionState: true, needGoalContext: true })
+    expect(runDeterministicTools(p, ctx).athleteState?.goal).toBe(ctx.snapshot.goal)
+  })
+
   it("exact state query: nutrition state + deterministic calculation, no retrieval, bound result", () => {
     const { plan: p } = plan("How much protein do I have left today?", [], { need: need({ needExactCalculation: true, needAthleteState: true, needKnowledgeRetrieval: true }) })
     expect(p.toolNeed).toMatchObject({ needNutritionState: true, needMacroCalculation: true, needKnowledgeRetrieval: false, needFoodLookup: false, needGoalContext: false })

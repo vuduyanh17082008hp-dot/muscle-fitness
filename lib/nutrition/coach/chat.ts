@@ -935,7 +935,8 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   // the active constraints) instead of the engine builder (which would invent an unrelated meal).
   const intent: typeof parsedIntent = (asksFoodInformation && parsedIntent.kind === "build") || (conversationOwnsFocus && parsedIntent.kind === "build" && parsedIntent.foodIds.length === 0 && parsedIntent.unresolvedFoods.length === 0 && DEFINITE_REFERENCE_REQUEST.test(message)) ? { kind: "chat" } : parsedIntent
 
-  if (intent.kind === "chat" && reference.explicit && !draft) {
+  // Only an edit needs a draft: "was that meal suitable for my goal?" asks about a meal (often a logged one) and goes on.
+  if (intent.kind === "chat" && reference.explicit && !draft && parseCoachMessage(message, { hasDraft: true }).kind !== "chat") {
     return respond("NEW_MEAL_REQUEST", "no_draft", "There's no active meal draft yet. Want me to build one around your remaining macros?", { action: "ASK_BEFORE_BUILD" })
   }
 

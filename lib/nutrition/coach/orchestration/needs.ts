@@ -18,6 +18,9 @@ export const isPersonalStateQuestion = (message: string) => PERSONAL_STATE.test(
 // "What have I eaten today?", "calories I've had", "my last meal": the food log answers these, so state is always read.
 const LOGGED_INTAKE = /(?<![\p{L}\p{N}])(?:(?:have|did) i (?:eat|eaten|had|have|log(?:ged)?)|i(?:'ve| have) (?:eaten|had|logged)|i ate|my (?:last|latest|previous) meal|(?:eaten|logged|consumed) (?:today|so far))(?![\p{L}\p{N}])|đã ăn|ăn gì hôm nay/iu
 export const isLoggedIntakeQuestion = (message: string) => LOGGED_INTAKE.test(message)
+// "Was that meal suitable for my goal?": the saved goal answers it, so it is read even outside a recommendation.
+const MY_GOAL = /(?<![\p{L}\p{N}])my goals?(?![\p{L}\p{N}])|mục tiêu của (?:tôi|mình)/iu
+export const namesOwnGoal = (message: string) => MY_GOAL.test(message)
 export const offerAsksForFit = (offer: string | null) => Boolean(offer && FIT_OFFER.test(offer))
 
 const CONTINUITY_TARGETS: ContinuationTarget[] = ["PRIOR_OFFER", "PENDING_CHOICE", "ACTIVE_MODIFICATION", "LAST_ASSISTANT_REFERENT", "ACTIVE_DRAFT", "PENDING_CLARIFICATION"]
@@ -61,13 +64,14 @@ export function decideNeeds(input: NeedInput): { toolNeed: ToolNeedDecision; con
   // Nutrition state (remaining/targets): exact calculations always; otherwise only for a personal state question.
   const plannerWantsState = need.needAthleteState && !continuity && personal
   const loggedIntake = message !== undefined && isLoggedIntakeQuestion(message)
-  const needNutritionState = !idle && input.nutritionStateAvailable && (needMacroCalculation || plannerWantsState || loggedIntake)
+  const ownGoal = message !== undefined && namesOwnGoal(message)
+  const needNutritionState = !idle && input.nutritionStateAvailable && (needMacroCalculation || plannerWantsState || loggedIntake || ownGoal)
   if (loggedIntake && !needMacroCalculation && !plannerWantsState) reasons.push("logged_intake_question")
   if (need.needAthleteState && !continuity && !personal && !needMacroCalculation) reasons.push("general_question_no_state")
   if (needNutritionState && !needMacroCalculation) reasons.push("personal_state_question")
 
   // Goal / training context: only a personal recommendation, never a continuity turn or a plain number lookup.
-  const needGoalContext = !idle && needNutritionState && mode === "PROPOSE" && !continuity && need.needAthleteState && personal
+  const needGoalContext = !idle && needNutritionState && ((mode === "PROPOSE" && !continuity && need.needAthleteState && personal) || ownGoal)
   if (needGoalContext) reasons.push("goal_specific_recommendation")
 
   // Retrieval: optional support. Never for continuity, questions/redirects, or a plain exact-state lookup.

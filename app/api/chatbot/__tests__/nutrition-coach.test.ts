@@ -275,6 +275,20 @@ describe("conversation edits are deterministic", () => {
     expect(json.draft).toBeNull()
   })
 
+  it("'What about my last meal?' is answered from the food log, not routed as a craving", async () => {
+    const entry = (id: string, mealType: string, foodName: string, calories: number, proteinG: number) => ({ id, logDate: "2026-10-07", mealType, foodName, quantityGrams: 200, servingName: null, servingsConsumed: null, calories, proteinG, carbsG: 0, fatG: 0 })
+    vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries: [entry("1", "breakfast", "Oatmeal", 300, 10), entry("2", "lunch", "Chicken Rice", 620, 38)], totals: { calories: 920, protein: 48, carbs: 0, fat: 0 } } as never)
+    const json = await (await post({ message: "What about my last meal?", coachMode: "nutrition" })).json()
+    expect(json.intent).not.toBe("NEW_CRAVING_REQUEST")
+    expect(json.route).not.toBe("craving_ask")
+    // A question about "that meal" is not a draft edit; an edit with no draft still says there is none.
+    expect((await (await post({ message: "Was that meal suitable for my goal?", coachMode: "nutrition" })).json()).route).not.toBe("no_draft")
+    expect((await (await post({ message: "make that meal cheaper", coachMode: "nutrition" })).json()).route).toBe("no_draft")
+    // A real switch to a food stays a craving topic.
+    const craving = await (await post({ message: "what about pizza?", coachMode: "nutrition" })).json()
+    expect(craving.intent).toBe("NEW_CRAVING_REQUEST")
+  })
+
   it("uses the LLM only for open conversation, with structured context", async () => {
     await post({ message: "is greek yogurt a good snack?", coachMode: "nutrition" })
     // N1.6.4: planner call + its one reduced retry (default mock is not a plan -> safe fallback) + the unchanged single answer call.
