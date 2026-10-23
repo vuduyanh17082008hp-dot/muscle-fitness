@@ -15,6 +15,8 @@ type FoodQuantityConfirmProps = {
   onMealTypeChange: (mealType: MealType) => void
   onConfirm: (food: ConfirmedFood) => void
   onBack: () => void
+  /** Says what the button really does: "Add to Today" logs; inside a review it only adds to the review. */
+  confirmLabel?: string
 }
 
 type ServingDefinition = { name: string; grams: number }
@@ -36,6 +38,7 @@ export function FoodQuantityConfirm({
   onMealTypeChange,
   onConfirm,
   onBack,
+  confirmLabel = "Add to Today",
 }: FoodQuantityConfirmProps) {
   const mealSelectId = useId()
 
@@ -457,7 +460,7 @@ export function FoodQuantityConfirm({
           onClick={() => onConfirm(buildConfirmedFood())}
           className="min-h-12 flex-[2] rounded-xl bg-amber-500 text-sm font-black uppercase tracking-wide text-black hover:bg-amber-400 disabled:opacity-40"
         >
-          Add to Today
+          {confirmLabel}
         </button>
       </div>
     </div>

@@ -36,6 +36,7 @@ describe("vision output is untrusted", () => {
       { name: "grilled chicken", estimatedGrams: 180, confidence: "high", notes: undefined, preparation: "grilled", preparationCertain: true, dish: null },
       { name: "mystery", estimatedGrams: 2000, confidence: "medium", notes: undefined, preparation: "unknown", preparationCertain: false, dish: null },
     ])
+    expect(parseItems({ items: [{ name: "bánh mì", estimatedGrams: 150, confidence: "high", preparation: "baked", preparationCertain: true, dish: "null", notes: "" }] })[0].dish).toBeNull() // live: the word "null"
     expect(parseItems({ calories: 500 })).toEqual([])
     expect(parseItems(null)).toEqual([])
   })
@@ -88,5 +89,39 @@ describe("estimateMealFromPhoto", () => {
     const result = await estimateMealFromPhoto("data:image/jpeg;base64,AA==")
     if (result.status !== "ok") throw new Error(result.status)
     expect(result.items[0].candidates.map((food) => food.id)).toEqual(["local-banana-raw", "off-2"])
+  })
+
+  it("an undecomposed Vietnamese dish becomes its catalog parts, each flagged as not seen, with no provider calls", async () => {
+    identifyFoodsInImage.mockResolvedValue({ items: [{ name: "bún bò Huế", estimatedGrams: 900, confidence: "medium", preparation: "boiled", preparationCertain: true, dish: null }] })
+    const result = await estimateMealFromPhoto("data:image/jpeg;base64,AA==")
+    if (result.status !== "ok") throw new Error(result.status)
+    expect(searchFood).not.toHaveBeenCalled()
+    expect(result.items.length).toBeGreaterThan(5)
+    expect(result.items.every((item) => item.fromTemplate && item.dish === "Bún bò Huế" && item.detectionConfidence === "low")).toBe(true)
+    expect(result.items.find((item) => item.detectedName.startsWith("Pork roll"))?.optional).toBe(true)
+    expect(result.items.map((item) => item.detectedName)).not.toContain("bún bò Huế") // the composite itself is never an item
+  })
+  it("a component of a catalog dish defaults to that dish's own record, even when a provider answers", async () => {
+    const branded = { id: "off-3", name: "Beef jerky", brand: "X", source: "open-food-facts", sourceId: "123456", sourceLabel: "Open Food Facts", preparationState: "packaged", per100g: { calories: 410, protein: 33, carbs: 11, fat: 25 } }
+    searchFood.mockResolvedValue({ foods: [branded], status: "results", usedFallback: false })
+    identifyFoodsInImage.mockResolvedValue({ items: [
+      { name: "sliced beef", estimatedGrams: 80, confidence: "high", preparation: "boiled", preparationCertain: true, dish: "Phở bò" },
+      { name: "pho broth", estimatedGrams: 400, confidence: "medium", preparation: "boiled", preparationCertain: false, dish: "Phở bò" },
+    ] })
+    const result = await estimateMealFromPhoto("data:image/jpeg;base64,AA==")
+    if (result.status !== "ok") throw new Error(result.status)
+    expect(result.items[0].groundedFood?.id).toBe("local-beef-lean-cooked")
+    expect(result.items[0].candidates.map((food) => food.id)).toContain("off-3")
+    expect(result.items[1].groundedFood?.id).toBe("local-beef-broth")
+    expect(result.items[1].noAddedOil).toBe(true)
+  })
+  it("USDA down: Vietnamese components still ground to reference records, and the failure is not a 'no match'", async () => {
+    searchFood.mockResolvedValue({ foods: [], status: "provider_timeout", usedFallback: true })
+    identifyFoodsInImage.mockResolvedValue({ items: [{ name: "rice vermicelli", estimatedGrams: 200, confidence: "high", preparation: "boiled", preparationCertain: true, dish: "Bún chả" }] })
+    const result = await estimateMealFromPhoto("data:image/jpeg;base64,AA==")
+    if (result.status !== "ok") throw new Error(result.status)
+    expect(result.items[0].groundedFood?.id).toBe("local-rice-noodles-cooked")
+    expect(result.items[0].searchStatus).toBe("provider_timeout")
+    expect(result.items[0].scaledMacros?.calories).toBe(216)
   })
 })

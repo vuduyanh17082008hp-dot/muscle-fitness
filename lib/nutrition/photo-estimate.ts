@@ -18,6 +18,7 @@ import { getLocalFallbackById, searchLocalFallback } from "@/lib/nutrition/food-
 import type { FoodSearchStatus, NormalizedFood } from "@/lib/nutrition/food-data/types"
 import { scaleMacrosToGrams, type ScaledMacros } from "@/lib/nutrition/food-log-calculator"
 import { dropDecomposedComposites, reviewFoodMatch, type CookingMethod } from "@/lib/nutrition/photo-match-review"
+import { matchVietnameseDish, templateItems } from "@/lib/nutrition/vietnamese-dishes"
 
 export type PhotoEstimateItem = {
   detectedName: string
@@ -36,6 +37,12 @@ export type PhotoEstimateItem = {
   candidates: NormalizedFood[]
   /** External-provider outcome of the grounding search; a failure means better matches may exist. */
   searchStatus: FoodSearchStatus
+  /** Not seen in the photo: a typical part of the named dish (lib/nutrition/vietnamese-dishes.ts), for the user to confirm. */
+  fromTemplate?: boolean
+  /** Template part that is common but not always there: starts unticked. */
+  optional?: boolean
+  /** The record already reflects how this part is prepared: no added-oil line. */
+  noAddedOil?: boolean
 }
 
 export type PhotoEstimateResult =
@@ -61,7 +68,17 @@ export async function estimateMealFromPhoto(imageDataUrl: string): Promise<Photo
   }
 
   const grounded = await Promise.all(
-    dropDecomposedComposites(detection.items).map(async (item): Promise<PhotoEstimateItem> => {
+    dropDecomposedComposites(detection.items).map(async (item): Promise<PhotoEstimateItem[]> => {
+      // A whole Vietnamese dish the model couldn't break down: offer the catalog's typical parts, each flagged
+      // as not seen in the photo, scaled to the model's portion guess.
+      const wholeDish = item.dish === null ? matchVietnameseDish(item.name) : null
+      if (wholeDish) return templateItems(wholeDish, item.estimatedGrams)
+
+      // A component of a catalog dish: the dish's own record for that part goes first ("beef" in phở → lean beef).
+      const dish = matchVietnameseDish(item.dish)
+      const dishPart = dish ? searchLocalFallback(item.name).find((food) => dish.components.some((c) => c.foodId === food.id)) ?? null : null
+      const component = dishPart && dish ? dish.components.find((c) => c.foodId === dishPart.id) : undefined
+
       const searchResult = await searchFood(item.name, "any")
       // A provider hit can be an unrelated or branded product ("broth" → bouillon powder, "banana" → banana
       // yogurt); keep the local records alongside and default to a name-matching, unbranded whole food.
@@ -70,10 +87,12 @@ export async function estimateMealFromPhoto(imageDataUrl: string): Promise<Photo
       const rank = (food: NormalizedFood) =>
         (reviewFoodMatch(item.name, food).some((flag) => flag.kind === "name_mismatch") ? 2 : 0) +
         (food.brand || food.preparationState === "packaged" ? 1 : 0)
-      const candidates = pool.map((food, index) => ({ food, index })).sort((a, b) => rank(a.food) - rank(b.food) || a.index - b.index).map(({ food }) => food).slice(0, 6)
+      const ranked = pool.map((food, index) => ({ food, index })).sort((a, b) => rank(a.food) - rank(b.food) || a.index - b.index).map(({ food }) => food)
+      const candidates = (dishPart ? [dishPart, ...ranked.filter((food) => food.id !== dishPart.id)] : ranked).slice(0, 6)
       const bestMatch = candidates[0] ?? null
 
-      return {
+      return [{
+        ...(component?.noAddedOil ? { noAddedOil: true } : {}),
         detectedName: item.name,
         estimatedGrams: item.estimatedGrams,
         detectionConfidence: item.confidence,
@@ -85,9 +104,9 @@ export async function estimateMealFromPhoto(imageDataUrl: string): Promise<Photo
         scaledMacros: bestMatch ? scaleMacrosToGrams(bestMatch.per100g, item.estimatedGrams) : null,
         candidates,
         searchStatus: searchResult.status,
-      }
+      }]
     }),
   )
 
-  return { status: "ok", items: grounded, cookingOil: getLocalFallbackById("local-olive-oil") }
+  return { status: "ok", items: grounded.flat(), cookingOil: getLocalFallbackById("local-olive-oil") }
 }

@@ -12,6 +12,7 @@ type ManualFoodFormProps = {
   onClose: () => void
   /** Pre-fills the name — used when a Photo Estimate item has no database match. */
   initialName?: string
+  confirmLabel?: string
 }
 
 type FieldState = {
@@ -24,7 +25,7 @@ type FieldState = {
   fiber: string
 }
 
-export function ManualFoodForm({ mealType, onMealTypeChange, onConfirm, onClose, initialName }: ManualFoodFormProps) {
+export function ManualFoodForm({ mealType, onMealTypeChange, onConfirm, onClose, initialName, confirmLabel = "Add to Today" }: ManualFoodFormProps) {
   const [fields, setFields] = useState<FieldState>({
     name: initialName ?? "",
     grams: "100",
@@ -163,7 +164,7 @@ export function ManualFoodForm({ mealType, onMealTypeChange, onConfirm, onClose,
           type="submit"
           className="min-h-12 flex-[2] rounded-xl bg-amber-500 text-sm font-black uppercase tracking-wide text-black hover:bg-amber-400"
         >
-          Add to Today
+          {confirmLabel}
         </button>
       </div>
     </form>

@@ -15,11 +15,12 @@ type FoodSearchPanelProps = {
   onMealTypeChange: (mealType: MealType) => void
   onConfirm: (food: ConfirmedFood) => void
   onClose: () => void
+  confirmLabel?: string
 }
 
 const DEBOUNCE_MS = 400
 
-export function FoodSearchPanel({ mealType, onMealTypeChange, onConfirm, onClose }: FoodSearchPanelProps) {
+export function FoodSearchPanel({ mealType, onMealTypeChange, onConfirm, onClose, confirmLabel }: FoodSearchPanelProps) {
   const [query, setQuery] = useState("")
   const [state, setState] = useState<SearchState>("idle")
   const [results, setResults] = useState<NormalizedFood[]>([])
@@ -80,6 +81,7 @@ export function FoodSearchPanel({ mealType, onMealTypeChange, onConfirm, onClose
         mealType={mealType}
         onMealTypeChange={onMealTypeChange}
         onConfirm={onConfirm}
+        confirmLabel={confirmLabel}
         onBack={() => setSelected(null)}
       />
     )

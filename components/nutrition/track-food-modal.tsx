@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { Barcode, MapPin, Plus, Search, Sparkles, X } from "lucide-react"
+import { Barcode, Camera, MapPin, Plus, ScrollText, Search, Soup, X } from "lucide-react"
 
 import { PrimaryButton } from "@/components/ui/button"
 import { suggestMealType } from "@/components/nutrition/meal-type"
@@ -10,7 +10,9 @@ import { FoodQuantityConfirm } from "@/components/nutrition/food-quantity-confir
 import { FoodSearchPanel } from "@/components/nutrition/food-search-panel"
 import { BarcodeScanner } from "@/components/nutrition/barcode-scanner"
 import { ManualFoodForm } from "@/components/nutrition/manual-food-form"
-import { PhotoEstimatePanel } from "@/components/nutrition/photo-estimate-panel"
+import { PhotoEstimatePanel, type ReviewSeed } from "@/components/nutrition/photo-estimate-panel"
+import { MenuPhotoPanel } from "@/components/nutrition/menu-photo-panel"
+import { VietnameseDishPicker } from "@/components/nutrition/vietnamese-dish-picker"
 import { HawkerLensPanel } from "@/components/nutrition/hawkerlens-panel"
 import type { ConfirmedFood } from "@/components/nutrition/types"
 import type { NormalizedFood } from "@/lib/nutrition/food-data/types"
@@ -23,7 +25,7 @@ import {
   type SaveItemResult,
 } from "@/lib/nutrition/food-log/client-save"
 
-type Mode = "menu" | "barcode" | "barcode_confirm" | "search" | "photo" | "manual" | "hawkerlens"
+type Mode = "menu" | "barcode" | "barcode_confirm" | "search" | "photo" | "manual" | "hawkerlens" | "dish" | "menu_photo" | "review"
 
 type MultiOutcome = FoodLogMultiOutcome<ConfirmedFood>
 
@@ -47,11 +49,14 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged, onClosed }
   const confirmLock = useRef(false)
   const pendingKey = useRef<string | null>(null)
   const [multiOutcome, setMultiOutcome] = useState<MultiOutcome | null>(null)
+  /** A dish or menu pick opened in the editable review; it logs only on confirmation, like a photo. */
+  const [seed, setSeed] = useState<ReviewSeed | null>(null)
 
   function reset() {
     setMode("menu")
     setScannedFood(null)
     setMultiOutcome(null)
+    setSeed(null)
     pendingKey.current = null
     confirmLock.current = false
   }
@@ -166,7 +171,9 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged, onClosed }
                 label="HawkerLens SG — Scan a Hawker Dish"
                 onClick={() => setMode("hawkerlens")}
               />
-              <MenuButton icon={Sparkles} label="Photo Estimate" onClick={() => setMode("photo")} />
+              <MenuButton icon={Camera} label="Food Photo" hint="Log a meal you're eating" onClick={() => setMode("photo")} />
+              <MenuButton icon={ScrollText} label="Menu Photo" hint="Choose what to order — logs nothing" onClick={() => setMode("menu_photo")} />
+              <MenuButton icon={Soup} label="Vietnamese Dish" hint="Phở, bún chả, cơm tấm… split into parts" onClick={() => setMode("dish")} />
               <MenuButton icon={Plus} label="Manual Entry" onClick={() => setMode("manual")} />
             </div>
           ) : mode === "barcode" ? (
@@ -199,6 +206,34 @@ export function TrackFoodModal({ onAddFood, onAddFoods, onLogChanged, onClosed }
               mealType={mealType}
               onMealTypeChange={setMealType}
               onConfirmMultiple={handleConfirmMultiple}
+              onClose={() => setMode("menu")}
+            />
+          ) : mode === "review" && seed ? (
+            <PhotoEstimatePanel
+              key={seed.title}
+              seed={seed}
+              mealType={mealType}
+              onMealTypeChange={setMealType}
+              onConfirmMultiple={handleConfirmMultiple}
+              onClose={() => {
+                setSeed(null)
+                setMode("menu")
+              }}
+            />
+          ) : mode === "dish" ? (
+            <VietnameseDishPicker
+              onPick={(next) => {
+                setSeed(next)
+                setMode("review")
+              }}
+              onClose={() => setMode("menu")}
+            />
+          ) : mode === "menu_photo" ? (
+            <MenuPhotoPanel
+              onReview={(next) => {
+                setSeed(next)
+                setMode("review")
+              }}
               onClose={() => setMode("menu")}
             />
           ) : mode === "hawkerlens" ? (
@@ -291,10 +326,12 @@ function MultiOutcomePanel({
 function MenuButton({
   icon: Icon,
   label,
+  hint,
   onClick,
 }: {
   icon: typeof Barcode
   label: string
+  hint?: string
   onClick: () => void
 }) {
   return (
@@ -306,7 +343,10 @@ function MenuButton({
       <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand">
         <Icon className="size-5" />
       </span>
-      <span className="text-base font-bold text-mf-glass-text">{label}</span>
+      <span className="min-w-0">
+        <span className="block text-base font-bold text-mf-glass-text">{label}</span>
+        {hint ? <span className="block text-xs text-mf-glass-text-muted">{hint}</span> : null}
+      </span>
     </button>
   )
 }

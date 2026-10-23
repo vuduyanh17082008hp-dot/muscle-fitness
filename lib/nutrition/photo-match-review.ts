@@ -66,7 +66,7 @@ export function reviewFoodMatch(
 }
 
 /** How a photographed food was prepared. "unknown" means the photo doesn't show it. */
-export const COOKING_METHODS = ["boiled", "steamed", "grilled", "roasted", "baked", "stir_fried", "fried", "deep_fried", "raw", "unknown"] as const
+export const COOKING_METHODS = ["boiled", "steamed", "grilled", "roasted", "baked", "stir_fried", "fried", "deep_fried", "air_fried", "raw", "unknown"] as const
 export type CookingMethod = (typeof COOKING_METHODS)[number]
 
 export const COOKING_METHOD_LABEL: Record<CookingMethod, string> = {
@@ -78,6 +78,7 @@ export const COOKING_METHOD_LABEL: Record<CookingMethod, string> = {
   stir_fried: "Stir-fried",
   fried: "Pan-fried",
   deep_fried: "Deep-fried",
+  air_fried: "Air-fried",
   raw: "Raw",
   unknown: "Not sure",
 }
@@ -87,7 +88,7 @@ export const COOKING_METHOD_LABEL: Record<CookingMethod, string> = {
 const OIL_SHARE: Record<CookingMethod, number> = {
   boiled: 0, steamed: 0, raw: 0, unknown: 0,
   grilled: 0.03, roasted: 0.03, baked: 0.03,
-  stir_fried: 0.06, fried: 0.08, deep_fried: 0.12,
+  air_fried: 0.01, stir_fried: 0.06, fried: 0.08, deep_fried: 0.12,
 }
 
 /** The matched record already includes the fat from cooking (e.g. "fried rice"), so adding oil would count it twice. */
@@ -95,16 +96,80 @@ export function recordIncludesCookingFat(food: Pick<NormalizedFood, "name" | "ra
   return /\b(fried|oil|butter|ghee|lard|margarine|tempura|battered|crispy|curry)\b/i.test(`${food.name} ${food.rawDescription ?? ""}`)
 }
 
-/** Default grams of added cooking oil for a food of `grams` cooked by `method`; 0 when none is implied. */
-export function suggestedOilGrams(method: CookingMethod, grams: number, food: Pick<NormalizedFood, "name" | "rawDescription">): number {
-  if (recordIncludesCookingFat(food)) return 0
+/**
+ * Default grams of added cooking oil for a food of `grams` cooked by `method`; 0 when none is implied, when the
+ * record already includes its cooking fat, or when the dish template says the record reflects its preparation.
+ */
+export function suggestedOilGrams(
+  method: CookingMethod,
+  grams: number,
+  food: Pick<NormalizedFood, "name" | "rawDescription">,
+  options: { noAddedOil?: boolean } = {},
+): number {
+  if (options.noAddedOil || recordIncludesCookingFat(food)) return 0
   const oil = grams * OIL_SHARE[method]
   return oil > 0 ? Math.max(1, Math.round(oil)) : 0
 }
 
-/** Preparation the photo can't confirm changes the oil default, so it is worth one question. */
-export function needsCookingQuestion(method: CookingMethod, certain: boolean): boolean {
-  return !certain || method === "unknown"
+// Foods whose calories don't depend on how they were cooked here (staples are boiled/steamed, garnish is raw).
+const METHOD_IMMATERIAL = /\b(rice|noodles?|vermicelli|pho|bun|broth|soup|porridge|congee|sauce|bread|baguette|lettuce|cucumber|herbs?|basil|cilantro|coriander|sprouts?|scallions?|lime|sugar|banana|apple|berr(y|ies))\b/i
+
+/**
+ * Preparation the photo can't confirm changes the oil default, so it is worth one question, but only when the
+ * answer could change the numbers: never for a record that already includes its fat, a template part that adds
+ * no oil, or a staple/garnish whose method doesn't matter.
+ */
+export function needsCookingQuestion(
+  method: CookingMethod,
+  certain: boolean,
+  food?: Pick<NormalizedFood, "name" | "rawDescription"> | null,
+  options: { noAddedOil?: boolean } = {},
+): boolean {
+  if (certain && method !== "unknown") return false
+  if (!food) return true
+  return !(options.noAddedOil || recordIncludesCookingFat(food) || METHOD_IMMATERIAL.test(food.name))
+}
+
+const isCookedState = (food: NormalizedFood) => food.preparationState === "cooked" || food.preparationState === "prepared"
+
+/**
+ * After the user changes the cooking method, the candidate whose raw/cooked state fits it: picking "raw" moves a
+ * cooked match to a raw record of the same food, any cooking method moves a raw match to a cooked one. Keeps the
+ * current match when it already fits, when no candidate fits, or for "unknown".
+ */
+export function candidateIndexForMethod(detectedName: string, candidates: NormalizedFood[], current: number, method: CookingMethod): number {
+  const selected = candidates[current]
+  if (!selected || method === "unknown") return current
+  const wantRaw = method === "raw"
+  if (wantRaw ? selected.preparationState === "raw" : !(selected.preparationState === "raw")) return current
+  const fits = (food: NormalizedFood) => (wantRaw ? food.preparationState === "raw" : isCookedState(food))
+  const sameFood = (food: NormalizedFood) => !reviewFoodMatch(detectedName, food).some((flag) => flag.kind === "name_mismatch")
+  const index = candidates.findIndex((food) => fits(food) && sameFood(food))
+  return index >= 0 ? index : current
+}
+
+/**
+ * Where a component's nutrient values come from, in the five honest buckets the review shows. Maps onto the
+ * existing food-log provenance fields; it is a label, never stored.
+ */
+export type NutrientProvenance = "VERIFIED_REFERENCE" | "CURATED_ESTIMATE" | "AI_ESTIMATE" | "USER_CORRECTED" | "UNKNOWN"
+
+export const NUTRIENT_PROVENANCE_LABEL: Record<NutrientProvenance, string> = {
+  VERIFIED_REFERENCE: "Reference data",
+  CURATED_ESTIMATE: "Curated estimate",
+  AI_ESTIMATE: "AI estimate",
+  USER_CORRECTED: "Entered by you",
+  UNKNOWN: "No nutrient data",
+}
+
+export function nutrientProvenance(
+  food: Pick<NormalizedFood, "isEstimated" | "confidence"> & { source: string } | null | undefined,
+): NutrientProvenance {
+  if (!food) return "UNKNOWN"
+  if (food.source === "user_provided") return "USER_CORRECTED"
+  if (food.source === "ai_estimate") return "AI_ESTIMATE"
+  if (food.isEstimated || food.confidence === "low" || food.confidence === "fallback") return "CURATED_ESTIMATE"
+  return "VERIFIED_REFERENCE"
 }
 
 /** Grams actually eaten from a served portion. 0 % means nothing is logged. */
@@ -123,4 +188,27 @@ export function dropDecomposedComposites<T extends DishPart>(items: T[]): T[] {
   const norm = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
   const decomposed = new Set(items.flatMap((item) => (item.dish ? [norm(item.dish)] : [])))
   return items.filter((item) => item.dish !== null || !decomposed.has(norm(item.name)))
+}
+
+/** Who set a component's eaten percentage. The user's own value is never overwritten by a photo suggestion. */
+export type EatenSource = "default" | "after_photo" | "user"
+
+export type EatenSuggestion = { id: string; eatenPercent: number | null; confidence: "high" | "medium" | "low"; note: string | null }
+
+/**
+ * Applies after-photo suggestions to reviewed components by their shared key. A null suggestion (the photos
+ * couldn't tell) and a value the user already set leave the percentage alone; the suggestion is kept beside it.
+ * Grams, matches and everything else stay as reviewed.
+ */
+export function applyEatenSuggestions<T extends { key: string; eatenPercent: number; eatenSource: EatenSource; suggestion?: EatenSuggestion | null }>(
+  items: T[],
+  suggestions: EatenSuggestion[],
+): T[] {
+  const byKey = new Map(suggestions.map((s) => [s.id, s]))
+  return items.map((item) => {
+    const suggestion = byKey.get(item.key)
+    if (!suggestion) return item
+    const apply = suggestion.eatenPercent !== null && item.eatenSource !== "user"
+    return { ...item, suggestion, ...(apply ? { eatenPercent: suggestion.eatenPercent as number, eatenSource: "after_photo" as const } : {}) }
+  })
 }
