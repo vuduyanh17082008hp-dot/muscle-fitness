@@ -315,7 +315,13 @@ describe("conversation edits are deterministic", () => {
   it("planner failure: follow-ups about a logged meal resolve from the log, never invent a food, goal or number", async () => {
     const entry = (id: string, mealType: string, foodName: string, calories: number, proteinG: number) => ({ id, logDate: "2026-10-07", mealType, foodName, quantityGrams: 200, servingName: null, servingsConsumed: null, calories, proteinG, carbsG: 0, fatG: 0 })
     const log = (...entries: ReturnType<typeof entry>[]) => vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries, totals: { calories: entries.reduce((s, e) => s + e.calories, 0), protein: entries.reduce((s, e) => s + e.proteinG, 0), carbs: 0, fat: 0 } } as never)
-    const ask = async (message: string, lastCoach?: string) => (await post({ message, coachMode: "nutrition", conversation: lastCoach ? { recentMessages: [{ role: "coach", text: lastCoach }] } : undefined })).json()
+    // Like the panel, each turn echoes the food-log snapshot the previous reply returned (what "it" could have meant).
+    let loggedRows: unknown
+    const ask = async (message: string, lastCoach?: string) => {
+      const json = await (await post({ message, coachMode: "nutrition", conversation: lastCoach ? { recentMessages: [{ role: "coach", text: lastCoach }], loggedRows } : undefined })).json()
+      loggedRows = json.conversation?.loggedRows
+      return json
+    }
     const ambiguousCalls = () => vi.mocked(callOpenAiWithFallback).mock.calls.filter(([prompt]) => prompt.startsWith("Handle one ambiguous")).length
     log(entry("1", "breakfast", "Oatmeal", 300, 10), entry("2", "lunch", "Chicken Rice", 620, 38))
     const LUNCH = "Your lunch (Chicken Rice (200 g)) had 38 g protein and 620 kcal, from your food log."

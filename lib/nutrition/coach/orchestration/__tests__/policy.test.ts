@@ -115,7 +115,7 @@ describe("A/H. prior offer + exact macros use deterministic state", () => {
 
   // "What foods have I eaten today?" / "what about my last meal?": answered from the log as logged, never guessed.
   it("state carries consumed intake and today's meals as logged, and their numbers are allowed in the reply", () => {
-    const ctx = { ...makeCtx({ caloriesRemaining: 520, proteinRemaining: 54 }), todayMeals: [{ meal: "lunch" as const, calories: 1680, protein: 106, carbs: 150, fat: 50, foods: ["Chicken rice (350 g)"] }], lastLogged: { meal: "lunch", food: "Chicken rice (350 g)" } }
+    const ctx = { ...makeCtx({ caloriesRemaining: 520, proteinRemaining: 54 }), todayMeals: [{ meal: "lunch" as const, calories: 1680, protein: 106, carbs: 150, fat: 50, foods: ["Chicken rice (350 g)"], rows: [{ id: "1", food: "Chicken rice", calories: 1680, protein: 106 }] }], lastLogged: { meal: "lunch", food: "Chicken rice (350 g)" } }
     const { plan: built } = plan("yes", recent, exact)
     const results = runDeterministicTools(built, ctx)
     expect(results.athleteState?.consumed).toEqual({ calories: 1680, protein: 106 })

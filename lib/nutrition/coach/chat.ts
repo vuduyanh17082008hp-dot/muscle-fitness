@@ -146,6 +146,8 @@ export type NutritionAgentResponse = {
     pending: PendingClarification | null
     /** The one food this conversation's last tool run resolved (identity + basis). A quantity follow-up re-resolves it server-side. */
     foodReference: ResolvedFoodReference | null
+    /** Today's food-log rows when THIS reply was written: a later "it" may only mean one of them (a re-added food is a new row). */
+    loggedRows: LoggedRow[] | null
   }
   /** Compact structured results the UI renders instead of re-parsing prose. */
   structuredBlocks: StructuredBlock[]
@@ -223,65 +225,91 @@ const LOG_TALK = /\b(?:logged|food log|you (?:had|ate)|you've had|your (?:last |
 const PREP_WORDS = new Set(["cooked", "raw", "boiled", "grilled", "fried", "baked", "steamed", "roasted"])
 const words = (text: string) => (text.toLowerCase().match(/\p{L}{3,}/gu) ?? []).filter((word) => !PREP_WORDS.has(word))
 
+type LoggedRow = { id: string; meal: string; food: string }
+
 /**
  * "How much protein was in it?" / "was that meal suitable for my goal?" / "my lunch": the meal is resolved only against
- * today's CURRENT log rows — by the meal the user names, or by the meal/food the last coach turn named — and its numbers come
- * from those rows, never from the chat. A meal the chat named that is no longer logged is said so; a same-named food under
- * another meal is never swapped in silently. `judge` = the meal exists and the user asks how it fits (a coaching answer):
- * the reply is then only the planner-failure fallback. Null = not a question about a logged meal.
+ * today's CURRENT log rows, and its numbers come from those rows, never from the chat. "My lunch" is the current lunch.
+ * "It" is a log ROW the last coach turn could have meant: the chat names the meal/food, `seen` (the rows logged when that
+ * turn was written) says which rows those were. A current row is the discussed one only if its id and food are in `seen` —
+ * a shared name, the same slot, or a delete + re-add of the same food is never proof (Codex P1). No snapshot, no identity:
+ * the reply says so instead of guessing. `judge` = the discussed meal is unchanged and the user asks how it fits (a coaching
+ * answer): the reply is then only the planner-failure fallback. `gone` = the discussed entry is no longer logged: the chat still
+ * means THAT row, so the next turn keeps this turn's snapshot. Null = not a question about a logged meal.
  */
-function loggedMealReply(message: string, ctx: CoachContext, recent: Array<{ role: "user" | "coach"; text: string }>): { reply: string; judge: boolean } | null {
+function loggedMealReply(message: string, ctx: CoachContext, recent: Array<{ role: "user" | "coach"; text: string }>, seen: LoggedRow[] | null): { reply: string; judge: boolean; gone?: true } | null {
   const meals = ctx.todayMeals
   const historical = HISTORICAL.test(message)
   if (!meals || !(MEAL_QUESTION.test(message) || historical || MY_MEAL.test(message))) return null
   const listed = meals.length ? `Today's log has ${meals.map(mealLabel).join(", ")}.` : "Nothing is logged for today yet."
   const lastCoach = recent.findLast((turn) => turn.role === "coach")?.text ?? ""
-  const answer = (meal: MealSummary, note = ""): { reply: string; judge: boolean } => {
-    const facts = `${note}Your ${mealLabel(meal)} (${meal.foods.map(portionOf).join(", ")}) had ${meal.protein} g protein and ${Math.round(meal.calories)} kcal, from your food log.`
+  // `ids` = the rows the answer covers; the numbers are those rows' own, summed.
+  const answer = (meal: MealSummary, note = "", ids = meal.rows.map((row) => row.id)): { reply: string; judge: boolean } => {
+    const rows = meal.rows.filter((row) => ids.includes(row.id))
+    const protein = Math.round(rows.reduce((sum, row) => sum + row.protein, 0) * 10) / 10
+    const calories = Math.round(rows.reduce((sum, row) => sum + row.calories, 0))
+    const facts = `${note}Your ${mealLabel(meal)} (${meal.foods.filter((_, i) => ids.includes(meal.rows[i].id)).map(portionOf).join(", ")}) had ${protein} g protein and ${calories} kcal, from your food log.`
     if (historical) return { reply: `Today's log now has it as: ${facts} Earlier in this chat I said: “${lastCoach.slice(0, 300)}”`, judge: false }
-    if (ASKS_NUMBERS.test(message)) return { reply: facts, judge: false }
+    if (ASKS_NUMBERS.test(message) || note) return { reply: facts, judge: false }
     const goal = ctx.snapshot.goal ? `The goal on your profile is ${ctx.snapshot.goal.replace(/_/g, " ")}, but I` : "There is no goal on your profile yet, and I"
     return { reply: `${facts} ${goal} can't give a proper judgement of how it fits right now. Try again in a moment.`, judge: true }
   }
-  const missing = (): { reply: string; judge: boolean } => ({
+  const missing = (): { reply: string; judge: boolean; gone: true } => ({
     reply: historical && lastCoach
       ? `That meal is no longer in today's food log, so I can't check it against your log now. Earlier in this chat I said: “${lastCoach.slice(0, 300)}”`
       : `I can't find that meal in today's log anymore, so I can't give its numbers. ${listed}`,
     judge: false,
+    gone: true,
   })
 
-  const named = message.match(MY_MEAL)?.[1]
-  if (named) {
-    const key = named.toLowerCase().replace(/s$/, "").replace(/(pre|post)[- ]?workout/, "$1_workout")
+  const asked = message.match(MY_MEAL)?.[1]
+  if (asked) {
+    const key = asked.toLowerCase().replace(/s$/, "").replace(/(pre|post)[- ]?workout/, "$1_workout")
     const meal = meals.find((item) => item.meal === key)
-    return meal ? answer(meal) : { reply: `Nothing is logged under ${named.toLowerCase()} today, so I can't give its numbers. ${listed}`, judge: false }
+    return meal ? answer(meal) : { reply: `Nothing is logged under ${asked.toLowerCase()} today, so I can't give its numbers. ${listed}`, judge: false }
   }
   if (!MEAL_BACKREF.test(message)) return null
-  // A composed intake reply rephrases portions ("200 g of cooked chicken breast"), so a food matches by its name's words too.
+  // The chat may only NAME the referent. A composed reply rephrases portions ("200 g of cooked chicken breast"), so a food is
+  // named when all its name's words appear; that picks candidates, it never proves identity.
   const coachWords = new Set(words(lastCoach))
-  const namesFood = (item: MealSummary) => item.foods.some((food) => lastCoach.includes(portionOf(food)) || words(portionOf(food).replace(/\(.*$/, "")).every((word) => coachWords.has(word)))
+  const named = (food: string) => {
+    const nameWords = words(food.replace(/\(.*$/, ""))
+    return lastCoach.includes(food) || (nameWords.length > 0 && nameWords.every((word) => coachWords.has(word)))
+  }
   // "it" points at something that was never about the food log (a food fact, a craving): not ours to answer.
-  if (!LOG_TALK.test(lastCoach) && !meals.some(namesFood)) return null
+  if (!LOG_TALK.test(lastCoach) && !meals.some((meal) => meal.rows.some((row) => named(row.food)))) return null
   const labels = MEAL_TYPES.filter((meal) => new RegExp(`\\b${mealLabel(meal)}\\b`, "i").test(lastCoach))
   if (labels.length > 1) {
     const present = meals.filter((item) => labels.includes(item.meal))
     return { reply: `Which meal do you mean — ${(present.length > 1 ? present.map(mealLabel) : labels.map(mealLabel)).join(" or ")}?${present.length > 1 ? "" : ` ${listed}`}`, judge: false }
   }
-  if (labels.length === 1) {
-    // The slot alone is not the meal's identity (Codex P1: chicken lunch deleted, salmon logged as lunch, "it" became the
-    // salmon). It is the discussed meal only while it still holds a food the chat named.
-    // ponytail: name-word overlap, not row ids — the chat carries no row ids; a deleted-and-re-added identical food still matches.
-    const meal = meals.find((item) => item.meal === labels[0])
-    if (meal && meal.foods.some((food) => words(portionOf(food).replace(/\(.*$/, "")).some((word) => coachWords.has(word)))) return answer(meal)
-    // The named meal is gone. The same food logged under another meal is said as such, never passed off as "it".
-    const moved = meals.filter(namesFood)
-    if (moved.length === 1) return answer(moved[0], `That meal is no longer logged as ${mealLabel(labels[0])}. `)
-    if (!meal || historical) return missing()
-    return { reply: `Your ${mealLabel(meal)} has changed since we discussed it: it now has ${meal.foods.map(portionOf).join(", ")}, not the food from earlier in this chat, so that earlier food isn't in your log anymore. Do you want the numbers for your ${mealLabel(meal)} as it is now?`, judge: false }
+  if (!meals.length) return missing()
+  if (!seen) return { reply: `I can't confirm from this chat which logged entry you mean, so I won't guess its numbers. ${listed} Ask about one by name, like “what's in my ${labels[0] ? mealLabel(labels[0]) : "lunch"} now?”`, judge: false }
+  // What the last turn discussed: the rows of the meal it named, else the rows whose food it named — as logged back then.
+  const then = seen.filter((row) => (labels.length ? row.meal === labels[0] : named(row.food)))
+  if (!then.length) return missing()
+  const current = meals.flatMap((meal) => meal.rows.map((row) => ({ ...row, meal: meal.meal })))
+  const kept = current.filter((row) => then.some((old) => old.id === row.id && old.food === row.food))
+  const was = then.map((row) => row.food).join(", ")
+  if (!kept.length) {
+    if (historical) return missing()
+    const slot = labels[0] ?? (new Set(then.map((row) => row.meal)).size === 1 ? then[0].meal : undefined)
+    const now = meals.find((meal) => meal.meal === slot)
+    if (now) return { reply: `Your ${mealLabel(now)} has changed since we discussed it: the entry we talked about (${was}) is no longer logged, and your ${mealLabel(now)} now has ${now.foods.map(portionOf).join(", ")}. I can't confirm that's the same food, so I won't carry the earlier numbers over. Do you want the numbers for your ${mealLabel(now)} as it is now?`, judge: false, gone: true }
+    const lookalike = meals.filter((meal) => meal.rows.some((row) => named(row.food)))
+    if (lookalike.length) return { reply: `The entry we talked about (${was}) is no longer in your log. A newer entry with that name is logged under ${lookalike.map(mealLabel).join(" and ")}, but I can't confirm it's the same one, so I won't give its numbers as that meal's. ${listed}`, judge: false, gone: true }
+    return missing()
   }
-  const matched = meals.filter(namesFood)
-  if (matched.length > 1) return { reply: `Which meal do you mean — ${matched.map(mealLabel).join(" or ")}?`, judge: false }
-  return matched.length ? answer(matched[0]) : missing()
+  const where = [...new Set(kept.map((row) => row.meal))]
+  if (where.length > 1) return { reply: `Which meal do you mean — ${where.map(mealLabel).join(" or ")}?`, judge: false }
+  const meal = meals.find((item) => item.meal === where[0])!
+  const gone = then.filter((old) => !kept.some((row) => row.id === old.id))
+  const note = [
+    labels[0] && meal.meal !== labels[0] ? `That meal is no longer logged as ${mealLabel(labels[0])}.` : "",
+    gone.length ? `It has changed since we discussed it: ${gone.map((row) => row.food).join(", ")} ${gone.length > 1 ? "are" : "is"} no longer logged, so this is only what's left of it.` : "",
+    kept.length < meal.rows.length ? `Entries added to your ${mealLabel(meal)} since then aren't counted here.` : "",
+  ].filter(Boolean).join(" ")
+  return answer(meal, note && `${note} `, kept.map((row) => row.id))
 }
 
 // A fallback reply may discuss any food, but may only say the user ATE one that is in today's log.
@@ -630,6 +658,8 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   // ICH-1: set once the nutrition context has loaded; null on every exit above it.
   const intelligenceRef: { current: CoachContext["intelligence"] } = { current: undefined }
   let canonicalTarget: { calories: number | null; protein: number | null } | null = null
+  // Null until the food log has loaded; every exit above it carries the previous turn's snapshot.
+  let todayRows: LoggedRow[] | null = null
 
   /** Builds the structured response. The handoff is recomputed from THIS reply, so it can never outlive one user turn. */
   const respond = (
@@ -740,6 +770,7 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
         pending: extra.pending ?? null,
         // A newly resolved food replaces the reference; a new meal, topic switch, reset or safety stop ends it; anything else carries it.
         foodReference: extra.foodReference ?? (mealDraft || newTopicFlag || extra.deactivate || extra.safetyBlocked || intent === "RESET_CONTEXT" ? null : (state.foodReference ?? null)),
+        loggedRows: todayRows ?? state.loggedRows ?? null,
       },
       structuredBlocks: committed.blocks,
       referent: followUp?.referent ?? null,
@@ -848,6 +879,7 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   const guards = disclosedAllergens.length ? { ...loaded.ctx.guards, allergies: [...new Set([...loaded.ctx.guards.allergies, ...disclosedAllergens])] } : loaded.ctx.guards
   const ctx: CoachContext = { ...loaded.ctx, guards, ...(coordination.signalLoaded ? { coordination } : {}), intelligence }
   caloriesRemaining = ctx.snapshot.caloriesRemaining
+  todayRows = ctx.todayMeals ? ctx.todayMeals.flatMap((meal) => meal.rows.map(({ id, food }) => ({ id, meal: meal.meal, food }))).slice(0, 60) : null
   canonicalTarget = { calories: Math.round(ctx.snapshot.caloriesTarget), protein: Math.round(ctx.snapshot.proteinTarget) }
   const targetUtterance = classifyTargetUtterance(message)
   if (targetUtterance.kind !== "NONE") {
@@ -1173,7 +1205,9 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
       // A question about a logged meal is answered against today's CURRENT rows before any model sees the chat: the history may
       // name the meal, but its numbers may have been edited or deleted since (live P1: deleted lunch re-voiced as "62 g").
       // Only "how does it fit my goal?" about a meal that still exists goes on to the composer, held to current numbers.
-      const loggedMeal = loggedMealReply(message, ctx, recent)
+      const loggedMeal = loggedMealReply(message, ctx, recent, state.loggedRows ?? null)
+      // "It" still means the entry that is gone, not the rows logged since (live: a historical follow-up got the re-added row).
+      if (loggedMeal?.gone) todayRows = state.loggedRows ?? null
       if (loggedMeal && !loggedMeal.judge) return respond("GENERAL_NUTRITION_QUESTION", "food_log", loggedMeal.reply, { clarified: loggedMeal.reply.startsWith("Which meal") })
       const currentFactsOnly = Boolean(loggedMeal) || isLoggedIntakeQuestion(message)
       // N1.6.4: context-aware understanding + plan. Any failure leaves the existing path below exactly as it was.

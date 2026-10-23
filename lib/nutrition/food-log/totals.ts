@@ -83,7 +83,8 @@ export function describePortion(entry: FoodLogEntry): string {
     : `${entry.foodName} (${entry.quantityGrams} g)`
 }
 
-export type MealSummary = DailyMacroTotals & { meal: MealType; foods: string[] }
+/** `rows[i]` is the log row behind `foods[i]`: its id is the entry's identity (a delete + re-add is a new id). */
+export type MealSummary = DailyMacroTotals & { meal: MealType; foods: string[]; rows: Array<{ id: string; food: string; calories: number; protein: number }> }
 
 /**
  * Per-meal totals from each row's own meal_type — the meal the user picked when logging it, the same grouping the
@@ -97,5 +98,6 @@ export function summarizeMeals(entries: FoodLogEntry[]): MealSummary[] {
     meal,
     ...computeDailyTotals(grouped[meal]),
     foods: grouped[meal].map((entry) => `${describePortion(entry)}: ${Math.round(entry.calories)} kcal, ${round1(entry.proteinG)} g protein`),
+    rows: grouped[meal].map((entry) => ({ id: entry.id, food: entry.foodName, calories: entry.calories, protein: entry.proteinG })),
   }))
 }

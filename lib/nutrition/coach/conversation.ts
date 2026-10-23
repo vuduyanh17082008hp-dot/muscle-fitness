@@ -123,6 +123,8 @@ export const conversationInputSchema = z.object({
   pending: pendingClarificationSchema.nullish().catch(undefined),
   /** The food the last tool run resolved. Identity + basis only: a follow-up ("150 g of that") re-resolves it server-side, so no echoed number is ever used. */
   foodReference: z.object({ canonicalName: z.string().max(160), provider: z.enum(["LOCAL_CANONICAL", "USDA_FDC"]), sourceId: z.string().max(80), basis: z.enum(["raw", "cooked", "prepared", "packaged", "unknown"]), base: z.string().max(60) }).nullish().catch(undefined),
+  /** Today's food-log rows (id, meal, food name) when the last reply was written: what "it" could have meant. Identity only — numbers always come from the current rows. */
+  loggedRows: z.array(z.object({ id: z.string().max(64), meal: z.string().max(20), food: z.string().max(200) })).max(60).nullish().catch(undefined),
 })
 export type ConversationInput = z.infer<typeof conversationInputSchema>
 
