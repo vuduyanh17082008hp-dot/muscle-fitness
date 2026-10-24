@@ -1,6 +1,7 @@
 import "server-only"
 
 import { findIngredientByText } from "@/lib/nutrition/coach/ingredients"
+import { LOCAL_FALLBACK_FOODS } from "@/lib/nutrition/food-data/local-fallback"
 import { isUsdaConfigured, searchFood as searchUsdaRaw } from "@/lib/nutrition/food-data/usda"
 import type { NormalizedFood } from "@/lib/nutrition/food-data/types"
 
@@ -43,8 +44,20 @@ function toCandidate(food: NormalizedFood): FoodCandidate {
   }
 }
 
+/** Offline USDA SR Legacy copies whose name says they were prepared by `method` ("Fried Chicken — ...", "Egg — fried"). */
+export function searchPreparedCopies(base: string, method: string): FoodCandidate[] {
+  const want = words(base)
+  return LOCAL_FALLBACK_FOODS.flatMap((food) => {
+    const fdc = food.rawDescription?.match(/\(USDA FDC (\d+)\)$/)?.[1]
+    const have = words(food.name)
+    if (!fdc || !have.includes(method) || !want.every((t) => have.includes(t))) return []
+    return [{ ...toCandidate(food), id: `usda-${fdc}` }]
+  })
+}
+
 export const serverResolverDeps: ResolverDeps = {
   searchLocal: searchLocalCanonical,
+  searchPrepared: searchPreparedCopies,
   searchUsda: async (query) => {
     if (!isUsdaConfigured()) return { foods: [], configured: false }
     const foods = await searchUsdaRaw(query, { limit: 10 })

@@ -204,7 +204,10 @@ function lastResortReply(ctx: CoachContext | null, options: { message?: string; 
     // The last meal is the whole meal the latest row was logged under, so a follow-up "it" means the same thing.
     const last = ctx.lastLogged && ctx.todayMeals.find((meal) => meal.meal === ctx.lastLogged!.meal)
     if (/\b(?:last|latest|previous) meal\b/i.test(options.message) && last) return `Your last logged meal today was ${mealLabel(last)}: ${last.foods.join("; ")}.`
-    return `Here's what you've logged today: ${ctx.todayMeals.map((meal) => `${meal.meal} — ${meal.foods.join("; ")}`).join(". ")}.`
+    // The day's total is the snapshot's sum of the same rows, so "how many calories today?" is answered, not just listed.
+    const { caloriesConsumed, proteinConsumed } = ctx.snapshot
+    const total = Number.isFinite(caloriesConsumed) && Number.isFinite(proteinConsumed) ? ` That's ${Math.round(caloriesConsumed)} kcal and ${Math.round(proteinConsumed * 10) / 10} g protein in total.` : ""
+    return `Here's what you've logged today: ${ctx.todayMeals.map((meal) => `${meal.meal} — ${meal.foods.join("; ")}`).join(". ")}.${total}`
   }
   if (options.lastMealName) return `I can show the ingredients or macros for ${options.lastMealName}, suggest a change to it, or we can switch to something else. What would you like?`
   if (ctx && ctx.snapshot.caloriesRemaining > 0) return `You've got about ${left(ctx)} left today. Want a meal that fits that, a craving worked in, or a nutrition question answered?`

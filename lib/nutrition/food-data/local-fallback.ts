@@ -186,6 +186,11 @@ export const LOCAL_FALLBACK_FOODS: NormalizedFood[] = [
   usdaCopy("local-pork-chop-grilled", "Pork Chop — grilled", "cooked", 167827, "Pork, fresh, loin, center loin (chops), bone-in, separable lean and fat, cooked, broiled", [209, 25.6, 0, 11.1, 0, 55]),
   usdaCopy("local-pork-ground-cooked", "Ground Pork — cooked", "cooked", 167903, "Pork, fresh, ground, cooked", [297, 25.7, 0, 20.8, 0, 73]),
   usdaCopy("local-pork-leg-roasted", "Pork Leg — roasted", "cooked", 168223, "Pork, fresh, leg (ham), whole, separable lean and fat, cooked, roasted", [273, 26.8, 0, 17.6, 0, 60]),
+  // Fried chicken: frying, batter and skin move the numbers far from plain cooked breast. USDA SR Legacy copies, looked up 2026-10-24.
+  usdaCopy("local-chicken-fried-battered", "Fried Chicken — meat and skin, battered", "cooked", 171448, "Chicken, broilers or fryers, meat and skin, cooked, fried, batter", [289, 22.5, 9.42, 17.4, 0.3, 292]),
+  usdaCopy("local-chicken-fried-meat-only", "Fried Chicken — meat only, no skin or batter", "cooked", 171053, "Chicken, broilers or fryers, meat only, cooked, fried", [219, 30.6, 1.69, 9.12, 0.1, 91]),
+  usdaCopy("local-chicken-breast-fried-battered", "Fried Chicken Breast — meat and skin, battered", "cooked", 171475, "Chicken, broilers or fryers, breast, meat and skin, cooked, fried, batter", [260, 24.8, 8.99, 13.2, 0.3, 275]),
+  usdaCopy("local-chicken-breast-fried-meat-only", "Fried Chicken Breast — meat only, no skin or batter", "cooked", 171078, "Chicken, broilers or fryers, breast, meat only, cooked, fried", [187, 33.4, 0.51, 4.71, 0, 79]),
   usdaCopy("local-egg-fried", "Egg — fried", "cooked", 173423, "Egg, whole, cooked, fried", [196, 13.6, 0.83, 14.8, 0, 207]),
   usdaCopy("local-egg-boiled", "Egg — hard-boiled", "cooked", 173424, "Egg, whole, cooked, hard-boiled", [155, 12.6, 1.12, 10.6, 0, 124]),
   usdaCopy("local-shrimp-cooked", "Shrimp — cooked", "cooked", 175180, "Crustaceans, shrimp, cooked", [99, 24, 0.2, 0.28, null, 111]),
@@ -254,6 +259,7 @@ const LOCAL_ALIASES: Record<string, string[]> = {
   "local-rice-noodles-cooked": ["bánh phở", "pho noodles", "bún", "rice vermicelli", "vermicelli", "hủ tiếu", "rice sticks", "mì quảng noodles"],
   "local-chicken-stewed": ["gà", "thịt gà", "gà luộc", "boiled chicken", "chicken with skin"],
   "local-chicken-roasted": ["gà nướng", "roast chicken"],
+  "local-chicken-fried-battered": ["gà rán", "gà chiên giòn"],
   "local-beef-lean-cooked": ["thịt bò", "bò tái", "bò chín", "sliced beef", "beef slices", "rare beef"],
   "local-beef-brisket-braised": ["nạm", "gầu", "bò nạm"],
   "local-pork-shoulder-grilled": ["thịt nướng", "thịt heo nướng", "thịt heo", "thịt lợn", "xá xíu", "bbq pork"],
@@ -297,6 +303,8 @@ export function foldText(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase().trim()
 }
 
+const FRIED_ONLY = new Set(["local-chicken-fried-battered", "local-chicken-fried-meat-only", "local-chicken-breast-fried-battered", "local-chicken-breast-fried-meat-only"])
+
 // Preparation/serving words say HOW a food was made, not WHICH food — "steamed chicken" should still find chicken.
 const PREP_WORDS = new Set(["cooked", "steamed", "boiled", "grilled", "roasted", "baked", "fried", "stir", "poached", "braised", "stewed", "sauteed", "pan", "deep", "raw", "fresh", "plain", "sliced", "slices", "chopped", "diced", "shredded", "piece", "pieces", "of", "and", "with", "a"])
 /** True for a word that says how a food was prepared, not which food it is ("braised", "sliced"). */
@@ -328,15 +336,20 @@ export function searchLocalFallback(query: string): NormalizedFood[] {
     const head = LOCAL_HEAD_WORD[food.id]
     // prefix compare: the plural fold is crude ("noodles" → "noodl")
     const hasHead = !head || words.some((word) => head.startsWith(word) || word.startsWith(head))
-    if (words.every((word) => nameWords.includes(word)) && hasHead) return true
+    // A fried chicken record answers only a fried query: plain "chicken breast" is never offered battered breast.
+    const methodOk = !FRIED_ONLY.has(food.id) || /\bfried\b/.test(normalizedQuery)
+    if (words.every((word) => nameWords.includes(word)) && hasHead && methodOk) return true
     // An alias matches only as a whole: "bún" finds rice noodles, but "bò" alone never finds "bò nạm".
     return (LOCAL_ALIASES[food.id] ?? []).some((alias) => {
       const aliasWords = foldText(alias).split(/[^a-z]+/).filter((word) => word && !PREP_WORDS.has(word)).map(stem)
       return words.every((word) => aliasWords.includes(word)) && aliasWords.every((word) => words.includes(word))
     })
   })
-  const wantsCooked = COOKED_QUERY.test(normalizedQuery)
-  return wantsCooked ? [...matches].sort((a, b) => Number(b.preparationState === "cooked") - Number(a.preparationState === "cooked")) : matches
+  const method = normalizedQuery.match(COOKED_QUERY)?.[1]
+  if (!method) return matches
+  // "fried chicken" lists the fried records before plain cooked breast; any cooked record still beats a raw one.
+  const rank = (food: NormalizedFood) => (foldText(food.name).split(/[^a-z]+/).includes(method) ? 2 : 0) + Number(food.preparationState === "cooked")
+  return [...matches].sort((a, b) => rank(b) - rank(a))
 }
 
 export function getLocalFallbackById(id: string): NormalizedFood | null {

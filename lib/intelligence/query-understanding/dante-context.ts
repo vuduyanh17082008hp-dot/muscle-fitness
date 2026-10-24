@@ -44,7 +44,7 @@ export type DanteFoodResolver = (req: ResolveRequest) => Promise<ResolvedFood>;
 const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "n/a" : String(Math.round(n * 10) / 10));
 
 function foodFacts(label: string, r: ResolvedFood, grams: number | null): string | null {
-  if (r.status === "AMBIGUOUS") return `food_fact: ${label} — raw vs cooked changes the numbers materially and the user did not say which; do not state macros, ask one short question if it matters.`;
+  if (r.status === "AMBIGUOUS") return `food_fact: ${label} — ${r.clarification?.options.join(" vs ") ?? "raw vs cooked"} changes the numbers materially and the user did not say which; do not state macros, ask one short question if it matters.`;
   const p = r.per100g;
   if (r.status === "UNRESOLVED" || !p) return `food_fact: ${label} — no verified nutrition data available; do not invent numbers.`;
   const src = r.source === "USDA_FDC" ? "USDA FoodData Central" : "app curated table";

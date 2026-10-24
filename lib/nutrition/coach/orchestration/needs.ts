@@ -17,7 +17,12 @@ const FIT_OFFER = /(?<![\p{L}\p{N}])fit(?:ting)?\b[^?]{0,60}\b(?:macros?|calorie
 export const isPersonalStateQuestion = (message: string) => PERSONAL_STATE.test(message)
 // "What have I eaten today?", "calories I've had", "my last meal": the food log answers these, so state is always read.
 const LOGGED_INTAKE = /(?<![\p{L}\p{N}])(?:(?:have|did) i (?:eat|eaten|had|have|log(?:ged)?)|i(?:'ve| have) (?:eaten|had|logged)|i ate|my (?:last|latest|previous) meal|(?:eaten|logged|consumed) (?:today|so far))(?![\p{L}\p{N}])|đã ăn|ăn gì hôm nay/iu
-export const isLoggedIntakeQuestion = (message: string) => LOGGED_INTAKE.test(message)
+// "Total calories today?", "my calorie total so far": a running total of the day is the food log's sum even with no "eat" verb
+// (live: the planner asked "what foods have you logged today?" instead). A total the user NEEDS or aims for is a target, not this.
+const DAY_TOTAL = /(?<![\p{L}\p{N}])(?:total|tổng)(?![\p{L}\p{N}])[^?.!]{0,30}(?<![\p{L}\p{N}])(?:calories|calorie|kcal|protein|macros|carbs|fat|calo|đạm)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:calories|calorie|kcal|protein|macros|calo)(?![\p{L}\p{N}])[^?.!]{0,15}(?<![\p{L}\p{N}])(?:total|tổng)(?![\p{L}\p{N}])/iu
+const DAY_WINDOW = /(?<![\p{L}\p{N}])(?:today|so far|hôm nay|tới giờ|đến giờ)(?![\p{L}\p{N}])/iu
+const NOT_INTAKE = /(?<![\p{L}\p{N}])(?:need|should|target|goal|aim|allowed|budget|left|remaining|burn(?:ed|t)?|cần|mục tiêu|còn lại)(?![\p{L}\p{N}])/iu
+export const isLoggedIntakeQuestion = (message: string) => LOGGED_INTAKE.test(message) || (DAY_TOTAL.test(message) && DAY_WINDOW.test(message) && !NOT_INTAKE.test(message))
 // "Was that meal suitable for my goal?": the saved goal answers it, so it is read even outside a recommendation.
 const MY_GOAL = /(?<![\p{L}\p{N}])my goals?(?![\p{L}\p{N}])|mục tiêu của (?:tôi|mình)/iu
 export const namesOwnGoal = (message: string) => MY_GOAL.test(message)
