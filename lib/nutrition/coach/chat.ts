@@ -67,7 +67,7 @@ import { applyDraftOp, type DraftOp } from "./draft"
 import { ALLERGEN_GUARD, asksForMealSuggestion, coordinationDiagnostics, coordinationNote, EMPTY_COORDINATION, GEMMA_CLEARANCE, loadGemmaCoordination, type GemmaCoordination } from "@/lib/intelligence/gemma-consumer"
 import { dayLevelCalorieProposal, isUnsafeCoachReply, parseCoachMessage, resolveFoods, SAFETY_REPLY } from "./intent"
 import { buildDanteDeferralReply } from "@/lib/intelligence/query-understanding"
-import { activeFacts, buildContextWorkingSet, buildIntelligenceBrief, enforceIntegrity, restrictedSubstanceReply } from "@/lib/intelligence/performance-core"
+import { activeFacts, buildContextWorkingSet, buildIntelligenceBrief, enforceIntegrity, restrictedSubstanceReply, withStoredAllergies } from "@/lib/intelligence/performance-core"
 import { syncDisclosureSignals } from "@/lib/intelligence/dante-signal-persistence"
 import { loadActiveCoachSignalsForDomain } from "@/lib/intelligence/coach-signal-store"
 import { withDisclosedFacts } from "@/lib/intelligence/dante-runtime"
@@ -79,6 +79,10 @@ const WORKING_SET_ALLERGEN: Record<string, string[]> = {
   "ALLERGY:eggs": ["egg"], "ALLERGY:soy": ["soy"], "ALLERGY:gluten or wheat": ["gluten"], "ALLERGY:sesame": ["sesame"],
 }
 import { checkSafety } from "@/lib/dante-core/safety-layer"
+import { detectLanguage } from "./orchestration/context"
+
+/** S0 D-01: the fixed integrity lines speak the turn's language; with no explicit control, the message's own (VI stays VI). */
+const integrityLanguage = (control: string, message: string): "en" | "vi" => (control === "VI" ? "vi" : control === "EN" ? "en" : detectLanguage(message) === "en" ? "en" : "vi")
 import { buildGemmaFrame, type ResolvedFoodReference } from "./orchestration/shared-query"
 import { COACH_INGREDIENT_IDS, getIngredient } from "./ingredients"
 import { totalsFor } from "./macros"
@@ -701,7 +705,7 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
     // Final Repair D1: every non-safety reply on a supplement turn leaves as education, whichever path wrote it.
     if (!extra.safetyBlocked && !route.startsWith("safety")) reply = supplementEducationReply(reply, message, recent).reply
     // ICH-1: under a no-dosing posture no dose leaves, and no effect is asserted for a topic with no verified knowledge, whichever path wrote the reply.
-    if (intelligenceRef.current && !extra.safetyBlocked && !route.startsWith("safety")) reply = enforceIntegrity(reply, intelligenceRef.current.brief, intelligenceRef.current.brief.control.responseLanguage === "VI" ? "vi" : "en")
+    if (intelligenceRef.current && !extra.safetyBlocked && !route.startsWith("safety")) reply = enforceIntegrity(reply, intelligenceRef.current.brief, integrityLanguage(intelligenceRef.current.brief.control.responseLanguage, message))
     if (canonicalTarget && !extra.safetyBlocked && !route.startsWith("safety")) reply = guardCanonicalTargetClaim(reply, canonicalTarget.calories)
     // AI-R1E.2b: the note rides on EVERY mode that answers "what should I eat" (composed chat, follow-ups, active-draft turns), not only
     // the deterministic build. Prefixed so it never joins the last numbered option; skipped on questions back to the user and safety stops.
@@ -801,9 +805,11 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
 
   // Safety and scope are decided before any data load or model call. They don't depend on the draft.
   // ICH-1: a self-harm statement belongs to the shared hard-safety layer on either coach surface (it was silently unhandled here).
-  const crisis = checkSafety(message)
-  if (crisis.triggered && crisis.category === "self_harm_crisis" && crisis.responseOverride) {
-    return respond("GENERAL_NUTRITION_QUESTION", "safety_self_harm", crisis.responseOverride, {
+  const crisis = checkSafety(message, { recentMessages: disclosurePrior.slice(-3) })
+  // S0 D-15: so does a dangerous caffeine dose — it was deferred to Dante as "a training question" or met with a soft caution.
+  const caffeineOverdose = crisis.category === "dangerous_substance" && Boolean(crisis.matchedPhrase?.startsWith("caffeine"))
+  if (crisis.triggered && (crisis.category === "self_harm_crisis" || caffeineOverdose) && crisis.responseOverride) {
+    return respond("GENERAL_NUTRITION_QUESTION", caffeineOverdose ? "safety_caffeine_overdose" : "safety_self_harm", crisis.responseOverride, {
       safetyBlocked: true,
       followUp: { referent: null, candidateReferents: [], pendingProposal: null, presentedOptions: null },
       focus: null,
@@ -866,7 +872,8 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
     message,
     coach: "GEMMA",
     priorUserMessages,
-    ...(disclosed.length ? { context: withDisclosedFacts(buildContextWorkingSet({ priorUserMessages, message }), disclosed, "GEMMA") } : {}),
+    // S0 D-01: the stored profile allergies are facts of this answer too, so output integrity enforces them on every reply path.
+    context: withStoredAllergies(withDisclosedFacts(buildContextWorkingSet({ priorUserMessages, message }), disclosed, "GEMMA"), loaded.ctx.guards.allergies),
     previousReply: [...recent].reverse().find((turn) => turn.role === "coach")?.text ?? null,
     athlete: { goal: loaded.ctx.snapshot.goal },
     canRetrieve: false,

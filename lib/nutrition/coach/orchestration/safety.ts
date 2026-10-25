@@ -1,4 +1,5 @@
 import { reviseClaimSpans } from "@/lib/intelligence/performance-core/claim-revision"
+import { intakeIsSomeoneElses } from "@/lib/intelligence/performance-core/context-working-set"
 import { detectLanguage } from "./context"
 import type { Language, ResponseMode } from "./types"
 
@@ -192,7 +193,8 @@ export function screenSafety(message: string, guards?: { allergies?: string[]; r
   for (const pattern of RESTRICTION) {
     const match = text.match(pattern)
     if (!match) continue
-    if (match[1] === undefined || Number(match[1]) < 1200) return { kind: "extreme_restriction", mode: "SAFE_REDIRECT" }
+    // S0 D-03: "my friend eats 600 a day" still gets the safety answer, worded about that person, not the user.
+    if (match[1] === undefined || Number(match[1]) < 1200) return { kind: "extreme_restriction", mode: "SAFE_REDIRECT", ...(intakeIsSomeoneElses(text) ? { item: "someone_else" } : {}) }
   }
 
   // Allergy conflict: "I'm allergic to peanuts, add peanut butter." and profile allergies requested outright.
@@ -230,8 +232,8 @@ const REPLIES: Record<SafetyKind, { en: (item?: string) => string; vi: (item?: s
     vi: () => "Chuyện này quan trọng hơn mọi kế hoạch ăn uống lúc này. Đau ngực, khó thở hay choáng váng có thể nghiêm trọng — bạn hãy dừng lại và liên hệ cấp cứu hoặc bác sĩ ngay. Mình tạm dừng việc lên thực đơn, khi nào bạn ổn thì mình tiếp tục nhé.",
   },
   extreme_restriction: {
-    en: () => `I won't plan around an intake that low — eating that little for more than a short while can drain your energy and health. If fat loss is the goal, I can help with a sustainable approach based on your profile. And if food feels stressful or hard to control, ${PRO.en} is a good next step.`,
-    vi: () => `Mình sẽ không lên kế hoạch với mức ăn thấp như vậy — ăn quá ít kéo dài có thể hại sức khỏe và năng lượng. Nếu mục tiêu là giảm mỡ, mình có thể giúp một cách bền vững dựa trên hồ sơ của bạn. Và nếu việc ăn uống đang khiến bạn căng thẳng, ${PRO.vi} là người nên trao đổi.`,
+    en: (item) => item === "someone_else" ? `That intake is dangerously low for anyone to live on for more than a short while — it can cause muscle loss, fatigue, dizziness, and hormonal and heart strain. If it's someone you know, the kindest step is encouraging them to see ${PRO.en}. I can explain what a sustainable intake looks like if that helps.` : `I won't plan around an intake that low — eating that little for more than a short while can drain your energy and health. If fat loss is the goal, I can help with a sustainable approach based on your profile. And if food feels stressful or hard to control, ${PRO.en} is a good next step.`,
+    vi: (item) => item === "someone_else" ? `Mức ăn đó quá thấp để bất kỳ ai duy trì lâu — có thể gây mất cơ, mệt mỏi, chóng mặt và ảnh hưởng nội tiết, tim mạch. Nếu đó là người bạn quen, cách tốt nhất là khuyến khích họ gặp ${PRO.vi}. Mình có thể giải thích mức ăn bền vững trông như thế nào nếu bạn muốn.` : `Mình sẽ không lên kế hoạch với mức ăn thấp như vậy — ăn quá ít kéo dài có thể hại sức khỏe và năng lượng. Nếu mục tiêu là giảm mỡ, mình có thể giúp một cách bền vững dựa trên hồ sơ của bạn. Và nếu việc ăn uống đang khiến bạn căng thẳng, ${PRO.vi} là người nên trao đổi.`,
   },
   prolonged_fasting: {
     en: () => `Going days without food is a real health concern, and it's beyond what I can safely coach. Please speak to ${PRO.en} soon, and if you feel weak, dizzy or unwell, get urgent care. I'm not going to plan meals around this — general, gentle eating guidance is best given by someone who can check on you.`,

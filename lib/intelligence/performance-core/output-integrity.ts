@@ -1,5 +1,5 @@
 import { candidateCompleteness } from "./candidates";
-import { clinicallyBounded } from "./context-working-set";
+import { clinicallyBounded, STORED_ALLERGY_VIA } from "./context-working-set";
 import { mapSentencesKeepingLists, renumberLists, reviseClaimSpans } from "./claim-revision";
 import { negativeOverclaimsIn, negativeRestatement, scopeBroadeningsIn, scopedRestatement, supportedScopeLine, type NegativeOverclaim, type ScopeBroadening } from "./claim-scope";
 import { personalPickBlocked, strongestSupport } from "./policy";
@@ -177,8 +177,9 @@ function stripInjuryLoading(reply: string, brief: IntelligenceBrief, language: "
 const ALLERGEN_ITEMS: Record<string, RegExp> = {
   fish: /(?<![a-z])(?:fish[- ]?oils?|cod liver oil|(?:oily |fatty |white )?fish|salmon|tuna|sardines?|mackerel|anchov\w*|trout|herring|tilapia|cod|basa|dau ca|ca hoi|ca ngu)(?![a-z])/,
   // Vietnamese only as unambiguous food compounds: bare tom/cua/lac/sua/trung fold onto tóm, của, lạc quan, sửa, tập trung.
-  shellfish: /(?<![a-z])(?:shellfish|shrimps?|prawns?|crabs?|lobsters?|krill(?: oil)?|mussels?|oysters?|clams?|scallops?|glucosamine|tom (?:hum|su|the|kho)|cua (?:bien|dong|lot)|hai san)(?![a-z])/,
-  "peanuts or tree nuts": /(?<![a-z])(?:peanuts?|peanut butter|(?:tree )?nuts|mixed nuts|nut butters?|almonds?|almond butter|cashews?|walnuts?|pecans?|pistachios?|hazelnuts?|macadamias?|trail mix|dau phong|hat dieu|hat oc cho)(?![a-z])/,
+  // S0 D-01: dishes that carry the allergen without naming it (pad thai, satay, laksa), and Vietnamese dish compounds.
+  shellfish: /(?<![a-z])(?:shellfish|shrimps?|prawns?|crabs?|lobsters?|krill(?: oil)?|mussels?|oysters?|clams?|scallops?|squid|calamari|octopus|glucosamine|shrimp paste|belacan|prawn crackers?|laksa|har gow|pad thai|tom (?:hum|su|the|kho|nuong|rang|chien|hap|luoc|xao|tuoi|cang|rim)|(?:mam|banh|goi|cuon|chao|cha|com|bun|mien|hu tieu|lau|canh) tom|mam ruoc|cua (?:bien|dong|lot)|muc (?:xao|nuong|chien|hap|ong|kho)|hai san)(?![a-z])/,
+  "peanuts or tree nuts": /(?<![a-z])(?:peanuts?|peanut butter|(?:tree )?nuts|mixed nuts|nut butters?|almonds?|almond butter|cashews?|walnuts?|pecans?|pistachios?|hazelnuts?|macadamias?|trail mix|pad thai|satay|gado[- ]gado|kung pao|rojak|massaman|dau phong|(?:sot|muoi|dau|keo|xoi|bo|nhan|hat) lac|lac rang|hat dieu|(?:hat |qua )?oc cho|(?:hat |sua )?hanh nhan|(?:hat )?mac ?ca|hat de cuoi|ho tran)(?![a-z])/,
   "dairy or lactose": /(?<![a-z])(?:milk|whey|casein|yogh?urts?|greek yogh?urt|cheese|cottage cheese|kefir|skyr|cream|ice cream|sua (?:tuoi|chua|bot|dac)|pho mai)(?![a-z])/,
   eggs: /(?<![a-z])(?:eggs?|egg whites?|omelet(?:te)?s?|trung (?:ga|vit|luoc|chien|op la))(?![a-z])/,
   soy: /(?<![a-z])(?:soy\w*|tofu|edamame|tempeh|dau nanh|dau phu)(?![a-z])/,
@@ -196,14 +197,14 @@ const ALLERGEN_SAFE_FORM: Record<string, RegExp> = {
 };
 
 /** What the constraint rests on, so the line says it truthfully: a stated allergy, a clinician's advice, or a reported reaction. */
-type AllergyBasis = "ALLERGY" | "CLINICIAN" | "POSSIBLE";
+type AllergyBasis = "ALLERGY" | "CLINICIAN" | "POSSIBLE" | "STORED";
 function activeAllergies(brief: IntelligenceBrief): Array<{ id: string; intolerance: boolean; basis: AllergyBasis }> {
   return (brief.context?.facts ?? [])
     .filter((fact) => fact.status === "ACTIVE" && fact.kind === "ALLERGY" && fact.temporal === "CURRENT")
     .map((fact) => ({
       id: fact.key.slice("ALLERGY:".length),
       intolerance: /intoleran/.test(fact.label),
-      basis: (/^(?:allergic|lactose)/.test(fact.label) ? "ALLERGY" : /clinician/.test(fact.label) ? "CLINICIAN" : /^possible reaction/.test(fact.label) ? "POSSIBLE" : "ALLERGY") as AllergyBasis,
+      basis: (fact.via === STORED_ALLERGY_VIA ? "STORED" : /^(?:allergic|lactose)/.test(fact.label) ? "ALLERGY" : /clinician/.test(fact.label) ? "CLINICIAN" : /^possible reaction/.test(fact.label) ? "POSSIBLE" : "ALLERGY") as AllergyBasis,
     }))
     .filter(({ id }) => ALLERGEN_ITEMS[id]);
 }
@@ -212,8 +213,19 @@ function activeAllergies(brief: IntelligenceBrief): Array<{ id: string; intolera
 // Lactose intolerance is about lactose, not milk protein: whey isolate, casein and hard cheese carry little of it (H1 C15).
 const LACTOSE_RICH = /(?<![a-z])(?:milk|whey concentrate|yogh?urts?|cottage cheese|soft cheese|cream|ice cream|sua (?:tuoi|chua|bot|dac))(?![a-z])/;
 
-function allergenHits(sentence: string, id: string, intolerance: boolean): string[] {
+// S0 D-01: "Does pad thai contain peanuts?" asks what is in a food. On that turn a sentence that names the allergen without
+// endorsing eating it ("pad thai usually contains peanuts") is the answer, not an offer. Any other turn gets no exemption:
+// a suggestion phrased as content ("a bowl that includes cashews") is still an offer.
+const ALLERGEN_CONTENT_QUESTION = /(?<![a-z])(?:contain\w*|ingredients?|made (?:with|from|of)|cooked (?:with|in)|in (?:it|them|there)|includ\w*|chua|co chua|lam tu|lam bang|thanh phan)(?![a-z])/;
+const ALLERGEN_OFFER = /(?<![a-z])(?:try|options?|good|great|ideal|perfect|recommend\w*|suggest\w*|enjoy|go for|go ahead|pick|choose|add|swap in|works? well|fits?|can (?:have|eat|still)|fine to|okay to|ok to|nen|thu|lua chon|goi y|co the an|an duoc|ngon|tot)(?![a-z])/;
+const informationalTurn = (brief: IntelligenceBrief) => {
+  const asked = fold(brief.message ?? "");
+  return /\?\s*$|^(?:does|do|is|are|what|which|how)\b/.test(asked.trim()) && ALLERGEN_CONTENT_QUESTION.test(asked);
+};
+
+function allergenHits(sentence: string, id: string, intolerance: boolean, informational = false): string[] {
   const folded = fold(sentence);
+  if (informational && !ALLERGEN_OFFER.test(folded)) return [];
   // Lactose intolerance (not a milk allergy) is compatible with lactose-free forms; an allergy is not.
   const safeForm = ALLERGEN_SAFE_FORM[id];
   const items = intolerance && id === "dairy or lactose" ? LACTOSE_RICH : ALLERGEN_ITEMS[id];
@@ -230,8 +242,9 @@ function allergenHits(sentence: string, id: string, intolerance: boolean): strin
 
 function allergenViolations(reply: string, brief: IntelligenceBrief): IntegrityViolation[] {
   const out: IntegrityViolation[] = [];
+  const informational = informationalTurn(brief);
   for (const { id, intolerance } of activeAllergies(brief)) {
-    const hits = sentences(reply.replace(/\n+/g, " ")).flatMap((sentence) => allergenHits(sentence, id, intolerance));
+    const hits = sentences(reply.replace(/\n+/g, " ")).flatMap((sentence) => allergenHits(sentence, id, intolerance, informational));
     if (hits.length > 0) out.push({ code: "ALLERGEN_RECOMMENDED", detail: `${id}|${[...new Set(hits)].slice(0, 4).join(", ")}` });
   }
   return out;
@@ -260,19 +273,20 @@ const ALLERGY_LINE = {
       ? `Because of the reaction to ${id} you described, avoid ${possibleLine((ALLERGY_AVOID[id]?.en ?? id).replace(/your allergist/, "a doctor"), "until a doctor has checked it")}`
       : basis === "CLINICIAN"
         ? `Because your doctor advised you to avoid ${id}, avoid ${(ALLERGY_AVOID[id]?.en ?? id).replace(/your allergist/, "your doctor")}.`
-        : `Because of the ${id} allergy you mentioned, avoid ${ALLERGY_AVOID[id]?.en ?? id}.`,
+        : `Because of the ${id} allergy ${basis === "STORED" ? "on your profile" : "you mentioned"}, avoid ${ALLERGY_AVOID[id]?.en ?? id}.`,
   vi: (id: string, intolerance = false, basis: AllergyBasis = "ALLERGY") => intolerance
     ? "Vì bạn không dung nạp lactose, hãy chọn dạng không lactose: sữa không lactose, whey isolate hoặc đạm thực vật."
     : basis === "POSSIBLE"
       ? `Vì bạn đã kể bị phản ứng sau khi ăn ${ALLERGY_AVOID[id]?.vn ?? id}, hãy tránh ${possibleLine((ALLERGY_AVOID[id]?.vi ?? id).replace(/bác sĩ dị ứng/, "bác sĩ"), "cho đến khi bác sĩ kiểm tra")}`
       : basis === "CLINICIAN"
         ? `Vì bác sĩ đã dặn bạn tránh ${ALLERGY_AVOID[id]?.vn ?? id}, hãy tránh ${(ALLERGY_AVOID[id]?.vi ?? id).replace(/bác sĩ dị ứng/, "bác sĩ")}.`
-        : `Vì bạn đã nói mình dị ứng ${ALLERGY_AVOID[id]?.vn ?? id}, hãy tránh ${ALLERGY_AVOID[id]?.vi ?? id}.`,
+        : `Vì ${basis === "STORED" ? "hồ sơ của bạn ghi" : "bạn đã nói mình"} dị ứng ${ALLERGY_AVOID[id]?.vn ?? id}, hãy tránh ${ALLERGY_AVOID[id]?.vi ?? id}.`,
 };
 
 /** Last line for an active allergy: a sentence or list item that still offers the allergen is removed, and the rule stated once. */
-function stripAllergens(reply: string, brief: IntelligenceBrief, language: "en" | "vi"): string {
+export function stripAllergens(reply: string, brief: IntelligenceBrief, language: "en" | "vi"): string {
   let out = reply;
+  const informational = informationalTurn(brief);
   for (const { id, intolerance, basis } of activeAllergies(brief)) {
     const blocks = listUnits(out);
     let removed = false;
@@ -281,7 +295,7 @@ function stripAllergens(reply: string, brief: IntelligenceBrief, language: "en" 
       .map((block) => {
         const all = sentences(block.replace(/\n+/g, " "));
         const kept = keepWithoutOrphans(all, (sentence) => {
-          const hits = allergenHits(sentence, id, intolerance);
+          const hits = allergenHits(sentence, id, intolerance, informational);
           hits.forEach((hit) => ruledOut.add(hit));
           return hits.length === 0;
         });
@@ -291,7 +305,8 @@ function stripAllergens(reply: string, brief: IntelligenceBrief, language: "en" 
       })
       .filter((block) => block.trim())
       .join("\n");
-    if (!removed) continue;
+    // One removed sentence can carry two allergens (shrimp pad thai with peanuts): each allergy still gets its line.
+    if (!removed && !sentences(reply.replace(/\n+/g, " ")).some((sentence) => allergenHits(sentence, id, intolerance, informational).length > 0)) continue;
     out = dropEmptyIntros(renumberLists(out));
     const base = ALLERGY_LINE[language](id, intolerance && id === "dairy or lactose", basis);
     // The question was about a food the line does not name ("Is hummus a good snack?"): say that food is the one ruled out
@@ -301,7 +316,93 @@ function stripAllergens(reply: string, brief: IntelligenceBrief, language: "en" 
     const line = language === "en" && named.length > 0 ? `${base} That rules out ${named.slice(0, 3).join(", ")}.` : base;
     if (!fold(out).includes(fold(line).slice(0, 40))) out = `${line}\n\n${dropDanglingContrast(out)}`.trim();
   }
-  return out;
+  return qualifyAllergySafety(out, reply, brief, language);
+}
+
+// S0 D-01/D-02: "safe for you" about food is a claim the coach cannot back while an allergy is on record or the record is unknown.
+const ALLERGY_SAFE_CLAIM = /(?<!(?:not|n't|never|khong|chua) )(?:allergy-?safe|allergen-?free|safe for (?:you|your allerg\w*)|safe (?:to eat|for you to eat)|(?:is|are|it'?s|that'?s|makes it|making it|keeps it) (?:completely |totally |perfectly |100% )?safe|no (?:allergy )?risk|an toan (?:cho ban|voi ban|cho nguoi di ung|tuyet doi)|la an toan|khong (?:sao|lo) (?:gi|dau))(?![a-z])/;
+// "Without peanuts", "ask them to leave out the shrimp", "dặn không cho lạc": removing the visible allergen is not removing the exposure.
+const ALLERGEN_REMOVAL = /(?<![a-z])(?:without|no|skip\w*|hold(?: the)?|leave (?:out|off)|left (?:out|off)|take (?:out|off)|pick(?:ing)? (?:out|off)|remove\w*|minus|khong (?:cho|bo|co|lay)|bo (?:ra|bot)|bot)(?![a-z])[^.?!,;]{0,25}$/;
+const FOOD_OFFER = new RegExp(`${ALLERGEN_OFFER.source}|(?<![a-z])(?:choices?|solid|have|eat|order|get|goi|an|dung)(?![a-z])`);
+const CROSS_CONTACT_LINE = {
+  en: (ids: string[]) => `Asking for a dish "without" it doesn't make it safe for your ${ids.join(" and ")} ${ids.length > 1 ? "allergies" : "allergy"}: shared woks, oil, sauces and utensils can still carry ${ids.join(" or ")}, so tell the staff about the allergy and pick dishes that don't normally contain them.`,
+  vi: (vns: string[]) => `Dặn quán "không cho" ${vns.join(" hay ")} không làm món đó an toàn khi bạn dị ứng: chảo, dầu, nước sốt và dụng cụ dùng chung vẫn có thể dính ${vns.join(" hay ")}, nên hãy báo nhân viên về dị ứng và chọn món vốn không có ${vns.join(" hay ")}.`,
+};
+// Codex S0 P1: a warning after the offer is not protection. With the record unknown the offer is withheld, and a chat-disclosed
+// allergy does not unlock it (it says nothing about the allergies on the profile). A retry once the record loads answers normally.
+const ALLERGY_UNAVAILABLE_LINE = {
+  en: "I couldn't load the allergies saved on your profile just now, so I won't suggest specific foods until I can check them against it — please try again in a moment.",
+  // Never "đã lưu": the false-persistence guards rewrite it to "chưa lưu thay đổi này".
+  vi: "Mình chưa tải được thông tin dị ứng trong hồ sơ của bạn, nên mình chưa gợi ý món cụ thể cho đến khi kiểm tra được — bạn thử lại sau ít phút nhé.",
+};
+// Asking to be told what to eat: "what should I eat", "a good post-workout snack?", "tối nay ăn gì". Not "can I eat 500 a day?".
+const FOOD_RECOMMENDATION_ASK = /(?<![a-z])(?:(?:what|which|any)(?![a-z])[^.?!]{0,40}(?<![a-z])(?:eat|have|cook|order|snack|meal|breakfast|lunch|dinner|food|dish)|(?:good|best|healthy|quick|easy|high[- ]protein|post[- ]workout|pre[- ]workout)(?![a-z])[^.?!]{0,30}(?<![a-z])(?:snack|meal|breakfast|lunch|dinner|food|dish|option)|(?:suggest|recommend|ideas?)[^.?!]{0,40}(?<![a-z])(?:eat|snack|meal|breakfast|lunch|dinner|food|dish)|an gi|nen an|goi y (?:mon|bua|do an)|mon (?:nao|gi)|bua (?:sang|trua|toi|phu) (?:gi|nao))/;
+// The fixed allergy lines stripAllergens wrote are kept: they name the allergen only to rule it out.
+const ALLERGY_RULE_LINE = /^\s*(?:because (?:of|your doctor)|vi (?:ban|ho so|bac si))(?![a-z])/;
+
+/**
+ * With an allergy on record (or the record unavailable): no sentence calls a food safe for them, a "without X" suggestion
+ * gets the cross-contact line once, and — record unavailable — a food answer says it could not be checked against it.
+ */
+// `reply` is the text after allergen removal; `original` what the model offered (a removed offer still made it a food answer).
+function qualifyAllergySafety(reply: string, original: string, brief: IntelligenceBrief, language: "en" | "vi"): string {
+  const allergies = activeAllergies(brief).filter(({ intolerance }) => !intolerance);
+  const unavailable = brief.context?.storedAllergies === "UNAVAILABLE";
+  if (allergies.length === 0 && !unavailable) return reply;
+  const folded = fold(original);
+  const claim = (sentence: string) => ALLERGY_SAFE_CLAIM.test(fold(sentence));
+  let out = reply;
+  if (sentences(reply.replace(/\n+/g, " ")).some(claim)) {
+    out = listUnits(reply)
+      .map((block) => {
+        const all = sentences(block.replace(/\n+/g, " "));
+        return all.some(claim) ? all.filter((sentence) => !claim(sentence)).join(" ") : block;
+      })
+      .filter((block) => block.trim())
+      .join("\n");
+  }
+  const lines: string[] = [];
+  const removed = allergies.map(({ id }) => id).filter((id) => [...folded.matchAll(new RegExp(ALLERGEN_ITEMS[id].source, "g"))].some((hit) => ALLERGEN_REMOVAL.test(folded.slice(0, hit.index))));
+  if (removed.length) lines.push(language === "vi" ? CROSS_CONTACT_LINE.vi(removed.map((id) => ALLERGY_AVOID[id]?.vn ?? id)) : CROSS_CONTACT_LINE.en(removed));
+  if (unavailable) {
+    const withheld = withholdUncheckedFoods(out, original, brief, language);
+    // Nothing is offered any more, so a "without X" caveat about an offered dish has nothing to qualify.
+    if (withheld !== out) lines.length = 0;
+    out = withheld;
+  }
+  const fresh = lines.filter((line) => !fold(out).includes(fold(line).slice(0, 40)));
+  if (fresh.length === 0) return out;
+  return `${out.trim()}\n\n${fresh.join(" ")}`.trim();
+}
+
+/**
+ * Record unknown: a food answer is withheld and says why instead. On a turn that asks what to eat, any offer makes the whole
+ * reply a food answer ("Or Greek yogurt with berries." names a food with no offer verb), so only the fixed allergy rule lines
+ * stay. On any other turn only a sentence offering an allergen-family food goes. A reply that only quotes the question back
+ * (Dante's hand-off to Gemma) and an educational answer offer nothing and are kept as written.
+ */
+function withholdUncheckedFoods(reply: string, original: string, brief: IntelligenceBrief, language: "en" | "vi"): string {
+  const line = ALLERGY_UNAVAILABLE_LINE[language];
+  const unquoted = (sentence: string) => fold(sentence).replace(/[“"][^”"]*[”"]/g, "");
+  const rule = (sentence: string) => ALLERGY_RULE_LINE.test(fold(sentence));
+  const all = (text: string) => sentences(text.replace(/\n+/g, " "));
+  if (FOOD_RECOMMENDATION_ASK.test(fold(`${brief.message ?? ""} ${brief.context?.followUpOf ?? ""}`))
+    && all(original).some((sentence) => !rule(sentence) && FOOD_OFFER.test(unquoted(sentence)))) {
+    // An allergy they told us is still said back, whether or not the model's offer touched it.
+    const rules = all(reply).filter(rule);
+    for (const { id, intolerance, basis } of activeAllergies(brief)) {
+      const stated = ALLERGY_LINE[language](id, intolerance && id === "dairy or lactose", basis);
+      if (!rules.some((kept) => fold(kept).includes(fold(stated).slice(0, 40)))) rules.push(stated);
+    }
+    return [...rules, line].join("\n\n");
+  }
+  const offers = (sentence: string) => !rule(sentence) && ALLERGEN_OFFER.test(unquoted(sentence)) && Object.values(ALLERGEN_ITEMS).some((items) => items.test(unquoted(sentence)));
+  if (!all(reply).some(offers)) return reply;
+  const kept = dropEmptyIntros(renumberLists(listUnits(reply)
+    .map((block) => keepWithoutOrphans(all(block), (sentence) => !offers(sentence)).join(" "))
+    .filter((block) => block.trim())
+    .join("\n")));
+  return tokens(fold(kept)).length < 6 ? line : `${kept.trim()}\n\n${line}`;
 }
 
 // Adding discretionary load on a dangerously low intake: "extra cardio after class is reasonable", "add a HIIT session".

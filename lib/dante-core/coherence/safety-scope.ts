@@ -99,6 +99,9 @@ const LIFTS: Array<[RegExp, string]> = [
   [/\brow\b/, "row"], [/\bcurl\b/, "curl"], [/\bpull ?ups?\b/, "pull-up"],
 ];
 
+// A request about how much to lift: the increment wording answers it. Anything else under a stop rule just stops.
+const LOAD_ASK = /(?<![a-z])(?:increase|increment|add(?:ing)?|progress\w*|kg|kgs|lbs?|pounds?|weight|load|heavier|lighter|step|jump|plates?|tang|giam|muc ta|ta)(?![a-z])/;
+
 export function topicOf(request: Pick<TurnObligation, "sourceSpan" | "payload">): string | null {
   const text = foldText(`${request.sourceSpan?.text ?? ""} ${request.payload.normalized ?? ""}`);
   return LIFTS.find(([re]) => re.test(text))?.[1] ?? null;
@@ -109,7 +112,14 @@ export function topicOf(request: Pick<TurnObligation, "sourceSpan" | "payload">)
  * and never clears the user; the only forward step is "get checked, then ask again". `topic` names the lift when the
  * turn's training requests name exactly one.
  */
-export function buildSafetyConstrainedAnswer(input: { topic: string | null; language: "en" | "vi" }): string {
+export function buildSafetyConstrainedAnswer(input: { topic: string | null; language: "en" | "vi"; asksLoad?: boolean }): string {
+  // S0 D-05: "Should I finish my set?" is not a load question. Talk of the next increment there reads as a plan to resume
+  // loading; the answer is to stop, and nothing more is promised.
+  if (input.asksLoad === false) {
+    return input.language === "vi"
+      ? `${input.topic ? `Về ${input.topic}: ` : "Về việc tập: "}hãy dừng ngay — đừng tập nốt hiệp này hay tập thêm gì cho đến khi bác sĩ đã kiểm tra các triệu chứng này.`
+      : `${input.topic ? `On ${input.topic}: ` : "On your training: "}stop now — don't finish the set or do any more training until a doctor has checked these symptoms.`;
+  }
   if (input.language === "vi") {
     const about = input.topic ? `Về ${input.topic}: ` : "Về các câu hỏi tập luyện của bạn: ";
     return `${about}khi triệu chứng bạn vừa nói còn đang diễn ra, mình sẽ không tư vấn tăng hay giữ mức tạ nào — cả bước nhỏ lẫn bước lớn. Hãy ngừng tập và được đánh giá y tế trước; khi đã được kiểm tra, hỏi lại mình để chọn mức tăng.`;
@@ -168,6 +178,7 @@ export function scopeOpenRequests(input: {
   );
   const topics = new Set(training.map((h) => topicOf(h)));
   const sharedTopic = topics.size === 1 ? [...topics][0] : null;
+  const asksLoad = training.some((h) => LOAD_ASK.test(foldText(`${h.sourceSpan?.text ?? ""} ${h.payload.normalized ?? ""}`)));
   const handled = input.handled.map((h): HandledObligation => {
     if (h.intent !== "OPEN_REQUEST" || h.disposition !== "DEFERRED") return h;
     const language = languageForRequest(h, input.obligations, input.language);
@@ -181,7 +192,7 @@ export function scopeOpenRequests(input: {
       return {
         ...h,
         disposition: "ANSWERED" as ObligationDisposition,
-        text: first ? buildSafetyConstrainedAnswer({ topic: sharedTopic, language }) : "",
+        text: first ? buildSafetyConstrainedAnswer({ topic: sharedTopic, language, asksLoad }) : "",
       };
     }
     scoped.unrelated.push(h);

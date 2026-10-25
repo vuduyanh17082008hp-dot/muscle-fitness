@@ -119,6 +119,9 @@ export function resolvePersistedSafetyApplication(input: {
   const sameHazard = aboutSymptom || (areaHit && emergency);
   const performDuringEmergency = emergency && training && !nutrition && PERFORM_TRAINING.test(input.message);
   if (sameHazard || performDuringEmergency) return { mode: "DOMINATE", scope };
+  // S0 D-04: CONSTRAIN's note is the musculoskeletal one ("…otherwise continue with the rest of the session"). During an
+  // unresolved emergency ("Should I finish my set?" after chest pain) no training answer may carry it: the stop dominates.
+  if (training && emergency) return { mode: "DOMINATE", scope };
   if (training || aboutSymptom || areaHit) return { mode: "CONSTRAIN", scope };
   return { mode: "IGNORE", scope };
 }

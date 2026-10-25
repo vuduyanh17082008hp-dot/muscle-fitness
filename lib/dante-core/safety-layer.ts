@@ -74,7 +74,9 @@ type SafetyRule = {
   category: SafetyCategory;
   responseMode: SafetyResponseMode;
   patterns: RegExp[];
-  matcher?: (message: string) => string | null;
+  matcher?: (message: string, recentMessages: readonly string[]) => string | null;
+  /** Copy built from the message when one fixed text cannot be proportionate (S0 D-15 caffeine). */
+  respond?: (message: string, recentMessages: readonly string[], language: SupportedSafetyLanguage) => string | null;
   response: LocalizedCopy | null;
 };
 
@@ -137,6 +139,160 @@ const SELF_HARM_INTENT_RESPONSE: LocalizedCopy = {
   en: "Thank you for telling me — that matters more than anything about training or food. Are you thinking about acting on this right now, do you have a plan or the means to hurt yourself, or do you feel unable to stay safe? If there may be immediate danger, call your local emergency number or a crisis line now, move near someone you trust, and move away from anything you could use to hurt yourself. If it is not immediate, please still reach out today to someone you trust and to a qualified mental-health professional. You do not have to handle this alone.",
   vi: "Cảm ơn bạn đã nói ra — điều này quan trọng hơn mọi chuyện về tập luyện hay ăn uống. Ngay lúc này bạn có đang nghĩ đến việc hành động theo điều đó, có kế hoạch hoặc phương tiện làm hại bản thân, hay cảm thấy mình không thể giữ an toàn không? Nếu có nguy hiểm trước mắt, hãy gọi số cấp cứu hoặc đường dây hỗ trợ khủng hoảng tại nơi bạn ở ngay, đến gần người bạn tin tưởng và tránh xa những thứ có thể dùng để làm hại bản thân. Nếu chưa phải nguy hiểm tức thời, hôm nay bạn vẫn hãy liên hệ một người bạn tin tưởng và một chuyên gia sức khỏe tâm thần. Bạn không cần chịu đựng một mình.",
 };
+
+/**
+ * S0 D-15: a stated caffeine intake, read as what the user said — never with an assumed pill strength. Reference points
+ * are the FDA's: up to 400 mg/day for most healthy adults; ~1,200 mg taken rapidly can cause seizures.
+ */
+export type CaffeineIntake = {
+  /** Pills / tablets named, or null when the amount is given only in mg. */
+  pills: number | null;
+  /** Strength of one pill, only when the user stated it. */
+  perPillMg: number | null;
+  /** Total stated mg; null when it cannot be known without assuming a strength. */
+  totalMg: number | null;
+  /** Several amounts spread over the day ("200 mg in the morning, 200 mg later"), not one exposure. */
+  distributed: boolean;
+  /** The user said it was one exposure ("all at once", "cùng lúc"). */
+  atOnce: boolean;
+  timing: "INGESTED" | "CONTEMPLATED" | "UNCLEAR";
+  /** Symptoms reported in the same message (racing heart, chest pain, vomiting, …). */
+  symptoms: boolean;
+};
+const CAFFEINE = String.raw`(?:caffeine|cafein|caffein|caphein|no-?doz|vivarin)`;
+const COUNT_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12, fifteen: 15, twenty: 20, mot: 1, hai: 2, ba: 3, bon: 4, nam: 5, sau: 6, bay: 7, tam: 8, chin: 9, muoi: 10 };
+const NUM = String.raw`\b(\d+|${Object.keys(COUNT_WORDS).join("|")})`;
+const MG = String.raw`(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(?:mg|milligrams?)\b`;
+const PILL = String.raw`(?:pills?|tablets?|tabs|capsules?|caps|vien)\b`;
+// "2 x 600 mg" and "2 600 mg caffeine pills": a count, then the strength of each.
+const COUNT_TIMES_STRENGTH = [new RegExp(String.raw`${NUM}\s*x\s*${MG}`), new RegExp(String.raw`${NUM}\s+${MG}\s*(?:of\s+)?(?:${CAFFEINE}\s*)?${PILL}`)];
+const PILL_COUNT = new RegExp(String.raw`${NUM}\s*(?:${CAFFEINE}\s*)?${PILL}`);
+const TOTAL_AFTER = /^\s*(?:in )?(?:total|altogether|all together|combined|tong(?: cong)?)\b/;
+const SPREAD = /\b(?:then|later|afterwards?|again|another|morning|afternoon|evening|throughout|over the day|spread|buoi sang|buoi chieu|sau do)\b/;
+// Codex S0 P2: one total said to be spread over the day ("600 mg over the whole day") is a daily total, not one exposure.
+const OVER_THE_DAY = /\b(?:over (?:the (?:whole |entire |course of the )?|a )?day|throughout the day|all day(?: long)?|across the day|during the day|over several (?:doses|hours)|in (?:several|a few|multiple) doses|spread (?:out )?over|rai rac|(?:trong |suot )?ca ngay|chia (?:ra )?(?:nhieu|vai) lan)\b/;
+// Only an exposure the user says was single is called "in one go"; no timing said, no timing invented.
+const AT_ONCE = /\b(?:all at once|at once|in one go|in one dose|at the same time|together|cung luc|mot lan|mot hoi)\b/;
+const INGESTED = /\b(?:took|taken|had|swallowed|downed|drank|consumed|ingested|already|da uong|vua uong|lo uong|uong roi|da dung|hom nay (?:toi|minh|em) uong)\b|\broi\s*[.!?]*$/;
+const CONTEMPLATED = /\b(?:thinking|think about|want(?:s|ed)? to|going to|gonna|plan(?:ning)? to|should i|can i|could i|would|is it|is that|is this|ok|okay|fine|safe|if i|muon|dinh|duoc khong|co nen|co sao khong)\b/;
+const CAFFEINE_SYMPTOMS = /\b(?:heart (?:is )?(?:racing|pounding|beating fast)|racing heart|palpitations?|chest (?:pain|tightness|hurts?)|shak(?:y|ing)|trembl\w*|vomit\w*|throwing up|threw up|nause\w*|dizz\w*|confus\w*|seizure|can'?t breathe|tim dap nhanh|hoi hop|dau nguc|tuc nguc|run ray|tay run|nguoi run|non mua|buon non|chong mat|lu lan|co giat|kho tho)\b/;
+// ponytail: a short list; a follow-up naming another substance must not inherit "caffeine" from the previous message.
+const OTHER_SUBSTANCE = /\b(?:ibuprofen|paracetamol|acetaminophen|aspirin|tylenol|advil|panadol|creatine|melatonin|vitamin|magnesium|zinc|iron|fish oil|omega|ashwagandha|beta[- ]alanine|citrulline|thuoc giam dau)\b/;
+const amount = (token: string) => Number(token.replace(/[., ](?=\d{3}\b)/g, "")) || COUNT_WORDS[token] || 0;
+
+/**
+ * The caffeine intake a message states, or null when it states none. A message that names no substance ("I already took
+ * 4 pills of 200 mg") is about caffeine only when the user's previous message was.
+ */
+export function parseCaffeineIntake(message: string, recentMessages: readonly string[] = []): CaffeineIntake | null {
+  const text = normalizeSafetyText(message).replace(/×/g, " x ");
+  const previous = recentMessages.length ? normalizeSafetyText(recentMessages[recentMessages.length - 1]) : "";
+  if (!new RegExp(CAFFEINE).test(text) && !(new RegExp(CAFFEINE).test(previous) && !OTHER_SUBSTANCE.test(text))) return null;
+  let pills: number | null = null;
+  let perPillMg: number | null = null;
+  let totalMg: number | null = null;
+  let distributed = false;
+  const counted = COUNT_TIMES_STRENGTH.map((re) => text.match(re)).find(Boolean);
+  if (counted) {
+    pills = amount(counted[1]);
+    perPillMg = amount(counted[2]);
+  } else {
+    // "1 200 mg" is 1,200 mg once no count-and-strength reading applies.
+    const spaced = text.replace(/\b(\d{1,2}) (\d{3})(?=\s*(?:mg|milligrams?)\b)/g, "$1$2");
+    const doses = [...spaced.matchAll(new RegExp(MG, "g"))].map((m) => ({ mg: amount(m[1]), total: TOTAL_AFTER.test(spaced.slice((m.index ?? 0) + m[0].length)) }));
+    const pillMatch = spaced.match(PILL_COUNT);
+    if (pillMatch) {
+      pills = amount(pillMatch[1]);
+      // Several mg figures beside a pill count and none called the total: which one is the strength is not said.
+      if (doses.some((dose) => dose.total)) totalMg = doses.find((dose) => dose.total)!.mg;
+      else if (doses.length === 1) perPillMg = doses[0].mg;
+    } else if (doses.length) {
+      distributed = !AT_ONCE.test(spaced) && ((doses.length > 1 && SPREAD.test(spaced)) || (doses.length === 1 && OVER_THE_DAY.test(spaced)));
+      totalMg = distributed ? doses.reduce((sum, dose) => sum + dose.mg, 0) : Math.max(...doses.map((dose) => dose.mg));
+    } else return null;
+  }
+  // Codex S0 final P2: pills said to be spread over the day are read as such, for the copy only (see caffeineSeverity).
+  if (pills !== null) distributed = !AT_ONCE.test(text) && OVER_THE_DAY.test(text);
+  if (pills !== null && perPillMg !== null) totalMg = pills * perPillMg;
+  return { pills, perPillMg, totalMg, distributed, atOnce: AT_ONCE.test(text), timing: INGESTED.test(text) ? "INGESTED" : CONTEMPLATED.test(text) ? "CONTEMPLATED" : "UNCLEAR", symptoms: CAFFEINE_SYMPTOMS.test(text) };
+}
+
+/** Total caffeine the message states, in mg, or null when it states none or the strength is unknown. */
+export const statedCaffeineMg = (message: string, recentMessages: readonly string[] = []): number | null => parseCaffeineIntake(message, recentMessages)?.totalMg ?? null;
+
+/**
+ * DANGEROUS: one exposure ≥ 1,000 mg, or ≥ 5 pills of unknown strength. HIGH: above the 400 mg/day reference when it was
+ * already taken, comes as pills, or brings symptoms; 3–4 pills of unknown strength. A bare figure only talked about
+ * ("a real coach wouldn't be scared of 500 mg") stays with the model, which answers it with the caffeine knowledge.
+ */
+export function caffeineSeverity(intake: CaffeineIntake): "DANGEROUS" | "HIGH" | null {
+  if (intake.totalMg === null) {
+    if ((intake.pills ?? 0) >= 5) return "DANGEROUS";
+    return (intake.pills ?? 0) >= 3 || (intake.symptoms && intake.timing === "INGESTED") ? "HIGH" : null;
+  }
+  // Pills keep their severity whatever the stated timing; only a spread mg total steps down.
+  if (intake.totalMg >= 1000 && (!intake.distributed || intake.pills !== null)) return "DANGEROUS";
+  // Asking whether to take more than the 400 mg/day reference ("is 999 mg okay?") gets the same deterministic answer as taking it.
+  if (intake.totalMg > 400) return intake.timing !== "UNCLEAR" || intake.pills !== null || intake.symptoms ? "HIGH" : null;
+  return intake.symptoms && intake.timing === "INGESTED" && intake.totalMg >= 200 ? "HIGH" : null;
+}
+
+/** Deterministic copy proportional to the stated dose, timing, symptoms and what is unknown. Never calls an amount safe. */
+export function caffeineSafetyResponse(intake: CaffeineIntake, language: SupportedSafetyLanguage): string {
+  const severity = caffeineSeverity(intake) ?? "HIGH";
+  const vi = language === "vi";
+  const fmt = (n: number) => n.toLocaleString(vi ? "vi-VN" : "en-US");
+  const known = intake.totalMg !== null;
+  const amt = !known
+    ? (vi ? `${intake.pills} viên caffeine chưa rõ hàm lượng` : `${intake.pills} caffeine pills of unknown strength`)
+    : intake.pills !== null && intake.perPillMg !== null
+      ? (vi ? `${intake.pills} viên × ${fmt(intake.perPillMg)} mg (${fmt(intake.totalMg!)} mg)` : `${intake.pills} × ${fmt(intake.perPillMg)} mg (${fmt(intake.totalMg!)} mg)`)
+      : `${fmt(intake.totalMg!)} mg`;
+  const taken = intake.timing === "INGESTED";
+  const callNow = vi ? "Hãy gọi cấp cứu hoặc trung tâm chống độc ngay và đừng ở một mình." : "Call your local emergency number or poison control now and don't stay alone.";
+  // Codex S0 final P2: timing is named only as the user stated it; unstated, it is neither "at once" nor "over the day".
+  const when = intake.atOnce ? (vi ? " cùng lúc" : " at once") : intake.distributed ? (vi ? " trong ngày" : " over the day") : "";
+  const askTiming = intake.atOnce || intake.distributed ? "" : vi
+    ? " Nếu được, cho mình biết mỗi viên bao nhiêu mg và bạn uống trong bao lâu — nhưng đừng chờ điều đó mới gọi giúp đỡ."
+    : " If you can, tell me the mg per pill and over what time you took them — but don't wait on that to get help.";
+  const lines: string[] = [];
+  if (taken && intake.symptoms) {
+    lines.push(vi ? `Các triệu chứng bạn kể sau ${amt} caffeine cần được xử lý ngay.` : `The symptoms you describe after ${amt} of caffeine need attention now.`);
+    lines.push(severity === "DANGEROUS" ? callNow : vi
+      ? "Nếu bạn đau ngực, tim đập rất nhanh hoặc loạn nhịp, run dữ dội, nôn, lú lẫn hay co giật, hãy gọi cấp cứu hoặc trung tâm chống độc ngay; nếu không, ngừng mọi caffeine, đừng tập và ở cạnh người khác cho đến khi đỡ."
+      : "If you have chest pain, a very fast or irregular heartbeat, severe shaking, vomiting, confusion or a seizure, call your local emergency number or poison control now; otherwise stop all caffeine, don't train, and stay with someone until it settles.");
+  } else if (severity === "DANGEROUS") {
+    if (!known) {
+      lines.push(taken
+        ? (vi ? `Uống ${intake.pills} viên caffeine${when} có thể là liều nguy hiểm — không biết hàm lượng nên mình không thể nói bạn đã uống bao nhiêu. Hãy gọi cấp cứu hoặc trung tâm chống độc ngay, cầm theo vỏ hộp, và đừng ở một mình.${askTiming}` : `${intake.pills} caffeine pills${when} can be a dangerous dose — without their strength I can't say how much you took. Call your local emergency number or poison control now with the package in hand, and don't stay alone.${askTiming}`)
+        : (vi ? `Bạn đừng uống nhiều như vậy. Mình không biết hàm lượng nên không thể nói con số, nhưng ${intake.pills} viên caffeine${when} rất dễ thành liều nguy hiểm.` : `Please don't take that many. I don't know their strength, so I can't put a number on it, but ${intake.pills} caffeine pills${when} can easily add up to a dangerous dose.`));
+    } else {
+      lines.push(taken
+        ? (vi ? `${amt} caffeine${intake.atOnce ? " uống cùng lúc" : intake.distributed ? " trong ngày" : ""} là liều nguy hiểm. Hãy gọi cấp cứu hoặc trung tâm chống độc ngay, kể cả khi bạn vẫn thấy ổn — triệu chứng có thể tăng dần trong vài giờ tới — và đừng ở một mình.` : `${amt} of caffeine${intake.atOnce ? " taken at once" : intake.distributed ? " over the day" : ""} is a dangerous dose. Call your local emergency number or poison control now, even if you feel all right so far — symptoms can build over the next hours — and don't stay alone.`)
+        : (vi ? `Bạn đừng uống lượng đó. ${amt} caffeine${when} là liều nguy hiểm: khoảng 1.200 mg uống nhanh có thể gây co giật và tim đập quá nhanh hoặc loạn nhịp.` : `Please don't take that. ${amt} of caffeine${when} is a dangerous dose: amounts around 1,200 mg taken quickly can cause seizures and a dangerously fast or irregular heartbeat.`));
+    }
+    if (intake.timing === "UNCLEAR") lines.push(vi ? `Nếu bạn đã uống rồi: ${callNow.charAt(0).toLowerCase()}${callNow.slice(1)}` : `If you have already taken it: ${callNow.charAt(0).toLowerCase()}${callNow.slice(1)}`);
+  } else if (!known) {
+    lines.push(vi
+      ? `${intake.pills} viên caffeine có thể đã vượt mức 400 mg mỗi ngày mà hầu hết người trưởng thành khỏe mạnh được khuyên không nên vượt — hãy xem hàm lượng trên nhãn${taken ? " và không dùng thêm caffeine hôm nay." : " trước khi uống."}`
+      : `${intake.pills} caffeine pills could already be more than the 400 mg a day most healthy adults are advised not to exceed — check the strength on the label${taken ? " and have no more caffeine today." : " before taking any."}`);
+  } else {
+    // Codex S0 P2: a whole-day total is never "in one go"; with no timing said, none is invented.
+    const once = intake.distributed ? (vi ? " trong ngày" : " over the day") : intake.atOnce ? (vi ? " trong một lần" : " in one go") : "";
+    lines.push(taken
+      ? (vi ? `${amt} caffeine${once} là nhiều hơn mức 400 mg mỗi ngày mà hầu hết người trưởng thành khỏe mạnh được khuyên không nên vượt. Đừng dùng thêm caffeine hôm nay và ở gần người có thể giúp bạn nếu cần.` : `${amt} of caffeine${once} is more than the 400 mg a day most healthy adults are advised not to exceed. Have no more caffeine today and stay where someone can help you if you need it.`)
+      : (vi ? `Mình khuyên bạn không nên: ${amt} caffeine${once} là nhiều hơn mức 400 mg mỗi ngày mà hầu hết người trưởng thành khỏe mạnh được khuyên không nên vượt.` : `I'd advise against that: ${amt} of caffeine${once} is more than the 400 mg a day most healthy adults are advised not to exceed.`));
+  }
+  if (!(taken && intake.symptoms)) {
+    lines.push(vi
+      ? "Nếu thấy đau ngực, tim đập nhanh hay loạn nhịp, run hoặc bồn chồn dữ dội, nôn, lú lẫn hay co giật, hãy gọi cấp cứu hoặc trung tâm chống độc ngay."
+      : "If you notice chest pain, a racing or irregular heartbeat, severe shaking or agitation, vomiting, confusion or a seizure, call your local emergency number or poison control now.");
+  }
+  lines.push(taken
+    ? (vi ? "Đừng tập khi đã uống lượng đó." : "Don't train on it.")
+    : (vi ? "Nếu muốn có thêm năng lượng trước khi tập, một khẩu phần caffeine bình thường — hoặc không dùng — ít rủi ro hơn nhiều, và bác sĩ hoặc dược sĩ có thể cho bạn biết mức phù hợp với bạn." : "For a pre-workout boost, a normal single serving — or none — carries far less risk, and a doctor or pharmacist can tell you what is right for you."));
+  return lines.join(" ");
+}
 
 /** The existing hard-block copy for a category, for callers that reach the same boundary by another route (ICH-1 supplement policy). */
 const INSULIN_HYPO_LEAD: LocalizedCopy = {
@@ -246,6 +402,17 @@ function inferredCurrentAbsence(text: string, afterIndex: number): SymptomMentio
  * cannot suppress a different current red flag. Current/today/now statements
  * outrank historical ones; within the same time frame, the later statement wins.
  */
+// S0 D-04: "What should I do if I ever get chest pain while lifting?" asks about a symptom they do not have. Persisted as a
+// fresh episode it held the whole chat. A present cue in the same clause ("if my chest hurts now", "this chest pain") still counts.
+const HYPOTHETICAL_LEAD = /(?<![a-z])(?:if|what if|in case|suppose|supposing|whenever|should (?:i|you|someone) ever|neu|gia su|lo nhu|phong khi|khi nao)(?![a-z])[^.!?;,\n]*$/;
+const PRESENT_CUE = /(?<![a-z])(?:right now|now|currently|at the moment|today|still|again|this|these|keep|since|bay gio|hien tai|dang|luc nay|van|hom nay)(?![a-z])/;
+export function hypotheticalAt(text: string, start: number, end: number): boolean {
+  const clauseStart = Math.max(...[".", "!", "?", ";", "\n"].map((mark) => text.lastIndexOf(mark, start - 1))) + 1;
+  const ends = [".", "!", "?", ";", "\n"].map((mark) => text.indexOf(mark, end)).filter((at) => at >= 0);
+  const clause = text.slice(clauseStart, ends.length ? Math.min(...ends) : text.length);
+  return HYPOTHETICAL_LEAD.test(text.slice(clauseStart, start)) && !PRESENT_CUE.test(clause);
+}
+
 function matchPresentSymptom(message: string, concepts: SymptomConcept[]): string | null {
   const text = normalizeSafetyText(message);
 
@@ -276,7 +443,8 @@ function matchPresentSymptom(message: string, concepts: SymptomConcept[]): strin
             present:
               !/^\s*khong\s+te\b/i.test(match[0])
               && !hasNearbyNegation(text, match.index)
-              && !hasFollowingResolution(text, endIndex),
+              && !hasFollowingResolution(text, endIndex)
+              && !hypotheticalAt(text, match.index, endIndex),
             temporalRank: temporalRankAt(text, match.index, endIndex),
           });
 
@@ -520,6 +688,23 @@ const RULES: SafetyRule[] = [
     response: HARD_BLOCK_RESPONSES.dangerous_substance,
   },
   {
+    // S0 D-15: "10 caffeine pills, 200 mg each" was answered by the model with a generic caution.
+    category: "dangerous_substance",
+    responseMode: "HARD_BLOCK",
+    patterns: [],
+    // Proportional: only DANGEROUS/HIGH stop here; the copy says what was stated, what is unknown, and what to do now.
+    matcher: (message, recent) => {
+      const intake = parseCaffeineIntake(message, recent);
+      const severity = intake && caffeineSeverity(intake);
+      return severity ? `caffeine ${intake!.totalMg ?? "unknown"} mg ${severity}` : null;
+    },
+    respond: (message, recent, language) => {
+      const intake = parseCaffeineIntake(message, recent);
+      return intake ? caffeineSafetyResponse(intake, language) : null;
+    },
+    response: null,
+  },
+  {
     category: "self_harm_crisis",
     responseMode: "HARD_BLOCK",
     patterns: [
@@ -565,10 +750,10 @@ const RULES: SafetyRule[] = [
   },
 ];
 
-function matchRule(message: string): { rule: SafetyRule; matchedPhrase: string } | null {
+function matchRule(message: string, recentMessages: readonly string[] = []): { rule: SafetyRule; matchedPhrase: string } | null {
   for (const rule of RULES) {
     if (rule.matcher) {
-      const matchedPhrase = rule.matcher(message);
+      const matchedPhrase = rule.matcher(message, recentMessages);
       if (matchedPhrase) return { rule, matchedPhrase };
       continue;
     }
@@ -769,7 +954,7 @@ export function checkSafety(message: string, options: SafetyCheckOptions = {}): 
 
   // Explicit medical emergencies and self-harm always outrank training-risk
   // redirects so the existing safety gate cannot be weakened by composition.
-  let matched = matchRule(message);
+  let matched = matchRule(message, options.recentMessages ?? []);
   if (matched?.rule.responseMode === "HARD_BLOCK") {
     return {
       triggered: true,
@@ -780,7 +965,7 @@ export function checkSafety(message: string, options: SafetyCheckOptions = {}): 
       // H0 cluster B: faint / dizzy / confused after insulin is possible severe hypoglycaemia — first aid leads.
       responseOverride: (/\binsulin\b/i.test(normalizeSafetyText(message)) && (matched.rule.category === "fainting_dizziness" || matched.rule.category === "neurological_symptoms")
         ? `${INSULIN_HYPO_LEAD[language]}\n\n${matched.rule.response?.[language] ?? ""}`.trim()
-        : null) ?? matched.rule.response?.[language] ?? null,
+        : null) ?? matched.rule.respond?.(message, options.recentMessages ?? [], language) ?? matched.rule.response?.[language] ?? null,
       contextTrace: {
         risk: "HIGH",
         observations: [matched.rule.category],

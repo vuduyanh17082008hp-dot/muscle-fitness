@@ -168,6 +168,8 @@ recovery data if today’s state overrides it.`;
       "dante_coherence_state",
       // Cross-coach disclosures (read-only SELECT of the user's own coach_signals; writes go through the admin client).
       "coach_signals",
+      // S0 D-02: the stored allergies (read-only SELECT of the user's own user_preferences row).
+      "user_preferences",
     ]);
     vi.mocked(createClient).mockResolvedValue({
       auth: {
@@ -187,6 +189,7 @@ recovery data if today’s state overrides it.`;
           order: () => query,
           limit: () => query,
           select: () => query,
+          abortSignal: () => query,
           maybeSingle: async () => {
             if (table === "profiles") {
               return { data: { timezone: "Asia/Singapore" }, error: null };
@@ -407,4 +410,53 @@ What would you do?`;
     expect(text).not.toMatch(/will improve your strength|should make this session better|hydration filler/i);
     expect(text).not.toMatch(/try (?:Leg Press|Deadlift|Lateral Raise|Face Pull)/i);
   });
+});
+
+describe("S0 D-01/D-02 stored-allergy read on the Dante route", () => {
+  function clientWithPreferences(read: (signal: AbortSignal | null) => Promise<unknown>, scopes: unknown[][]) {
+    const empty: unknown = new Proxy(() => empty, {
+      get(_target, prop) {
+        if (prop === "then") return (resolve: (value: unknown) => void) => resolve({ data: [], error: null });
+        if (prop === "maybeSingle" || prop === "single") return async () => ({ data: null, error: null });
+        return () => empty;
+      },
+      apply: () => empty,
+    });
+    return {
+      auth: { getUser: async () => ({ data: { user: { id: USER_ID } }, error: null }) },
+      from: vi.fn((table: string) => {
+        if (table === "profiles") return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { timezone: "Asia/Singapore" }, error: null }) }) }) };
+        if (table === "user_preferences") {
+          let signal: AbortSignal | null = null;
+          const query = {
+            select: () => query,
+            eq: (...args: unknown[]) => { scopes.push(args); return query; },
+            abortSignal: (value: AbortSignal) => { signal = value; return query; },
+            maybeSingle: () => read(signal),
+          };
+          return query;
+        }
+        return { select: () => empty, insert: () => Promise.resolve({ error: null }), update: () => empty };
+      }),
+    };
+  }
+
+  it.each([
+    ["a failed read", async () => ({ data: null, error: { message: "permission denied" } })],
+    // The bounded allergy read never resolves on its own: only its abort ends it. (Unbounded readers elsewhere just fail.)
+    ["a timed-out read", (signal: AbortSignal | null) => signal
+      ? new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("aborted"))))
+      : Promise.resolve({ data: null, error: { message: "unavailable" } })],
+  ] as const)("%s is scoped to the caller and never blocks or fails an unrelated reply", async (_label, read) => {
+    const scopes: unknown[][] = [];
+    vi.mocked(createClient).mockResolvedValue(clientWithPreferences(read as never, scopes) as never);
+    const { response, events } = await postMessage("Should I set chest to 3x per week?");
+    const delta = events.find((event) => event.type === "delta");
+    expect(response.status).toBe(200);
+    expect(delta && delta.type === "delta" ? delta.text.length : 0).toBeGreaterThan(0);
+    expect(delta && delta.type === "delta" ? delta.text : "").not.toMatch(/couldn't load the allergies/);
+    // Cross-user isolation: every user_preferences read is filtered to the authenticated user's own id.
+    expect(scopes.length).toBeGreaterThan(0);
+    expect(scopes.every(([column, value]) => column === "user_id" && value === USER_ID)).toBe(true);
+  }, 15_000);
 });

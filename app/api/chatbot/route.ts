@@ -93,6 +93,8 @@ import {
   retrievedPopulation,
   scopedPromptBlock,
   settleBrief,
+  stripAllergens,
+  withStoredAllergies,
   type AthleteFacts,
   type BriefInput,
   type ConversationControl,
@@ -4519,7 +4521,8 @@ async function handleChatbotPost(
     // supporting evidence (and the bootstrap when nothing durable exists yet). Fail-open: a store outage
     // degrades to history-derived state and never blocks the reply.
     const coherenceSession = await prepareTurnWithPersistence({
-      store: boundedCoherenceStore(createSupabaseCoherenceStore(supabase), budget),
+      // S0 D-04: one coherence state per conversation — language and safety lifecycle never leak into another chat.
+      store: boundedCoherenceStore(createSupabaseCoherenceStore(supabase, readTurnIds(body)?.threadId ?? null), budget),
       key: user.id,
       message: userMessage,
       now: now.toISOString(),
@@ -4573,9 +4576,23 @@ async function handleChatbotPost(
     };
     // A disclosure the user made to Gemma (allergy, dangerously low intake) is part of this answer's context too, exactly like
     // something said earlier in this chat (coach_signals, same user, RLS). Bounded; a failed read leaves the local context.
-    const disclosedRead = await boundedDependency(budget, "disclosure_read", () => loadActiveCoachSignalsForDomain(supabase, { userId: user.id, targetDomain: "TRAINING", clearance: "SENSITIVE", now }));
-    if (disclosedRead.status === "OK" && disclosedRead.value?.length) {
-      briefInput.context = withDisclosedFacts(buildContextWorkingSet({ priorUserMessages, message: userMessage }), disclosedRead.value, "DANTE");
+    // S0 D-02: the allergies stored on the profile are read here too, so every Dante reply path (early exits included) enforces
+    // them through output integrity. A failed read keeps what the chat established and marks the record unavailable.
+    const [disclosedRead, storedAllergyRead] = await Promise.all([
+      boundedDependency(budget, "disclosure_read", () => loadActiveCoachSignalsForDomain(supabase, { userId: user.id, targetDomain: "TRAINING", clearance: "SENSITIVE", now })),
+      boundedDependency(budget, "allergy_read", async (signal) => {
+        const { data, error } = await supabase.from("user_preferences").select("allergies").eq("user_id", user.id).abortSignal(signal).maybeSingle();
+        if (error) throw error;
+        return (data?.allergies ?? []) as string[];
+      }),
+    ]);
+    // A failed or timed-out read is ALLERGY_DATA_UNAVAILABLE (null), never "no stored allergies" ([]).
+    const storedAllergies = storedAllergyRead.status === "OK" ? (storedAllergyRead.value ?? []) : null;
+    if ((disclosedRead.status === "OK" && disclosedRead.value?.length) || storedAllergies === null || storedAllergies.length) {
+      briefInput.context = withStoredAllergies(
+        withDisclosedFacts(buildContextWorkingSet({ priorUserMessages, message: userMessage }), disclosedRead.status === "OK" ? (disclosedRead.value ?? []) : [], "DANTE"),
+        storedAllergies,
+      );
     }
     let intelligenceBrief = buildIntelligenceBrief(briefInput);
     // H0 cluster D: a safety disclosure made to Dante this turn reaches Gemma as closed-vocabulary context (coach_signals), and a
@@ -4614,6 +4631,8 @@ async function handleChatbotPost(
       const captured: { finished: CoherenceTurnResult | null } = { finished: null };
       const response = emitConvergedCore({
         ...input,
+        // S0 D-02: a deterministic early exit cannot offer a food the user is allergic to either. Hard safety copy is fixed.
+        draft: input.branch === "HARD_SAFETY" ? input.draft : stripAllergens(input.draft, intelligenceBrief, input.language),
         done: {
           ...input.done,
           toolTraceSummary: [

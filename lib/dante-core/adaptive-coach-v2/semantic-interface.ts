@@ -1,4 +1,4 @@
-import { normalizeSafetyText } from "@/lib/dante-core/safety-layer";
+import { hypotheticalAt, normalizeSafetyText } from "@/lib/dante-core/safety-layer";
 import type {
   EvidenceCertainty,
   ProvenanceKind,
@@ -561,6 +561,11 @@ export function interpretUserTurn(rawText: string): SemanticInterpretation {
       while ((match = matcher.exec(normalized)) !== null) {
         const [start, end] = clauseBounds(normalized, match.index);
         const clause = normalized.slice(start, end);
+        // S0 D-04: "what should I do if I ever get chest pain?" states nothing about the user now (same rule as the safety layer).
+        if (hypotheticalAt(normalized, match.index, match.index + match[0].length)) {
+          if (match[0].length === 0) matcher.lastIndex += 1;
+          continue;
+        }
         propositions.push(propositionForMatch(
           definition.concept,
           match[0],

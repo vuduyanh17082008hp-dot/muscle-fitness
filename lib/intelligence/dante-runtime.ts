@@ -40,7 +40,7 @@ import {
   findCounterEvidence,
 } from "./logic";
 import type { ClaimLedgerEntry, EvidenceItem, Hypothesis, HypothesisStatus, MissingEvidence } from "./types";
-import { activeFacts, retractedSafetyKeys, type ContextFact, type ContextWorkingSet } from "./performance-core/context-working-set";
+import { activeFacts, retractedSafetyKeys, turnOnlyIntake, type ContextFact, type ContextWorkingSet } from "./performance-core/context-working-set";
 
 /** Producer-side validity durations. Documented as policy, not science; not persisted. */
 export const SIGNAL_VALIDITY_POLICY = {
@@ -323,7 +323,8 @@ export function buildDisclosureSignals(a: { userScope: UserScopeRef; context: Co
       // A restriction PLAN ("I want to eat 500 a day") is not a disclosure of what they eat: published, it reached the
       // other coach as "reported eating dangerously little" for 24 h, against a food log that says otherwise. The plan
       // request itself is refused where it is made (this turn's posture; the nutrition coach's own safety screen).
-      if (fact.kind === "LOW_ENERGY_INTAKE" && fact.label.startsWith("wants to eat")) continue;
+      // S0 D-03: nor is a question about an intake ("can I eat 500 a day?", "is 600 a day safe?"), nor advice someone gave them.
+      if ((fact.kind === "LOW_ENERGY_INTAKE" && fact.label.startsWith("wants to eat")) || turnOnlyIntake(fact)) continue;
       const id = fact.key.split(":")[1] ?? "";
       const directive =
         fact.kind === "PED_USE" ? (/insulin/.test(fact.label) ? "INSULIN_HYPO_RISK" : "NO_DRUG_OPTIMISED_DIET")
