@@ -12,6 +12,7 @@ DEMO_PASSWORD='<pick a password, 12+ chars>' npx tsx scripts/demo/seed-demo.ts
 - The script refuses to run unless `NEXT_PUBLIC_SUPABASE_URL` is a localhost URL.
 - It only touches the account `demo.athlete@muscle-fitness.local`. Override it with `DEMO_EMAIL`; set the profile timezone with `DEMO_TIMEZONE` (default `Asia/Singapore`).
 - Running it again deletes and rebuilds that one account, so it is safe to run between rehearsals and right before the demo.
+- Every date is relative to the day you run it, in the athlete's timezone. **Reseed on the demo day itself** (2 November, Singapore date). A seed from an earlier day leaves today's breakfast and check-in history on the wrong days.
 - Seeded data is fictional: "Maya Chen", plan "Strength Foundations" (Full Body A/B/C), and 4 completed sessions over the last ~10 days.
 - There are 6 check-ins, all without pain, scored by the app's own engine. Yesterday's meals plus one breakfast today are entered manually.
 - Today has **no check-in and no session**, so the demo does both live.
@@ -23,7 +24,7 @@ DEMO_PASSWORD='<pick a password, 12+ chars>' npx tsx scripts/demo/seed-demo.ts
 3. **Workout.** Go back to Today and tap Start Workout. Log two sets (the carry-forward hint fills the values), then tap Complete workout → Finish Anyway. You land on History, which now shows the new session.
 4. **Nutrition.** Tap Add food and search "chicken breast". If USDA/Open Food Facts are unreachable, the honest outage notice plus local fallback results appear. Pick one, set 150 g, then Add to Today. Edit the portion, delete it, and point out that the Nutrition Coach strip updates each time.
 5. **Dante.** Ask *"What should I focus on for the rest of today?"*. The reply streams in. Go to Nutrition and back, and the same conversation is restored.
-6. **Progress and Calendar.** The new session appears in this week's totals and under Today in the Calendar.
+6. **Progress and Calendar.** The new session appears under Today in the Calendar and in this week's totals. 2 November 2026 is a Monday, so the week starts fresh: before the workout, Progress reads 0 sessions this week, and after it, 1 session. The volume comparison against last week will look low; that's expected on a Monday.
 7. **Settings.** Open the menu, then Settings. Every row opens a real page.
 
 ### Optional safety moment
@@ -33,11 +34,11 @@ Redo the check-in with **Unusual pain or illness: Yes**. Recovery says "Recovery
 ### If something external is down
 
 - Food search falls back to local data with a visible outage notice.
-- Dante shows "couldn't complete that response" with Retry.
+- If OpenAI is unreachable, Dante answers "I wasn't able to produce a fully verified answer for this one…" and invents nothing. Just ask again. If the stream itself breaks mid-reply, Dante shows "couldn't complete that response" with Retry.
 - Never claim live provider data that isn't there.
 
 ## Known limits
 
 - Real iOS/Android keyboard behaviour has not been tested.
 - The production build is unverified: it needs a real HTTPS Supabase project, because the build guard rejects the local http URL by design.
-- The `start_workout` database RPC is still directly callable by a signed-in user over PostgREST. The training-hold check lives in the app server (Start action, Dante tool, adjustment apply), not in the database.
+- **Production blocker:** the `start_workout` database RPC is still directly callable by a signed-in user over PostgREST, bypassing the training hold. The hold check lives in the app server (Start action, Dante tool, adjustment apply), not in the database. It needs a reviewed migration before any real deployment. It is out of scope for the localhost demo.
