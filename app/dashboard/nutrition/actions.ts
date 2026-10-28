@@ -98,6 +98,7 @@ export async function updateNutritionSettingsAction(
   }
 
   revalidatePath("/dashboard/nutrition")
+  revalidatePath("/dashboard/nutrition/plan")
   revalidatePath("/dashboard")
 
   return { success: true, message: "Nutrition plan updated." }
@@ -147,6 +148,7 @@ export async function updateWeeklyFoodBudgetAction(
   }
 
   revalidatePath("/dashboard/nutrition")
+  revalidatePath("/dashboard/nutrition/plan")
   revalidatePath("/dashboard/nutrition/shopping-list")
 
   return { success: true, message: "Weekly food budget updated." }

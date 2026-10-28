@@ -12,7 +12,6 @@ import {
 } from "@/lib/dashboard/muscle-intelligence";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { GlassCard, GlassCardHeader } from "@/components/dashboard/glass/glass-card";
-import { DanteAgentInteractive } from "@/components/dante/dante-agent-interactive";
 
 export type MuscleIntelligenceCardProps = {
   entries: MuscleIntelligenceEntry[];
@@ -29,7 +28,6 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
   const [selectedMuscle, setSelectedMuscle] = useState<CanonicalMuscle | null>(
     entries[0]?.muscle ?? null,
   );
-  const [viewMode, setViewMode] = useState<"dante" | "map">("dante");
 
   if (error) {
     return (
@@ -42,50 +40,21 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
     );
   }
 
-  const ViewModeToggle = (
-    <div className="inline-flex rounded-lg border border-white/10 bg-black/40 p-0.5 text-[10px] font-bold uppercase tracking-wider">
-      <button
-        type="button"
-        onClick={() => setViewMode("dante")}
-        className={`rounded-md px-2.5 py-1 transition ${
-          viewMode === "dante"
-            ? "bg-[#D4FF00]/15 text-[#D4FF00] shadow-xs"
-            : "text-zinc-400 hover:text-white"
-        }`}
-      >
-        Dante AI
-      </button>
-      <button
-        type="button"
-        onClick={() => setViewMode("map")}
-        className={`rounded-md px-2.5 py-1 transition ${
-          viewMode === "map"
-            ? "bg-[#D4FF00]/15 text-[#D4FF00] shadow-xs"
-            : "text-zinc-400 hover:text-white"
-        }`}
-      >
-        Anatomy Map
-      </button>
-    </div>
-  );
-
+  // The former "Dante AI" view was a canned, data-free chat (fixed replies such as "keep today's session at full
+  // intent" regardless of a training hold). The card now shows only the anatomy map built from completed sets.
   if (entries.length === 0) {
     return (
       <GlassCard data-testid="muscle-intelligence-card">
-        <GlassCardHeader title="Muscle Intelligence" action={ViewModeToggle} />
+        <GlassCardHeader title="Muscle Intelligence" />
 
         <div className="mt-4 grid flex-1 gap-6 md:grid-cols-[minmax(0,280px)_1fr]">
-          {viewMode === "dante" ? (
-            <DanteAgentInteractive />
-          ) : (
-            <MuscleMap
-              highlights={{}}
-              legend={false}
-              selectedMuscle={null}
-              accentColor="var(--mf-glass-brand)"
-              className="border-mf-glass-border bg-black/10"
-            />
-          )}
+          <MuscleMap
+            highlights={{}}
+            legend={false}
+            selectedMuscle={null}
+            accentColor="var(--mf-glass-brand)"
+            className="border-mf-glass-border bg-black/10"
+          />
 
           <div className="flex flex-col items-start justify-center gap-3">
             <p className="text-sm font-semibold text-mf-glass-text">No completed workout data yet.</p>
@@ -96,9 +65,9 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
             </p>
             <Link
               href="/dashboard/workouts"
-              className="mt-1 inline-flex h-9 items-center justify-center rounded-xl bg-mf-glass-brand px-4 text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+              className="mt-1 inline-flex min-h-11 items-center justify-center rounded-xl border border-mf-glass-border px-4 text-sm font-semibold text-mf-glass-text transition hover:bg-white/5"
             >
-              Start Today&apos;s Plan
+              Open training
             </Link>
           </div>
         </div>
@@ -114,37 +83,33 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
 
   return (
     <GlassCard data-testid="muscle-intelligence-card">
-      <GlassCardHeader title="Muscle Intelligence" action={ViewModeToggle} />
+      <GlassCardHeader title="Muscle Intelligence" />
 
       <div className="mt-4 grid flex-1 gap-6 md:grid-cols-[minmax(0,300px)_1fr]">
         <div>
-          {viewMode === "dante" ? (
-            <DanteAgentInteractive />
-          ) : (
-            <div>
-              <MuscleMap
-                highlights={highlights}
-                legend={false}
-                selectedMuscle={selected?.muscle ?? null}
-                onSelectMuscle={setSelectedMuscle}
-                accentColor="var(--mf-glass-brand)"
-                className="border-mf-glass-border bg-black/10"
-              />
+          <div>
+            <MuscleMap
+              highlights={highlights}
+              legend={false}
+              selectedMuscle={selected?.muscle ?? null}
+              onSelectMuscle={setSelectedMuscle}
+              accentColor="var(--mf-glass-brand)"
+              className="border-mf-glass-border bg-black/10"
+            />
 
-              <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1">
-                {LEGEND.map((item) => (
-                  <span key={item.label} className="flex items-center gap-1.5 text-[10px] font-semibold text-mf-glass-text-muted">
-                    <span
-                      className="size-2 rounded-full bg-mf-glass-brand"
-                      style={{ opacity: item.opacity }}
-                      aria-hidden="true"
-                    />
-                    {item.label}
-                  </span>
-                ))}
-              </div>
+            <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1">
+              {LEGEND.map((item) => (
+                <span key={item.label} className="flex items-center gap-1.5 text-[10px] font-semibold text-mf-glass-text-muted">
+                  <span
+                    className="size-2 rounded-full bg-mf-glass-brand"
+                    style={{ opacity: item.opacity }}
+                    aria-hidden="true"
+                  />
+                  {item.label}
+                </span>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* Accessible text alternative to the interactive body map. */}
           <ul className="sr-only">
@@ -206,7 +171,7 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
                   type="button"
                   onClick={() => setSelectedMuscle(entry.muscle)}
                   aria-pressed={entry.muscle === selected.muscle}
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                  className={`inline-flex min-h-11 items-center rounded-full border px-3 text-xs font-semibold transition ${
                     entry.muscle === selected.muscle
                       ? "border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand"
                       : "border-mf-glass-border text-mf-glass-text-muted hover:text-mf-glass-text-secondary"
@@ -220,14 +185,14 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
             <div className="mt-4 flex gap-2">
               <Link
                 href="/dashboard/training-intelligence"
-                className="inline-flex h-9 flex-1 items-center justify-center rounded-xl border border-mf-glass-border bg-white/[0.02] px-4 text-xs font-bold uppercase tracking-[0.06em] text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-text"
+                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-mf-glass-border bg-white/[0.02] px-4 text-xs font-bold uppercase tracking-[0.06em] text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-text"
               >
                 Open Muscle Intelligence
               </Link>
 
               <Link
                 href="/dashboard/ai-coach"
-                className="inline-flex h-9 flex-1 items-center justify-center rounded-xl border border-mf-glass-dante/30 bg-mf-glass-dante/10 px-4 text-xs font-bold uppercase tracking-[0.06em] text-violet-200 transition hover:bg-mf-glass-dante/20"
+                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-mf-glass-dante/30 bg-mf-glass-dante/10 px-4 text-xs font-bold uppercase tracking-[0.06em] text-violet-200 transition hover:bg-mf-glass-dante/20"
               >
                 Ask Dante
               </Link>

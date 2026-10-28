@@ -54,7 +54,7 @@ export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps
 
         <Link
           href="/dashboard/nutrition"
-          className="text-xs font-semibold text-mf-glass-brand hover:underline"
+          className="-my-3 inline-flex min-h-11 items-center text-xs font-semibold text-mf-glass-brand hover:underline"
         >
           View Food Log →
         </Link>
@@ -110,15 +110,16 @@ export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps
       {/* Craving / Coach Entry Shortcuts */}
       <div className="mt-5 border-t border-white/5 pt-4">
         <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
-          What sounds good? (Ask Coach)
+          What sounds good? Ask Dante
         </p>
 
         <div className="mt-2 flex flex-wrap gap-2">
           {CRAVING_SHORTCUTS.map((shortcut) => (
             <Link
               key={shortcut.label}
-              href={`/dashboard/nutrition?query=${encodeURIComponent(shortcut.query)}`}
-              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-mf-glass-text transition hover:border-white/20 hover:bg-white/[0.08]"
+              // Opens Dante with the question drafted (not sent). Nutrition never read a ?query= parameter.
+              href={`/dashboard/ai-coach?ask=${encodeURIComponent(shortcut.query)}`}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-mf-glass-text transition hover:border-white/20 hover:bg-white/[0.08]"
             >
               <span>{shortcut.label}</span>
               <ArrowRight className="size-3 text-zinc-500" />

@@ -231,6 +231,9 @@ const HISTORICAL = /\bbefore (?:i|you|it was) (?:delet|remov|chang|edit)/i
 const LOG_TALK = /\b(?:logged|food log|you (?:had|ate)|you've had|your (?:last |latest )?(?:meal|breakfast|lunch|dinner|snack))\b/i
 const PREP_WORDS = new Set(["cooked", "raw", "boiled", "grilled", "fried", "baked", "steamed", "roasted"])
 const words = (text: string) => (text.toLowerCase().match(/\p{L}{3,}/gu) ?? []).filter((word) => !PREP_WORDS.has(word))
+// "the chicken" / "my grilled rice": a food named with a determiner; it is a log reference only if a logged row has that word.
+const FOOD_REF = /\b(?:the|my|that|this)\s+(?:(?:cooked|raw|boiled|grilled|fried|baked|steamed|roasted)\s+)?(\p{L}{3,})/giu
+const NOT_FOOD = new Set(["protein", "calories", "kcal", "macros", "macro", "carbs", "fat", "meal", "food", "total", "log", "day", "breakfast", "lunch", "dinner", "snack", "snacks"])
 
 type LoggedRow = { id: string; meal: string; food: string }
 
@@ -275,6 +278,38 @@ function loggedMealReply(message: string, ctx: CoachContext, recent: Array<{ rol
     const meal = meals.find((item) => item.meal === key)
     return meal ? answer(meal) : { reply: `Nothing is logged under ${asked.toLowerCase()} today, so I can't give its numbers. ${listed}`, judge: false }
   }
+  const current = meals.flatMap((meal) => meal.rows.map((row) => ({ ...row, meal: meal.meal })))
+  // "How much protein was in the chicken?" names a food, not "it" (live D-11: chicken deleted from a chicken + rice lunch, and
+  // its 33.8 g was re-voiced from the chat as current). The food is the rows with that word logged NOW; a row from `seen` that is
+  // gone is said to be gone, with no numbers (the snapshot holds no amounts), and is never answered with another row's numbers.
+  const hasWord = (word: string) => (row: { food: string }) => words(row.food.replace(/\(.*$/, "")).includes(word)
+  const ref = ASKS_NUMBERS.test(message) || historical
+    ? [...message.matchAll(FOOD_REF)].map((m) => m[1].toLowerCase()).find((word) => !NOT_FOOD.has(word) && [...current, ...(seen ?? [])].some(hasWord(word)))
+    : undefined
+  if (ref) {
+    const now = current.filter(hasWord(ref))
+    const then = (seen ?? []).filter(hasWord(ref))
+    const kept = now.filter((row) => then.some((old) => old.id === row.id && old.food === row.food))
+    const removed = then.filter((old) => !current.some((row) => row.id === old.id && row.food === old.food))
+    if (!now.length || (historical && !kept.length && removed.length)) {
+      const slots = [...new Set(removed.map((row) => row.meal))]
+      const nowIn = slots.map((slot) => meals.find((meal) => meal.meal === slot)).map((meal, i) => (meal ? `Your ${mealLabel(meal)} now has ${meal.foods.map(portionOf).join(", ")}.` : `Nothing is logged under ${mealLabel(slots[i] as MealType)} now.`))
+      return {
+        reply: `${[...new Set(removed.map((row) => row.food))].join(", ")} was logged under your ${slots.map((slot) => mealLabel(slot as MealType)).join(" and ")} when I last replied, but it is no longer in today's food log, so it isn't part of what you've logged now. I don't have a verified record of its amounts from before it was removed, so I won't give its numbers. ${nowIn.join(" ")}`,
+        judge: false,
+        gone: true,
+      }
+    }
+    const pick = kept.length ? kept : now
+    const where = [...new Set(pick.map((row) => row.meal))]
+    if (where.length > 1) return { reply: `Which meal do you mean — ${where.map((slot) => mealLabel(slot as MealType)).join(" or ")}?`, judge: false }
+    const meal = meals.find((item) => item.meal === where[0])!
+    if (pick.length > 1) return { reply: `Your ${mealLabel(meal)} has more than one ${ref} entry: ${meal.foods.filter((_, i) => pick.some((row) => row.id === meal.rows[i].id)).map(portionOf).join(" and ")}. Which one do you mean?`, judge: false }
+    const note = !kept.length && removed.length ? `The ${ref} entry from earlier in this chat (${removed.map((row) => row.food).join(", ")}) is no longer logged; this is a newer entry, not the same one. ` : ""
+    const i = meal.rows.findIndex((row) => row.id === pick[0].id)
+    const facts = `${note}The ${portionOf(meal.foods[i])} in your ${mealLabel(meal)} has ${Math.round(meal.rows[i].protein * 10) / 10} g protein and ${Math.round(meal.rows[i].calories)} kcal, from your food log. Your ${mealLabel(meal)} has ${meal.foods.map(portionOf).join(", ")}.`
+    return { reply: historical ? `Today's log now has it as: ${facts}` : facts, judge: false }
+  }
   if (!MEAL_BACKREF.test(message)) return null
   // The chat may only NAME the referent. A composed reply rephrases portions ("200 g of cooked chicken breast"), so a food is
   // named when all its name's words appear; that picks candidates, it never proves identity.
@@ -295,7 +330,6 @@ function loggedMealReply(message: string, ctx: CoachContext, recent: Array<{ rol
   // What the last turn discussed: the rows of the meal it named, else the rows whose food it named — as logged back then.
   const then = seen.filter((row) => (labels.length ? row.meal === labels[0] : named(row.food)))
   if (!then.length) return missing()
-  const current = meals.flatMap((meal) => meal.rows.map((row) => ({ ...row, meal: meal.meal })))
   const kept = current.filter((row) => then.some((old) => old.id === row.id && old.food === row.food))
   const was = then.map((row) => row.food).join(", ")
   if (!kept.length) {

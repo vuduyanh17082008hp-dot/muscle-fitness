@@ -393,6 +393,7 @@ export async function buildAthleteState(
       soreness: recoveryContext?.today?.soreness ?? null,
       fatigue: recoveryContext?.today?.fatigue ?? null,
       painFlag: recoveryContext?.today?.pain_illness === "yes",
+      painFlagUnavailable: !recoveryContext || recoveryContext.checkinsUnavailable === true,
       recoveryStatusCode: recoveryStatus,
     },
 

@@ -112,6 +112,8 @@ export function FoodQuantityConfirm({
   const selectedServingGrams = servingOptions.find((s) => s.name === servingName)?.grams ?? defaultServing?.grams ?? 0
 
   const effectiveGrams = unit === "servings" ? round1(servingsCount * selectedServingGrams) : grams
+  // Servings chosen but no serving size is known yet: there is no amount to calculate, which is not "0 g".
+  const servingUndefined = unit === "servings" && selectedServingGrams <= 0
   const scaled = scaleMacrosToGrams(food.per100g, effectiveGrams)
 
   function adjustGrams(delta: number) {
@@ -433,17 +435,23 @@ export function FoodQuantityConfirm({
         </select>
       </div>
 
-      <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
-        <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">
-          For {effectiveGrams} g
+      {servingUndefined ? (
+        <p role="status" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-zinc-300">
+          No serving size yet. Define one above, or switch to Grams — nothing is calculated until there is an amount.
         </p>
-        <div className="grid grid-cols-4 gap-2 text-center">
-          <MacroPreview label="kcal" value={scaled.calories} />
-          <MacroPreview label="P" value={scaled.protein} suffix="g" />
-          <MacroPreview label="C" value={scaled.carbs} suffix="g" />
-          <MacroPreview label="F" value={scaled.fat} suffix="g" />
+      ) : (
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
+          <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">
+            For {effectiveGrams} g
+          </p>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <MacroPreview label="kcal" value={scaled.calories} />
+            <MacroPreview label="P" value={scaled.protein} suffix="g" />
+            <MacroPreview label="C" value={scaled.carbs} suffix="g" />
+            <MacroPreview label="F" value={scaled.fat} suffix="g" />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-3">
         <button
@@ -458,7 +466,7 @@ export function FoodQuantityConfirm({
           type="button"
           disabled={effectiveGrams <= 0}
           onClick={() => onConfirm(buildConfirmedFood())}
-          className="min-h-12 flex-[2] rounded-xl bg-amber-500 text-sm font-black uppercase tracking-wide text-black hover:bg-amber-400 disabled:opacity-40"
+          className="min-h-12 flex-[2] rounded-xl bg-mf-glass-brand text-sm font-black uppercase tracking-wide text-mf-glass-brand-ink hover:bg-mf-glass-brand-hover disabled:opacity-40"
         >
           {confirmLabel}
         </button>

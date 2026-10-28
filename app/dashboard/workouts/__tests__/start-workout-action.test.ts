@@ -29,6 +29,12 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
+// The hold check (QA-01) has its own tests (hackathon-p1-safety.test.ts); here no hold is active.
+vi.mock("@/lib/dante-core/server/training-hold-guard", () => ({
+  currentTrainingHold: vi.fn(async () => null),
+  TRAINING_HOLD_MESSAGE: { recovery: "", unverified: "" },
+}));
+
 import { createClient } from "@/lib/supabase/server";
 import { startWorkoutAction } from "@/app/dashboard/workouts/actions";
 

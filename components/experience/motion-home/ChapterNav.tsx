@@ -26,7 +26,7 @@ export function ChapterNav({ activeChapter }: { activeChapter: string }) {
           >
             <span
               className={`${styles.monoLabel} text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${
-                isActive ? "opacity-100" : "opacity-0 group-hover:opacity-60"
+                isActive ? "opacity-100" : "opacity-0 group-hover:opacity-60 group-focus-visible:opacity-100"
               }`}
               style={{ color: isActive ? "var(--mf-brand)" : "var(--mf-pub-text-muted)" }}
             >

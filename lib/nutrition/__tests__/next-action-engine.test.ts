@@ -61,7 +61,7 @@ describe("buildNextMealOptions", () => {
     expect(adjusted?.adjustments).toEqual(
       expect.arrayContaining([expect.stringContaining("less"), expect.stringContaining("extra")]),
     )
-    expect(adjusted?.provenance).toContain("Comparable Reference")
+    expect(adjusted?.provenance).toContain("reference values, not measured")
   })
 
   it("never suggests a food matching an excluded term or allergy", () => {

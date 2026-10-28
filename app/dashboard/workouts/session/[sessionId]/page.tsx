@@ -28,7 +28,9 @@ import type { RecoveryStatusInput, TrainingLoadStateInput } from "@/lib/training
 import type { TraceableDecision } from "@/lib/dante-core/types";
 import { AdaptiveRecommendationCard } from "@/components/training/adaptive-recommendation-card";
 import { WorkoutPlayer } from "@/features/workouts/workout-player";
-import { startWorkoutAction } from "@/app/dashboard/workouts/actions";
+import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision";
+import { loadPreviousPerformance } from "@/lib/training/load-previous-performance";
+import { ScheduleConflictNote, TrainingHoldNotice, WorkoutStartButton } from "@/components/training/workout-start-control";
 import type {
   WorkoutPlayerExercise,
   WorkoutReplacementOption,
@@ -308,6 +310,22 @@ export default async function WorkoutSessionPage({
       ? `/dashboard/workouts/plans/${session.workout_plan_id}`
       : "/dashboard/workouts";
 
+  // A direct link here must not bypass the Daily Brief's safety decision: while it holds training (pain/illness, or an
+  // unconfirmed check-in) a planned session offers no Start, and an in-progress one shows the hold above the logger.
+  // Finished sessions are history and need no decision.
+  const trainable =
+    session.session_state === "in_progress" ||
+    session.session_state === "not_started" ||
+    session.session_state === null;
+  const daily = trainable ? await loadDailyDecision(supabase, user.id) : null;
+  const hold = daily?.hold ?? null;
+  // Today's not-started session on a plan REST day: the same "needs review" reading as the Today hero (F-03B / H).
+  const scheduleConflict =
+    daily?.todaySession?.id === session.id && daily.todaySessionStatus === "conflict";
+  const holdNotice = hold ? (
+    <TrainingHoldNotice hold={hold} secondary={{ label: "Review plan", href: backHref }} />
+  ) : null;
+
   /* =========================================================
      ACTIVE SESSION — the one interactive logger (WorkoutPlayer).
      Only `in_progress` is active: it is the only state
@@ -372,6 +390,8 @@ export default async function WorkoutSessionPage({
       equipment: row.equipment,
     }));
 
+    const previousByExercise = await loadPreviousPerformance(supabase, user.id, exerciseIds);
+
     const playerExercises: WorkoutPlayerExercise[] =
       exercisesWithSets.map((exercise) => ({
         id: exercise.id,
@@ -402,24 +422,25 @@ export default async function WorkoutSessionPage({
           rpe: set.rpe === null ? null : Number(set.rpe),
           completed: set.completed,
         })),
-        // ponytail: previous-performance panel is not loaded yet; add a
-        // last-completed-session lookup per exercise_id when wanted.
-        previous: null,
+        previous: previousByExercise.get(exercise.exercise_id) ?? null,
       }));
 
     return (
-      <main className="min-h-screen bg-mf-bg px-4 py-8 text-white sm:px-6 lg:px-10">
+      <main className="min-h-screen bg-mf-bg px-4 pb-4 pt-2 text-white sm:py-8 sm:px-6 lg:px-10">
         <div className="mx-auto max-w-7xl">
+          {/* 44px tap target without adding layout height (the first set input must clear the fold at 320×640). */}
           <Link
             href={backHref}
-            className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
+            className="-my-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-mf-glass-text-muted transition hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
 
             Back to workout
           </Link>
 
-          <div className="mt-8">
+          {holdNotice ? <div className="mt-8">{holdNotice}</div> : null}
+
+          <div className="mt-3 sm:mt-8">
             {/* Keyed on the exercise ids so a replaced exercise
                 remounts the player with the refreshed server data. */}
             <WorkoutPlayer
@@ -590,20 +611,19 @@ export default async function WorkoutSessionPage({
               {/* A planned session starts here, keeping its own (possibly adjusted) prescription — start_workout
                   begins this row rather than cloning the plan template. */}
               {(session.session_state === "not_started" || session.session_state === null) && session.workout_day_id ? (
-                <form action={startWorkoutAction}>
-                  <input type="hidden" name="workout_day_id" value={session.workout_day_id} />
-                  <button
-                    type="submit"
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 text-sm font-black uppercase tracking-[0.12em] text-black transition hover:bg-amber-300"
-                  >
-                    <PlayCircle aria-hidden="true" className="h-5 w-5" />
-                    Start workout
-                  </button>
-                </form>
+                <WorkoutStartButton workoutDayId={session.workout_day_id} hold={hold} size="lg" />
               ) : null}
             </div>
           </div>
         </header>
+
+        {holdNotice ? <div className="mt-6">{holdNotice}</div> : null}
+
+        {!hold && scheduleConflict ? (
+          <div className="mt-6">
+            <ScheduleConflictNote />
+          </div>
+        ) : null}
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard

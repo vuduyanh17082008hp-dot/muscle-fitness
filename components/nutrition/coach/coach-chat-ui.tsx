@@ -57,7 +57,7 @@ export function NutritionContextStrip({ context }: { context: { caloriesRemainin
   if (!context) return null
   return (
     <details className="group rounded-xl border border-mf-glass-border bg-white/[0.02] text-xs text-mf-glass-text-muted">
-      <summary className={`flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-1.5 [&::-webkit-details-marker]:hidden ${focusRing}`}>
+      <summary className={`flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-1.5 [&::-webkit-details-marker]:hidden ${focusRing}`}>
         <span className="font-semibold text-mf-glass-text-secondary">Today</span>
         <span className="min-w-0 flex-1 truncate">
           {Math.round(context.caloriesRemaining)} kcal left · {Math.round(context.proteinRemaining)}g protein left
@@ -98,7 +98,7 @@ function MessageBody({ text }: { text: string }) {
   return <div className="space-y-2.5">{blocks}</div>
 }
 
-const chip = `inline-flex min-h-8 items-center rounded-full border border-mf-glass-border px-2.5 text-xs font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-text disabled:opacity-50 ${focusRing}`
+const chip = `inline-flex min-h-11 items-center rounded-full border border-mf-glass-border px-2.5 text-xs font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-text disabled:opacity-50 ${focusRing}`
 const kcal = (n: number) => `${Math.round(n)} kcal`
 
 /** Compact, typed results under a coach message. Built from structured data — never parsed out of prose. */
@@ -226,7 +226,7 @@ export function NutritionQuickActions({ actions, disabled, onPick }: { actions: 
           type="button"
           disabled={disabled}
           onClick={() => onPick(action.message)}
-          className={`inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-mf-glass-border bg-white/[0.04] px-3 text-xs font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-text disabled:opacity-50 ${focusRing}`}
+          className={`inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full border border-mf-glass-border bg-white/[0.04] px-3 text-xs font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-text disabled:opacity-50 ${focusRing}`}
         >
           {action.label}
         </button>
@@ -247,8 +247,8 @@ export function NutritionActiveDraftMini({ name, calories, protein, background, 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-mf-glass-border px-3 py-2">
         <p className="text-xs text-mf-glass-text-muted">{Math.round(calories)} kcal · {Math.round(protein)}g protein</p>
         <div className="flex gap-2 text-xs font-semibold">
-          <button type="button" onClick={onEdit} className={`min-h-9 rounded-full border border-mf-glass-border px-3 text-xs font-semibold text-mf-glass-text-secondary hover:border-white/25 ${focusRing}`}>Edit</button>
-          {onLog ? <button type="button" onClick={onLog} className={`min-h-9 rounded-full border border-mf-glass-brand-border bg-mf-glass-brand-soft px-3 text-xs font-semibold text-mf-glass-brand ${focusRing}`}>Log</button> : null}
+          <button type="button" onClick={onEdit} className={`min-h-11 rounded-full border border-mf-glass-border px-3 text-xs font-semibold text-mf-glass-text-secondary hover:border-white/25 ${focusRing}`}>Edit</button>
+          {onLog ? <button type="button" onClick={onLog} className={`min-h-11 rounded-full border border-mf-glass-brand-border bg-mf-glass-brand-soft px-3 text-xs font-semibold text-mf-glass-brand ${focusRing}`}>Log</button> : null}
         </div>
       </div>
     </details>

@@ -71,6 +71,8 @@ export type AthleteState = {
     fatigue: number | null;
     /** True when today's check-in flagged pain/illness — the same safety gate lib/training/progression-engine.ts already enforces. */
     painFlag: boolean;
+    /** The check-in couldn't be read (recovery context or recovery_checkins failed): `painFlag: false` is then not a clearance. */
+    painFlagUnavailable?: boolean;
     /** Raw status code (ready/good/moderate/priority) behind the human-readable `status` label above — needed by engines that gate on it directly, e.g. lib/training/progression-engine.ts. */
     recoveryStatusCode: RecoveryStatusInput;
   };

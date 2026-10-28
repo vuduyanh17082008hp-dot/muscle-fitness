@@ -30,6 +30,8 @@ export function reviewFoodMatch(
   detectedName: string,
   food: NormalizedFood,
   searchStatus?: FoodSearchStatus,
+  /** A provider failed even though another one answered (FoodSearchResult.partial). */
+  searchPartial?: boolean,
 ): MatchFlag[] {
   const flags: MatchFlag[] = []
   const detected = detectedName.toLowerCase()
@@ -60,6 +62,8 @@ export function reviewFoodMatch(
 
   if (searchStatus === "provider_timeout" || searchStatus === "provider_error") {
     flags.push({ kind: "degraded_search", message: "The food databases didn't respond, so better matches may exist." })
+  } else if (searchPartial) {
+    flags.push({ kind: "degraded_search", message: "One of the food databases didn't respond, so better matches may exist." })
   }
 
   return flags

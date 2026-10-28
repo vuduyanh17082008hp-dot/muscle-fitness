@@ -26,9 +26,10 @@ import {
   type DailyMacroTotals,
 } from "@/lib/nutrition/food-log/types"
 import { computeDailyTotals, compareToTargets, groupByMeal } from "@/lib/nutrition/food-log/totals"
-import { addDaysIso, formatDateLabel, todayIso } from "@/lib/nutrition/date-utils"
+import { addDaysIso, formatDateLabel } from "@/lib/nutrition/date-utils"
 import { suggestMealType } from "@/components/nutrition/meal-type"
 import type { FoodHistoryItem } from "@/lib/nutrition/food-log/history"
+import { FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event"
 
 type NutritionTrackerProps = {
   initialEntries: FoodLogEntry[]
@@ -55,7 +56,6 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
   const submittingRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -66,7 +66,21 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
   const [unconfirmed, setUnconfirmed] = useState<UnconfirmedSave[]>([])
   const totalsUnverified = unconfirmed.length > 0 && selectedDate === initialDate
 
-  const isToday = selectedDate === todayIso()
+  // QA-03: "today" is the athlete's date (profile timezone) the server resolved, never the device's. A device in another
+  // timezone (e.g. Vietnam vs a Singapore profile around midnight) must not hide Add food or relabel the athlete's today.
+  const athleteToday = initialDate
+  const isToday = selectedDate === athleteToday
+
+  // Every confirmed add/edit/delete (and reload) lands in `entries`; tell the page's other readers of today's log — the
+  // Nutrition Coach strip re-fetches its server-computed remaining macros — instead of letting them show the old totals.
+  const entriesMounted = useRef(false)
+  useEffect(() => {
+    if (!entriesMounted.current) {
+      entriesMounted.current = true
+      return
+    }
+    window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT))
+  }, [entries])
 
   const totals = useMemo(() => computeDailyTotals(entries), [entries])
   const comparison = useMemo(() => compareToTargets(totals, target), [totals, target])
@@ -227,10 +241,9 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     return results
   }
 
-  async function handleAddAgain(item: FoodHistoryItem) {
-    if (submittingRef.current) return
+  async function handleAddAgain(item: FoodHistoryItem): Promise<boolean> {
+    if (submittingRef.current) return false
     submittingRef.current = true
-    setSubmitting(true)
     setError(null)
 
     // Derive a per-100g profile back out of exactly what was logged
@@ -240,7 +253,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     const factor = item.lastQuantityGrams > 0 ? 100 / item.lastQuantityGrams : 0
 
     try {
-      await handleAddFood({
+      return await handleAddFood({
         foodName: item.foodName,
         brand: item.brand,
         source: item.source,
@@ -261,11 +274,10 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
       })
     } finally {
       submittingRef.current = false
-      setSubmitting(false)
     }
   }
 
-  async function handleUpdateQuantity(id: string, grams: number) {
+  async function handleUpdateQuantity(id: string, portion: PortionEdit) {
     setPendingId(id)
     setError(null)
 
@@ -273,7 +285,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
       const response = await fetch(`/api/nutrition/log/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quantityGrams: grams }),
+        body: JSON.stringify(portion),
       })
 
       const data = await response.json()
@@ -315,14 +327,27 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     }
   }
 
+  // Recent first, then frequent foods not already listed — the Add Food sheet's one-tap re-log list.
+  const quickAdd = useMemo(() => {
+    const seen = new Set<string>()
+    return [...recentFoods, ...frequentFoods]
+      .filter((item) => {
+        const identity = item.foodIdentity ?? item.foodName
+        if (seen.has(identity)) return false
+        seen.add(identity)
+        return true
+      })
+      .slice(0, QUICK_ADD_LIMIT)
+  }, [recentFoods, frequentFoods])
+
   return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+    <section className="mf-touch-inputs space-y-5" aria-label="Food log">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-mf-glass-brand">
             {isToday ? "Today's Nutrition" : "Food Log"}
           </p>
-          <h2 className="mt-1 text-2xl font-black text-mf-glass-text">{formatDateLabel(selectedDate)}</h2>
+          <h2 className="mt-1 text-2xl font-black text-mf-glass-text">{formatDateLabel(selectedDate, athleteToday)}</h2>
         </div>
 
         {isToday ? (
@@ -331,11 +356,14 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
             onAddFoods={handleAddFoods}
             onLogChanged={reloadLog}
             onClosed={() => void recheckUnconfirmed()}
+            quickAdd={quickAdd}
+            onAddAgain={handleAddAgain}
           />
         ) : null}
       </div>
 
       <DateNav
+        today={athleteToday}
         selectedDate={selectedDate}
         onChange={setSelectedDate}
         onPrev={() => setSelectedDate((d) => addDaysIso(d, -1))}
@@ -343,7 +371,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
       />
 
       {error && !logUnavailable ? (
-        <p className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">{error}</p>
+        <p role="alert" className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">{error}</p>
       ) : null}
 
       {logUnavailable && !loadingDate ? (
@@ -355,7 +383,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
           <button
             type="button"
             onClick={() => setReloadKey((key) => key + 1)}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
+            className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-amber-400/30 px-3 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
           >
             <RotateCw className="size-3.5" />
             Retry
@@ -378,7 +406,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
           <button
             type="button"
             onClick={() => void recheckUnconfirmed()}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
+            className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-amber-400/30 px-3 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
           >
             <RotateCw className="size-3.5" />
             Check again
@@ -387,29 +415,18 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
       ) : null}
 
       <NutritionResultGlow>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MacroCard label="Calories" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.calories.consumed} target={comparison.calories.target} remaining={comparison.calories.remaining} unit="kcal" accent />
-        <MacroCard label="Protein" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.protein.consumed} target={comparison.protein.target} remaining={comparison.protein.remaining} unit="g" />
-        <MacroCard label="Carbs" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.carbs.consumed} target={comparison.carbs.target} remaining={comparison.carbs.remaining} unit="g" />
-        <MacroCard label="Fat" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.fat.consumed} target={comparison.fat.target} remaining={comparison.fat.remaining} unit="g" />
-      </div>
+        <div className="space-y-2" aria-busy={loadingDate}>
+          <MacroCard label="Calories" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.calories.consumed} target={comparison.calories.target} remaining={comparison.calories.remaining} unit="kcal" accent />
+          <div className="grid grid-cols-3 gap-2">
+            <MacroCard label="Protein" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.protein.consumed} target={comparison.protein.target} remaining={comparison.protein.remaining} unit="g" />
+            <MacroCard label="Carbs" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.carbs.consumed} target={comparison.carbs.target} remaining={comparison.carbs.remaining} unit="g" />
+            <MacroCard label="Fat" unavailable={logUnavailable} unverified={totalsUnverified} consumed={comparison.fat.consumed} target={comparison.fat.target} remaining={comparison.fat.remaining} unit="g" />
+          </div>
+        </div>
       </NutritionResultGlow>
 
-      {isToday ? <NextMealCard refreshKey={nextActionRefreshKey} onLogged={handleAddFood} /> : null}
-
-      {isToday && (recentFoods.length > 0 || frequentFoods.length > 0) ? (
-        <div id="history" className="grid gap-4 sm:grid-cols-2 scroll-mt-24">
-          {recentFoods.length > 0 ? (
-            <FoodShortcutList title="Recent Foods" items={recentFoods} submitting={submitting} onAddAgain={handleAddAgain} />
-          ) : null}
-          {frequentFoods.length > 0 ? (
-            <FoodShortcutList title="Frequent Foods" items={frequentFoods} submitting={submitting} onAddAgain={handleAddAgain} />
-          ) : null}
-        </div>
-      ) : null}
-
       <div>
-        <p className="mb-4 text-xs font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">Today&apos;s Food</p>
+        <p className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">Meals</p>
 
         {loadingDate ? (
           <div className="flex items-center justify-center gap-2 rounded-2xl border border-mf-glass-border bg-white/[0.02] p-6 text-sm text-mf-glass-text-muted">
@@ -430,16 +447,17 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
             title="Nothing logged yet"
             description={
               isToday
-                ? "Track your first meal to start today's nutrition summary."
+                ? "Tap Add food to log your first meal."
                 : "No food was logged on this day."
             }
           />
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-5">
             {MEAL_TYPES.filter((meal) => grouped[meal].length > 0).map((meal) => (
               <div key={meal}>
-                <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-text-muted">
-                  {MEAL_TYPE_LABEL[meal]}
+                <p className="mb-2 flex items-baseline justify-between gap-3 text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-text-muted">
+                  <span>{MEAL_TYPE_LABEL[meal]}</span>
+                  <span className="tracking-normal normal-case">{Math.round(computeDailyTotals(grouped[meal]).calories)} kcal</span>
                 </p>
                 <ul className="space-y-2">
                   {grouped[meal].map((entry) => (
@@ -450,10 +468,16 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
                       isEditing={editingId === entry.id}
                       isConfirmingDelete={confirmingDeleteId === entry.id}
                       isPending={pendingId === entry.id}
-                      onStartEdit={() => setEditingId(entry.id)}
+                      onStartEdit={() => {
+                        setConfirmingDeleteId(null)
+                        setEditingId(entry.id)
+                      }}
                       onCancelEdit={() => setEditingId(null)}
-                      onSaveEdit={(grams) => handleUpdateQuantity(entry.id, grams)}
-                      onRequestDelete={() => setConfirmingDeleteId(entry.id)}
+                      onSaveEdit={(portion) => handleUpdateQuantity(entry.id, portion)}
+                      onRequestDelete={() => {
+                        setEditingId(null)
+                        setConfirmingDeleteId(entry.id)
+                      }}
                       onCancelDelete={() => setConfirmingDeleteId(null)}
                       onConfirmDelete={() => handleDelete(entry.id)}
                     />
@@ -464,35 +488,45 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
           </div>
         )}
       </div>
+
+      {isToday ? <NextMealCard refreshKey={nextActionRefreshKey} onLogged={handleAddFood} /> : null}
     </section>
   )
 }
 
+const QUICK_ADD_LIMIT = 6
+
+/** What the PATCH route accepts: grams always; a serving pair keeps "2 bowls", omitting it records plain grams. */
+type PortionEdit = { quantityGrams: number; servingName?: string; servingsConsumed?: number }
+
 function DateNav({
+  today,
   selectedDate,
   onChange,
   onPrev,
   onNext,
 }: {
+  /** The athlete's date (server-resolved profile timezone). */
+  today: string
   selectedDate: string
   onChange: (date: string) => void
   onPrev: () => void
   onNext: () => void
 }) {
-  const isToday = selectedDate === todayIso()
+  const isToday = selectedDate === today
 
   return (
-    <div className="flex items-center justify-center gap-3 rounded-xl border border-mf-glass-border bg-white/[0.02] px-4 py-2.5">
-      <button type="button" aria-label="Previous day" onClick={onPrev} className="grid size-9 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text">
-        <ChevronLeft className="size-4" />
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-mf-glass-border bg-white/[0.02] px-1.5 py-1">
+      <button type="button" aria-label="Previous day" onClick={onPrev} className="grid size-11 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text">
+        <ChevronLeft className="size-5" />
       </button>
 
       <input
         type="date"
         value={selectedDate}
-        max={todayIso()}
+        max={today}
         onChange={(event) => event.target.value && onChange(event.target.value)}
-        className="border-none bg-transparent text-center text-sm font-semibold text-mf-glass-text [color-scheme:dark]"
+        className="min-h-11 min-w-0 flex-1 border-none bg-transparent text-center text-sm font-semibold text-mf-glass-text [color-scheme:dark]"
         aria-label="Select date"
       />
 
@@ -501,50 +535,10 @@ function DateNav({
         aria-label="Next day"
         onClick={onNext}
         disabled={isToday}
-        className="grid size-9 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text disabled:opacity-30"
+        className="grid size-11 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text disabled:opacity-30"
       >
-        <ChevronRight className="size-4" />
+        <ChevronRight className="size-5" />
       </button>
-    </div>
-  )
-}
-
-function FoodShortcutList({
-  title,
-  items,
-  submitting,
-  onAddAgain,
-}: {
-  title: string
-  items: FoodHistoryItem[]
-  submitting: boolean
-  onAddAgain: (item: FoodHistoryItem) => void
-}) {
-  return (
-    <div className="rounded-2xl border border-mf-glass-border bg-white/[0.02] p-4">
-      <p className="mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-text-muted">{title}</p>
-      <ul className="space-y-2">
-        {items.map((item, index) => (
-          <li key={`${item.foodIdentity ?? item.foodName}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-mf-glass-bg-deep px-3 py-2">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-mf-glass-text">{item.foodName}</p>
-              <p className="text-xs text-mf-glass-text-muted">
-                {item.lastServingName && item.lastServingsConsumed
-                  ? `${item.lastServingsConsumed} ${item.lastServingName}${item.lastServingsConsumed === 1 ? "" : "s"}`
-                  : `${item.lastQuantityGrams} g`}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => onAddAgain(item)}
-              disabled={submitting}
-              className="shrink-0 rounded-lg border border-mf-glass-brand-border bg-mf-glass-brand-soft px-3 py-1.5 text-xs font-bold text-mf-glass-brand hover:bg-mf-glass-brand-soft disabled:opacity-40"
-            >
-              {submitting ? "Adding…" : "Add Again"}
-            </button>
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }
@@ -569,24 +563,42 @@ function MacroCard({
   /** A save's outcome is unknown, so this figure may be missing it. */
   unverified?: boolean
 }) {
+  const progress = !unavailable && target > 0 ? Math.min(consumed / target, 1) : 0
+
   return (
     <div
-      className={`rounded-2xl border p-5 transition duration-200 hover:-translate-y-0.5 hover:border-white/20 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 ${accent ? "border-mf-glass-brand-border bg-mf-glass-brand-soft" : "border-mf-glass-border bg-white/[0.035]"}`}
+      className={`min-w-0 rounded-2xl border ${accent ? "border-mf-glass-brand-border bg-mf-glass-brand-soft p-4" : "border-mf-glass-border bg-white/[0.035] p-3"}`}
     >
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-mf-glass-text-muted">{label}</p>
-      <p className={`mt-3 text-2xl font-black ${accent ? "text-mf-glass-brand" : "text-mf-glass-text"}`}>
-        {unavailable ? "—" : <AnimatedNumber value={consumed} />}
-        <span className="text-base font-semibold text-mf-glass-text-muted"> / {target} {unit}</span>
-      </p>
-      <p className="mt-2 text-xs text-mf-glass-text-muted">
+      <div className={accent ? "flex flex-wrap items-baseline justify-between gap-x-3" : undefined}>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-mf-glass-text-muted">{label}</p>
+        <p className={`font-black ${accent ? "text-2xl text-mf-glass-brand" : "mt-1 text-lg text-mf-glass-text"}`}>
+          {unavailable ? "—" : <AnimatedNumber value={consumed} />}
+          <span className={`font-semibold text-mf-glass-text-muted ${accent ? "text-sm" : "text-xs"}`}> / {target}{accent ? ` ${unit}` : unit}</span>
+        </p>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10" aria-hidden="true">
+        <div className={`h-full rounded-full ${remaining < 0 ? "bg-amber-400" : accent ? "bg-mf-glass-brand" : "bg-mf-glass-text-secondary"}`} style={{ width: `${progress * 100}%` }} />
+      </div>
+      <p className="mt-1.5 text-xs text-mf-glass-text-muted">
         {unavailable
           ? "Unavailable — log not loaded"
           : unverified
             ? "Unverified — a save is unconfirmed"
-            : remaining >= 0 ? `${remaining} ${unit} remaining` : `${Math.abs(remaining)} ${unit} over target`}
+            : remaining >= 0 ? `${remaining}${accent ? ` ${unit}` : unit} left` : `${Math.abs(remaining)}${accent ? ` ${unit}` : unit} over`}
       </p>
     </div>
   )
+}
+
+/** Verified = a USDA / Open Food Facts profile the server re-resolved itself; anything else says where the numbers came from. */
+function ProvenanceBadge({ entry }: { entry: FoodLogEntry }) {
+  if (entry.isEstimated) {
+    return <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">Estimate</span>
+  }
+  if (entry.source === "usda" || entry.source === "open-food-facts") {
+    return <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300">Verified source</span>
+  }
+  return null
 }
 
 function FoodLogRow({
@@ -609,7 +621,7 @@ function FoodLogRow({
   isPending: boolean
   onStartEdit: () => void
   onCancelEdit: () => void
-  onSaveEdit: (grams: number) => void
+  onSaveEdit: (portion: PortionEdit) => void
   onRequestDelete: () => void
   onCancelDelete: () => void
   onConfirmDelete: () => void
@@ -620,35 +632,31 @@ function FoodLogRow({
       : `${entry.quantityGrams} g`
 
   return (
-    <li className="rounded-xl border border-mf-glass-border bg-white/[0.03] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-mf-glass-text">
-            {entry.foodName}
-            {entry.isEstimated ? (
-              <span className="ml-2 rounded-full bg-mf-glass-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-mf-glass-brand">
-                Estimated
-              </span>
-            ) : null}
+    <li className="rounded-xl border border-mf-glass-border bg-white/[0.03] py-3 pl-4 pr-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-mf-glass-text">
+            <span className="min-w-0 break-words">{entry.foodName}</span>
+            <ProvenanceBadge entry={entry} />
           </p>
-          <p className="text-xs text-mf-glass-text-muted">
+          <p className="mt-0.5 text-xs text-mf-glass-text-muted">
             {quantityLabel} · {FOOD_LOG_SOURCE_LABEL[entry.source]}
           </p>
           <p className="mt-1 text-xs text-mf-glass-text-muted">
             <span className="font-semibold text-mf-glass-text-secondary">{entry.calories} kcal</span>
             {" · "}
-            {entry.proteinG} P • {entry.carbsG} C • {entry.fatG} F
+            P {entry.proteinG}g · C {entry.carbsG}g · F {entry.fatG}g
           </p>
         </div>
 
         {canEdit && !isEditing && !isConfirmingDelete ? (
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center">
             <button
               type="button"
-              aria-label={`Edit ${entry.foodName}`}
+              aria-label={`Edit portion of ${entry.foodName}`}
               onClick={onStartEdit}
               disabled={isPending}
-              className="grid size-9 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text disabled:opacity-40"
+              className="grid size-11 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-white/10 hover:text-mf-glass-text disabled:opacity-40"
             >
               <Pencil className="size-4" />
             </button>
@@ -657,7 +665,7 @@ function FoodLogRow({
               aria-label={`Delete ${entry.foodName}`}
               onClick={onRequestDelete}
               disabled={isPending}
-              className="grid size-9 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+              className="grid size-11 place-items-center rounded-lg text-mf-glass-text-muted hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
             >
               <Trash2 className="size-4" />
             </button>
@@ -666,24 +674,26 @@ function FoodLogRow({
       </div>
 
       {isEditing ? (
-        <EditQuantityRow initialGrams={entry.quantityGrams} isPending={isPending} onCancel={onCancelEdit} onSave={onSaveEdit} />
+        <EditPortionRow entry={entry} isPending={isPending} onCancel={onCancelEdit} onSave={onSaveEdit} />
       ) : null}
 
       {isConfirmingDelete ? (
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-mf-glass-border pt-3">
-          <p className="text-xs text-mf-glass-text-muted">Remove {entry.foodName} from today&apos;s food?</p>
-          <div className="flex shrink-0 gap-2">
-            <button type="button" onClick={onCancelDelete} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-mf-glass-text-muted hover:bg-white/10">
-              Cancel
+        <div role="alertdialog" aria-label={`Remove ${entry.foodName}?`} className="mt-3 mr-2 space-y-3 border-t border-mf-glass-border pt-3">
+          <p className="text-sm text-mf-glass-text-secondary">
+            Remove {entry.foodName} ({entry.calories} kcal) from today? Totals update right away.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={onCancelDelete} className="min-h-11 rounded-lg border border-mf-glass-border text-sm font-semibold text-mf-glass-text-secondary hover:bg-white/10">
+              Keep
             </button>
             <button
               type="button"
               disabled={isPending}
               onClick={onConfirmDelete}
-              className="flex items-center gap-1.5 rounded-lg bg-red-500/90 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+              className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-red-500/90 text-sm font-bold text-white disabled:opacity-40"
             >
-              {isPending ? <Loader2 className="size-3 animate-spin" /> : null}
-              Remove
+              {isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              {isPending ? "Removing…" : "Remove"}
             </button>
           </div>
         </div>
@@ -692,40 +702,85 @@ function FoodLogRow({
   )
 }
 
-function EditQuantityRow({
-  initialGrams,
+/**
+ * Edits the portion only — the food itself never changes here (delete + re-add for that). An entry logged in servings
+ * can be edited in servings, keeping its serving name; the server recomputes every macro from the new grams.
+ */
+function EditPortionRow({
+  entry,
   isPending,
   onCancel,
   onSave,
 }: {
-  initialGrams: number
+  entry: FoodLogEntry
   isPending: boolean
   onCancel: () => void
-  onSave: (grams: number) => void
+  onSave: (portion: PortionEdit) => void
 }) {
-  const [grams, setGrams] = useState(initialGrams)
+  const serving = entry.servingName && entry.servingsConsumed ? { name: entry.servingName, grams: entry.quantityGrams / entry.servingsConsumed } : null
+  const [unit, setUnit] = useState<"servings" | "grams">(serving ? "servings" : "grams")
+  const [value, setValue] = useState(String(serving ? entry.servingsConsumed : entry.quantityGrams))
+
+  const amount = Number(value)
+  const valid = Number.isFinite(amount) && amount > 0
+  const grams = unit === "servings" && serving ? Math.round(amount * serving.grams * 10) / 10 : amount
+  // Display-only preview, scaled from this row's stored values; the saved figures come back from the server.
+  const preview = valid && entry.quantityGrams > 0 ? Math.round((entry.calories * grams) / entry.quantityGrams) : null
 
   return (
-    <div className="mt-3 flex items-center gap-2 border-t border-mf-glass-border pt-3">
-      <input
-        type="number"
-        value={grams}
-        onChange={(event) => setGrams(Number(event.target.value) || 0)}
-        className="h-10 w-24 rounded-lg border border-mf-glass-border bg-mf-glass-bg-deep px-3 text-center text-sm text-mf-glass-text"
-        aria-label="Edit quantity in grams"
-      />
-      <span className="text-xs text-mf-glass-text-muted">g</span>
-      <div className="ml-auto flex gap-2">
-        <button type="button" onClick={onCancel} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-mf-glass-text-muted hover:bg-white/10">
+    <div className="mt-3 mr-2 space-y-3 border-t border-mf-glass-border pt-3">
+      {serving ? (
+        <div className="grid grid-cols-2 gap-1 rounded-lg border border-mf-glass-border p-1" role="group" aria-label="Portion unit">
+          {(["servings", "grams"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={unit === option}
+              onClick={() => {
+                if (option === unit) return
+                setUnit(option)
+                setValue(String(option === "grams" ? grams || entry.quantityGrams : Math.round((amount / serving.grams) * 10) / 10 || entry.servingsConsumed))
+              }}
+              className={`min-h-10 rounded-md text-sm font-semibold capitalize ${unit === option ? "bg-white/10 text-mf-glass-text" : "text-mf-glass-text-muted"}`}
+            >
+              {option === "servings" ? `${serving.name}s` : "Grams"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step={unit === "servings" ? "0.5" : "1"}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          className="h-11 w-28 rounded-lg border border-mf-glass-border bg-mf-glass-bg-deep px-3 text-center text-sm text-mf-glass-text"
+          aria-label={unit === "servings" && serving ? `Number of ${serving.name}s` : "Quantity in grams"}
+        />
+        <span className="text-sm text-mf-glass-text-muted">
+          {unit === "servings" && serving ? `${serving.name}${amount === 1 ? "" : "s"} · ${valid ? grams : "—"} g` : "g"}
+        </span>
+        <span className="ml-auto text-xs text-mf-glass-text-muted" aria-live="polite">
+          {preview !== null ? `≈ ${preview} kcal` : null}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={onCancel} className="min-h-11 rounded-lg border border-mf-glass-border text-sm font-semibold text-mf-glass-text-secondary hover:bg-white/10">
           Cancel
         </button>
         <button
           type="button"
-          disabled={isPending || !(grams > 0)}
-          onClick={() => onSave(grams)}
-          className="rounded-lg bg-mf-glass-brand px-3 py-1.5 text-xs font-bold text-mf-glass-brand-ink disabled:opacity-40"
+          disabled={isPending || !valid || !(grams > 0) || grams > 5000}
+          onClick={() =>
+            onSave(unit === "servings" && serving ? { quantityGrams: grams, servingName: serving.name, servingsConsumed: amount } : { quantityGrams: grams })
+          }
+          className="min-h-11 rounded-lg bg-mf-glass-brand text-sm font-bold text-mf-glass-brand-ink disabled:opacity-40"
         >
-          {isPending ? "Saving…" : "Save"}
+          {isPending ? "Saving…" : "Save portion"}
         </button>
       </div>
     </div>

@@ -26,7 +26,7 @@ export function NewUserDashboard({
       title: "Training Structure",
       desc: "Generate or assign your custom training split and target volume.",
       completed: hasWorkoutPlan,
-      href: "/dashboard/workouts/plans",
+      href: "/dashboard/workouts/plans/new",
       actionText: "Setup Training Plan",
     },
     {

@@ -13,7 +13,7 @@ export default function PrivacyPage() {
       <div className="mx-auto max-w-3xl">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-400 transition hover:text-white"
         >
           <ArrowLeft className="size-4" />
           Back home
@@ -117,7 +117,7 @@ export default function PrivacyPage() {
             </p>
           </section>
 
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
             Effective 6 October 2026
           </p>
         </article>

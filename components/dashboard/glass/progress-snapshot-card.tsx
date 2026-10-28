@@ -65,7 +65,7 @@ export function ProgressSnapshotCard({ snapshot }: { snapshot: DashboardProgress
         action={
           <Link
             href="/dashboard/progress"
-            className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-mf-glass-text-muted transition hover:text-mf-glass-text"
+            className="-my-3 inline-flex min-h-11 items-center gap-0.5 text-xs font-semibold text-mf-glass-text-muted transition hover:text-mf-glass-text"
           >
             Details
             <ChevronRight className="size-3" aria-hidden="true" />

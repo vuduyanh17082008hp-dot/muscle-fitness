@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Loader2, Sparkles } from "lucide-react"
+import { ChevronDown, Loader2, Sparkles } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { PrimaryButton, SecondaryButton } from "@/components/ui/button"
@@ -12,7 +12,7 @@ import type { FollowUpState, StructuredBlock } from "@/lib/nutrition/coach/follo
 import { QUICK_ACTIONS } from "@/lib/nutrition/coach/quick-actions"
 import type { ActiveMealDraft, ContextSnapshot, CravingKey, MealDraftHistoryItem } from "@/lib/nutrition/coach/types"
 import { MEAL_TYPE_LABEL, MEAL_TYPES, type MealType } from "@/lib/nutrition/food-log/types"
-import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT } from "@/lib/coach-context-event"
+import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT, FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event"
 
 import { MealDraftCard } from "./meal-draft-card"
 import {
@@ -120,11 +120,15 @@ export function NutritionCoachPanel() {
    * refresh after any coach turn that may have changed it. A failed refresh clears the cards: a card fetched before a new
    * restriction must never stay on screen looking eligible.
    */
+  const refreshSeq = useRef(0)
   const refreshSuggestions = useCallback(async () => {
+    const seq = ++refreshSeq.current
     const [ctx, suggest] = await Promise.all([
       postJson<CoachResponse>("/api/nutrition/coach", { action: "context" }).catch(() => null),
       postJson<CoachResponse>("/api/nutrition/coach", { action: "suggest" }).catch(() => null),
     ])
+    // Back-to-back log changes each re-read; only the newest read may land, never an older total over a newer one.
+    if (seq !== refreshSeq.current) return
     if (ctx?.json.context) setContext(ctx.json.context)
     setBlockedIds(ctx?.json.blockedIngredientIds ?? [])
     setSuggestions(suggest?.json.drafts ?? [])
@@ -143,11 +147,15 @@ export function NutritionCoachPanel() {
       void refreshSuggestions()
     }
     const onTurnStarted = () => setSuggestionsStale(true)
+    // The tracker changed today's log: re-read the server's remaining macros (and the cards sized to them).
+    const onFoodLogChanged = () => void refreshSuggestions()
     window.addEventListener(COACH_CONTEXT_CHANGED_EVENT, onCoachTurn)
     window.addEventListener(COACH_TURN_STARTED_EVENT, onTurnStarted)
+    window.addEventListener(FOOD_LOG_CHANGED_EVENT, onFoodLogChanged)
     return () => {
       window.removeEventListener(COACH_CONTEXT_CHANGED_EVENT, onCoachTurn)
       window.removeEventListener(COACH_TURN_STARTED_EVENT, onTurnStarted)
+      window.removeEventListener(FOOD_LOG_CHANGED_EVENT, onFoodLogChanged)
     }
   }, [refreshSuggestions, router])
 
@@ -334,7 +342,7 @@ export function NutritionCoachPanel() {
   const chipLabel = topicChip(conv.currentTopic, draft)
 
   return (
-    <section id="coach" className="scroll-mt-24 space-y-5" aria-label="Nutrition Coach">
+    <section id="coach" className="mf-touch-inputs scroll-mt-24 space-y-5" aria-label="Nutrition Coach">
       <div className="space-y-3 rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-4 sm:p-5">
         <NutritionCoachHeader busy={busy} />
         <NutritionContextStrip context={context} />
@@ -393,6 +401,13 @@ export function NutritionCoachPanel() {
         <NutritionComposer value={input} onChange={setInput} onSend={() => void send(input)} busy={busy} />
       </div>
 
+      {/* Meal-building tools: secondary to the chat on Today, so they start folded. Drafts they create show below either way. */}
+      <details className="group space-y-5 rounded-[20px] border border-mf-glass-border bg-white/[0.02]">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-[20px] px-4 text-sm font-bold text-mf-glass-text-secondary hover:text-mf-glass-text focus-visible:outline-none! focus-visible:ring-2 focus-visible:ring-mf-glass-brand [&::-webkit-details-marker]:hidden">
+          <span>Meal ideas &amp; cravings<span className="ml-2 font-normal text-mf-glass-text-muted">build a meal, makeover a craving, use what you have</span></span>
+          <ChevronDown className="size-4 shrink-0 transition group-open:rotate-180" aria-hidden="true" />
+        </summary>
+      <div className="space-y-5 px-3 pb-3 sm:px-4 sm:pb-4">
       <div className="grid gap-5 lg:grid-cols-2">
         {/* BUILD MY NEXT MEAL */}
         <div className={card}>
@@ -472,6 +487,8 @@ export function NutritionCoachPanel() {
           </ul>
         </div>
       ) : null}
+      </div>
+      </details>
 
       {/* ACTIVE MEAL DRAFT */}
       {draft && draftInBackground ? (

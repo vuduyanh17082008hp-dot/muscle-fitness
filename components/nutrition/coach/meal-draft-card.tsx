@@ -82,7 +82,8 @@ export function MealDraftCard({ draft, proposal, skippedSuggestions, blockedIngr
         </div>
       ) : null}
 
-      <div className="mt-4 overflow-x-auto">
+      {/* relative: contains the sr-only header so it scrolls with the table instead of widening the page at 320px. */}
+      <div className="relative mt-4 overflow-x-auto">
         <table className="w-full min-w-[320px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-mf-glass-border text-left text-[11px] uppercase tracking-[0.14em] text-mf-glass-text-muted">

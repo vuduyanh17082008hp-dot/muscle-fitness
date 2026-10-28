@@ -46,7 +46,19 @@ function moduleDefs(viewModel: MotionHomepageViewModel): ModuleDef[] {
 
 function moduleList(viewModel: MotionHomepageViewModel): Module[] {
   const { routes } = viewModel;
-  const hrefs: Record<string, string> = {
+  // Anonymous visitors explore the landing chapter for each system;
+  // signed-in athletes jump into the live app surface.
+  const explore: Record<string, string> = {
+    recovery: "#recovery",
+    muscle: "#muscle",
+    training: "#training",
+    adapt: "#adapt",
+    progress: "#signal",
+    dante: "#dante",
+    checkin: "#recovery",
+    nutrition: "#nutrition",
+  };
+  const hrefs: Record<string, string> = viewModel.mode === "anonymous" ? explore : {
     recovery: routes.recovery,
     muscle: routes.muscleIntelligence,
     training: routes.training,
@@ -87,8 +99,10 @@ export function Ecosystem({ viewModel }: { viewModel: MotionHomepageViewModel })
   const modules = moduleList(viewModel);
 
   return (
+    <>
+    {/* Below lg the orbit is a compact core; the satellites become the in-flow telemetry grid underneath. */}
     <div
-      className={`ecosystem ${coreStyles.ecosystemRoot} relative mx-auto flex aspect-square w-full max-w-[320px] sm:max-w-[400px] md:max-w-[500px] lg:max-w-[580px] xl:max-w-[640px] items-center justify-center`}
+      className={`ecosystem ${coreStyles.ecosystemRoot} relative mx-auto flex aspect-square w-full max-w-[200px] sm:max-w-[280px] lg:max-w-[580px] xl:max-w-[640px] items-center justify-center`}
       data-ecosystem-root
     >
       {/* SVG CONNECTORS, SINGLE ORBIT CIRCLE & ENERGY PULSES LAYER */}
@@ -127,7 +141,7 @@ export function Ecosystem({ viewModel }: { viewModel: MotionHomepageViewModel })
             const isActive = active === mod.id;
 
             return (
-              <g key={mod.id} className={mod.tier === "secondary" ? "hidden lg:block" : ""}>
+              <g key={mod.id}>
                 {/* Radial Connector Line */}
                 <line
                   x1={0}
@@ -167,7 +181,7 @@ export function Ecosystem({ viewModel }: { viewModel: MotionHomepageViewModel })
 
       {/* SATELLITE NODES HTML LAYER (Unified Orbit + True Counter-Rotation) */}
       <div
-        className={`absolute inset-0 pointer-events-none ${reducedMotion ? "" : coreStyles.unifiedTrack}`}
+        className={`absolute inset-0 hidden pointer-events-none lg:block ${reducedMotion ? "" : coreStyles.unifiedTrack}`}
       >
         {modules.map((mod) => {
           const isActive = active === mod.id;
@@ -200,9 +214,7 @@ export function Ecosystem({ viewModel }: { viewModel: MotionHomepageViewModel })
                       onFocus={() => setActive(mod.id)}
                       onBlur={() => setActive((cur) => (cur === mod.id ? null : cur))}
                       data-ecosystem-node
-                      className={`ecosystem-node relative block w-[88px] sm:w-[96px] -translate-x-1/2 -translate-y-1/2 rounded-xl border px-2 py-1.5 text-left ${
-                        mod.tier === "secondary" ? "hidden lg:block" : ""
-                      }`}
+                      className="ecosystem-node relative block w-[96px] -translate-x-1/2 -translate-y-1/2 rounded-xl border px-2 py-1.5 text-left"
                       style={{
                         borderColor: isActive ? `var(${mod.accentVar})` : "rgba(255,255,255,0.14)",
                         background: isActive
@@ -250,12 +262,39 @@ export function Ecosystem({ viewModel }: { viewModel: MotionHomepageViewModel })
         })}
       </div>
 
-      {/* Mobile Restrained Explanatory Cue */}
-      <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-center lg:hidden">
-        <span className="rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[var(--mf-pub-text-muted)] backdrop-blur-md">
-          {viewModel.mode === "anonymous" ? "Illustrative system preview" : "Your connected systems"}
-        </span>
-      </div>
     </div>
+
+    <div className="mt-5 lg:hidden">
+      <p className="text-center text-[10px] font-black uppercase tracking-[0.18em] text-[var(--mf-pub-text-muted)]">
+        {viewModel.mode === "anonymous" ? "Illustrative system preview" : "Your connected systems"}
+      </p>
+      <ul className="mt-4 grid grid-cols-2 gap-2.5 min-[540px]:grid-cols-4">
+        {modules.map((mod) => (
+          <li key={mod.id}>
+            <Link
+              href={mod.href}
+              className="relative flex h-full min-h-[56px] flex-col justify-center rounded-xl border border-white/[0.14] bg-[rgba(5,5,5,0.65)] py-2 pl-3.5 pr-2 transition-colors hover:border-white/30 focus-visible:border-white/30"
+            >
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-[22%] left-0 w-[2.5px] rounded-full"
+                style={{ background: `var(${mod.accentVar})` }}
+              />
+              <span className="text-[10px] font-black uppercase leading-none tracking-[0.1em] text-[var(--mf-pub-text-muted)]">
+                {mod.label}
+              </span>
+              <span className="mt-1 truncate text-sm font-bold leading-tight text-[var(--mf-pub-text)]">{mod.value}</span>
+              <span
+                className="mt-1 text-[10px] font-black uppercase leading-none tracking-[0.1em]"
+                style={{ color: `var(${mod.accentVar})` }}
+              >
+                {mod.status}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+    </>
   );
 }

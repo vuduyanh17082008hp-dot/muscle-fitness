@@ -46,7 +46,7 @@ export function PasswordField({
           autoComplete={autoComplete}
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
-          className="h-13 min-h-13 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 pr-12 text-sm text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-orange-400/60 focus:bg-white/[0.05] focus:ring-4 focus:ring-orange-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-13 min-h-13 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 pr-12 text-sm text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-mf-brand/60 focus:bg-white/[0.05] focus:ring-4 focus:ring-mf-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
         />
 
         <button

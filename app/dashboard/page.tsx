@@ -7,8 +7,8 @@ import { loadReadinessForUser } from "@/lib/dante-core/server/load-readiness-for
 import { getOrBuildDailyIntelligence, type DailyIntelligence } from "@/lib/dante-core/daily-intelligence";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import type { AthleteState } from "@/lib/athlete-state/types";
-import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-session";
-import { buildDailyDecision, type DailyDecision } from "@/lib/dante-core/daily-decision-engine";
+import { loadTodaySessionRead, localDateTimeParts } from "@/lib/training/load-today-session";
+import { resolveDailyDecision } from "@/lib/dante-core/server/load-daily-decision";
 
 
 import { loadRecentWorkoutSessions } from "@/lib/dashboard/load-recent-workout-sessions";
@@ -16,7 +16,7 @@ import { loadWeeklyNutritionTotals } from "@/lib/dashboard/load-weekly-nutrition
 import { buildMuscleIntelligence } from "@/lib/dashboard/muscle-intelligence";
 import { buildRecentActivity } from "@/lib/dashboard/recent-activity";
 import { buildProgressSnapshot } from "@/lib/dashboard/progress-snapshot";
-import type { TraceableDecision } from "@/lib/dante-core/types";
+import { todayWorkoutItem } from "@/lib/dashboard/today-workout-item";
 
 import { DashboardHeader } from "@/components/dashboard/glass/dashboard-header";
 import { DailyActionHero } from "@/components/dashboard/daily-action-hero";
@@ -137,7 +137,7 @@ export default async function DashboardPage() {
     getOrBuildDailyIntelligence(supabase, user.id),
     loadNutritionContext(supabase, user.id),
     loadFoodLogForDate(supabase, user.id, localDate),
-    loadTodaySession(supabase, user.id, now, timeZone),
+    loadTodaySessionRead(supabase, user.id, now, timeZone),
     buildAthleteState(supabase, user.id, { now }),
     loadRecentWorkoutSessions(supabase, user.id, 5),
     loadWeeklyNutritionTotals(supabase, user.id, now, timeZone, 7),
@@ -153,7 +153,7 @@ export default async function DashboardPage() {
     totals: null,
     unavailable: true as const,
   };
-  const todaySession = unwrap(todaySessionResult, "loadTodaySession");
+  const todaySessionRead = unwrap(todaySessionResult, "loadTodaySession");
   const plannedDay = unwrap(plannedDayResult, "loadPlannedDay");
   const athleteState: AthleteState | null = unwrap(athleteStateResult, "buildAthleteState");
   const recentWorkoutSessions = unwrap(recentWorkoutSessionsResult, "loadRecentWorkoutSessions") ?? [];
@@ -177,11 +177,15 @@ export default async function DashboardPage() {
      guessing when either failed to load.
   ======================================================= */
 
-  let dailyDecision: TraceableDecision<DailyDecision> | null = null;
-
-  if (athleteState && trainingContext) {
-    dailyDecision = buildDailyDecision(athleteState, trainingContext, todaySession).decision;
-  }
+  // Same reads, same classification the Daily Brief decision uses, so the hero and "What matters" never disagree with it.
+  // The Brief's safety decision (hold) governs them: no Start/Resume prompt while it holds training.
+  const { todaySession, todaySessionStatus, dailyDecision, hold } = resolveDailyDecision({
+    todaySessionRead,
+    plannedDay,
+    planUnavailable: plannedDayResult.status === "rejected",
+    athleteState,
+    trainingContext,
+  });
 
 
 
@@ -237,15 +241,8 @@ export default async function DashboardPage() {
 
   const whatMattersItems: WhatMattersItem[] = [];
 
-  if (todaySession && todaySession.sessionState !== "completed") {
-    whatMattersItems.push({
-      id: "pending-session",
-      title: "Today's workout is pending",
-      subtitle: `${todaySession.name || "Scheduled Session"} (${todaySession.exercises.length} exercises)`,
-      href: `/dashboard/workouts/session/${todaySession.id}`,
-      urgency: "high",
-    });
-  }
+  const workoutItem = todayWorkoutItem(todaySession, todaySessionStatus, hold);
+  if (workoutItem) whatMattersItems.push(workoutItem);
 
   if (nutritionTargets?.protein && foodLog.totals) {
     const proteinRemaining = Math.max(0, nutritionTargets.protein - Math.round(foodLog.totals.protein));
@@ -260,7 +257,16 @@ export default async function DashboardPage() {
     }
   }
 
-  if (!recoveryContext?.today) {
+  // A failed check-in read is unknown, not "no check-in": say it couldn't be loaded (the hold already covers training).
+  if (recoveryContext?.checkinsUnavailable) {
+    whatMattersItems.push({
+      id: "recovery-checkin-unavailable",
+      title: "Recovery check-in couldn't be loaded",
+      subtitle: "No score is assumed — check Recovery before training",
+      href: "/dashboard/recovery",
+      urgency: "high",
+    });
+  } else if (!recoveryContext?.today) {
     whatMattersItems.push({
       id: "recovery-checkin",
       title: "Recovery check-in needed",
@@ -295,7 +301,7 @@ export default async function DashboardPage() {
       ) : (
         <div className="mt-5 flex flex-col gap-5 sm:mt-6 sm:gap-6">
           {/* 1. Daily Action Hero (Dominant Above-The-Fold Action) */}
-          <DailyActionHero todaySession={todaySession} plannedDay={plannedDay} hasCheckinToday={Boolean(recoveryContext?.today)} />
+          <DailyActionHero todaySession={todaySession} sessionStatus={todaySessionStatus} plannedDay={plannedDay} hold={hold} hasCheckinToday={Boolean(recoveryContext?.today)} />
 
           {/* 2. Athlete State Strip (Compact Horizontal Row) */}
           <FoodLogFreshnessNotice userId={user.id} logDate={localDate} />
@@ -310,7 +316,7 @@ export default async function DashboardPage() {
           />
 
           {/* 3. What Matters Now (Max 1-3 deterministic priorities) */}
-          <WhatMattersNow items={whatMattersItems} />
+          <WhatMattersNow items={whatMattersItems} hold={hold} statusUnknown={todaySessionStatus === "unknown"} />
 
           {/* 4. Core Intelligence Grid: Nutrition Opportunity + Dante Daily Brief */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

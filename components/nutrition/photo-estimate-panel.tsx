@@ -36,6 +36,7 @@ export type DetectedItem = {
   groundedFood: NormalizedFood | null
   candidates?: NormalizedFood[]
   searchStatus?: FoodSearchStatus
+  searchPartial?: boolean
   fromTemplate?: boolean
   optional?: boolean
   noAddedOil?: boolean
@@ -580,7 +581,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
           <ul className="space-y-3">
             {items.map((item, index) => {
               const food = selectedFood(item)
-              const flags = food ? reviewFoodMatch(item.detectedName, food, item.searchStatus) : []
+              const flags = food ? reviewFoodMatch(item.detectedName, food, item.searchStatus, item.searchPartial) : []
               const eaten = food ? sumMacros([{ per100g: food.per100g, grams: eatenGrams(item.grams, item.eatenPercent) }]) : null
               const provenance = nutrientProvenance(food)
               return (
@@ -738,7 +739,11 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
                       ) : null}
                     </div>
                   ) : (
-                    <p className="mt-2 text-xs text-amber-300">No database match, so no nutrients are assumed for this item.</p>
+                    <p className="mt-2 text-xs text-amber-300">
+                      {item.searchStatus === "provider_timeout" || item.searchStatus === "provider_error"
+                        ? "The food databases didn't respond, so this item couldn't be matched. No nutrients are assumed for it."
+                        : "No database match, so no nutrients are assumed for this item."}
+                    </p>
                   )}
 
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">

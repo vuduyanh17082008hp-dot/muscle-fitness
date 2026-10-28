@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+// These tests exercise provider truth inside the route; the auth + rate-limit gate (QA-05) is tested separately.
+vi.mock("@/lib/nutrition/food-data/lookup-guard", () => ({ guardFoodLookup: async () => null }))
+
 import { getProductByBarcodeWithStatus } from "../open-food-facts"
 import { lookupBarcode, searchFood } from "../index"
 import { GET as barcodeRoute } from "@/app/api/nutrition/foods/barcode/route"
@@ -130,7 +133,7 @@ describe("searchFood cascade status", () => {
 
     const result = await searchFood("kaya toast zzqx")
     expect(result).toMatchObject({ status: "results", source: "open-food-facts", usedFallback: false })
-    expect(result.warning).toMatch(/USDA didn't respond/)
+    expect(result.warning).toMatch(/USDA was unavailable/)
   })
 
   it("USDA has results → results, no warning", async () => {

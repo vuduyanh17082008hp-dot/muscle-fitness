@@ -72,7 +72,7 @@ export function HeroScene({ viewModel }: { viewModel: MotionHomepageViewModel })
         <div className="absolute right-1/4 bottom-1/4 size-[600px] rounded-full bg-violet-600/5 blur-[140px]" />
       </div>
 
-      <div className="relative mx-auto grid w-full max-w-7xl items-center gap-14 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 xl:gap-24">
+      <div className="relative mx-auto grid w-full max-w-7xl items-center gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 xl:gap-24">
         <div className="hero-copy">
           <div className="hero-line mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--mf-brand-border)] bg-[var(--mf-brand-soft)] px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--mf-brand)]">
             <span className="size-1.5 rounded-full bg-[var(--mf-brand)]" />

@@ -6,42 +6,54 @@ import styles from "@/components/experience/motion-home/styles/motion-home.modul
 
 const TRAIL_COUNT = 8;
 const RING_DAMPING = 0.18;
-const DOT_DAMPING = 0.55;
 const TRAIL_DAMPING = 0.28;
 
 const HOVER_SELECTOR = "a, button, [data-cursor-hover], [data-ecosystem-node]";
 
 /**
- * Desktop-only enhancement (fine pointer + hover-capable + no reduced
- * motion — spec #93). Normal cursor is only hidden once all three hold,
- * and everything runs off a single RAF loop (spec #57: one loop, not one
- * per particle).
+ * Desktop-only decorative halo (fine pointer + hover-capable + no reduced
+ * motion — spec #93) that trails the native cursor. The OS cursor is never
+ * hidden, so text/pointer/disabled affordances and tracking latency stay
+ * native. Everything runs off a single RAF loop (spec #57: one loop, not
+ * one per particle).
  */
 export function CustomCursor() {
   const { reducedMotion, finePointer } = useMotionCapabilities();
+  const rootRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
-  const dotRef = useRef<HTMLDivElement>(null);
   const trailRefs = useRef<Array<HTMLDivElement | null>>([]);
   const active = !reducedMotion && finePointer;
 
   useEffect(() => {
     if (!active) return;
 
-    const previousCursor = document.body.style.cursor;
-    document.body.style.cursor = "none";
-
-    const pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    const ring = { x: pointer.x, y: pointer.y };
-    const dot = { x: pointer.x, y: pointer.y };
-    const trail = Array.from({ length: TRAIL_COUNT }, () => ({ x: pointer.x, y: pointer.y }));
+    const pointer = { x: 0, y: 0 };
+    const ring = { x: 0, y: 0 };
+    const trail = Array.from({ length: TRAIL_COUNT }, () => ({ x: 0, y: 0 }));
 
     let rafId = 0;
     let hovering = false;
     let pressed = false;
+    let visible = false;
+
+    // Hidden until the pointer is in the window, so no halo parks mid-screen or at the exit edge.
+    const setVisible = (next: boolean) => {
+      visible = next;
+      if (rootRef.current) rootRef.current.style.opacity = next ? "1" : "0";
+    };
 
     const onPointerMove = (event: PointerEvent) => {
       pointer.x = event.clientX;
       pointer.y = event.clientY;
+      if (!visible) {
+        ring.x = pointer.x;
+        ring.y = pointer.y;
+        trail.forEach((particle) => {
+          particle.x = pointer.x;
+          particle.y = pointer.y;
+        });
+        setVisible(true);
+      }
 
       const target = event.target as Element | null;
       hovering = Boolean(target?.closest(HOVER_SELECTOR));
@@ -53,16 +65,18 @@ export function CustomCursor() {
     const onPointerUp = () => {
       pressed = false;
     };
+    const onPointerOut = (event: PointerEvent) => {
+      if (!event.relatedTarget) setVisible(false);
+    };
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointerout", onPointerOut);
 
     const tick = () => {
       ring.x += (pointer.x - ring.x) * RING_DAMPING;
       ring.y += (pointer.y - ring.y) * RING_DAMPING;
-      dot.x += (pointer.x - dot.x) * DOT_DAMPING;
-      dot.y += (pointer.y - dot.y) * DOT_DAMPING;
 
       let prevX = pointer.x;
       let prevY = pointer.y;
@@ -86,10 +100,6 @@ export function CustomCursor() {
           : "rgba(200, 245, 39, 0.4)";
       }
 
-      if (dotRef.current) {
-        dotRef.current.style.transform = `translate3d(${dot.x}px, ${dot.y}px, 0) translate(-50%, -50%)`;
-      }
-
       rafId = requestAnimationFrame(tick);
     };
 
@@ -100,14 +110,14 @@ export function CustomCursor() {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointerup", onPointerUp);
-      document.body.style.cursor = previousCursor;
+      document.removeEventListener("pointerout", onPointerOut);
     };
   }, [active]);
 
   if (!active) return null;
 
   return (
-    <div aria-hidden="true" className={styles.cursorRoot}>
+    <div ref={rootRef} aria-hidden="true" className={styles.cursorRoot} style={{ opacity: 0 }}>
       {Array.from({ length: TRAIL_COUNT }).map((_, index) => (
         <div
           key={index}
@@ -122,7 +132,6 @@ export function CustomCursor() {
           }}
         />
       ))}
-      <div ref={dotRef} className={styles.cursorDot} />
       <div ref={ringRef} className={styles.cursorRing} />
     </div>
   );

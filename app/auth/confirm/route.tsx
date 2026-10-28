@@ -4,6 +4,7 @@ import {
   type NextRequest,
 } from "next/server"
 
+import { getSupabaseEnvironment } from "@/lib/supabase/env"
 import { createClient } from "@/lib/supabase/server"
 
 export async function GET(
@@ -28,6 +29,32 @@ export async function GET(
     )
   }
 
+  /*
+   * A token_hash recovery link (custom email template) is handed back to
+   * GoTrue's verify endpoint so it finishes as a PKCE exchange in
+   * /auth/callback: verifyOtp here would record amr "otp", which cannot
+   * be told apart from an OTP login, and /reset-password requires
+   * "recovery".
+   */
+  if (rawType === "recovery") {
+    const verifyUrl = new URL(
+      "/auth/v1/verify",
+      getSupabaseEnvironment().url
+    )
+
+    verifyUrl.searchParams.set("token", tokenHash)
+    verifyUrl.searchParams.set("type", "recovery")
+    verifyUrl.searchParams.set(
+      "redirect_to",
+      new URL(
+        "/auth/callback?next=/reset-password",
+        request.url
+      ).toString()
+    )
+
+    return NextResponse.redirect(verifyUrl)
+  }
+
   const supabase = await createClient()
 
   const { error } =
@@ -39,18 +66,7 @@ export async function GET(
   if (error) {
     return redirectToError(
       request,
-      rawType === "recovery"
-        ? "expired-recovery-link"
-        : "expired-confirmation-link"
-    )
-  }
-
-  /*
-   * Recovery cần giữ session để update password.
-   */
-  if (rawType === "recovery") {
-    return NextResponse.redirect(
-      new URL("/reset-password", request.url)
+      "expired-confirmation-link"
     )
   }
 

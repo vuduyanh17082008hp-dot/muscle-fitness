@@ -1,8 +1,10 @@
 import type { AthleteState } from "@/lib/athlete-state/types";
 import type { TrainingContext } from "@/lib/training/load-training-context";
 import type { TodaySession } from "@/lib/training/load-today-session";
+import type { PlannedDay } from "@/lib/training/planned-day";
 import type { ConfidenceLevel, TraceableDecision } from "@/lib/dante-core/types";
 import type { MuscleRecoveryMapEntry } from "@/lib/dante-core/muscle-recovery-map";
+import { sessionStateToActionStatus } from "@/lib/daily-plan/types";
 import {
   buildProposedActionId,
   type DanteProposedAction,
@@ -28,7 +30,15 @@ export type DailyDecisionCode =
   | "no_session_scheduled"
   | "insufficient_data"
   | "modify_session"
-  | "proceed_as_planned";
+  | "proceed_as_planned"
+  /** Today's session is already finished — never suggest doing it (again). */
+  | "session_completed"
+  /** Today's session was cancelled, or every exercise in it was postponed. */
+  | "session_postponed"
+  /** The session record could not be read, its state is not one we know, or it conflicts with the plan: no training directive. */
+  | "session_state_unknown"
+  /** Today's pain/illness check-in couldn't be read: no clearance to train is assumed, so no training directive. */
+  | "safety_state_unknown";
 
 export type DailyDecisionAffectedExercise = {
   sessionExerciseId: string;
@@ -103,10 +113,79 @@ function buildRecoveryActionForPainFlag(): DanteProposedAction {
   };
 }
 
+/** workout_sessions.session_state values the app writes; anything else is an unknown record, not a plan. */
+const KNOWN_SESSION_STATES = new Set([null, "not_started", "in_progress", "paused", "completed", "cancelled"]);
+
+/** "conflict" = a not-started session on a day the active plan calls REST: nothing records an intentional reschedule, so neither wins. */
+export type TodaySessionStatus = "none" | "unknown" | "completed" | "postponed" | "active" | "planned" | "conflict";
+
+/**
+ * What is known about today's workout. A session row always wins. With no row, the active plan's day decides (loadPlannedDay):
+ * a plan day is not materialized until it is started, so "no row" alone is not "no workout" (F-03B). `planUnavailable` = the
+ * plan read failed, which is unknown, never absence. Omitted plan fields = the caller reads sessions only.
+ */
+export type TodayWorkoutReads = { sessionUnavailable?: boolean; plannedDay?: PlannedDay | null; planUnavailable?: boolean };
+
+const isPlannedWorkout = (plannedDay: PlannedDay | null | undefined): plannedDay is Extract<PlannedDay, { dayId: string }> =>
+  Boolean(plannedDay && plannedDay.kind !== "REST");
+
+/**
+ * The one reading of today's session state. buildDailyDecision (Daily Brief) and the dashboard's
+ * session prompts both go through it, so no surface offers a workout the Brief calls done or postponed.
+ */
+export function classifyTodaySession(
+  todaySession: TodaySession | null,
+  options: TodayWorkoutReads = {},
+): TodaySessionStatus {
+  if (options.sessionUnavailable) return "unknown";
+  if (!todaySession) return options.planUnavailable ? "unknown" : isPlannedWorkout(options.plannedDay) ? "planned" : "none";
+  if (!KNOWN_SESSION_STATES.has(todaySession.sessionState) || todaySession.exercisesUnavailable) return "unknown";
+  const state = sessionStateToActionStatus(todaySession.sessionState);
+  if (state === "completed") return "completed";
+  const allPostponed = todaySession.exercises.length > 0 && todaySession.exercises.every((ex) => ex.isSkipped);
+  if (state === "skipped" || allPostponed) return "postponed";
+  if (state === "active") return "active";
+  // Started, finished or cancelled sessions are the user's own act and govern. An untouched one is checked against the plan:
+  // vs REST it is unresolved (no record marks a reschedule), and an unreadable plan can't rule that out.
+  if (options.planUnavailable) return "unknown";
+  return options.plannedDay?.kind === "REST" ? "conflict" : "planned";
+}
+
+/**
+ * Whether the Daily Brief's decision holds today's training CTAs (Start/Resume) on the dashboard: pain/illness → "recovery";
+ * no decision, or an unreadable check-in → "unverified" (no clearance is invented). Informational links stay available.
+ */
+export function trainingHold(decision: DailyDecision | null): "recovery" | "unverified" | null {
+  if (!decision || decision.decisionCode === "safety_state_unknown") return "unverified";
+  return decision.decisionCode === "prioritize_recovery" ? "recovery" : null;
+}
+
+function sessionOnlyDecision(
+  decisionCode: DailyDecisionCode,
+  sessionId: string | null,
+  recommendation: string,
+  why: string,
+  dataUsed: Record<string, string | number | null>,
+): { decision: TraceableDecision<DailyDecision>; proposedActions: DanteProposedAction[] } {
+  return {
+    decision: {
+      recommendation,
+      decision: { decisionCode, sessionId, affectedExercises: [], warnings: [] },
+      why: [why],
+      dataUsed,
+      confidence: decisionCode === "session_state_unknown" || decisionCode === "safety_state_unknown" ? "low" : "high",
+      sources: [],
+    },
+    proposedActions: [],
+  };
+}
+
 export function buildDailyDecision(
   athleteState: AthleteState,
   trainingContext: TrainingContext,
   todaySession: TodaySession | null,
+  /** The session read failed (loadTodaySessionRead UNAVAILABLE): `todaySession: null` then means "unknown", not "none". */
+  options: TodayWorkoutReads = {},
 ): { decision: TraceableDecision<DailyDecision>; proposedActions: DanteProposedAction[] } {
   const dataUsed: Record<string, string | number | null> = {
     readinessScore: athleteState.recovery.score,
@@ -136,6 +215,102 @@ export function buildDailyDecision(
       },
       proposedActions: [buildRecoveryActionForPainFlag()],
     };
+  }
+
+  if (athleteState.recovery.painFlagUnavailable) {
+    return sessionOnlyDecision(
+      "safety_state_unknown",
+      todaySession?.id ?? null,
+      "Today's recovery check-in couldn't be loaded — check Recovery for pain or illness before you train.",
+      "The pain/illness check-in read failed, so Dante can't confirm it's safe to train and gives no training directive.",
+      dataUsed,
+    );
+  }
+
+  // ---- Canonical workout state (lib/daily-plan/types.ts) gates any session directive. ----
+  if (options.sessionUnavailable) {
+    return sessionOnlyDecision(
+      "session_state_unknown",
+      null,
+      "Today's workout status couldn't be loaded — check Training before you start.",
+      "The workout session read failed, so Dante can't tell whether a session is planned, in progress or done.",
+      dataUsed,
+    );
+  }
+
+  if (todaySession) {
+    dataUsed.sessionState = todaySession.sessionState;
+    const status = classifyTodaySession(todaySession, options);
+
+    if (status === "conflict") {
+      return sessionOnlyDecision(
+        "session_state_unknown",
+        todaySession.id,
+        "Workout schedule needs review — your plan has today as a rest day, but a workout session is also scheduled. Check Training before you start.",
+        `${todaySession.name ?? "Today's session"} is scheduled today and not started, while your active plan has no training day today; nothing records it as an intentional reschedule.`,
+        dataUsed,
+      );
+    }
+
+    if (status === "unknown") {
+      return sessionOnlyDecision(
+        "session_state_unknown",
+        todaySession.id,
+        "Today's workout status couldn't be confirmed — check Training before you start.",
+        !KNOWN_SESSION_STATES.has(todaySession.sessionState)
+          ? `Today's session has an unrecognised state ("${todaySession.sessionState}").`
+          : todaySession.exercisesUnavailable
+            ? "Today's session exercises couldn't be loaded."
+            : "Your workout plan couldn't be read, so Dante can't check today's not-started session against it.",
+        dataUsed,
+      );
+    }
+
+    if (status === "completed") {
+      return sessionOnlyDecision(
+        "session_completed",
+        todaySession.id,
+        "Today's session is already done — focus on recovery and nutrition; there's nothing left to train today.",
+        `${todaySession.name ?? "Today's session"} is marked completed.`,
+        dataUsed,
+      );
+    }
+
+    if (status === "postponed") {
+      return sessionOnlyDecision(
+        "session_postponed",
+        todaySession.id,
+        "Today's session is postponed — treat today as a rest day.",
+        todaySession.sessionState === "cancelled"
+          ? `${todaySession.name ?? "Today's session"} was cancelled.`
+          : `Every exercise in ${todaySession.name ?? "today's session"} was postponed.`,
+        dataUsed,
+      );
+    }
+  }
+
+  if (!todaySession && options.planUnavailable) {
+    return sessionOnlyDecision(
+      "session_state_unknown",
+      null,
+      "Today's workout status couldn't be loaded — check Training before you start.",
+      "Your workout plan couldn't be read, so Dante can't tell whether a workout is planned today.",
+      dataUsed,
+    );
+  }
+
+  // A plan day with no session row yet (it is created when started): the planned workout, not "nothing scheduled". There are
+  // no session exercises to assess, so no recovery-based directive — the same "not enough data" code a session would get.
+  if (!todaySession && isPlannedWorkout(options.plannedDay)) {
+    const day = options.plannedDay;
+    dataUsed.plannedDay = day.kind;
+    return sessionOnlyDecision(
+      "insufficient_data",
+      null,
+      `${day.kind === "SCHEDULED" ? "Today's planned workout is" : "Next in your plan is"} ${day.name} (${day.exerciseCount} exercises) — not started yet. Start it when you're ready, using your own judgment on effort.`,
+      `${day.name} is ${day.kind === "SCHEDULED" ? "scheduled for today" : "the next day in your plan's rotation"}; it has no session yet, so its exercises haven't been checked against your muscle recovery.`,
+      dataUsed,
+    );
   }
 
   if (!todaySession) {
@@ -269,14 +444,18 @@ export function buildDailyDecision(
         ? " Readiness is moderate today, so consider trimming optional volume."
         : "";
 
+  // An in-progress session is continued, never "started" again.
+  const inProgress = sessionStateToActionStatus(todaySession.sessionState) === "active";
   const recommendation =
     decisionCode === "modify_session"
       ? `Adjust today's session — ${affectedExercises.map((e) => e.exerciseName).join(", ")} need attention.`
       : decisionCode === "insufficient_data"
-        ? `Not enough training history yet to give a confident recommendation — proceed with today's planned session using your own judgment on effort.${readinessCaveat}`
+        ? `Not enough training history yet to give a confident recommendation — ${inProgress ? "continue your session in progress" : "proceed with today's planned session"} using your own judgment on effort.${readinessCaveat}`
         : lowReadiness
           ? `No planned exercise is flagged by muscle recovery.${readinessCaveat}`
-          : "Proceed with today's session as planned.";
+          : inProgress
+            ? "Continue today's session in progress as planned."
+            : "Proceed with today's session as planned.";
 
   if (lowReadiness) {
     why.push(

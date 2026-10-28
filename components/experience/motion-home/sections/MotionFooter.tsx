@@ -8,10 +8,11 @@ export function MotionFooter({ routes }: { routes: HomepageRoutes }) {
     {
       heading: "Product",
       links: [
-        { label: "Training", href: routes.training },
-        { label: "Nutrition", href: routes.nutrition },
-        { label: "Recovery", href: routes.recovery },
-        { label: "Dante", href: routes.chatbot },
+        // Product = this page's chapters; Account opens the app.
+        { label: "Training", href: "#training" },
+        { label: "Nutrition", href: "#nutrition" },
+        { label: "Recovery", href: "#recovery" },
+        { label: "Dante", href: "#dante" },
       ],
     },
     {
@@ -36,14 +37,14 @@ export function MotionFooter({ routes }: { routes: HomepageRoutes }) {
       <div className="mx-auto grid max-w-7xl gap-10 sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_1fr_1fr]">
         <div>
           <Logo tagline="AI-powered personal training" />
-          <p className="mt-5 max-w-xs text-sm leading-6 text-zinc-500">
+          <p className="mt-5 max-w-xs text-sm leading-6 text-zinc-400">
             One profile. One system. One coach.
           </p>
         </div>
 
         {columns.map((column) => (
           <div key={column.heading}>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">{column.heading}</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">{column.heading}</p>
             <ul className="mt-4 space-y-2.5">
               {column.links.map((link) => (
                 <li key={link.label}>
@@ -60,7 +61,7 @@ export function MotionFooter({ routes }: { routes: HomepageRoutes }) {
         ))}
       </div>
 
-      <div className="mx-auto mt-12 max-w-7xl border-t border-white/5 pt-6 text-sm text-zinc-600">
+      <div className="mx-auto mt-12 max-w-7xl border-t border-white/5 pt-6 text-sm text-zinc-400">
         <p>© {new Date().getFullYear()} Muscle Fitness.</p>
       </div>
     </footer>

@@ -88,7 +88,7 @@ export function MuscleReadinessPanel() {
       <div className="flex items-center gap-2">
         <Activity className="size-4 text-mf-glass-dante" aria-hidden="true" />
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
-          Dante Core — Readiness
+          Per-muscle readiness · training-load estimate
         </p>
       </div>
 

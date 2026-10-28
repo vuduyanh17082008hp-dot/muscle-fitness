@@ -20,14 +20,14 @@ export function getFriendlyAuthError(
     code === "invalid_credentials" ||
     message.includes("invalid login credentials")
   ) {
-    return "Email hoặc mật khẩu không chính xác."
+    return "Incorrect email or password."
   }
 
   if (
     code === "email_not_confirmed" ||
     message.includes("email not confirmed")
   ) {
-    return "Bạn cần xác nhận email trước khi đăng nhập."
+    return "Please confirm your email before logging in."
   }
 
   if (
@@ -35,7 +35,7 @@ export function getFriendlyAuthError(
     message.includes("already registered") ||
     message.includes("already been registered")
   ) {
-    return "Email này đã được đăng ký."
+    return "This email is already registered."
   }
 
   if (
@@ -43,28 +43,28 @@ export function getFriendlyAuthError(
     message.includes("password should be") ||
     message.includes("weak password")
   ) {
-    return "Mật khẩu chưa đủ mạnh. Hãy sử dụng ít nhất 8 ký tự."
+    return "Password is too weak. Use at least 8 characters."
   }
 
   if (
     code === "over_email_send_rate_limit" ||
     message.includes("email rate limit")
   ) {
-    return "Bạn đã gửi quá nhiều email. Hãy thử lại sau."
+    return "Too many emails sent. Please try again later."
   }
 
   if (
     code === "same_password" ||
     message.includes("same password")
   ) {
-    return "Mật khẩu mới phải khác mật khẩu hiện tại."
+    return "Your new password must be different from your current one."
   }
 
   if (
     message.includes("expired") ||
     message.includes("invalid token")
   ) {
-    return "Liên kết không hợp lệ hoặc đã hết hạn."
+    return "This link is invalid or has expired."
   }
 
   if (
@@ -72,16 +72,16 @@ export function getFriendlyAuthError(
     message.includes("fetch failed") ||
     message.includes("network")
   ) {
-    return "Không thể kết nối tới máy chủ. Hãy kiểm tra Internet."
+    return "Can't reach the server. Check your internet connection and try again."
   }
 
   if (message.includes("email is required")) {
-    return "Vui lòng nhập email."
+    return "Please enter your email address."
   }
 
   if (message.includes("password is required")) {
-    return "Vui lòng nhập mật khẩu."
+    return "Please enter your password."
   }
 
-  return "Không thể hoàn tất yêu cầu. Vui lòng thử lại."
+  return "We couldn't complete your request. Please try again."
 }

@@ -788,7 +788,7 @@ export default async function WorkoutHistoryPage() {
 
         <Link
           href="/dashboard/workouts"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
+          className="-my-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-mf-glass-text-muted transition hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
 
@@ -1081,7 +1081,7 @@ function PersonalRecordCard({
 
         <Link
           href={`/dashboard/workouts/session/${record.sessionId}`}
-          className="mt-2 inline-flex text-xs font-bold text-orange-400 transition hover:text-orange-300"
+          className="mt-1 inline-flex min-h-11 items-center text-sm font-bold text-orange-400 transition hover:text-orange-300"
         >
           View session
         </Link>

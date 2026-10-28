@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import type { DanteTool } from "@/lib/dante-core/tools/types";
+import { currentTrainingHold, TRAINING_HOLD_MESSAGE } from "@/lib/dante-core/server/training-hold-guard";
 
 const inputSchema = z
   .object({
@@ -39,6 +40,10 @@ export const scheduleWorkoutTool: DanteTool<ScheduleWorkoutInput, ScheduleWorkou
 
   async execute(context, input) {
     const { supabase } = context;
+
+    // QA-01: re-checked at execution (confirm) time, the same canonical hold the Start button respects.
+    const hold = await currentTrainingHold(supabase, context.userId, context.now);
+    if (hold) return { ok: false, error: TRAINING_HOLD_MESSAGE[hold] };
 
     const { data: sessionId, error } = await supabase.rpc("start_workout", {
       p_workout_day_id: input.workoutDayId,

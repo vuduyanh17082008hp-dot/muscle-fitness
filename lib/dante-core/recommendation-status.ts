@@ -78,6 +78,10 @@ export function statusFromDailyDecisionCode(code: DailyDecisionCode): Recommenda
       return "caution";
     case "no_session_scheduled":
     case "insufficient_data":
+    case "session_completed":
+    case "session_postponed":
+    case "session_state_unknown":
+    case "safety_state_unknown":
       return null;
   }
 }

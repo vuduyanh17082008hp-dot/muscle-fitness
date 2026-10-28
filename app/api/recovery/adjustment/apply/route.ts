@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { createClient } from "@/lib/supabase/server"
 import { createRecoveryAdminClient } from "@/lib/supabase/admin"
+import { currentTrainingHold } from "@/lib/dante-core/server/training-hold-guard"
 import { applyErrorMessage, applyWorkoutAdjustment } from "@/lib/recovery/apply-proposal"
 import {
   createSupabaseCanonicalCommit,
@@ -52,6 +53,8 @@ export async function POST(request: Request) {
 
   const result = await applyWorkoutAdjustment({
     actorUserId: user.id,
+    // QA-02: safety is re-validated when the change is applied, not only when it was proposed.
+    trainingHold: await currentTrainingHold(supabase, user.id),
     proposalId: parsed.data.proposalId,
     sessions: createSupabaseSessionWriter(supabase),
     mutations: createSupabaseMutationStore(supabase),

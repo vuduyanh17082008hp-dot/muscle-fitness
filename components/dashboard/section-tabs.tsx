@@ -25,17 +25,20 @@ function readHash(): string {
   return window.location.hash;
 }
 
-function isTabActive(pathname: string, href: string, currentHash: string): boolean {
-  const [hrefPath, hrefHash] = href.split("#");
-
-  if (hrefHash) {
-    // Hash tabs only mark active after mount (currentHash tracked via
-    // hashchange) so server HTML and the client's first paint agree —
-    // both treat every hash tab as inactive until the listener runs.
-    return pathname === hrefPath && currentHash === `#${hrefHash}`;
+/**
+ * Exactly one active tab. Hash tabs on the current path: the one matching the hash, else the page's first section
+ * (landing with no hash is that section). Route tabs: the longest matching path, so /dashboard/workouts/library marks
+ * "Exercises", not also "Today" (/dashboard/workouts).
+ */
+function activeTabHref(tabs: SectionTab[], pathname: string, currentHash: string): string | null {
+  const hashTabs = tabs.filter((tab) => tab.href.includes("#") && tab.href.split("#")[0] === pathname);
+  if (hashTabs.length > 0) {
+    return (hashTabs.find((tab) => `#${tab.href.split("#")[1]}` === currentHash) ?? hashTabs[0]).href;
   }
-
-  return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+  const routeMatches = tabs.filter(
+    (tab) => !tab.href.includes("#") && (pathname === tab.href || pathname.startsWith(`${tab.href}/`)),
+  );
+  return routeMatches.sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
 }
 
 export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
@@ -49,21 +52,25 @@ export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
     return () => window.removeEventListener("hashchange", sync);
   }, [pathname]);
 
+  const activeHref = activeTabHref(tabs, pathname, currentHash);
+
   return (
     <nav
       aria-label="Section"
       className="-mx-1 flex gap-1 overflow-x-auto border-b border-mf-glass-border px-1 pb-px"
     >
       {tabs.map((tab) => {
-        const active = isTabActive(pathname, tab.href, currentHash);
+        const active = tab.href === activeHref;
 
         return (
           <Link
             key={tab.href}
             href={tab.href}
+            // Link navigates with pushState, which fires no hashchange: record the section the tap went to.
+            onClick={() => tab.href.includes("#") && setCurrentHash(`#${tab.href.split("#")[1]}`)}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors duration-200",
+              "inline-flex min-h-11 shrink-0 items-center whitespace-nowrap border-b-2 px-3 text-sm font-semibold transition-colors duration-200",
               active
                 ? "border-mf-glass-brand text-mf-glass-text"
                 : "border-transparent text-mf-glass-text-muted hover:text-mf-glass-text-secondary",

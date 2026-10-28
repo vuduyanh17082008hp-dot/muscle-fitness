@@ -258,7 +258,8 @@ describe("PF-01 active workout session", () => {
   it("mounts the interactive player for an in-progress session, restoring saved sets", async () => {
     const html = await renderSession(fakeSupabase(active()));
 
-    expect(html).toContain("Workout in progress");
+    // UX-R1.4: "Workout " is hidden on phones so the eyebrow and start time fit one line at 320px.
+    expect(html).toContain('<span class="max-sm:hidden">Workout </span>in progress');
     expect(html).toContain("Push A");
     expect(html).toContain("Complete workout");
     expect(html).toContain("Rest timer");

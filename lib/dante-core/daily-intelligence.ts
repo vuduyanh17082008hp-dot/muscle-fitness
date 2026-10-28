@@ -6,6 +6,7 @@ import { loadReadinessForUser } from "@/lib/dante-core/server/load-readiness-for
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { callDanteLlm } from "@/lib/dante-core/llm-client";
+import { sessionStateToActionStatus } from "@/lib/daily-plan/types";
 import type { AppEventType } from "@/lib/events/types";
 import {
   localDateTimeParts,
@@ -62,18 +63,24 @@ async function resolveTrainingFocus(
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from("workout_sessions")
-    .select("name, scheduled_for, completed_at")
+    .select("name, scheduled_for, completed_at, session_state")
     .eq("user_id", userId)
     .gte("scheduled_for", range.startIso)
     .lte("scheduled_for", range.endIso)
     .order("scheduled_for", { ascending: true })
-    .limit(1);
+    .limit(5);
 
   if (error || !data || data.length === 0) {
     return null;
   }
 
-  return (data[0] as { name: string | null }).name;
+  // Only a session still to do (planned or in progress) is a training focus: a finished or cancelled
+  // one must never come back as "proceed with today's planned … session".
+  const open = (data as Array<{ name: string | null; session_state: string | null }>).find((row) => {
+    const status = sessionStateToActionStatus(row.session_state);
+    return status === "planned" || status === "active";
+  });
+  return open?.name ?? null;
 }
 
 /**
@@ -102,6 +109,7 @@ async function resolveNutritionAdherence(
 }
 
 const NARRATIVE_INTAKE_CLAIM = /%|calori|kcal|nutrition|intake|protein|carb|eaten|meal/i;
+const SESSION_DIRECTIVE = /\b(session|workout|train(ing)?|proceed|lift(ing)?)\b/i;
 
 function deterministicNarrative(
   intel: Omit<DailyIntelligence, "narrative" | "generatedAt" | "nutritionAdherencePercent">,
@@ -138,7 +146,11 @@ async function generateNarrative(
 ): Promise<string> {
   const fallback = deterministicNarrative(intel);
 
-  const prompt = `You are Dante. Given this data, write ONE short sentence (max 25 words) summarizing today's performance conditions for the user, in the style of "Performance conditions are favorable. Proceed with the planned session." Do not invent any number not given here. Do not add a disclaimer.
+  const prompt = `You are Dante. Given this data, write ONE short sentence (max 25 words) summarizing today's performance conditions for the user, in the style of "Performance conditions are favorable." Do not invent any number not given here. Do not add a disclaimer. ${
+    intel.trainingFocus
+      ? `You may mention today's planned "${intel.trainingFocus}" session.`
+      : "There is no session left to do today: do not mention or suggest any workout or session."
+  }
 
 DATA:
 ${JSON.stringify(intel, null, 2)}
@@ -147,7 +159,10 @@ Reply with ONLY the sentence, nothing else.`;
 
   try {
     const result = await callDanteLlm(prompt);
-    return result?.reply.trim() || fallback;
+    const reply = result?.reply.trim();
+    // The prose may not invent a session the data doesn't have.
+    if (!reply || (!intel.trainingFocus && SESSION_DIRECTIVE.test(reply))) return fallback;
+    return reply;
   } catch {
     return fallback;
   }
@@ -243,17 +258,21 @@ export async function getOrBuildDailyIntelligence(
     .maybeSingle();
 
   if (data) {
+    // The cached focus can predate a finished, cancelled or newly added session (e.g. a completion that
+    // never emitted WORKOUT_COMPLETED): re-read it live — one small query — and re-phrase when it moved.
+    const liveFocus = await resolveTrainingFocus(supabase, userId, resolveDailyIntelligenceDay(now, timeZone));
     const cached = {
       summaryDate: data.summary_date,
       readinessScore: data.readiness_score,
-      trainingFocus: data.training_focus,
+      trainingFocus: liveFocus,
       recoveryStatus: data.recovery_status,
     };
+    const stale = liveFocus !== data.training_focus || NARRATIVE_INTAKE_CLAIM.test(data.narrative ?? "");
     return {
       ...cached,
       nutritionAdherencePercent: await resolveNutritionAdherence(supabase, userId),
       // Rows cached before intake left the narrative may still state a (now stale) intake figure.
-      narrative: NARRATIVE_INTAKE_CLAIM.test(data.narrative ?? "") ? deterministicNarrative(cached) : data.narrative,
+      narrative: stale ? deterministicNarrative(cached) : data.narrative,
       generatedAt: data.generated_at,
     };
   }

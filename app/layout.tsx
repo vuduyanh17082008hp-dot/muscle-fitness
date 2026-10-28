@@ -228,8 +228,8 @@ export default function RootLayout({
 
           antialiased
 
-          selection:bg-amber-500
-          selection:text-black
+          selection:bg-mf-brand
+          selection:text-mf-brand-ink
         "
       >
         <AuthProvider>

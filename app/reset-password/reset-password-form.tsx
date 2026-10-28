@@ -3,6 +3,7 @@
 import {
   useMemo,
   useState,
+  useSyncExternalStore,
   type FormEvent,
 } from "react"
 import { useRouter } from "next/navigation"
@@ -20,6 +21,8 @@ export function ResetPasswordForm() {
     useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  // Until hydration the submit handler isn't attached; a native submit would send the fields as a GET query string.
+  const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false)
 
   const requirements = useMemo(
     () => ({
@@ -135,8 +138,8 @@ export function ResetPasswordForm() {
 
         <button
           type="submit"
-          disabled={loading}
-          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={loading || !hydrated}
+          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
             <>

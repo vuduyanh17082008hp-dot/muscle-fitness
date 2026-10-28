@@ -5,7 +5,13 @@ import { gsap, useGSAP } from "@/components/experience/motion-home/motion/gsapSe
 import { ease, enterOnce } from "@/components/experience/motion-home/motion/motionTokens";
 import type { AdaptViewModel } from "@/components/experience/motion-home/data/homepageViewModel";
 
-const STAGES = ["Train", "Measure", "Adapt", "Progress"] as const;
+// x = node position in the 800-wide viewBox; Measure sits on the selected curve's midpoint.
+const STAGES = [
+  { label: "Train", x: 40 },
+  { label: "Measure", x: 220 },
+  { label: "Adapt", x: 400 },
+  { label: "Progress", x: 760 },
+] as const;
 
 export function AdaptScene({ adapt }: { adapt: AdaptViewModel }) {
   const rootRef = useRef<HTMLElement>(null);
@@ -81,13 +87,23 @@ export function AdaptScene({ adapt }: { adapt: AdaptViewModel }) {
             <path className="adapt-path adapt-path--selected" d="M 400,120 C 560,120 600,90 760,90" fill="none" stroke="var(--mf-brand)" strokeWidth="3" strokeLinecap="round" />
 
             <circle className="adapt-node" cx="40" cy="180" r="7" fill="var(--mf-pub-bg)" stroke="var(--mf-brand)" strokeWidth="2" />
+            <circle className="adapt-node" cx="220" cy="150" r="5" fill="var(--mf-pub-bg)" stroke="var(--mf-brand)" strokeWidth="2" />
             <circle className="adapt-node" cx="400" cy="120" r="7" fill="var(--mf-pub-bg)" stroke="var(--mf-brand)" strokeWidth="2" />
             <circle className="adapt-node" cx="760" cy="90" r="8" fill="var(--mf-brand)" />
           </svg>
 
-          <div className="adapt-label mx-auto mt-4 flex max-w-3xl justify-between px-2 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--mf-pub-text-muted)]">
-            {STAGES.map((stage) => (
-              <span key={stage}>{stage}</span>
+          {/* Each label hangs under its node; the end labels align inward so they never clip. */}
+          <div className="adapt-label relative mx-auto mt-4 h-4 max-w-3xl text-[10px] font-black uppercase tracking-[0.14em] text-[var(--mf-pub-text-muted)]">
+            {STAGES.map((stage, index) => (
+              <span
+                key={stage.label}
+                className={`absolute top-0 whitespace-nowrap ${
+                  index === 0 ? "-translate-x-3" : index === STAGES.length - 1 ? "-translate-x-[calc(100%-12px)]" : "-translate-x-1/2"
+                }`}
+                style={{ left: `${(stage.x / 800) * 100}%` }}
+              >
+                {stage.label}
+              </span>
             ))}
           </div>
         </div>

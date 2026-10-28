@@ -3,6 +3,7 @@
 import {
   useEffect,
   useState,
+  useSyncExternalStore,
   type FormEvent,
 } from "react"
 
@@ -19,6 +20,8 @@ export function ResendConfirmationForm({
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [loading, setLoading] = useState(false)
+  // Until hydration the submit handler isn't attached; a native submit would send the fields as a GET query string.
+  const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false)
   const [countdown, setCountdown] = useState(0)
 
   useEffect(() => {
@@ -105,17 +108,18 @@ export function ResendConfirmationForm({
         onChange={(event) =>
           setEmail(event.target.value)
         }
-        className="h-13 min-h-13 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-orange-400/60 focus:ring-4 focus:ring-orange-400/10 disabled:opacity-50"
+        className="h-13 min-h-13 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-mf-brand/60 focus:ring-4 focus:ring-mf-brand/10 disabled:opacity-50"
       />
 
       <button
         type="submit"
         disabled={
+          !hydrated ||
           loading ||
           countdown > 0 ||
           !email.trim()
         }
-        className="flex h-12 w-full items-center justify-center gap-3 rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-12 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading
           ? "Sending..."

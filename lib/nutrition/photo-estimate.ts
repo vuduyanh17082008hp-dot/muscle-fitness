@@ -37,6 +37,8 @@ export type PhotoEstimateItem = {
   candidates: NormalizedFood[]
   /** External-provider outcome of the grounding search; a failure means better matches may exist. */
   searchStatus: FoodSearchStatus
+  /** A provider failed although another answered: better matches may exist. */
+  searchPartial?: boolean
   /** Not seen in the photo: a typical part of the named dish (lib/nutrition/vietnamese-dishes.ts), for the user to confirm. */
   fromTemplate?: boolean
   /** Template part that is common but not always there: starts unticked. */
@@ -104,6 +106,7 @@ export async function estimateMealFromPhoto(imageDataUrl: string): Promise<Photo
         scaledMacros: bestMatch ? scaleMacrosToGrams(bestMatch.per100g, item.estimatedGrams) : null,
         candidates,
         searchStatus: searchResult.status,
+        ...(searchResult.partial ? { searchPartial: true } : {}),
       }]
     }),
   )

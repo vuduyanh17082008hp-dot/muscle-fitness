@@ -90,7 +90,7 @@ export function Logo({
         </span>
 
         {tagline ? (
-          <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+          <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
             {tagline}
           </span>
         ) : null}

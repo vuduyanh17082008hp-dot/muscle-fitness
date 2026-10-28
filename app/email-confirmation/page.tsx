@@ -26,14 +26,14 @@ export default async function EmailConfirmationPage({
       step="02 / 04"
     >
       <div className="space-y-6">
-        <div className="rounded-3xl border border-orange-400/20 bg-orange-500/[0.07] p-5">
+        <div className="rounded-3xl border border-mf-brand/20 bg-mf-brand/[0.07] p-5">
           <div className="flex items-start gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-mf-brand/10 text-mf-brand">
               <MailIcon />
             </span>
 
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-300">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-mf-brand">
                 Confirmation sent
               </p>
 
@@ -68,7 +68,7 @@ export default async function EmailConfirmationPage({
 
         <Link
           href="/login"
-          className="flex h-13 min-h-13 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.16em] text-white transition hover:border-orange-400/30 hover:bg-orange-500/10 hover:text-orange-300"
+          className="flex h-13 min-h-13 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.16em] text-white transition hover:border-mf-brand/30 hover:bg-mf-brand/10 hover:text-mf-brand-hover"
         >
           Return to login
         </Link>

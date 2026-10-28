@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   CheckSquare2,
+  ChevronRight,
   MessageSquareText,
   Settings,
   Zap,
@@ -24,40 +25,89 @@ import { loadTodaySession } from "@/lib/training/load-today-session"
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
 import { buildChatSuggestions } from "@/lib/dante-core/build-chat-suggestions"
+import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision"
 import type { DanteInsight } from "@/lib/dante-core/insight"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import DanteChat from "@/components/dante-chat"
 
 /**
- * Contextual conversation starters for the "Ask Dante" section (spec:
- * "Contextual Suggestions") — reuses the exact same loaders the
- * Dashboard and Recovery pages already call, never a second read of
- * the same tables through a different path.
+ * The "Ask Dante" page's starters and current-data line (spec: "Contextual Suggestions") — reuses the exact same loaders
+ * the Dashboard and Recovery pages already call, and the one safety decision (loadDailyDecision → trainingHold), never a
+ * second read of the same tables through a different path. A read that failed contributes nothing rather than a guess.
  */
-async function loadAiCoachSuggestions(
+async function loadAiCoachContext(
   supabase: SupabaseClient,
   userId: string,
-): Promise<DanteInsight[]> {
-  const [recoveryContext, todaySession, nutritionContext, foodLog] =
+): Promise<{ suggestions: DanteInsight[]; contextLine: string | null }> {
+  const [recoveryContext, todaySession, nutritionContext, foodLog, decision] =
     await Promise.all([
       loadRecoveryContext(supabase, userId).catch(() => null),
       loadTodaySession(supabase, userId).catch(() => null),
       loadNutritionContext(supabase, userId).catch(() => null),
       loadFoodLogForDate(supabase, userId).catch(() => null),
+      loadDailyDecision(supabase, userId).catch(() => null),
     ])
 
+  const hold = decision?.hold ?? null
   const proteinTargetG = nutritionContext?.targets.protein ?? null
-  const proteinLoggedG = foodLog?.totals?.protein ?? null
+  const proteinLoggedG = foodLog && !foodLog.unavailable ? (foodLog.totals?.protein ?? null) : null
+  const proteinRemainingG =
+    proteinTargetG !== null && proteinLoggedG !== null ? Math.max(0, Math.round(proteinTargetG - proteinLoggedG)) : null
+  const hasCheckinToday = recoveryContext ? recoveryContext.today !== null : false
+  const recoveryScore = recoveryContext?.todayScoreResult.score ?? null
 
-  return buildChatSuggestions({
-    recoveryScore: recoveryContext?.todayScoreResult.score ?? null,
-    hasCheckinToday: recoveryContext ? recoveryContext.today !== null : false,
-    todayWorkoutName: todaySession?.name ?? null,
-    todayWorkoutSessionId: todaySession?.id ?? null,
-    proteinRemainingG:
-      proteinTargetG !== null && proteinLoggedG !== null ? Math.max(0, Math.round(proteinTargetG - proteinLoggedG)) : null,
-    proteinTargetG,
-  })
+  const facts: string[] = []
+  if (hold === "recovery") facts.push("training on hold — today's check-in flagged pain or illness")
+  else if (hold === "unverified") facts.push("training not cleared — today's check-in couldn't be confirmed")
+  if (recoveryContext?.checkinsUnavailable) facts.push("recovery check-in couldn't be loaded")
+  else if (recoveryContext && !hasCheckinToday) facts.push("no check-in today")
+  else if (recoveryScore !== null) facts.push(`recovery ${recoveryScore}/100 from today's check-in`)
+  if (todaySession?.name && todaySession.sessionState !== "cancelled") {
+    facts.push(
+      todaySession.sessionState === "completed"
+        ? `${todaySession.name} done`
+        : todaySession.sessionState === "in_progress" || todaySession.sessionState === "paused"
+          ? `${todaySession.name} in progress`
+          : `${todaySession.name} scheduled`,
+    )
+  }
+  if (proteinRemainingG !== null) facts.push(`${proteinRemainingG} g protein left`)
+
+  return {
+    suggestions: buildChatSuggestions({
+      recoveryScore,
+      hasCheckinToday,
+      todayWorkoutName: todaySession?.name ?? null,
+      todayWorkoutSessionId: todaySession?.id ?? null,
+      proteinRemainingG,
+      proteinTargetG,
+      trainingHold: hold,
+    }),
+    contextLine: facts.length > 0 ? facts.join(" · ").replace(/^./, (c) => c.toUpperCase()) : null,
+  }
+}
+
+function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section aria-label={title}>
+      <h2 className="mb-2 px-1 text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">{title}</h2>
+      <div className="overflow-hidden rounded-2xl border border-mf-glass-border bg-mf-glass-surface [&>*+*]:border-t [&>*+*]:border-mf-glass-border">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+function SettingsRow({ href, title, detail }: { href: string; title: string; detail?: string }) {
+  return (
+    <Link href={href} className="flex min-h-14 items-center justify-between gap-3 px-4 py-3 transition hover:bg-white/[0.03]">
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-mf-glass-text">{title}</span>
+        {detail ? <span className="block text-xs leading-5 text-mf-glass-text-muted">{detail}</span> : null}
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-mf-glass-text-muted" aria-hidden="true" />
+    </Link>
+  )
 }
 
 type SectionConfig = {
@@ -169,7 +219,7 @@ export default async function DashboardSectionPage({
     profileResponse,
     fitnessResponse,
     calendarDays,
-    aiCoachSuggestions,
+    aiCoachContext,
     todayNutritionContext,
   ] = await Promise.all([
     supabase
@@ -188,7 +238,7 @@ export default async function DashboardSectionPage({
       ? loadCalendarRange(supabase, user.id)
       : Promise.resolve(null),
     sectionKey === "ai-coach"
-      ? loadAiCoachSuggestions(supabase, user.id)
+      ? loadAiCoachContext(supabase, user.id)
       : Promise.resolve(null),
     // Same canonical targets the Dashboard, Dante and Gemma use — never a
     // fitness_profiles column read of its own.
@@ -213,30 +263,17 @@ export default async function DashboardSectionPage({
           too would be a redundant second focal point on the same
           screen, so it's skipped for ai-coach specifically. */}
       {sectionKey !== "ai-coach" ? (
-        <section id="overview" className="scroll-mt-24 rounded-[20px] border border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-6 sm:p-8">
-          <span className="inline-grid size-14 place-items-center rounded-xl border border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand">
-            <Icon className="size-6" />
-          </span>
-
-          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand">
+        <header id="overview" className="scroll-mt-24">
+          <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">
+            <Icon className="size-4" aria-hidden="true" />
             {section.project}
           </p>
-
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-mf-glass-text sm:text-4xl">
-            {section.title}
-          </h1>
-
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">
-            {section.description}
+          <h1 className="mt-1 text-3xl font-black tracking-tight text-mf-glass-text">{section.title}</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">{section.description}</p>
+          <p className="mt-2 text-xs text-mf-glass-text-muted">
+            Signed in as <span className="text-mf-glass-text-secondary">{displayName}</span>
           </p>
-
-          <p className="mt-4 text-sm text-mf-glass-text-muted">
-            Signed in as{" "}
-            <span className="text-mf-glass-text-secondary">
-              {displayName}
-            </span>
-          </p>
-        </section>
+        </header>
       ) : null}
 
       {sectionKey === "today" && (
@@ -282,42 +319,57 @@ export default async function DashboardSectionPage({
         // Persistent "Dante learned" pattern memory is intentionally not
         // mounted on the Phase 2C chat surface — that table/migration is
         // optional adaptive-intelligence work, not required for chat UX.
-        <DanteChat contextualSuggestions={aiCoachSuggestions ?? undefined} restoreHistory />
+        <DanteChat
+          contextualSuggestions={aiCoachContext?.suggestions}
+          contextLine={aiCoachContext?.contextLine}
+          restoreHistory
+        />
       )}
 
       {sectionKey === "settings" && (
-        <section className="rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-6">
-          <p className="text-sm leading-6 text-mf-glass-text-muted">
-            Update personal details, goals and preferences. Onboarding completed:{" "}
-            <span className="text-mf-glass-text">
-              {profile?.onboarding_completed ? "Yes" : "No"}
-            </span>
-          </p>
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link
+        // Every row is an existing destination or action — no preference here without a working implementation behind it.
+        <div className="space-y-6">
+          <SettingsGroup title="Account">
+            <SettingsRow href="/account/edit" title="Profile" detail="Name, username, phone, date of birth" />
+            <SettingsRow
               href="/account/edit"
-              className="inline-flex rounded-xl bg-mf-glass-brand px-5 py-3 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
-            >
-              Edit profile
-            </Link>
-            <Link
-              href="/account"
-              className="inline-flex rounded-xl border border-mf-glass-border px-5 py-3 text-sm font-semibold text-mf-glass-text transition hover:bg-white/5"
-            >
-              View account
-            </Link>
-            {!profile?.onboarding_completed ? (
-              <Link
-                href="/onboarding"
-                className="inline-flex rounded-xl border border-mf-glass-border px-5 py-3 text-sm font-semibold text-mf-glass-text-muted transition hover:bg-white/5"
-              >
-                Finish onboarding
-              </Link>
-            ) : null}
-          </div>
-          <MotivationPreferenceToggle />
-        </section>
+              title="Time zone"
+              detail={profile?.timezone ? `${profile.timezone} — sets which day your logs count toward` : "Not set — days follow UTC until you choose one"}
+            />
+            <SettingsRow href="/account" title="Account overview" detail="Your details and fitness profile at a glance" />
+          </SettingsGroup>
+
+          <SettingsGroup title="Training & nutrition">
+            <SettingsRow
+              href="/onboarding?edit=1"
+              title="Training profile"
+              detail={profile?.onboarding_completed ? "Goal, experience, training days, body metrics" : "Not finished — complete it to get a plan"}
+            />
+            <SettingsRow href="/dashboard/nutrition/plan" title="Nutrition plan & targets" detail="Training mode, activity level, goal, weekly food budget" />
+          </SettingsGroup>
+
+          <SettingsGroup title="Coaching">
+            <div className="px-4 pb-1">
+              <MotivationPreferenceToggle />
+              <p className="px-1 pt-2 text-xs text-mf-glass-text-muted">Saved on this device only.</p>
+            </div>
+          </SettingsGroup>
+
+          {/* No password row: signed-in users are redirected away from /forgot-password and there is no in-app change. */}
+          <SettingsGroup title="Session">
+            <form action="/auth/signout" method="post">
+              <button type="submit" className="flex min-h-14 w-full items-center px-4 text-left text-sm font-semibold text-mf-status-danger transition hover:bg-white/[0.03]">
+                Sign out
+              </button>
+            </form>
+          </SettingsGroup>
+
+          <SettingsGroup title="Privacy & legal">
+            <SettingsRow href="/privacy" title="Privacy policy" />
+            <SettingsRow href="/terms" title="Terms of service" />
+            <SettingsRow href="/responsible-ai" title="Responsible AI" detail="How Dante uses your data and where its limits are" />
+          </SettingsGroup>
+        </div>
       )}
 
       {sectionKey === "check-in" && (

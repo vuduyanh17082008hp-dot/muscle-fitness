@@ -503,8 +503,8 @@ function BodyTile({ label, value, unit, note }: { label: string; value: string; 
   return (
     <article className="card-spot rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.4)" }}>
       <div className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-3xl font-bold tracking-tight">{value}</span>
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-1">
+        <span className="min-w-0 break-words text-2xl font-bold tracking-tight sm:text-3xl">{value}</span>
         {unit ? <span className="text-sm" style={{ color: "var(--text-muted)" }}>{unit}</span> : null}
       </div>
       {note ? <div className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>{note}</div> : null}

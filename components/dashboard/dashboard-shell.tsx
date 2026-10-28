@@ -501,7 +501,8 @@ export function DashboardShell({
           MAIN
       =================================================== */}
 
-      <main className="min-h-screen pb-28 lg:pb-10 lg:pl-72">
+      {/* lg:pr-20 reserves the floating-controls column so they never sit on a card. */}
+      <main className="min-h-screen pb-28 lg:pb-10 lg:pl-72 lg:pr-20">
         <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">
           {
             children
@@ -518,13 +519,15 @@ export function DashboardShell({
       {/* ===================================================
           FLOATING CONTROLS (PF-02) — Centralized floating layout
           for Floating Dante and Quick Capture (+).
-          Positioned above MobileBottomNav on mobile/tablet,
-          and anchored in the bottom-right corner on desktop.
+          Desktop only, in the gutter main reserves (lg:pr-20). Below
+          lg they covered Send, chat replies and the workout bar, and
+          the bottom nav already carries every Quick Capture
+          destination plus Dante.
       =================================================== */}
 
       <aside
         aria-label="Floating quick actions"
-        className="pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] right-4 z-40 flex flex-col-reverse items-center gap-3 lg:bottom-6 lg:right-6"
+        className="pointer-events-none fixed bottom-6 right-6 z-40 hidden flex-col-reverse items-center gap-3 lg:flex"
       >
         <FloatingDante />
         <QuickCapture />

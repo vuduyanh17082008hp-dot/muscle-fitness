@@ -130,7 +130,7 @@ export function DanteScene({ dante, routes }: { dante: DanteViewModel; routes: H
             behind it.
           </p>
 
-          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-violet-400/25 bg-violet-400/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--mf-violet)]">
+          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-violet-400/25 bg-violet-400/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-violet-300">
             <span className="size-1.5 rounded-full bg-[var(--mf-violet)]" />
             {dante.statusLabel}
           </div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { lookupBarcode } from "@/lib/nutrition/food-data"
 import { normalizeBarcode } from "@/lib/nutrition/barcode"
+import { guardFoodLookup } from "@/lib/nutrition/food-data/lookup-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -17,6 +18,10 @@ export const dynamic = "force-dynamic"
  * and this route can never disagree on what a valid barcode is.
  */
 export async function GET(request: Request) {
+  // QA-05: signed-in callers only, at a bounded rate — these spend the server's provider quota.
+  const stop = await guardFoodLookup()
+  if (stop) return stop
+
   const url = new URL(request.url)
   const rawCode = (url.searchParams.get("code") ?? "").trim()
 

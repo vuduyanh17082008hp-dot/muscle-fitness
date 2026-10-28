@@ -7,6 +7,8 @@ import {
   type NextRequest,
 } from "next/server";
 
+import { isRecoverySession } from "@/lib/auth/recovery-session";
+
 /* =========================================================
    ROUTES
 ========================================================= */
@@ -266,6 +268,9 @@ export async function updateSession(
     string | null =
       null;
 
+  let recoverySession =
+    false;
+
   /*
    * getClaims() verifies the JWT locally (signature + exp) without a
    * round trip to Supabase — fast, and the normal path. But it is a
@@ -299,6 +304,11 @@ export async function updateSession(
     ) {
       userId =
         data.claims.sub;
+
+      recoverySession =
+        isRecoverySession(
+          data.claims,
+        );
     } else if (
       error
     ) {
@@ -385,13 +395,20 @@ export async function updateSession(
      AUTH PAGE
 
      Already authenticated users should not be sent back
-     through login/register.
+     through login/register. The one exception is a session
+     opened by a recovery link: it exists to reach
+     /reset-password, and the page re-checks it.
   ======================================================= */
 
   if (
     isAuthenticated &&
     AUTH_PAGES.has(
       pathname,
+    ) &&
+    !(
+      pathname ===
+        "/reset-password" &&
+      recoverySession
     )
   ) {
     const dashboardUrl =

@@ -47,6 +47,8 @@ export type RecoveryContext = {
   averages7Days: RecoveryAverages
   averages30Days: RecoveryAverages
   trainingLoad: TrainingLoadSummary
+  /** recovery_checkins read failed: `today: null` then means "unknown", not "no check-in" — never pain/illness clearance. */
+  checkinsUnavailable?: true
 }
 
 function average(values: Array<number | null>): number | null {
@@ -180,5 +182,6 @@ export async function loadRecoveryContext(
     averages7Days,
     averages30Days,
     trainingLoad,
+    ...(checkinsResponse.error ? { checkinsUnavailable: true as const } : {}),
   }
 }

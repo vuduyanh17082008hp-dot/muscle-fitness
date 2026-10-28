@@ -33,7 +33,8 @@ function client(cached: typeof CACHED | null) {
     gte: () => chain,
     lte: () => chain,
     order: () => chain,
-    limit: async () => ({ data: [], error: null }),
+    // Today's open session, matching the cached training_focus (FINAL-F: the cached focus is re-read live).
+    limit: async () => ({ data: [{ name: "Upper", session_state: "not_started" }], error: null }),
     maybeSingle: async () => ({ data: cached, error: null }),
     upsert: async () => ({ error: null }),
   };

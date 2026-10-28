@@ -23,15 +23,33 @@ export type ChatSuggestionSignals = {
   todayWorkoutSessionId: string | null;
   proteinRemainingG: number | null;
   proteinTargetG: number | null;
+  /** trainingHold(dailyDecision): while set, no starter offers to plan or push today's session. */
+  trainingHold?: "recovery" | "unverified" | null;
 };
 
 const LOW_RECOVERY_THRESHOLD = 65;
 
 function buildTrainingSuggestion(signals: ChatSuggestionSignals): DanteInsight {
+  if (signals.trainingHold) {
+    const pain = signals.trainingHold === "recovery";
+    return {
+      id: "suggestion-training-hold",
+      action: pain ? "My check-in flagged pain or illness. What should I do today?" : "Is it safe to train before my check-in is confirmed?",
+      category: "recovery",
+      severity: "notice",
+      reasons: [],
+      evidence: [],
+      prompt: pain
+        ? "My check-in today flagged pain or illness. What is a sensible way to handle today instead of my planned training?"
+        : "Today's pain/illness check-in couldn't be confirmed. What should I check before I train?",
+      nextAction: { label: "View recovery", href: "/dashboard/recovery" },
+    };
+  }
+
   if (signals.todayWorkoutName && signals.recoveryScore !== null && signals.recoveryScore < LOW_RECOVERY_THRESHOLD) {
     return {
       id: "suggestion-training-low-recovery",
-      action: `⚡ Should I still train ${signals.todayWorkoutName} today?`,
+      action: `Should I still train ${signals.todayWorkoutName} today?`,
       category: "recovery",
       severity: signals.recoveryScore < 50 ? "warning" : "notice",
       reasons: [`Recovery score is ${signals.recoveryScore}/100 today.`],
@@ -46,7 +64,7 @@ function buildTrainingSuggestion(signals: ChatSuggestionSignals): DanteInsight {
   if (signals.todayWorkoutName) {
     return {
       id: "suggestion-training-today",
-      action: `🏋️ What should I focus on for ${signals.todayWorkoutName} today?`,
+      action: `What should I focus on for ${signals.todayWorkoutName} today?`,
       category: "training",
       reasons: [],
       evidence: [],
@@ -59,7 +77,7 @@ function buildTrainingSuggestion(signals: ChatSuggestionSignals): DanteInsight {
 
   return {
     id: "suggestion-training-generic",
-    action: "🏋️ What should I train today?",
+    action: "What should I train today?",
     category: "training",
     reasons: [],
     evidence: [],
@@ -71,7 +89,7 @@ function buildNutritionSuggestion(signals: ChatSuggestionSignals): DanteInsight 
   if (signals.proteinRemainingG !== null && signals.proteinRemainingG > 0) {
     return {
       id: "suggestion-nutrition-protein",
-      action: `🍗 What can I eat to hit my remaining ${signals.proteinRemainingG} g protein target?`,
+      action: `What can I eat to hit my remaining ${signals.proteinRemainingG} g protein target?`,
       category: "nutrition",
       reasons: [],
       evidence:
@@ -87,7 +105,7 @@ function buildNutritionSuggestion(signals: ChatSuggestionSignals): DanteInsight 
 
   return {
     id: "suggestion-nutrition-generic",
-    action: "🥗 Help me plan meals for my remaining macros.",
+    action: "Help me plan meals for my remaining macros.",
     category: "nutrition",
     reasons: [],
     evidence: [],
@@ -96,11 +114,11 @@ function buildNutritionSuggestion(signals: ChatSuggestionSignals): DanteInsight 
   };
 }
 
-function buildRecoverySuggestion(signals: ChatSuggestionSignals): DanteInsight {
+function buildRecoverySuggestion(signals: ChatSuggestionSignals): DanteInsight | null {
   if (!signals.hasCheckinToday) {
     return {
       id: "suggestion-recovery-checkin",
-      action: "🛌 You have not checked in today.",
+      action: "What should I log in today's check-in?",
       category: "checkin",
       reasons: [],
       evidence: [],
@@ -109,10 +127,13 @@ function buildRecoverySuggestion(signals: ChatSuggestionSignals): DanteInsight {
     };
   }
 
+  // On hold the training starter already asks about recovery; "am I recovered enough to train hard?" would contradict it.
+  if (signals.trainingHold) return null;
+
   if (signals.recoveryScore !== null && signals.recoveryScore < LOW_RECOVERY_THRESHOLD) {
     return {
       id: "suggestion-recovery-low",
-      action: `🧠 Why is my recovery only ${signals.recoveryScore} today?`,
+      action: `Why is my recovery only ${signals.recoveryScore} today?`,
       category: "recovery",
       severity: signals.recoveryScore < 50 ? "warning" : "notice",
       reasons: [],
@@ -124,7 +145,7 @@ function buildRecoverySuggestion(signals: ChatSuggestionSignals): DanteInsight {
 
   return {
     id: "suggestion-recovery-generic",
-    action: "⚡ Am I recovered enough to train hard?",
+    action: "Am I recovered enough to train hard?",
     category: "recovery",
     reasons: [],
     evidence: [],
@@ -141,7 +162,7 @@ function buildProgressSuggestion(): DanteInsight {
   // fabricating a trend.
   return {
     id: "suggestion-progress-generic",
-    action: "📈 How am I progressing this month?",
+    action: "How am I progressing this month?",
     category: "progress",
     reasons: [],
     evidence: [],
@@ -155,5 +176,5 @@ export function buildChatSuggestions(signals: ChatSuggestionSignals): DanteInsig
     buildNutritionSuggestion(signals),
     buildRecoverySuggestion(signals),
     buildProgressSuggestion(),
-  ];
+  ].filter((suggestion): suggestion is DanteInsight => suggestion !== null);
 }

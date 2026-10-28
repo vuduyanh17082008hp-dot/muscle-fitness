@@ -5,6 +5,7 @@ import {
   Suspense,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -85,6 +86,8 @@ function LoginContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  // Until hydration the submit handler isn't attached; a native submit would send the fields as a GET query string.
+  const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   const [loadingType, setLoadingType] =
     useState<LoadingType>(null);
@@ -252,7 +255,7 @@ function LoginContent() {
       >
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:90px_90px]" />
 
-        <div className="absolute left-1/2 top-[-260px] h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-orange-500/[0.08] blur-[130px]" />
+        <div className="absolute left-1/2 top-[-260px] h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-mf-brand/[0.08] blur-[130px]" />
 
         <div className="absolute bottom-[-350px] right-[-150px] h-[700px] w-[700px] rounded-full bg-violet-500/[0.07] blur-[150px]" />
 
@@ -267,7 +270,7 @@ function LoginContent() {
 
         {/* Heading */}
         <div className="mt-10">
-          <p className="text-sm font-black uppercase tracking-[0.25em] text-orange-400">
+          <p className="text-sm font-black uppercase tracking-[0.25em] text-mf-brand">
             Member access
           </p>
 
@@ -301,6 +304,12 @@ function LoginContent() {
             {error}
           </div>
         )}
+
+        <noscript>
+          <p className="mt-8 rounded-3xl border border-sky-400/20 bg-sky-500/10 px-5 py-4 text-sm leading-6 text-sky-200">
+            Signing in needs JavaScript. Enable it in your browser and reload the page.
+          </p>
+        </noscript>
 
         {/* Login form */}
         <form
@@ -339,7 +348,7 @@ function LoginContent() {
                   }
                 }}
                 placeholder="your@email.com"
-                className="h-16 w-full rounded-full border border-white/10 bg-[#151515] pl-14 pr-6 text-base text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-orange-400/70 focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-16 w-full rounded-full border border-white/10 bg-[#151515] pl-14 pr-6 text-base text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-mf-brand/70 focus:ring-4 focus:ring-mf-brand/10 disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
           </div>
@@ -355,7 +364,7 @@ function LoginContent() {
 
               <Link
                 href="/forgot-password"
-                className="text-sm font-bold text-zinc-300 transition hover:text-orange-400"
+                className="text-sm font-bold text-zinc-300 transition hover:text-mf-brand-hover"
               >
                 Forgot password?
               </Link>
@@ -388,7 +397,7 @@ function LoginContent() {
                   }
                 }}
                 placeholder="Enter your password"
-                className="h-16 w-full rounded-full border border-white/10 bg-[#151515] pl-14 pr-14 text-base text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-orange-400/70 focus:ring-4 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-16 w-full rounded-full border border-white/10 bg-[#151515] pl-14 pr-14 text-base text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-mf-brand/70 focus:ring-4 focus:ring-mf-brand/10 disabled:cursor-not-allowed disabled:opacity-60"
               />
 
               <button
@@ -404,7 +413,7 @@ function LoginContent() {
                     ? "Hide password"
                     : "Show password"
                 }
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-zinc-600 transition hover:text-white disabled:cursor-not-allowed"
+                className="absolute right-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full text-zinc-500 transition hover:text-white disabled:cursor-not-allowed"
               >
                 {showPassword ? (
                   <EyeOff className="h-5 w-5" />
@@ -417,8 +426,8 @@ function LoginContent() {
 
           <button
             type="submit"
-            disabled={isLoading}
-            className="flex h-16 w-full items-center justify-center gap-3 rounded-full bg-orange-400 px-6 text-base font-semibold uppercase tracking-[0.18em] text-black transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isLoading || !hydrated}
+            className="flex h-16 w-full items-center justify-center gap-3 rounded-full bg-mf-brand px-6 text-base font-semibold uppercase tracking-[0.18em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loadingType === "email" ? (
               <>
@@ -466,7 +475,7 @@ function LoginContent() {
           New to Muscle Fitness?{" "}
           <Link
             href="/register"
-            className="font-bold text-orange-400 transition hover:text-orange-300"
+            className="font-bold text-mf-brand transition hover:text-mf-brand-hover"
           >
             Create an account
           </Link>
@@ -510,7 +519,7 @@ function LoginFallback() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#050505] text-white">
       <div className="flex items-center gap-3 text-sm font-semibold text-zinc-400">
-        <Loader2 className="h-5 w-5 animate-spin text-orange-400" />
+        <Loader2 className="h-5 w-5 animate-spin text-mf-brand" />
         Loading secure login...
       </div>
     </main>

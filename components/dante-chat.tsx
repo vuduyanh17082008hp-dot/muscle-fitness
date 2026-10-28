@@ -17,9 +17,6 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 
-import { DanteRobot } from "@/components/dante/dante-robot";
-import { BiometricFieldCanvas } from "@/components/dante/biometric-field-canvas";
-import hudStyles from "@/components/dante/holographic-telemetry-pod.module.css";
 import {
   DANTE_STATE_LABEL,
   useDantePresence,
@@ -115,9 +112,9 @@ const QUICK_PROMPTS: QuickPrompt[] = [
     prompt: "What should I eat to hit my remaining protein target?",
   },
   {
-    tag: "Recovery check-in",
-    label: "I haven't checked in today.",
-    prompt: "I still need to do my daily recovery check-in. What should I log?",
+    tag: "Recovery",
+    label: "How is my recovery looking?",
+    prompt: "How is my recovery looking today, and what is driving it?",
   },
   {
     tag: "30-day trajectory",
@@ -159,7 +156,37 @@ export type DanteChatProps = {
    * the history picker. Contextual embeds leave this off: their turns are still saved, each embed starts fresh.
    */
   restoreHistory?: boolean;
+  /**
+   * One line of the athlete's CURRENT data, built server-side from what actually loaded (never guessed). Shown under the
+   * header so older replies in a restored conversation are never mistaken for today's numbers.
+   */
+  contextLine?: string | null;
 };
+
+/** The conversation this tab last had open ("" = a new, unsaved chat), so returning to Dante reopens it. */
+const LAST_THREAD_KEY = "mf.dante.lastThread";
+
+function readLastThread(): string | null {
+  try {
+    return window.sessionStorage.getItem(LAST_THREAD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberThread(id: string | null) {
+  try {
+    window.sessionStorage.setItem(LAST_THREAD_KEY, id ?? "");
+  } catch {
+    // storage blocked — restore falls back to the most recent conversation
+  }
+}
+
+function formatAsOf(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "earlier";
+  return date.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
 
 const DEFAULT_WELCOME_MESSAGE =
   "Hi. I'm **Dante**, your Muscle Fitness intelligence coach. Ask me about your training, nutrition, recovery or progress.";
@@ -187,12 +214,12 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
   }
 
   return (
-    <div className="mt-4 border-t border-white/8 pt-4">
+    <div className="mt-1 flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {insight.nextAction ? (
           <Link
             href={insight.nextAction.href}
-            className="inline-flex h-9 items-center rounded-xl bg-amber-400 px-4 text-xs font-black uppercase tracking-[0.06em] text-black transition hover:bg-amber-300"
+            className="inline-flex min-h-11 items-center rounded-xl bg-mf-glass-brand px-4 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
           >
             {insight.nextAction.label}
           </Link>
@@ -200,7 +227,7 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
 
         {hasWhy ? (
           <details className="group">
-            <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-white/10 px-4 text-xs font-black uppercase tracking-[0.06em] text-zinc-400 transition hover:bg-white/[0.06]">
+            <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-mf-glass-border px-4 text-sm font-semibold text-mf-glass-text-secondary transition hover:bg-white/[0.06]">
               {insight.severity ? (
                 <span
                   className={cn("size-1.5 rounded-full", SEVERITY_DOT[insight.severity])}
@@ -275,9 +302,9 @@ function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
   }
 
   return (
-    <div className="mt-4 border-t border-white/8 pt-4">
+    <div className="mt-1 flex flex-col gap-2">
       <details className="group">
-        <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-white/10 px-4 text-xs font-black uppercase tracking-[0.06em] text-zinc-400 transition hover:bg-white/[0.06]">
+        <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-mf-glass-border px-4 text-sm font-semibold text-mf-glass-text-secondary transition hover:bg-white/[0.06]">
           Sources ({safeSources.length})
         </summary>
 
@@ -374,7 +401,7 @@ function PendingConfirmationPanel({
         type="button"
         disabled={isBusy}
         onClick={onConfirm}
-        className="rounded-lg bg-amber-400 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-black transition hover:bg-amber-300 disabled:opacity-50"
+        className="min-h-11 rounded-xl bg-mf-glass-brand px-4 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:opacity-50"
       >
         Confirm
       </button>
@@ -383,7 +410,7 @@ function PendingConfirmationPanel({
         type="button"
         disabled={isBusy}
         onClick={onCancel}
-        className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
+        className="min-h-11 rounded-xl border border-mf-glass-border px-4 text-sm font-semibold text-mf-glass-text-secondary transition hover:bg-white/5 disabled:opacity-50"
       >
         Cancel
       </button>
@@ -397,13 +424,15 @@ function PendingConfirmationPanel({
 
 export default function DanteChat({
   welcomeMessage = DEFAULT_WELCOME_MESSAGE,
-  heroTitle = "Dante, Your Performance Coach",
+  heroTitle = "Dante",
+  heroSubtitle,
   quickPrompts = QUICK_PROMPTS,
   contextualSuggestions,
   compact = false,
   className,
   contextPayload,
   restoreHistory = false,
+  contextLine = null,
 }: DanteChatProps = {}) {
   const emptyStatePrompts: QuickPrompt[] =
     contextualSuggestions && contextualSuggestions.length > 0
@@ -438,15 +467,11 @@ export default function DanteChat({
   const sendStartedRef = useRef(false);
 
   const [activity, setActivity] = useState<DanteActivity>("idle");
-  const [hoveredPromptIndex, setHoveredPromptIndex] = useState<number | null>(null);
   const visualState = useDantePresence(activity);
+  // A conversation reopened from history: how many saved messages it brought back, and when the last one was written.
+  const [restored, setRestored] = useState<{ count: number; asOf: string } | null>(null);
 
   const isEmpty = messages.length === 1;
-
-  const messagesEndRef =
-    useRef<HTMLDivElement | null>(
-      null
-    );
 
   const abortControllerRef =
     useRef<AbortController | null>(null);
@@ -481,9 +506,10 @@ export default function DanteChat({
   useEffect(() => {
     if (!shouldAutoScrollRef.current) return;
 
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-    });
+    // Scroll the chat window itself — scrollIntoView also scrolled the
+    // page, pushing the selector and NEW CHAT under the mobile header.
+    const el = chatWindowRef.current;
+    el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, isLoading]);
 
   /* =======================================================
@@ -532,17 +558,22 @@ export default function DanteChat({
     const data = (await response.json()) as { messages?: StoredDanteMessage[] };
     // Only the automatic mount restore yields to a send already in progress; a picked conversation always opens.
     if (isMountRestore && sendStartedRef.current) return true;
-    setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }, ...(data.messages ?? []).map(fromStoredMessage)]);
+    const stored = data.messages ?? [];
+    setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }, ...stored.map(fromStoredMessage)]);
+    setRestored(stored.length > 0 ? { count: stored.length, asOf: stored[stored.length - 1].createdAt } : null);
     setThreadId(id);
     syncThreadUrl(id);
+    if (restoreHistory) rememberThread(id);
     return true;
   }
 
   function startNewConversation() {
     abortControllerRef.current?.abort();
     setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }]);
+    setRestored(null);
     setThreadId(null);
     syncThreadUrl(null);
+    if (restoreHistory) rememberThread(null);
   }
 
   async function selectThread(id: string) {
@@ -556,9 +587,23 @@ export default function DanteChat({
     let cancelled = false;
     async function restore() {
       if (!restoreHistory) return;
-      const fromUrl = compact ? null : new URLSearchParams(window.location.search).get("c");
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = compact ? null : params.get("c");
+      // ?ask= (a contextual "Ask Dante" link): a fresh conversation with the question drafted, never sent automatically.
+      const ask = compact ? null : params.get("ask")?.trim().slice(0, 500) || null;
+      if (ask) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("ask");
+        window.history.replaceState(window.history.state, "", url);
+        setInput(ask);
+        rememberThread(null);
+        await refreshThreads();
+        return;
+      }
       const list = await refreshThreads();
-      const target = fromUrl ?? list[0]?.id ?? null;
+      // URL first, then the conversation this tab last had open ("" = it was on a new chat), then the most recent one.
+      const remembered = readLastThread();
+      const target = fromUrl ?? (remembered === null ? list[0]?.id ?? null : remembered || null);
       if (!cancelled && target && !sendStartedRef.current && !(await openThread(target, true))) syncThreadUrl(null);
     }
     void restore()
@@ -658,6 +703,7 @@ export default function DanteChat({
     if (!threadId) {
       setThreadId(activeThreadId);
       syncThreadUrl(activeThreadId);
+      if (restoreHistory) rememberThread(activeThreadId);
     }
 
     const turnId = retry?.turnId ?? crypto.randomUUID();
@@ -786,17 +832,24 @@ export default function DanteChat({
         if (doneEvent) {
           const finalEvent = doneEvent;
 
-          updateStreamingMessage(assistantId, (message) => ({
-            ...message,
-            insight: finalEvent.insight,
-            sources: Array.isArray(finalEvent.sources) ? finalEvent.sources : [],
-            // A pending confirmation is only ever attached here, from
-            // the server's own completed `done` event — never
-            // rendered speculatively while text is still streaming.
-            pendingConfirmation: finalEvent.pendingConfirmation,
-            confirmationResolution: null,
-            isComplete: true,
-          }));
+          updateStreamingMessage(assistantId, (message) => {
+            // QA-08: a finished reply with no text and nothing to confirm would render as a silent blank — say so instead
+            // (same copy as any failed turn) and offer Retry.
+            const empty = message.content.trim().length === 0 && !finalEvent.pendingConfirmation;
+            return {
+              ...message,
+              content: empty ? UNAVAILABLE_MESSAGE : message.content,
+              insight: finalEvent.insight,
+              sources: Array.isArray(finalEvent.sources) ? finalEvent.sources : [],
+              // A pending confirmation is only ever attached here, from
+              // the server's own completed `done` event — never
+              // rendered speculatively while text is still streaming.
+              pendingConfirmation: finalEvent.pendingConfirmation,
+              confirmationResolution: null,
+              isComplete: true,
+              ...(empty ? { historyStatus: "error" as const } : {}),
+            };
+          });
 
           setActivity("success");
         }
@@ -960,517 +1013,210 @@ export default function DanteChat({
   }
 
   /* =======================================================
-     UI
+     UI — conversation first: a slim header, the messages, the composer.
   ======================================================= */
 
+  const welcome = messages[0];
+  const conversation = messages.slice(1);
+
   return (
-    <div
+    <section
+      aria-label={heroTitle}
       className={cn(
-        "relative flex w-full flex-col font-sans overflow-hidden rounded-[24px] border border-white/6 p-4 sm:p-6 transition-all duration-500",
-        hudStyles.obsidianCanvas,
+        // isolate: keeps the chat's internal z-layers from painting over the dashboard header.
+        // mf-touch-inputs: the composer and conversation picker stay 16px on phones (no zoom on focus).
+        "relative isolate flex w-full flex-col font-sans overflow-hidden rounded-[20px] border border-mf-glass-border bg-mf-glass-surface mf-touch-inputs",
         compact
           ? "h-[min(65dvh,560px)] max-h-[min(65dvh,560px)] min-h-[420px]"
-          : "h-[min(82dvh,860px)] min-h-[520px] sm:min-h-[580px]",
+          // Below lg: fit between the shell header (4rem), the page's top padding (1.25rem)
+          // and the bottom nav (4.5rem, as the workout bar) so the composer is never under the nav.
+          : "max-lg:h-[calc(100dvh-9.75rem-env(safe-area-inset-bottom,0px))] max-lg:min-h-[360px] lg:h-[min(82dvh,860px)] lg:min-h-[580px]",
         className
       )}
     >
-      {/* 2D PROCEDURAL BIOMETRIC FIELD CANVAS (Grid & Micro-Particles) */}
-      <BiometricFieldCanvas />
-
-      {/* Ambient Lighting Washes — Persistent in BOTH States */}
-      <div aria-hidden="true" className={`absolute inset-0 pointer-events-none z-0 ${hudStyles.topLimeWash}`} />
-      <div aria-hidden="true" className={`absolute inset-0 pointer-events-none z-0 ${hudStyles.bottomVioletWash}`} />
-      <div aria-hidden="true" className={`absolute inset-0 pointer-events-none z-0 ${hudStyles.leftBlueWash}`} />
-
-      {/* Screen Reader Accessibility */}
       <span aria-live="polite" className="sr-only">
         {DANTE_STATE_LABEL[visualState]}
       </span>
 
-      {/* CONVERSATION HISTORY — server-backed; a native select stays usable on phones. */}
-      {restoreHistory ? (
-        <div className="relative z-30 mb-2 flex shrink-0 items-center gap-2">
-          <select
-            aria-label="Dante conversations"
-            value={threadId ?? ""}
-            disabled={isLoading || isRestoring}
-            onChange={(event) => void selectThread(event.target.value)}
-            className="h-9 min-w-0 flex-1 truncate rounded-xl border border-white/10 bg-[#0e1016]/80 px-3 font-mono text-[11px] text-zinc-300 disabled:opacity-50"
-          >
-            <option value="">{isRestoring ? "Loading conversations…" : "New conversation"}</option>
-            {threads.map((thread) => (
-              <option key={thread.id} value={thread.id}>
-                {thread.title} · {new Date(thread.updatedAt).toLocaleDateString()}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={startNewConversation}
-            disabled={isLoading || isRestoring || threadId === null}
-            className="h-9 shrink-0 rounded-xl border border-white/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wider text-zinc-300 transition hover:bg-white/5 disabled:opacity-40"
-          >
-            New chat
-          </button>
-        </div>
+      {/* HEADER — who you're talking to, and (full page) which conversation. */}
+      <header className="flex shrink-0 items-center gap-2 border-b border-mf-glass-border px-3 py-2 sm:px-4">
+        <DanteMonogram />
+        <span className={cn("text-sm font-bold text-mf-glass-text", restoreHistory && "max-sm:sr-only")}>Dante</span>
+
+        {restoreHistory ? (
+          <>
+            <select
+              aria-label="Dante conversations"
+              value={threadId ?? ""}
+              disabled={isLoading || isRestoring}
+              onChange={(event) => void selectThread(event.target.value)}
+              className="h-11 min-w-0 flex-1 truncate rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-3 text-sm text-mf-glass-text-secondary disabled:opacity-50"
+            >
+              <option value="">{isRestoring ? "Loading conversations…" : "New conversation"}</option>
+              {threads.map((thread) => (
+                <option key={thread.id} value={thread.id}>
+                  {thread.title} · {new Date(thread.updatedAt).toLocaleDateString()}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={startNewConversation}
+              disabled={isLoading || isRestoring || threadId === null}
+              className="h-11 shrink-0 rounded-xl border border-mf-glass-border px-3 text-sm font-semibold text-mf-glass-text-secondary transition hover:bg-white/5 disabled:opacity-40"
+            >
+              New chat
+            </button>
+          </>
+        ) : null}
+      </header>
+
+      {contextLine ? (
+        <p className="shrink-0 border-b border-mf-glass-border px-3 py-2 text-xs leading-5 text-mf-glass-text-muted sm:px-4">
+          <span className="font-semibold text-mf-glass-text-secondary">Your data now</span> · {contextLine}
+        </p>
       ) : null}
 
-      {/* ===================================================
-          DANTE SUPERVISOR HEADER (IN-PLACE FLUID MORPH)
-      =================================================== */}
+      {/* CONVERSATION */}
       <div
-        className={cn(
-          "relative z-20 flex shrink-0 transition-all duration-500",
-          isEmpty
-            ? "flex-col items-center justify-center gap-3 px-1 py-2 text-center"
-            : "mb-3 flex-row items-center justify-between rounded-[18px] border border-white/6 bg-[#0e1016]/60 px-3 py-2 sm:px-4 sm:py-2.5 backdrop-blur-md"
-        )}
+        ref={chatWindowRef}
+        onScroll={handleChatWindowScroll}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5"
       >
-        {/* Living Mascot Supervisor */}
-        <div
-          className={cn(
-            "flex items-center gap-3",
-            isEmpty ? "w-full max-w-md flex-col sm:flex-row sm:justify-center" : "min-w-0 flex-1"
-          )}
-        >
-          <div
-            className={cn(
-              "relative flex shrink-0 items-center justify-center transition-all duration-500",
-              isEmpty ? "p-2 sm:p-4" : "origin-left scale-75"
-            )}
-          >
-            {/* Volumetric Cone Light (Active in State 1) */}
-            {isEmpty && (
-              <div aria-hidden="true" className={`absolute -top-2 hidden w-[180px] h-[130px] pointer-events-none sm:block ${hudStyles.volumetricCone}`} />
-            )}
+        <div className="mx-auto max-w-3xl space-y-5">
+          <AssistantText content={welcome.content} />
 
-            {/* Elliptical Floor Reflection Sheen */}
-            {isEmpty && (
-              <div aria-hidden="true" className={`absolute bottom-1 hidden w-[130px] h-[22px] rounded-full pointer-events-none sm:block ${hudStyles.floorSheen}`} />
-            )}
-
-            {/* Concentric SVG Dashed Orbit Rings */}
-            {isEmpty && (
-              <svg
-                viewBox="-300 -140 600 280"
-                className="pointer-events-none absolute inset-0 hidden size-full overflow-visible sm:block"
-                aria-hidden="true"
-              >
-                <ellipse
-                  rx="275"
-                  ry="115"
-                  fill="none"
-                  stroke="rgba(212, 255, 0, 0.35)"
-                  strokeWidth="1"
-                  strokeDasharray="4 8"
-                  transform="rotate(-8)"
-                  className={hudStyles.orbitRingCW}
-                />
-                <ellipse
-                  rx="210"
-                  ry="85"
-                  fill="none"
-                  stroke="rgba(212, 255, 0, 0.22)"
-                  strokeWidth="1"
-                  strokeDasharray="2 6"
-                  transform="rotate(12)"
-                  className={hudStyles.orbitRingCCW}
-                />
-              </svg>
-            )}
-
-            {/* Laser Scanline Beam & Mascot Float */}
-            <div className="relative z-10 overflow-hidden py-1">
-              {isEmpty && (
-                <div className={`absolute left-0 right-0 z-20 pointer-events-none ${hudStyles.scanlineBeam}`} />
-              )}
-              <div className={cn(hudStyles.mascotFloat, isEmpty && "origin-center max-sm:scale-[0.78]")}>
-                <DanteRobot
-                  state={visualState}
-                  size="sm"
-                  interactive
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Morphing Metadata Breadcrumb */}
-          <div className={cn("min-w-0", isEmpty ? "text-center sm:text-left" : "text-left")}>
-            <p className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-[#D4FF00] sm:text-[10px] sm:tracking-[0.2em]">
-              {isEmpty ? "DANTE • ONLINE" : "DANTE • LIVE"}
-            </p>
-            {isEmpty ? (
-              <h2 className="mt-1 text-lg font-bold tracking-tight text-white sm:text-xl md:text-2xl lg:text-3xl">
-                {heroTitle}
-              </h2>
-            ) : (
-              <p className="truncate text-[11px] font-mono text-zinc-400">
-                TRAINING • RECOVERY • NUTRITION
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Live Status Beacon (when in active chat mode) */}
-        {!isEmpty && (
-          <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-            <span
-              className={cn(
-                "size-2 rounded-full transition-colors",
-                visualState === "error"
-                  ? "bg-rose-400 shadow-[0_0_8px_#f43f5e]"
-                  : visualState === "idle"
-                    ? "bg-[#D4FF00] shadow-[0_0_8px_#D4FF00]"
-                    : "bg-[var(--mf-violet)] shadow-[0_0_8px_var(--mf-violet)] animate-pulse"
-              )}
-            />
-            <span>{visualState === "idle" ? "ONLINE" : visualState}</span>
-          </div>
-        )}
-      </div>
-
-      {/* ===================================================
-          STATE 1: SATELLITE PROMPT ORBIT SYSTEM
-      =================================================== */}
-      {isEmpty && (
-        <div className="relative z-30 flex-1 w-full max-w-7xl mx-auto grid grid-cols-1 gap-3.5 sm:block sm:h-full my-auto transition-all duration-300">
-          {emptyStatePrompts.slice(0, 4).map((item, index) => {
-            const driftClasses = [
-              hudStyles.satelliteDriftA,
-              hudStyles.satelliteDriftB,
-              hudStyles.satelliteDriftC,
-              hudStyles.satelliteDriftD,
-            ];
-            const driftClass = driftClasses[index % 4];
-            const isHovered = hoveredPromptIndex === index;
-            const isAnyHovered = hoveredPromptIndex !== null;
-            const opacityClass = isAnyHovered && !isHovered ? "opacity-45 scale-[0.98]" : "opacity-100";
-
-            const spatialPositionClass = [
-              "sm:absolute sm:top-2 sm:left-0 md:left-2 lg:left-6 xl:left-10 sm:max-w-[280px]",
-              "sm:absolute sm:top-2 sm:right-0 md:right-2 lg:right-6 xl:right-10 sm:max-w-[280px]",
-              "sm:absolute sm:bottom-6 sm:left-2 md:left-4 lg:left-10 xl:left-16 sm:max-w-[280px]",
-              "sm:absolute sm:bottom-6 sm:right-2 md:right-4 lg:right-10 xl:right-16 sm:max-w-[280px]",
-            ][index % 4];
-
-            return (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => handleQuickPrompt(item.prompt)}
-                onPointerEnter={() => setHoveredPromptIndex(index)}
-                onPointerLeave={() => setHoveredPromptIndex(null)}
-                disabled={isLoading}
-                className={`relative px-4 py-3.5 text-left transition ${hudStyles.hudCard} ${driftClass} ${spatialPositionClass} ${opacityClass} disabled:cursor-not-allowed disabled:opacity-40`}
-              >
-                <p className="font-mono text-[9.5px] font-bold uppercase tracking-wider text-[#D4FF00]/90 mb-1">
-                  {item.tag ?? "Prompt"}
-                </p>
-                <p className="text-xs font-semibold leading-5 text-zinc-100">
-                  {item.label}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ===================================================
-          STATE 2: ACTIVE CONVERSATION THREAD (HUD GLASS TELEMETRY)
-      =================================================== */}
-      {!isEmpty && (
-        <div
-          ref={chatWindowRef}
-          onScroll={handleChatWindowScroll}
-          className="relative z-20 flex-1 min-h-0 w-full max-w-3xl mx-auto overflow-y-auto px-2 sm:px-4 py-3 space-y-4"
-        >
-          {messages.map((message) => {
-            const isUser = message.role === "user";
-
-            return (
-              <div
-                key={message.id}
-                className={cn(
-                  "dante-message-in flex w-full",
-                  isUser ? "justify-end" : "justify-start"
-                )}
-              >
-                {isUser ? (
-                  /* User Message: Sleek right-aligned obsidian glass pill */
-                  <div className="max-w-[85%] sm:max-w-[75%] rounded-[16px_16px_4px_16px] border border-[#D4FF00]/25 bg-[#16181e]/85 px-4.5 py-3 text-sm sm:text-base font-medium leading-relaxed text-white shadow-lg backdrop-blur-md">
-                    <p className="whitespace-pre-wrap">{message.content}</p>
-                  </div>
-                ) : (
-                  /* Dante Message: Left-aligned glass panel */
-                  <div className="flex w-full max-w-[95%] sm:max-w-[90%] flex-col gap-2 rounded-[16px_16px_16px_4px] border border-white/8 bg-[#0e1016]/75 p-4 sm:p-5 shadow-xl backdrop-blur-xl">
-                    {/* Header status pill: [D] icon badge with glowing lime pulse dot */}
-                    <div className="flex items-center gap-2">
-                      <span className="flex size-5 items-center justify-center rounded-md border border-[#D4FF00]/30 bg-[#D4FF00]/10 font-mono text-[10px] font-black text-[#D4FF00]">
-                        D
-                      </span>
-                      <span className="size-1.5 rounded-full bg-[#D4FF00] shadow-[0_0_6px_#D4FF00]" />
-                      <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                        DANTE // INTELLIGENCE COACH
-                      </span>
-                    </div>
-
-                    {/* Thinking state with 3 animated equalizer bars */}
-                    {message.content.length === 0 && !message.isComplete ? (
-                      <div
-                        aria-live="polite"
-                        className="flex items-center gap-2.5 py-2 font-mono text-xs font-bold tracking-wider text-[#D4FF00]"
-                      >
-                        <span className="size-1.5 rounded-full bg-[#D4FF00] animate-ping" />
-                        <span>{"// DANTE ANALYZING BIOMETRICS"}</span>
-                        <div className="flex items-center gap-0.5 ml-1 select-none" aria-hidden="true">
-                          <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
-                          <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.2s" }} />
-                          <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.4s" }} />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="prose prose-invert max-w-none text-white/90 text-sm leading-relaxed">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeRaw, rehypeSanitize]}
-                          components={{
-                            p({ children }) {
-                              return (
-                                <p className="mb-3.5 text-sm sm:text-[15px] leading-relaxed text-[#edf0f5] last:mb-0">
-                                  {children}
-                                </p>
-                              );
-                            },
-                            h1({ children }) {
-                              return (
-                                <h1 className="mb-4 mt-2 text-xl sm:text-2xl font-bold tracking-tight text-white">
-                                  {children}
-                                </h1>
-                              );
-                            },
-                            h2({ children }) {
-                              return (
-                                <h2 className="mb-3 mt-5 text-lg sm:text-xl font-semibold tracking-wide text-white">
-                                  {children}
-                                </h2>
-                              );
-                            },
-                            h3({ children }) {
-                              return (
-                                <h3 className="mb-2 mt-4 text-base font-semibold text-[#D4FF00]">
-                                  {children}
-                                </h3>
-                              );
-                            },
-                            strong({ children }) {
-                              return (
-                                <strong className="font-semibold text-white">
-                                  {children}
-                                </strong>
-                              );
-                            },
-                            ul({ children }) {
-                              return (
-                                <ul className="mb-4 ml-5 list-disc space-y-1.5 marker:text-[#D4FF00]">
-                                  {children}
-                                </ul>
-                              );
-                            },
-                            // `start` must pass through: a list interrupted by a paragraph or heading continues as <ol start="n">.
-                            ol({ children, start }) {
-                              return (
-                                <ol start={start} className="mb-4 ml-5 list-decimal space-y-1.5 marker:font-semibold marker:text-[#D4FF00]">
-                                  {children}
-                                </ol>
-                              );
-                            },
-                            li({ children }) {
-                              return (
-                                <li className="pl-1 text-sm sm:text-[15px] leading-relaxed">
-                                  {children}
-                                </li>
-                              );
-                            },
-                            br() {
-                              return <br className="block content-['']" />;
-                            },
-                            table({ children }) {
-                              return (
-                                <div className="my-4 w-full overflow-x-auto rounded-xl border border-white/10">
-                                  <table className="w-full min-w-160 border-collapse text-left text-xs sm:text-sm">
-                                    {children}
-                                  </table>
-                                </div>
-                              );
-                            },
-                            thead({ children }) {
-                              return (
-                                <thead className="bg-[#12141a] text-[#D4FF00]">
-                                  {children}
-                                </thead>
-                              );
-                            },
-                            tbody({ children }) {
-                              return (
-                                <tbody className="divide-y divide-white/8">
-                                  {children}
-                                </tbody>
-                              );
-                            },
-                            tr({ children }) {
-                              return (
-                                <tr className="transition-colors hover:bg-white/4">
-                                  {children}
-                                </tr>
-                              );
-                            },
-                            th({ children }) {
-                              return (
-                                <th className="border-r border-white/8 px-4 py-3 text-left font-bold text-[#D4FF00] last:border-r-0">
-                                  {children}
-                                </th>
-                              );
-                            },
-                            td({ children }) {
-                              return (
-                                <td className="border-r border-white/8 px-4 py-3 align-top text-[#e1e5ec] last:border-r-0">
-                                  {children}
-                                </td>
-                              );
-                            },
-                            blockquote({ children }) {
-                              return (
-                                <blockquote className="my-4 rounded-r-xl border-l-4 border-[#D4FF00] bg-black/20 px-4 py-3 text-white/75">
-                                  {children}
-                                </blockquote>
-                              );
-                            },
-                            code({ children }) {
-                              return (
-                                <code className="rounded-md bg-black/35 px-1.5 py-0.5 font-mono text-xs text-[#D4FF00]">
-                                  {children}
-                                </code>
-                              );
-                            },
-                            pre({ children }) {
-                              return (
-                                <pre className="my-4 overflow-x-auto rounded-xl bg-black/45 p-4 font-mono text-xs leading-5">
-                                  {children}
-                                </pre>
-                              );
-                            },
-                            hr() {
-                              return <hr className="my-5 border-white/10" />;
-                            },
-                          }}
-                        >
-                          {message.content}
-                        </ReactMarkdown>
-                      </div>
-                    )}
-
-                    {message.historyStatus === "pending" || message.historyStatus === "interrupted" ? (
-                      <p className="text-xs font-semibold text-amber-400">
-                        {message.historyStatus === "pending"
-                          ? "This reply was never confirmed as finished — it may have been cut off by a refresh or lost connection."
-                          : "This reply was interrupted before Dante finished."}
-                      </p>
-                    ) : null}
-
-                    {message.notSaved ? (
-                      <p className="text-xs font-semibold text-amber-400">
-                        This reply couldn&apos;t be saved to your conversation history.
-                      </p>
-                    ) : null}
-
-                    {message.historyStatus && message.turnId && !isLoading ? (
+          {isEmpty ? (
+            <div className="space-y-3">
+              {heroSubtitle ? <p className="text-sm leading-6 text-mf-glass-text-muted">{heroSubtitle}</p> : null}
+              {emptyStatePrompts.length > 0 ? (
+                <ul className="space-y-2" aria-label="Suggested questions">
+                  {emptyStatePrompts.slice(0, 4).map((item) => (
+                    <li key={item.label}>
                       <button
                         type="button"
-                        onClick={() => {
-                          const question = messages.find((entry) => entry.role === "user" && entry.turnId === message.turnId);
-                          if (question) void sendMessage(question.content, { turnId: message.turnId!, assistantId: message.id });
-                        }}
-                        className="self-start rounded-lg border border-white/15 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-zinc-300 transition hover:bg-white/5"
+                        onClick={() => handleQuickPrompt(item.prompt)}
+                        disabled={isLoading}
+                        className="flex min-h-11 w-full items-center rounded-xl border border-mf-glass-border px-3.5 py-2 text-left text-sm text-mf-glass-text-secondary transition hover:border-mf-glass-dante/40 hover:text-mf-glass-text disabled:opacity-40"
                       >
-                        Retry
+                        {item.label}
                       </button>
-                    ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
 
-                    {message.insight ? (
-                      <DanteInsightPanel insight={message.insight} />
-                    ) : null}
+          {conversation.map((message, index) => {
+            const isUser = message.role === "user";
+            // One marker where the reopened history ends: replies above it describe the data as it was then.
+            const earlierBoundary = restored && index === restored.count - 1;
 
-                    {message.sources && message.sources.length > 0 ? (
-                      <DanteSourcesPanel sources={message.sources} />
-                    ) : null}
+            return (
+              <React.Fragment key={message.id}>
+                <div className={cn("dante-message-in flex w-full", isUser ? "justify-end" : "justify-start")}>
+                  {isUser ? (
+                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-white/[0.07] px-4 py-2.5 text-[15px] leading-relaxed text-mf-glass-text sm:max-w-[75%]">
+                      <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                    </div>
+                  ) : (
+                    <div className="flex w-full min-w-0 flex-col gap-2">
+                      {message.content.length === 0 && !message.isComplete ? (
+                        <p aria-live="polite" className="flex items-center gap-2 py-1 text-sm text-mf-glass-text-muted">
+                          <span className="flex gap-1" aria-hidden="true">
+                            <span className="size-1.5 rounded-full bg-mf-glass-dante motion-safe:animate-pulse" />
+                            <span className="size-1.5 rounded-full bg-mf-glass-dante motion-safe:animate-pulse [animation-delay:150ms]" />
+                            <span className="size-1.5 rounded-full bg-mf-glass-dante motion-safe:animate-pulse [animation-delay:300ms]" />
+                          </span>
+                          Dante is thinking…
+                        </p>
+                      ) : (
+                        <AssistantText content={message.content} />
+                      )}
 
-                    {message.pendingConfirmation ? (
-                      <PendingConfirmationPanel
-                        pendingConfirmation={message.pendingConfirmation}
-                        resolution={message.confirmationResolution}
-                        isBusy={confirmingActionId === message.pendingConfirmation.actionId}
-                        onConfirm={() =>
-                          void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "confirm")
-                        }
-                        onCancel={() =>
-                          void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "cancel")
-                        }
-                      />
-                    ) : null}
-                  </div>
-                )}
-              </div>
+                      {message.historyStatus === "pending" || message.historyStatus === "interrupted" ? (
+                        <p className="text-xs font-semibold text-amber-400">
+                          {message.historyStatus === "pending"
+                            ? "This reply was never confirmed as finished — it may have been cut off by a refresh or lost connection."
+                            : "This reply was interrupted before Dante finished."}
+                        </p>
+                      ) : null}
+
+                      {message.notSaved ? (
+                        <p className="text-xs font-semibold text-amber-400">
+                          This reply couldn&apos;t be saved to your conversation history.
+                        </p>
+                      ) : null}
+
+                      {message.historyStatus && message.turnId && !isLoading ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const question = messages.find((entry) => entry.role === "user" && entry.turnId === message.turnId);
+                            if (question) void sendMessage(question.content, { turnId: message.turnId!, assistantId: message.id });
+                          }}
+                          className="min-h-11 self-start rounded-xl border border-mf-glass-border px-4 text-sm font-semibold text-mf-glass-text-secondary transition hover:bg-white/5"
+                        >
+                          Retry
+                        </button>
+                      ) : null}
+
+                      {message.insight ? <DanteInsightPanel insight={message.insight} /> : null}
+
+                      {message.sources && message.sources.length > 0 ? <DanteSourcesPanel sources={message.sources} /> : null}
+
+                      {message.pendingConfirmation ? (
+                        <PendingConfirmationPanel
+                          pendingConfirmation={message.pendingConfirmation}
+                          resolution={message.confirmationResolution}
+                          isBusy={confirmingActionId === message.pendingConfirmation.actionId}
+                          onConfirm={() => void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "confirm")}
+                          onCancel={() => void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "cancel")}
+                        />
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
+                {earlierBoundary ? (
+                  <p role="note" className="flex items-center gap-3 text-[11px] font-semibold text-mf-glass-text-muted">
+                    <span className="h-px flex-1 bg-mf-glass-border" aria-hidden="true" />
+                    <span className="text-center">Earlier conversation · figures above were current {formatAsOf(restored.asOf)}</span>
+                    <span className="h-px flex-1 bg-mf-glass-border" aria-hidden="true" />
+                  </p>
+                ) : null}
+              </React.Fragment>
             );
           })}
-
-          <div ref={messagesEndRef} />
         </div>
-      )}
+      </div>
 
-      {/* ===================================================
-          COMPOSER — Persistent, Pinned at Bottom Center
-      =================================================== */}
+      {/* COMPOSER */}
       <form
         onSubmit={handleSubmit}
-        className="relative z-30 mt-3 w-full min-w-0 max-w-3xl mx-auto flex shrink-0 items-center gap-2 sm:gap-3 pb-[env(safe-area-inset-bottom)]"
+        className="flex shrink-0 items-end gap-2 border-t border-mf-glass-border px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:px-4"
       >
-        <div
-          className={`flex min-h-12 min-w-0 flex-1 items-center rounded-[18px] px-3 py-2 text-sm sm:px-4 ${hudStyles.hudInputContainer}`}
-        >
-          <span className="mr-2 font-mono text-xs font-bold text-[#D4FF00] select-none">
-            $&gt;
-          </span>
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          disabled={isLoading}
+          aria-label="Message to Dante"
+          placeholder="Ask Dante…"
+          className="max-h-40 min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-3.5 py-2.5 text-base leading-6 text-mf-glass-text placeholder:text-mf-glass-text-muted focus-visible:border-mf-glass-dante/60 disabled:cursor-not-allowed disabled:opacity-60"
+        />
 
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={handleInputFocus}
-            onBlur={handleInputBlur}
-            disabled={isLoading}
-            aria-label="Message to Dante"
-            placeholder="Ask Dante…"
-            className="max-h-40 min-w-0 w-full flex-1 resize-none border-none bg-transparent font-mono text-xs leading-5 text-white outline-none shadow-none placeholder:truncate placeholder:whitespace-nowrap placeholder:text-zinc-500 focus:border-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
-          />
-
-          {/* Live Audio Waveform (4 mini equalizer bars) */}
-          <div className="hidden items-center gap-0.5 px-2 select-none sm:flex" aria-hidden="true">
-            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
-            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.3s" }} />
-            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.15s" }} />
-            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.45s" }} />
-          </div>
-        </div>
-
-        {/* Send / Stop Button */}
         {isLoading ? (
           <button
             type="button"
             onClick={stopStreaming}
             aria-label="Stop Dante's response"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-400 shadow-lg transition hover:bg-rose-500/20 active:scale-95"
+            className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-rose-500/40 text-rose-300 transition hover:bg-rose-500/10"
           >
             <span className="size-3 rounded-[2px] bg-current" aria-hidden="true" />
           </button>
@@ -1479,33 +1225,62 @@ export default function DanteChat({
             type="submit"
             disabled={!input.trim()}
             aria-label="Send message to Dante"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#D4FF00] text-black shadow-[0_0_16px_rgba(212,255,0,0.3)] transition hover:scale-105 hover:bg-[#D4FF00] hover:shadow-[0_0_22px_rgba(212,255,0,0.6)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+            className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-mf-glass-brand text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:cursor-not-allowed disabled:opacity-30"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M22 2L11 13"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M22 2L15 22L11 13L2 9L22 2Z"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M22 2L11 13" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
         )}
       </form>
+    </section>
+  );
+}
+
+/** Dante's small mark: a monogram, never an illustration. */
+function DanteMonogram() {
+  return (
+    <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-lg border border-mf-glass-dante/35 bg-mf-glass-dante/10 text-xs font-black text-mf-glass-dante">
+      D
+    </span>
+  );
+}
+
+const MARKDOWN_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>["components"] = {
+  p: ({ children }) => <p className="mb-3 text-[15px] leading-relaxed text-mf-glass-text last:mb-0">{children}</p>,
+  h1: ({ children }) => <h1 className="mb-3 mt-2 text-lg font-bold text-mf-glass-text">{children}</h1>,
+  h2: ({ children }) => <h2 className="mb-2 mt-4 text-base font-bold text-mf-glass-text">{children}</h2>,
+  h3: ({ children }) => <h3 className="mb-2 mt-3 text-[15px] font-semibold text-mf-glass-text">{children}</h3>,
+  strong: ({ children }) => <strong className="font-semibold text-mf-glass-text">{children}</strong>,
+  ul: ({ children }) => <ul className="mb-3 ml-5 list-disc space-y-1 marker:text-mf-glass-text-muted">{children}</ul>,
+  // `start` must pass through: a list interrupted by a paragraph or heading continues as <ol start="n">.
+  ol: ({ children, start }) => <ol start={start} className="mb-3 ml-5 list-decimal space-y-1 marker:text-mf-glass-text-muted">{children}</ol>,
+  li: ({ children }) => <li className="pl-1 text-[15px] leading-relaxed text-mf-glass-text">{children}</li>,
+  br: () => <br className="block content-['']" />,
+  table: ({ children }) => (
+    <div className="my-3 w-full overflow-x-auto rounded-xl border border-mf-glass-border">
+      <table className="w-full min-w-120 border-collapse text-left text-sm">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-white/[0.04] text-mf-glass-text-secondary">{children}</thead>,
+  tbody: ({ children }) => <tbody className="divide-y divide-mf-glass-border">{children}</tbody>,
+  tr: ({ children }) => <tr>{children}</tr>,
+  th: ({ children }) => <th className="px-3 py-2 text-left font-semibold">{children}</th>,
+  td: ({ children }) => <td className="px-3 py-2 align-top text-mf-glass-text">{children}</td>,
+  blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-mf-glass-dante/50 pl-3 text-mf-glass-text-secondary">{children}</blockquote>,
+  code: ({ children }) => <code className="rounded bg-black/30 px-1 py-0.5 font-mono text-[13px] text-mf-glass-text">{children}</code>,
+  pre: ({ children }) => <pre className="my-3 overflow-x-auto rounded-xl bg-black/35 p-3 font-mono text-[13px] leading-5">{children}</pre>,
+  hr: () => <hr className="my-4 border-mf-glass-border" />,
+};
+
+/** A Dante reply as plain reading text (sanitized markdown), not a card. */
+function AssistantText({ content }: { content: string }) {
+  return (
+    <div className="min-w-0 break-words">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]} components={MARKDOWN_COMPONENTS}>
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }

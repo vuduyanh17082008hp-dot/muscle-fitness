@@ -268,6 +268,8 @@
 .pj-root .tabs { display: flex; gap: 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem; overflow-x: auto; }
 .pj-root .tab { font-size: 15px; color: var(--text-muted); padding: 10px 4px; font-weight: 500; border-bottom: 2px solid transparent; }
 .pj-root .tab[aria-current="page"] { color: var(--text); border-bottom-color: #4ade80; }
+/* UX-R1.4: all four tabs fit a 320px phone instead of the last one scrolling out of view. */
+@media (max-width: 399px) { .pj-root .tabs { gap: 1rem; } }
 
 @media (hover: hover) and (pointer: fine) {
   .pj-root.pj-cursor-on, .pj-root.pj-cursor-on a, .pj-root.pj-cursor-on button { cursor: none; }

@@ -72,7 +72,7 @@ export function RecoveryTrendsChart({
               type="button"
               onClick={() => setRange(option)}
               className={cn(
-                "rounded-lg border px-3 py-1.5 text-xs font-bold transition",
+                "inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border px-3 text-xs font-bold transition",
                 range === option
                   ? "border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand"
                   : "border-mf-glass-border text-mf-glass-text-muted hover:border-mf-glass-border-strong",
@@ -91,7 +91,7 @@ export function RecoveryTrendsChart({
             type="button"
             onClick={() => setMetric(item.key)}
             className={cn(
-              "rounded-full border px-3 py-1.5 text-[11px] font-bold transition",
+              "inline-flex min-h-11 items-center rounded-full border px-3 text-xs font-bold transition",
               metric === item.key
                 ? "border-mf-glass-border-strong bg-white/10 text-mf-glass-text"
                 : "border-mf-glass-border text-mf-glass-text-muted hover:border-mf-glass-border-strong",
@@ -112,7 +112,8 @@ export function RecoveryTrendsChart({
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={points}
-              margin={{ top: 12, right: 10, left: -20, bottom: 0 }}
+              // No negative left margin: it pushed the Y-axis labels (e.g. "75") off the canvas on phones.
+              margin={{ top: 12, right: 8, left: 0, bottom: 0 }}
             >
               <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
               <XAxis
@@ -126,7 +127,7 @@ export function RecoveryTrendsChart({
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: "#71717a", fontSize: 11 }}
-                width={36}
+                width={30}
                 domain={metric === "score" ? [0, 100] : undefined}
               />
               <Tooltip

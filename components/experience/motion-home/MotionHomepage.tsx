@@ -27,6 +27,14 @@ import { MotionFooter } from "@/components/experience/motion-home/sections/Motio
 import type { MotionHomepageViewModel } from "@/components/experience/motion-home/data/homepageViewModel";
 import styles from "@/components/experience/motion-home/styles/motion-home.module.css";
 
+// Header links explore this page; only the account CTAs open the (authenticated) app.
+const exploreLinks = [
+  { label: "Training", href: "#training" },
+  { label: "Recovery", href: "#recovery" },
+  { label: "Nutrition", href: "#nutrition" },
+  { label: "Dante", href: "#dante" },
+];
+
 export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewModel }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeChapter, setActiveChapter] = useState<string>("hero");
@@ -44,6 +52,7 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
 
   const { routes } = viewModel;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const signedIn = viewModel.mode === "authenticated";
 
   return (
     <PageTransition>
@@ -64,41 +73,39 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
               </span>
             </div>
 
-            <nav className="hidden items-center gap-6 lg:flex">
-              {[
-                { label: "Dashboard", href: routes.dashboard },
-                { label: "Training", href: routes.training },
-                { label: "Nutrition", href: routes.nutrition },
-                { label: "Progress", href: routes.progress },
-                { label: "Dante", href: routes.chatbot },
-              ].map((link) => (
-                <Link
+            <nav aria-label="Explore Muscle Fitness" className="hidden items-center gap-6 lg:flex">
+              {exploreLinks.map((link) => (
+                <a
                   key={link.label}
                   href={link.href}
                   className="text-[13px] font-semibold text-zinc-400 transition hover:text-white"
                 >
                   {link.label}
-                </Link>
+                </a>
               ))}
             </nav>
 
             <div className="flex items-center gap-2">
+              {signedIn ? null : (
+                <Link
+                  href={routes.login}
+                  className="hidden rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-zinc-300 transition hover:border-white/20 hover:bg-white/5 sm:inline-flex"
+                >
+                  Log in
+                </Link>
+              )}
               <Link
-                href={routes.login}
-                className="hidden rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-zinc-300 transition hover:border-white/20 hover:bg-white/5 sm:inline-flex"
-              >
-                Log in
-              </Link>
-              <Link
-                href={routes.signup}
+                href={signedIn ? routes.dashboard : routes.signup}
                 className="rounded-xl bg-[var(--mf-brand)] px-4 py-2 text-xs font-black uppercase tracking-wider text-[var(--mf-brand-ink)] transition hover:bg-[var(--mf-brand-hover)]"
               >
-                Start now
+                {signedIn ? "Open dashboard" : "Start now"}
               </Link>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen((open) => !open)}
                 aria-label="Toggle navigation menu"
+                aria-expanded={mobileMenuOpen}
+                aria-controls="landing-mobile-menu"
                 className="inline-flex size-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 lg:hidden"
               >
                 <span className="text-xs font-bold uppercase">{mobileMenuOpen ? "✕" : "☰"}</span>
@@ -108,25 +115,25 @@ export function MotionHomepage({ viewModel }: { viewModel: MotionHomepageViewMod
 
           {/* Mobile Menu Drawer — closes immediately on any link click */}
           {mobileMenuOpen && (
-            <div className="border-t border-white/10 bg-[var(--mf-pub-bg)]/95 px-6 py-4 backdrop-blur-2xl lg:hidden">
-              <nav className="flex flex-col gap-3">
-                {[
-                  { label: "Dashboard", href: routes.dashboard },
-                  { label: "Training", href: routes.training },
-                  { label: "Nutrition", href: routes.nutrition },
-                  { label: "Progress", href: routes.progress },
-                  { label: "Dante", href: routes.chatbot },
-                  { label: "Log in", href: routes.login },
-                ].map((link) => (
-                  <Link
+            <div id="landing-mobile-menu" className="border-t border-white/10 bg-[var(--mf-pub-bg)]/95 px-6 py-4 backdrop-blur-2xl lg:hidden">
+              <nav aria-label="Explore Muscle Fitness" className="flex flex-col gap-3">
+                {exploreLinks.map((link) => (
+                  <a
                     key={link.label}
                     href={link.href}
                     onClick={() => setMobileMenuOpen(false)}
                     className="rounded-lg px-3 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-white/5 hover:text-white"
                   >
                     {link.label}
-                  </Link>
+                  </a>
                 ))}
+                <Link
+                  href={signedIn ? routes.dashboard : routes.login}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="mt-1 rounded-lg border-t border-white/10 px-3 pb-2 pt-4 text-sm font-semibold text-white transition hover:bg-white/5"
+                >
+                  {signedIn ? "Open dashboard" : "Log in"}
+                </Link>
               </nav>
             </div>
           )}

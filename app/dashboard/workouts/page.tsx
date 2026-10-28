@@ -15,9 +15,10 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { SectionTabs } from "@/components/dashboard/section-tabs";
 import { TRAIN_TABS } from "@/components/dashboard/train-tabs";
-import { loadTodaySession } from "@/lib/training/load-today-session";
+import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision";
+import { trainingHeroAction } from "@/lib/dashboard/training-hero-action";
 import { resolveCanonicalMuscle, MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
-import { PrimaryButton } from "@/components/ui/button";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /** A rough, honestly-labeled ("~") estimate from each exercise's own target sets and rest time — never a fabricated fixed number. 45s is an assumed average set-execution time, not measured. */
@@ -351,7 +352,7 @@ export default async function WorkoutsPage() {
     fitnessResponse,
     plansResponse,
     externalTemplates,
-    todaySession,
+    { todaySession, todaySessionStatus, hold, plannedDay },
   ] =
     await Promise.all([
       supabase
@@ -401,7 +402,8 @@ export default async function WorkoutsPage() {
         .limit(4),
 
       loadWgerTemplates(),
-      loadTodaySession(supabase, user.id),
+      // Same session/plan classification and safety hold as the Today hero (Daily Brief decision).
+      loadDailyDecision(supabase, user.id),
     ]);
 
   const fitness =
@@ -449,6 +451,15 @@ export default async function WorkoutsPage() {
 
   const estimatedMinutes = activeExercises.length > 0 ? estimateSessionMinutes(activeExercises) : null;
   const hasTodaySession = todaySession !== null && activeExercises.length > 0;
+  const planDay = !todaySession && plannedDay && plannedDay.kind !== "REST" ? plannedDay : null;
+  const heroAction = trainingHeroAction({
+    status: todaySessionStatus,
+    hold,
+    sessionId: todaySession?.id ?? null,
+    activePlanId: activePlan?.id ?? null,
+    restDay: plannedDay?.kind === "REST",
+    buildPlanHref: `/dashboard/workouts/plans/new?preset=${recommended}`,
+  });
 
   return (
     <main className="space-y-10">
@@ -468,11 +479,20 @@ export default async function WorkoutsPage() {
               <Dumbbell className="h-4 w-4" />
 
               <p className="text-xs font-black uppercase tracking-[0.28em]">
-                {hasTodaySession ? "Today's Session" : "Workout System"}
+                {heroAction.eyebrow}
               </p>
             </div>
 
-            {hasTodaySession ? (
+            {planDay ? (
+              <>
+                <h1 className="mt-4 text-4xl font-black tracking-tight text-mf-glass-text sm:text-5xl">
+                  {planDay.name}
+                </h1>
+                <p className="mt-4 text-sm text-mf-glass-text-muted sm:text-base">
+                  {planDay.exerciseCount} exercise{planDay.exerciseCount === 1 ? "" : "s"} · not started yet
+                </p>
+              </>
+            ) : hasTodaySession ? (
               <>
                 <h1 className="mt-4 text-4xl font-black tracking-tight text-mf-glass-text sm:text-5xl">
                   {todaySession!.name ?? "Today's session"}
@@ -509,30 +529,28 @@ export default async function WorkoutsPage() {
                 </p>
               </>
             )}
+
+            {heroAction.note ? (
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">{heroAction.note}</p>
+            ) : null}
           </div>
 
-          {hasTodaySession ? (
+          {/* One action from trainingHeroAction: completed/postponed are reviewed, a safety hold replaces Start/Resume. */}
+          {heroAction.primary ? (
             <PrimaryButton size="lg" asChild>
-              <Link href={`/dashboard/workouts/session/${todaySession!.id}`}>
-                Start workout
-                <ArrowRight className="size-4" />
-              </Link>
-            </PrimaryButton>
-          ) : activePlan ? (
-            // An active plan's days start from the plan page; offering to build a new plan here would bury it.
-            <PrimaryButton size="lg" asChild>
-              <Link href={`/dashboard/workouts/plans/${activePlan.id}`}>
-                Start from your plan
+              <Link href={heroAction.href}>
+                {heroAction.label === "Build recommended plan" ? <WandSparkles className="size-4" /> : null}
+                {heroAction.label}
                 <ArrowRight className="size-4" />
               </Link>
             </PrimaryButton>
           ) : (
-            <PrimaryButton size="lg" asChild>
-              <Link href={`/dashboard/workouts/plans/new?preset=${recommended}`}>
-                <WandSparkles className="size-4" />
-                Build recommended plan
+            <SecondaryButton size="lg" asChild>
+              <Link href={heroAction.href}>
+                {heroAction.label}
+                <ArrowRight className="size-4" />
               </Link>
-            </PrimaryButton>
+            </SecondaryButton>
           )}
         </div>
       </header>

@@ -2,6 +2,7 @@
 
 import {
   useState,
+  useSyncExternalStore,
   type FormEvent,
 } from "react"
 import Link from "next/link"
@@ -23,6 +24,8 @@ export function ForgotPasswordForm({
   )
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
+  // Until hydration the submit handler isn't attached; a native submit would send the fields as a GET query string.
+  const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false)
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
@@ -43,10 +46,12 @@ export function ForgotPasswordForm({
           normalizedEmail,
           {
             /*
-             * The email template uses redirectTo to build the
-             * /auth/confirm link.
+             * The default {{ .ConfirmationURL }} email verifies the
+             * token, then lands here with a PKCE code. The callback
+             * exchanges it for a session GoTrue marks amr
+             * "recovery", which /reset-password requires.
              */
-            redirectTo: window.location.origin,
+            redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
           }
         )
 
@@ -101,7 +106,7 @@ export function ForgotPasswordForm({
 
         <Link
           href="/login"
-          className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-orange-400"
+          className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-mf-brand-hover"
         >
           Return to login
         </Link>
@@ -140,14 +145,14 @@ export function ForgotPasswordForm({
             onChange={(event) =>
               setEmail(event.target.value)
             }
-            className="h-13 min-h-13 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-orange-400/60 focus:ring-4 focus:ring-orange-400/10 disabled:opacity-50"
+            className="h-13 min-h-13 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-mf-brand/60 focus:ring-4 focus:ring-mf-brand/10 disabled:opacity-50"
           />
         </div>
 
         <button
           type="submit"
-          disabled={loading || !email.trim()}
-          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={loading || !hydrated || !email.trim()}
+          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
             <>
@@ -162,7 +167,7 @@ export function ForgotPasswordForm({
 
       <Link
         href="/login"
-        className="block text-center text-sm font-black text-zinc-600 transition hover:text-orange-400"
+        className="block text-center text-sm font-black text-zinc-600 transition hover:text-mf-brand-hover"
       >
         Back to login
       </Link>

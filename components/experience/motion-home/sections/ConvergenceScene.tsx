@@ -9,10 +9,10 @@ import type { HomepageRoutes } from "@/components/experience/motion-home/data/ho
 
 const LOOP_STAGES = [
   { label: "Train", x: 110, y: 20, lx: 110, ly: 2 },
-  { label: "Measure", x: 196, y: 82, lx: 213, ly: 74 },
+  { label: "Measure", x: 196, y: 82, lx: 213, ly: 60 },
   { label: "Recover", x: 163, y: 183, lx: 173, ly: 200 },
   { label: "Adapt", x: 57, y: 183, lx: 47, ly: 200 },
-  { label: "Progress", x: 24, y: 82, lx: 7, ly: 74 },
+  { label: "Progress", x: 24, y: 82, lx: 7, ly: 60 },
 ] as const;
 
 const LOOP_PATH_D = `M ${LOOP_STAGES.map((stage) => `${stage.x},${stage.y}`).join(" L ")} Z`;

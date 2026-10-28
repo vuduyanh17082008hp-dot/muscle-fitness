@@ -50,7 +50,7 @@ export function DecisionCard<TDecision>({
 
   return (
     <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-mf-glass-dante" aria-hidden="true" />
           <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">

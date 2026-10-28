@@ -31,6 +31,7 @@ export type ApplyProposalError =
   | "INVALID_PATCH"
   | "NO_MUTATION"
   | "APPLY_FAILED"
+  | "HOLD_ACTIVE"
 
 export type ApplyProposalResult =
   | {
@@ -84,6 +85,28 @@ const APPLY_MESSAGES: Record<ApplyProposalError, string> = {
   INVALID_PATCH: "This suggestion no longer matches today's workout.",
   NO_MUTATION: "There is nothing to apply.",
   APPLY_FAILED: "The plan change could not be recorded. Nothing was applied.",
+  HOLD_ACTIVE: "Training is on hold today, so only a change that strictly reduces or rests today's session can be applied. Nothing was applied.",
+}
+
+const REDUCING_ACTIONS: ReadonlySet<WorkoutChange["action"]> = new Set(["REDUCE_SETS", "REDUCE_LOAD", "REDUCE_RPE", "REST", "REMOVE"])
+
+/** after <= before, where both must be known — an unknown baseline can't be proven not to add training. */
+function notMore(before: number | null, after: number | null): boolean {
+  if (after === null) return true
+  return before !== null && after <= before
+}
+
+/**
+ * QA-02: while a training hold is active, a change may be applied only if it verifiably cannot add training — a
+ * reducing/resting action whose prescription never grows and never un-skips an exercise. REPLACE (a different
+ * exercise) and any unknown baseline are rejected as ambiguous. Pure; exported for tests.
+ */
+export function isReduceOnlyChange(change: WorkoutChange): boolean {
+  const { before, after } = change
+  if (!REDUCING_ACTIONS.has(change.action) || !before || !after) return false
+  if (before.isSkipped && !after.isSkipped) return false
+  if (after.isSkipped) return true
+  return notMore(before.targetSets, after.targetSets) && notMore(before.repMin, after.repMin) && notMore(before.repMax, after.repMax)
 }
 
 export function applyErrorMessage(error: ApplyProposalError): string {
@@ -141,6 +164,8 @@ export async function applyWorkoutAdjustment(input: {
   mutations: MutationStore
   proposals: ProposalStore
   commit?: CanonicalCommit
+  /** trainingHold(dailyDecision) re-read at apply time (QA-02). While set, only reduce-only changes may be applied. */
+  trainingHold?: "recovery" | "unverified" | null
 }): Promise<ApplyProposalResult> {
   if (!input.actorUserId) {
     return { ok: false, error: "UNAUTHENTICATED", message: APPLY_MESSAGES.UNAUTHENTICATED }
@@ -179,6 +204,9 @@ export async function applyWorkoutAdjustment(input: {
   const changes = mutatingChanges(proposal)
   if (changes.length === 0) {
     return { ok: false, error: "NO_MUTATION", message: APPLY_MESSAGES.NO_MUTATION }
+  }
+  if (input.trainingHold && !changes.every(isReduceOnlyChange)) {
+    return { ok: false, error: "HOLD_ACTIVE", message: APPLY_MESSAGES.HOLD_ACTIVE }
   }
 
   const currentVersion = buildPlanVersionRef(session)

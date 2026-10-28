@@ -120,8 +120,9 @@ export function RecoveryCheckinForm({
 
   return (
     <form
+      id="checkin"
       onSubmit={handleSubmit}
-      className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8"
+      className="mf-touch-inputs scroll-mt-24 rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-7"
     >
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -173,7 +174,7 @@ export function RecoveryCheckinForm({
         </label>
       </div>
 
-      <div className="mt-6 space-y-5">
+      <div className="mt-6 space-y-3">
         {SLIDER_FIELDS.map((field) => (
           <div key={field.key}>
             <div className="flex items-center justify-between">
@@ -195,9 +196,9 @@ export function RecoveryCheckinForm({
               }
               aria-label={field.label}
               aria-valuetext={`${form[field.key]} of 10`}
-              className="mt-2 w-full accent-mf-glass-brand"
+              className="mt-1 h-11 w-full cursor-pointer accent-mf-glass-brand"
             />
-            <p className="mt-1 text-[11px] text-mf-glass-text-muted">{field.helper}</p>
+            <p className="text-[11px] text-mf-glass-text-muted">{field.helper}</p>
           </div>
         ))}
       </div>
@@ -225,9 +226,10 @@ export function RecoveryCheckinForm({
               <button
                 key={option}
                 type="button"
+                aria-pressed={form.painIllness === option}
                 onClick={() => update("painIllness", option)}
                 className={cn(
-                  "flex-1 rounded-xl border px-3 py-3 text-xs font-bold uppercase tracking-wide transition",
+                  "min-h-11 flex-1 rounded-xl border px-3 text-sm font-bold capitalize transition",
                   form.painIllness === option
                     ? "border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand"
                     : "border-mf-glass-border bg-mf-glass-bg-deep text-mf-glass-text-muted hover:border-mf-glass-border-strong",
@@ -255,13 +257,13 @@ export function RecoveryCheckinForm({
       </label>
 
       {error && (
-        <p className="mt-4 text-sm text-rose-400">{error}</p>
+        <p role="alert" className="mt-4 text-sm text-rose-400">{error}</p>
       )}
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-5 py-3.5 text-sm font-black uppercase tracking-wider text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+        className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-5 py-3.5 text-sm font-black uppercase tracking-wider text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
       >
         {isSubmitting ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />

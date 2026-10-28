@@ -65,6 +65,7 @@
   inset: 0;
   z-index: 190;
   pointer-events: none;
+  transition: opacity 0.2s ease;
 }
 .cursorRing {
   position: fixed;
@@ -75,16 +76,6 @@
   border-radius: 9999px;
   border: 1.5px solid rgba(200, 245, 39, 0.4);
   transition: width 0.2s ease, height 0.2s ease, border-color 0.2s ease;
-  will-change: transform;
-}
-.cursorDot {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 4px;
-  height: 4px;
-  border-radius: 9999px;
-  background: var(--mf-brand, #d8ff20);
   will-change: transform;
 }
 .cursorTrailDot {

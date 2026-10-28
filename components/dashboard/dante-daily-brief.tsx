@@ -9,11 +9,12 @@ export type DanteDailyBriefProps = {
 };
 
 export function DanteDailyBrief({ narrative, decision }: DanteDailyBriefProps) {
-  // Grounded takeaway without sci-fi holograms
-  const briefText =
-    narrative ||
-    decision?.recommendation ||
-    "Dante is ready to assist with today's training adaptation and nutrition balancing.";
+  // The Daily Decision Engine is the training authority; the cached narrative is phrasing from earlier in the
+  // day and may predate a completed or postponed session. No decision = its safety inputs failed: the dashboard holds
+  // training (trainingHold), so the Brief says that rather than voicing the narrative as clearance.
+  const briefText = decision
+    ? decision.recommendation || narrative || "Dante is ready to assist with today's training adaptation and nutrition balancing."
+    : "Today's training decision couldn't be loaded — check Recovery for pain or illness before you train.";
 
   return (
     <article className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#131522] to-mf-glass-surface p-5 sm:p-6 shadow-sm">
@@ -27,7 +28,7 @@ export function DanteDailyBrief({ narrative, decision }: DanteDailyBriefProps) {
 
         <Link
           href="/dashboard/ai-coach"
-          className="inline-flex items-center gap-1 text-xs font-semibold text-mf-glass-dante hover:underline"
+          className="-my-3 inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-mf-glass-dante hover:underline"
         >
           Ask Dante <ArrowRight className="size-3" />
         </Link>

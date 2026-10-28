@@ -26,6 +26,7 @@ import type { FoodSearchCategory, FoodSearchResult, FoodSearchStatus, Normalized
 export type { FoodSearchCategory, FoodSearchResult, FoodSearchStatus, NormalizedFood, ProviderStatus } from "./types"
 
 const PROVIDER_LABEL = { usda: "USDA", "open-food-facts": "Open Food Facts" } as const
+export { MIN_QUERY_LENGTH } from "./types"
 export { isUsdaConfigured } from "./usda"
 
 /**
@@ -55,11 +56,12 @@ function looksPackaged(query: string): boolean {
 export async function searchFood(
   query: string,
   category: FoodSearchCategory = "any",
+  options: { signal?: AbortSignal } = {},
 ): Promise<FoodSearchResult> {
   const trimmedQuery = query.trim()
 
   if (!trimmedQuery) {
-    return { foods: [], source: "local", usedFallback: true, warning: "Empty query.", status: "invalid_input", providers: {} }
+    return { foods: [], source: "local", usedFallback: true, warning: "Empty query.", status: "invalid_input", providers: {}, partial: false }
   }
 
   const preferPackagedFirst = category === "packaged" || (category === "any" && looksPackaged(trimmedQuery))
@@ -70,6 +72,8 @@ export async function searchFood(
   const providers: FoodSearchResult["providers"] = {}
 
   for (const provider of order) {
+    // The caller left (the browser aborted this search): don't start another upstream request for nobody.
+    if (options.signal?.aborted) break
     const outcome = provider === "usda" ? await searchUsda(trimmedQuery) : await searchPackagedFood(trimmedQuery)
     providers[provider] = outcome.status
 
@@ -82,8 +86,9 @@ export async function searchFood(
         usedFallback: false,
         status: "results",
         providers,
+        partial: degraded.length > 0,
         ...(degraded.length > 0
-          ? { warning: `${degraded.map((p) => PROVIDER_LABEL[p]).join(" and ")} didn't respond — results may be incomplete.` }
+          ? { warning: `${degraded.map(describeFailure(providers)).join(" and ")} — results may be incomplete.` }
           : {}),
       }
     }
@@ -95,25 +100,31 @@ export async function searchFood(
     : failed.length > 0
       ? "provider_error"
       : "no_match"
+  const foods = searchLocalFallback(trimmedQuery)
+  const local = foods.length > 0 ? "Showing local fallback data" : "No local fallback data either"
 
   return {
-    foods: searchLocalFallback(trimmedQuery),
+    foods,
     source: "local",
     usedFallback: true,
     status,
     providers,
+    partial: failed.length > 0,
     warning:
       failed.length > 0
-        ? `${failed.map((p) => `${PROVIDER_LABEL[p]} ${providers[p] === "timeout" ? "timed out" : "returned an error"}`).join(" and ")} — this isn't a confirmed "no match". Showing local fallback data; try again shortly.`
+        ? `${failed.map(describeFailure(providers)).join(" and ")} — this isn't a confirmed "no match". ${local}; try again shortly.`
         : isUsdaConfigured()
-          ? "No external match found — showing local fallback data."
-          : "USDA_FDC_API_KEY is not configured — showing local fallback data.",
+          ? `No external match found. ${local}.`
+          : `USDA_FDC_API_KEY is not configured. ${local}.`,
   }
 }
 
 function isFailure(status: ProviderStatus | undefined): boolean {
-  return status === "timeout" || status === "error"
+  return status === "timeout" || status === "error" || status === "rejected"
 }
+
+const describeFailure = (providers: FoodSearchResult["providers"]) => (p: keyof typeof PROVIDER_LABEL) =>
+  `${PROVIDER_LABEL[p]} ${providers[p] === "timeout" ? "timed out" : providers[p] === "rejected" ? "rejected the search" : "was unavailable"}`
 
 export async function lookupBarcode(
   barcode: string,
