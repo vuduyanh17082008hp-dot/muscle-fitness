@@ -28,6 +28,8 @@ import type { RecoveryStatusInput, TrainingLoadStateInput } from "@/lib/training
 import type { TraceableDecision } from "@/lib/dante-core/types";
 import { AdaptiveRecommendationCard } from "@/components/training/adaptive-recommendation-card";
 import { WorkoutPlayer } from "@/features/workouts/workout-player";
+import { resolveUserTimeZone } from "@/lib/training/load-today-session";
+import { formatSessionDateTime } from "@/lib/training/session-time";
 import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision";
 import { loadPreviousPerformance } from "@/lib/training/load-previous-performance";
 import { ScheduleConflictNote, TrainingHoldNotice, WorkoutStartButton } from "@/components/training/workout-start-control";
@@ -58,28 +60,6 @@ type SessionPageProps = {
     sessionId: string;
   }>;
 };
-
-function formatDateTime(
-  value: string | null,
-): string {
-  if (!value) {
-    return "Not recorded";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Invalid date";
-  }
-
-  return new Intl.DateTimeFormat("en-SG", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
 
 function formatDuration(seconds: number): string {
   if (seconds <= 0) {
@@ -229,6 +209,8 @@ export default async function WorkoutSessionPage({
 
   const session: WorkoutSession =
     sessionData;
+
+  const timeZone = await resolveUserTimeZone(supabase, user.id);
 
   const {
     data: sessionExercisesData,
@@ -448,6 +430,7 @@ export default async function WorkoutSessionPage({
               sessionId={session.id}
               sessionName={session.name}
               startedAt={session.started_at}
+              timeZone={timeZone}
               allowSubstitution={allowSubstitution}
               initialExercises={playerExercises}
               replacementOptions={replacementOptions}
@@ -666,15 +649,17 @@ export default async function WorkoutSessionPage({
         <section className="mt-6 grid gap-4 lg:grid-cols-2">
           <InfoCard
             label="Started"
-            value={formatDateTime(
+            value={formatSessionDateTime(
               session.started_at,
+              timeZone,
             )}
           />
 
           <InfoCard
             label="Completed"
-            value={formatDateTime(
+            value={formatSessionDateTime(
               session.completed_at,
+              timeZone,
             )}
           />
         </section>

@@ -148,3 +148,17 @@ export function suggestSetValues(
 
   return set?.targetReps != null ? { weightKg: null, reps: set.targetReps, source: { kind: 'target' } } : null
 }
+
+// Equipment that carries no external load: a blank weight there means bodyweight, not "forgot to type it".
+const NO_LOAD_EQUIPMENT = new Set(['bodyweight', 'pull_up_bar'])
+
+/** Loaded movements need an explicit kg; logging one blank would silently record zero volume. */
+export function requiresExplicitLoad(equipment: string): boolean {
+  return !NO_LOAD_EQUIPMENT.has(equipment.trim().toLowerCase())
+}
+
+/** Feedback for a confirmed set write: logging, undoing and editing each say what actually happened. */
+export function setSaveMessage(wasCompleted: boolean, isCompleted: boolean): string {
+  if (!isCompleted) return 'Set undone — it no longer counts.'
+  return wasCompleted ? 'Changes saved.' : 'Set saved.'
+}

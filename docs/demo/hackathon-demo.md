@@ -23,7 +23,10 @@ DEMO_PASSWORD='<pick a password, 12+ chars>' npx tsx scripts/demo/seed-demo.ts
 2. **Recovery → check-in.** Open Recovery and complete the check-in with no pain. Show the single verdict, the "From today's check-in" signals and the 7-day trend.
 3. **Workout.** Go back to Today and tap Start Workout. Log two sets (the carry-forward hint fills the values), then tap Complete workout → Finish Anyway. You land on History, which now shows the new session.
 4. **Nutrition.** Tap Add food and search "chicken breast". If USDA/Open Food Facts are unreachable, the honest outage notice plus local fallback results appear. Pick one, set 150 g, then Add to Today. Edit the portion, delete it, and point out that the Nutrition Coach strip updates each time.
-5. **Dante.** Ask *"What should I focus on for the rest of today?"*. The reply streams in. Go to Nutrition and back, and the same conversation is restored.
+5. **Dante.** Ask *"I finished Full Body B today. What should I prioritize tonight?"*. The reply streams in. Go to Nutrition and back, and the same conversation is restored.
+   - In the 28 Oct rehearsals, this question got grounded replies twice: Full Body B, protein left, kcal left.
+   - Don't start a question with "Based on my …". The coherence layer reads it as a scoped train-or-skip decision and prepends "That's not enough reason to skip. If the trip is unsafe, stay home." This is a known defect, not fixed before the demo.
+   - "…the rest of today?" can be answered as if it were morning ("a protein-rich breakfast"), because Dante gets no clock time.
 6. **Progress and Calendar.** The new session appears under Today in the Calendar and in this week's totals. 2 November 2026 is a Monday, so the week starts fresh: before the workout, Progress reads 0 sessions this week, and after it, 1 session. The volume comparison against last week will look low; that's expected on a Monday.
 7. **Settings.** Open the menu, then Settings. Every row opens a real page.
 

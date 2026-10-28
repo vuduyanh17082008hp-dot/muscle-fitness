@@ -58,7 +58,7 @@ describe("carry-forward suggestion", () => {
 describe("active workout player (SSR)", () => {
   const render = (exercises: WorkoutPlayerExercise[]) =>
     renderToStaticMarkup(createElement(WorkoutPlayer, {
-      sessionId: "s1", sessionName: "Push A", startedAt: null, allowSubstitution: false, initialExercises: exercises, replacementOptions: [],
+      sessionId: "s1", sessionName: "Push A", startedAt: null, timeZone: "Asia/Singapore", allowSubstitution: false, initialExercises: exercises, replacementOptions: [],
     }));
 
   const bench = exercise("e1", "Bench Press", [set("a", 1, { weightKg: 80, reps: 8, rir: 2, completed: true }), set("b", 2), set("c", 3)]);

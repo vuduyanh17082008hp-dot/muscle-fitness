@@ -35,8 +35,11 @@ import {
   saveWorkoutSetAction,
   skipSessionExerciseAction,
 } from "@/app/dashboard/workouts/actions";
+import { formatSessionClock } from "@/lib/training/session-time";
 
 import {
+  requiresExplicitLoad,
+  setSaveMessage,
   suggestSetValues,
   type SetSuggestion,
 } from "./calculations";
@@ -62,6 +65,10 @@ type Props = {
 
   startedAt:
     string | null;
+
+  /** The athlete's profile time zone — the completed page formats in it too. */
+  timeZone:
+    string;
 
   allowSubstitution:
     boolean;
@@ -137,8 +144,8 @@ function nullableNumber(
    keeps the typed values on screen and in storage; they are re-sent
    on reconnect and on the next load. The receiver is an update by
    set id, so a repeated delivery has one logical effect (at-least-
-   once delivery, effectively-once result). "Set saved." is shown
-   only for a server-confirmed write.
+   once delivery, effectively-once result). Success feedback is shown
+   only for a server-confirmed write, and only for the newest one.
    ponytail: last write wins against the server row; per-set version
    checks if multi-device editing of one session ever matters.
 ========================================================= */
@@ -220,6 +227,7 @@ export function WorkoutPlayer({
   sessionId,
   sessionName,
   startedAt,
+  timeZone,
   allowSubstitution,
   initialExercises,
   replacementOptions,
@@ -303,6 +311,8 @@ export function WorkoutPlayer({
   const [dirtySetIds, setDirtySetIds] = useState<ReadonlySet<string>>(() => new Set());
   const [savingSetId, setSavingSetId] = useState<string | null>(null);
   const finishDialogRef = useRef<HTMLDialogElement>(null);
+  // Only the newest set write may report success, so a slow earlier save can't overwrite newer feedback.
+  const latestSaveRef = useRef(0);
 
   /** Sends every stored pending set once, in order; stops at the first network failure (still offline). */
   const syncPendingSets = useCallback(async () => {
@@ -573,6 +583,13 @@ export function WorkoutPlayer({
       return;
     }
 
+    // A blank weight on a loaded lift would be stored as zero volume; ask instead of guessing.
+    if (completed && nextSet.weightKg === null && requiresExplicitLoad(exercise.equipment)) {
+      setIsError(true);
+      setMessage(`Enter the weight in kg for ${exercise.name} before logging the set.`);
+      return;
+    }
+
     updateSetLocally(
       exercise.id,
       set.id,
@@ -592,6 +609,8 @@ export function WorkoutPlayer({
     const pending = readPendingSets(sessionId);
     pending[nextSet.id] = { exerciseId: exercise.id, weightKg: nextSet.weightKg, reps: nextSet.reps, rir: nextSet.rir, rpe: nextSet.rpe, completed: nextSet.completed };
     writePendingSets(sessionId, pending);
+
+    const saveToken = ++latestSaveRef.current;
 
     startTransition(
       async () => {
@@ -678,12 +697,14 @@ export function WorkoutPlayer({
           );
         }
 
+        if (saveToken !== latestSaveRef.current) return;
+
         setIsError(
           false,
         );
 
         setMessage(
-          "Set saved.",
+          setSaveMessage(set.completed, nextSet.completed),
         );
       },
     );
@@ -961,12 +982,9 @@ export function WorkoutPlayer({
         <div className="flex flex-wrap items-center gap-x-2 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400">
           <Dumbbell aria-hidden="true" className="size-4" />
           <span><span className="max-sm:hidden">Workout </span>in progress</span>
-          {/* Server and browser time zones differ; the browser's local time is the one to show. */}
-          <span suppressHydrationWarning className="whitespace-nowrap font-semibold normal-case tracking-normal text-mf-text-muted">
+          <span className="whitespace-nowrap font-semibold normal-case tracking-normal text-mf-text-muted">
             · Started{" "}
-            {startedAt
-              ? new Date(startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-              : "now"}
+            {formatSessionClock(startedAt, timeZone) ?? "now"}
           </span>
         </div>
 
