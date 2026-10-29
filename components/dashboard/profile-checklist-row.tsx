@@ -93,11 +93,11 @@ export function ProfileChecklistRow({
           </p>
 
           {completed ? (
-            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">
+            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-black uppercase tracking-[0.12em] text-emerald-300">
               Complete
             </span>
           ) : active ? (
-            <span className="rounded-full border border-orange-500/20 bg-orange-500/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
+            <span className="rounded-full border border-orange-500/20 bg-orange-500/10 px-2 py-0.5 text-xs font-black uppercase tracking-[0.12em] text-orange-300">
               Current
             </span>
           ) : null}

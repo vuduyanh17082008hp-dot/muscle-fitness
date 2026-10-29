@@ -74,9 +74,8 @@ describe("Add food is search-first", () => {
     }
   });
 
-  it("keeps editable fields at 16px on phones inside the sheet", () => {
-    expect(modal).toContain("mf-touch-inputs");
-    expect(read("app/globals.css")).toMatch(/\.mf-touch-inputs :is\(input[^{]+\{\s*font-size: 16px;/);
+  it("keeps editable fields at 16px on phones (app-wide, so the sheet is covered)", () => {
+    expect(read("app/globals.css")).toMatch(/@media \(max-width: 639px\) \{\s*:is\(input[^{]+\{\s*font-size: 16px;/);
   });
 });
 

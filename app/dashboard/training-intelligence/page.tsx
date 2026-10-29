@@ -40,7 +40,7 @@ export default async function TrainingIntelligencePage() {
         <PageVisual page="trainingIntelligence" />
 
         <div className="relative z-10">
-          <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-mf-glass-analytics">
+          <p className="text-xs font-bold uppercase tracking-[0.3em] text-mf-glass-analytics">
             Muscle Intelligence
           </p>
 

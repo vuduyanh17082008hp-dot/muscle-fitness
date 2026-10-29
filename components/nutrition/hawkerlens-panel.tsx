@@ -284,7 +284,7 @@ export function HawkerLensPanel({
       {phase === "results" && result?.status === "ok" ? (
         <div className="flex flex-col gap-4">
           <label className="block">
-            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
               Meal
             </span>
             <select
@@ -303,7 +303,7 @@ export function HawkerLensPanel({
 
           {result.isDemo ? (
             <div className="rounded-2xl border border-sky-400/25 bg-sky-400/5 p-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-sky-300">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-sky-300">
                 Demo mode — not a real analysis
               </p>
               <p className="mt-1 text-xs leading-5 text-zinc-400">{result.message}</p>
@@ -311,7 +311,7 @@ export function HawkerLensPanel({
           ) : null}
 
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-400">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-400">
               {result.dish?.replace(/_/g, " ")}
             </p>
             <span className="text-xs text-zinc-500">
@@ -368,7 +368,7 @@ export function HawkerLensPanel({
           </ul>
 
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
-            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.12em] text-amber-400">
               Estimated calories
             </p>
             <p className="text-lg font-black text-white">{Math.round(totals.calories)} kcal</p>

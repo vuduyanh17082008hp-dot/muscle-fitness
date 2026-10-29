@@ -256,7 +256,7 @@ export function LoginForm({
       <div className="my-6 flex items-center gap-3">
         <span className="h-px flex-1 bg-white/10" />
 
-        <span className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
+        <span className="text-xs font-black uppercase tracking-[0.12em] text-zinc-600">
           or continue with
         </span>
 

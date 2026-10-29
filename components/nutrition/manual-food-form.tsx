@@ -174,7 +174,7 @@ export function ManualFoodForm({ mealType, onMealTypeChange, onConfirm, onClose,
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">{label}</span>
+      <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">{label}</span>
       {children}
     </label>
   )

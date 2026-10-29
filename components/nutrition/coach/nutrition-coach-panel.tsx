@@ -59,7 +59,7 @@ const GROUPS: Array<{ role: string; label: string }> = [
 ]
 
 const card = "rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-6"
-const eyebrow = "text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand"
+const eyebrow = "text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand"
 
 function defaultMealType(): MealType {
   const hour = new Date().getHours()

@@ -108,7 +108,7 @@ export function LogoutButton({
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-200/30 border-t-red-200" />
 
             {!compact ? (
-              <span className="text-[11px] font-black uppercase tracking-[0.14em]">
+              <span className="text-xs font-black uppercase tracking-[0.14em]">
                 Logging out
               </span>
             ) : null}
@@ -118,7 +118,7 @@ export function LogoutButton({
             <LogoutIcon />
 
             {!compact ? (
-              <span className="text-[11px] font-black uppercase tracking-[0.14em]">
+              <span className="text-xs font-black uppercase tracking-[0.14em]">
                 Logout
               </span>
             ) : null}

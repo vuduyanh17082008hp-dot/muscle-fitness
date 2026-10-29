@@ -57,7 +57,7 @@ export function TrainingRecoveryCard({
     <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-7">
       <div className="flex items-center gap-2">
         <Dumbbell className="size-4 text-mf-glass-brand" aria-hidden="true" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
           {signalsOnly ? "Training load · last 7 days" : "Training × Recovery"}
         </p>
       </div>
@@ -80,7 +80,7 @@ export function TrainingRecoveryCard({
 
       <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-4", signalsOnly ? "mt-4" : "mt-6")}>
         <div className="rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
+          <p className="text-xs uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Sessions / 7d
           </p>
           <p className="mt-1 text-lg font-black text-mf-glass-text">
@@ -89,7 +89,7 @@ export function TrainingRecoveryCard({
         </div>
 
         <div className="rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
+          <p className="text-xs uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Rest days / 7d
           </p>
           <p className="mt-1 text-lg font-black text-mf-glass-text">
@@ -98,7 +98,7 @@ export function TrainingRecoveryCard({
         </div>
 
         <div className="rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
+          <p className="text-xs uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Avg RPE
           </p>
           <p className="mt-1 text-lg font-black text-mf-glass-text">
@@ -107,7 +107,7 @@ export function TrainingRecoveryCard({
         </div>
 
         <div className="rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
+          <p className="text-xs uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Last session
           </p>
           <p className="mt-1 text-lg font-black text-mf-glass-text">

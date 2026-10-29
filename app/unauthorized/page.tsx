@@ -26,14 +26,14 @@ export default function UnauthorizedPage() {
         <div className="mt-9 grid gap-3 sm:grid-cols-2">
           <Link
             href="/dashboard"
-            className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-orange-400"
+            className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-orange-400"
           >
             Dashboard
           </Link>
 
           <Link
             href="/"
-            className="flex h-13 min-h-13 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.16em] transition hover:bg-white/[0.07]"
+            className="flex h-13 min-h-13 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.12em] transition hover:bg-white/[0.07]"
           >
             Homepage
           </Link>

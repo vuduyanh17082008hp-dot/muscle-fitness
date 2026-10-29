@@ -73,14 +73,14 @@ export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps
                 <p className="text-xl font-black text-mf-glass-text">
                   {remainingCalories.toLocaleString()}
                 </p>
-                <p className="text-[11px] text-mf-glass-text-muted">kcal remaining today</p>
+                <p className="text-xs text-mf-glass-text-muted">kcal remaining today</p>
               </>
             ) : (
               <>
                 <p className="text-xl font-black text-mf-glass-text">
                   {totals.calories.toLocaleString()}
                 </p>
-                <p className="text-[11px] text-mf-glass-text-muted">kcal logged (no target set)</p>
+                <p className="text-xs text-mf-glass-text-muted">kcal logged (no target set)</p>
               </>
             )}
           </div>
@@ -95,12 +95,12 @@ export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps
             {remainingProtein !== null ? (
               <>
                 <p className="text-xl font-black text-mf-glass-text">{remainingProtein}g</p>
-                <p className="text-[11px] text-mf-glass-text-muted">protein remaining</p>
+                <p className="text-xs text-mf-glass-text-muted">protein remaining</p>
               </>
             ) : (
               <>
                 <p className="text-xl font-black text-mf-glass-text">{Math.round(totals.protein)}g</p>
-                <p className="text-[11px] text-mf-glass-text-muted">protein logged</p>
+                <p className="text-xs text-mf-glass-text-muted">protein logged</p>
               </>
             )}
           </div>
@@ -109,7 +109,7 @@ export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps
 
       {/* Craving / Coach Entry Shortcuts */}
       <div className="mt-5 border-t border-white/5 pt-4">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
+        <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
           What sounds good? Ask Dante
         </p>
 

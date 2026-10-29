@@ -117,7 +117,7 @@ export default function PrivacyPage() {
             </p>
           </section>
 
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
             Effective 6 October 2026
           </p>
         </article>

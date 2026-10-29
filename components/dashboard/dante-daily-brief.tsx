@@ -44,7 +44,7 @@ export function DanteDailyBrief({ narrative, decision }: DanteDailyBriefProps) {
             {decision.why.map((reason, idx) => (
               <span
                 key={idx}
-                className="rounded-md border border-white/5 bg-white/[0.04] px-2 py-0.5 text-[11px] text-mf-glass-text-muted"
+                className="rounded-md border border-white/5 bg-white/[0.04] px-2 py-0.5 text-xs text-mf-glass-text-muted"
               >
                 {reason}
               </span>

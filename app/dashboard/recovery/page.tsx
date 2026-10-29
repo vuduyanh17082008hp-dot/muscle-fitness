@@ -189,7 +189,7 @@ export default async function RecoveryPage() {
       <section className="rounded-3xl border border-mf-glass-warning/15 bg-mf-glass-warning/[0.04] p-5 sm:p-6">
         <div className="flex items-center gap-2">
           <ShieldAlert className="size-4 text-mf-glass-warning" aria-hidden="true" />
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-mf-glass-warning">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-mf-glass-warning">
             Recovery Guidance, Not Medical Diagnosis
           </p>
         </div>

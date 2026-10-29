@@ -55,7 +55,7 @@ function SectionHeading({
 }) {
   return (
     <div className="mb-5">
-      <p className="text-xs font-black uppercase tracking-[0.24em] text-mf-glass-brand">
+      <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-brand">
         {eyebrow}
       </p>
 
@@ -159,7 +159,7 @@ export default async function NutritionPlanPage() {
           <Utensils className="size-6" />
         </span>
 
-        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand">
+        <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand">
           Nutrition Intelligence
         </p>
 
@@ -172,7 +172,7 @@ export default async function NutritionPlanPage() {
           the settings below any time your training changes.
         </p>
 
-        <p className="mt-6 text-[11px] font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
+        <p className="mt-6 text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
           Current Plan
         </p>
 
@@ -198,7 +198,7 @@ export default async function NutritionPlanPage() {
         ) : null}
 
         <div className="mt-7 border-t border-mf-glass-border pt-6">
-          <p className="mb-4 text-[11px] font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="mb-4 text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Adjust Your Plan
           </p>
 
@@ -343,7 +343,7 @@ export default async function NutritionPlanPage() {
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[280px] border-collapse text-sm">
                   <thead>
-                    <tr className="border-b border-mf-glass-border text-left text-[11px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
+                    <tr className="border-b border-mf-glass-border text-left text-xs uppercase tracking-[0.14em] text-mf-glass-text-muted">
                       <th className="pb-2 font-semibold">Food</th>
                       <th className="pb-2 pl-3 text-right font-semibold">
                         Grams
@@ -363,7 +363,7 @@ export default async function NutritionPlanPage() {
                         <td className="py-2 pl-3 text-right font-semibold text-mf-glass-text">
                           {ingredient.grams} g
                           {ingredient.measurementBasis !== "as-served" ? (
-                            <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-mf-glass-text-muted">
+                            <span className="ml-1.5 text-xs font-semibold uppercase tracking-wide text-mf-glass-text-muted">
                               {ingredient.measurementBasis}
                             </span>
                           ) : null}
@@ -422,7 +422,7 @@ export default async function NutritionPlanPage() {
               key={note}
               className="flex items-start gap-3 text-sm leading-6 text-mf-glass-text-secondary"
             >
-              <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-bold text-mf-glass-text-secondary">
+              <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-bold text-mf-glass-text-secondary">
                 {index + 1}
               </span>
               {note}

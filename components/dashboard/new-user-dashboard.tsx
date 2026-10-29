@@ -44,7 +44,7 @@ export function NewUserDashboard({
     <div className="space-y-6">
       {/* 1. Welcome & Orientation */}
       <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-6 sm:p-8">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-brand">
+        <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-brand">
           Welcome to Muscle Fitness
         </p>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-white sm:text-3xl">
@@ -76,7 +76,7 @@ export function NewUserDashboard({
           >
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
+                <span className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
                   Step 0{idx + 1}
                 </span>
                 {step.completed ? (

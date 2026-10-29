@@ -86,7 +86,7 @@ export function ReadinessCard({ scoreResult, todayCheckin, error = false }: Read
         action={
           <Link
             href="/dashboard/recovery"
-            className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-mf-glass-text-muted transition hover:text-mf-glass-text"
+            className="inline-flex items-center gap-0.5 text-xs font-semibold text-mf-glass-text-muted transition hover:text-mf-glass-text"
           >
             {`Why ${score}?`}
             <ChevronRight className="size-3" aria-hidden="true" />
@@ -116,7 +116,7 @@ export function ReadinessCard({ scoreResult, todayCheckin, error = false }: Read
           </svg>
           <div className="absolute flex flex-col items-center">
             <span className="text-3xl font-bold tabular-nums text-mf-glass-text">{score}</span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-mf-glass-text-muted">
+            <span className="text-xs font-bold uppercase tracking-[0.14em] text-mf-glass-text-muted">
               {statusLabel}
             </span>
           </div>

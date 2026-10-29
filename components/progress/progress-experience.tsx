@@ -88,11 +88,11 @@ function Journey({ model }: { model: ProgressPageModel }) {
                 <circle cx="90" cy="90" r="92" fill="none" stroke="rgba(74,222,128,0.15)" strokeWidth="1" strokeDasharray="1 8" />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-[10px] uppercase tracking-[0.25em]" style={{ color: "var(--text-dim)" }}>Streak</div>
+                <div className="text-xs uppercase tracking-[0.12em]" style={{ color: "var(--text-dim)" }}>Streak</div>
                 <div className="text-4xl font-bold tracking-tight">
                   <AnimatedNumber value={journey.currentStreak} />
                 </div>
-                <div className="mt-1 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                <div className="mt-1 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
                   <span className="flame" aria-hidden="true">🔥</span> days
                 </div>
               </div>
@@ -107,7 +107,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
             </h1>
             <p className="mt-3 text-[16px] leading-relaxed" style={{ color: "var(--text-muted)" }}>{model.sentence}</p>
             <div className="mt-5 flex flex-wrap items-center gap-2">
-              <span className="mr-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>This week</span>
+              <span className="mr-2 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>This week</span>
               {model.weekDots.map((dot) => (
                 <span key={dot.date} className={`week-dot ${dot.kind}`} title={dot.title}>{dot.label}</span>
               ))}
@@ -122,18 +122,18 @@ function Journey({ model }: { model: ProgressPageModel }) {
           <div className="space-y-3 md:col-span-3">
             <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.5)" }}>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Level</span>
-                <span className="mono text-[11px] text-[#4ade80]">LVL {level.level}</span>
+                <span className="text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Level</span>
+                <span className="mono text-xs text-[#4ade80]">LVL {level.level}</span>
               </div>
               <div className="mb-2 text-sm font-semibold">{level.title}</div>
               <div className="level-bar"><div className="level-bar-fill" data-w={level.progressPercent} /></div>
-              <div className="mt-2 text-[10px]" style={{ color: "var(--text-dim)" }}>
+              <div className="mt-2 text-xs" style={{ color: "var(--text-dim)" }}>
                 {level.currentXp} / {level.nextLevelXp} XP to LVL {Math.min(5, level.level + 1)}
               </div>
             </article>
             {model.next ? (
               <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.5)" }}>
-                <div className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Next milestone</div>
+                <div className="mb-2 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Next milestone</div>
                 <div className="text-sm font-semibold">
                   {model.next.title} → <span className="text-[#4ade80]">{model.next.current}/{model.next.target}</span>
                 </div>
@@ -157,9 +157,9 @@ function Journey({ model }: { model: ProgressPageModel }) {
                 {insight.id === "trend" ? <TrendingUp className="h-5 w-5 text-[#a78bfa]" /> : null}
               </div>
               <div className="min-w-0">
-                <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{insight.label}</div>
+                <div className="text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{insight.label}</div>
                 <div className="truncate text-sm font-semibold">{insight.value}</div>
-                <div className={`text-[10px] ${insight.tone === "good" ? "delta-up" : ""}`}>{insight.detail}</div>
+                <div className={`text-xs ${insight.tone === "good" ? "delta-up" : ""}`}>{insight.detail}</div>
               </div>
             </article>
           ))}
@@ -175,7 +175,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
           </div>
         </div>
         <div className="flex gap-4">
-          <div className="mono flex flex-col justify-around py-1 text-[9px]" style={{ color: "var(--text-dim)" }}>
+          <div className="mono flex flex-col justify-around py-1 text-xs" style={{ color: "var(--text-dim)" }}>
             {WEEKDAYS.map((day) => <span key={day}>{day}</span>)}
           </div>
           <div className="heatmap flex-1" role="img" aria-label="Twelve-week consistency heatmap">
@@ -230,7 +230,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
         <section className="glass card-spot rounded-3xl p-6 reveal md:p-7">
           <span className="s-title">Muscle volume</span>
           <h3 className="mt-2 text-xl font-bold tracking-tight">Focus balance</h3>
-          <p className="mt-1 text-[11px]" style={{ color: "var(--text-dim)" }}>Last 30 days · relative allocation</p>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>Last 30 days · relative allocation</p>
           {model.muscle ? <MuscleRadar muscle={model.muscle} /> : (
             <p className="mt-6 text-[16px]" style={{ color: "var(--text-muted)" }}>More logged sessions are needed before muscle-focus balance can be estimated.</p>
           )}
@@ -275,7 +275,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
               <article key={record.exerciseId} className="pr-row grid items-center gap-3 border-b py-3 md:grid-cols-12" style={{ borderColor: "var(--border)" }}>
                 <div className="md:col-span-5">
                   <div className="text-sm font-semibold">{record.exerciseName}</div>
-                  <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>{record.metric}</div>
+                  <div className="text-xs" style={{ color: "var(--text-dim)" }}>{record.metric}</div>
                 </div>
                 <div className="mono text-sm md:col-span-2" style={{ color: "var(--text-muted)" }}>{record.achievedAt}</div>
                 <div className="mono text-sm line-through md:col-span-2" style={{ color: "var(--text-dim)" }}>
@@ -338,8 +338,8 @@ function Journey({ model }: { model: ProgressPageModel }) {
           <div className="dante-avatar grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-lg font-bold text-[#04121a]">D</div>
           <div className="flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--text-muted)" }}>Dante</span>
-              <span className="mono rounded-md px-2 py-0.5 text-[10px]" style={{ background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>
+              <span className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--text-muted)" }}>Dante</span>
+              <span className="mono rounded-md px-2 py-0.5 text-xs" style={{ background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>
                 Week {journey.currentWeek} snapshot
               </span>
             </div>
@@ -378,11 +378,11 @@ function EmptyState() {
 function MiniStat({ label, value, hint, up }: { label: string; value: string; hint: string; up?: boolean }) {
   return (
     <div className="card-spot rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.5)" }}>
-      <div className="mb-1 text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
+      <div className="mb-1 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
       <div className={`text-xl font-bold ${label === "Adherence" ? "text-[#4ade80]" : ""}`}>
         <AnimatedNumber value={value} />
       </div>
-      <div className={`mt-0.5 text-[10px] ${up ? "delta-up" : ""}`} style={up ? undefined : { color: "var(--text-dim)" }}>{hint}</div>
+      <div className={`mt-0.5 text-xs ${up ? "delta-up" : ""}`} style={up ? undefined : { color: "var(--text-dim)" }}>{hint}</div>
     </div>
   )
 }
@@ -410,7 +410,7 @@ function MuscleRadar({ muscle }: { muscle: NonNullable<ProgressPageModel["muscle
               return <circle key={group.label} cx={Math.cos(angle) * group.share * r} cy={Math.sin(angle) * group.share * r} r="3" />
             })}
           </g>
-          <g fontSize="9" fill="#7f95ad" fontFamily="JetBrains Mono" textAnchor="middle">
+          <g fontSize="11" fill="#7f95ad" textAnchor="middle">
             {muscle.groups.map((group, index) => {
               const angle = -Math.PI / 2 + (index * 2 * Math.PI) / muscle.groups.length
               return <text key={group.label} x={Math.cos(angle) * 102} y={Math.sin(angle) * 102}>{group.label.toUpperCase()}</text>
@@ -418,7 +418,7 @@ function MuscleRadar({ muscle }: { muscle: NonNullable<ProgressPageModel["muscle
           </g>
         </svg>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
         <div className="flex justify-between rounded-lg border px-2 py-1.5" style={{ borderColor: "var(--border)" }}>
           <span style={{ color: "var(--text-muted)" }}>Most trained</span>
           <span className="font-semibold text-[#4ade80]">{muscle.mostTrained}</span>
@@ -443,9 +443,9 @@ function MilestoneBadge({ item }: { item: ProgressPageModel["catalog"][number] }
       <div className="ms-icon mb-2 grid h-14 w-14 place-items-center rounded-2xl" style={{ background: item.unlocked ? "rgba(74,222,128,0.1)" : "rgba(80,100,120,0.1)", border: `1px solid ${item.unlocked ? "rgba(74,222,128,0.3)" : "var(--border)"}` }}>
         {item.unlocked ? <Award className="h-6 w-6 text-[#4ade80]" /> : <Lock className="h-6 w-6" style={{ color: "var(--text-dim)" }} />}
       </div>
-      <div className="text-[11px] font-semibold">{item.title}</div>
-      <div className="mono text-[10px]" style={{ color: "var(--text-dim)" }}>{item.unlocked ? item.unlocked.achievedAt.slice(0, 10) : "Locked"}</div>
-      {open ? <p className="mt-2 text-[10px]" style={{ color: "var(--text-muted)" }}>{item.unlocked?.displayData.description ?? item.description}</p> : null}
+      <div className="text-xs font-semibold">{item.title}</div>
+      <div className="mono text-xs" style={{ color: "var(--text-dim)" }}>{item.unlocked ? item.unlocked.achievedAt.slice(0, 10) : "Locked"}</div>
+      {open ? <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.unlocked?.displayData.description ?? item.description}</p> : null}
     </button>
   )
 }
@@ -454,15 +454,15 @@ function CompareCard({ item }: { item: ProgressComparison }) {
   const path = sparkPath(item.series ?? [item.thenValue, item.nowValue])
   return (
     <article className="card-spot rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.4)" }}>
-      <div className="mb-3 text-[11px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{item.label}</div>
+      <div className="mb-3 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{item.label}</div>
       <div className="flex items-baseline gap-4">
         <div>
-          <div className="text-[10px] uppercase" style={{ color: "var(--text-dim)" }}>{item.thenLabel}</div>
+          <div className="text-xs uppercase" style={{ color: "var(--text-dim)" }}>{item.thenLabel}</div>
           <div className="text-3xl font-bold" style={{ color: "var(--text-dim)" }}>{item.thenValue}{item.unit ?? ""}</div>
         </div>
         <span aria-hidden="true" className="text-[#4ade80]">→</span>
         <div>
-          <div className="text-[10px] uppercase" style={{ color: "var(--text-dim)" }}>{item.nowLabel}</div>
+          <div className="text-xs uppercase" style={{ color: "var(--text-dim)" }}>{item.nowLabel}</div>
           <div className="glow-green text-3xl font-bold text-[#4ade80]">{item.nowValue}{item.unit ?? ""}</div>
         </div>
       </div>
@@ -488,12 +488,12 @@ function MacroCard({ label, consumed, target, unit, color }: { label: string; co
           <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(74,222,128,0.12)" strokeWidth="5" />
           <circle cx="30" cy="30" r="26" fill="none" stroke={color} strokeWidth="5" strokeDasharray={`${dash} 200`} strokeLinecap="round" />
         </svg>
-        <div className="absolute inset-0 grid place-items-center font-mono text-[11px] font-bold" style={{ color }}>{pct}%</div>
+        <div className="absolute inset-0 grid place-items-center font-mono text-xs font-bold" style={{ color }}>{pct}%</div>
       </div>
       <div>
-        <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
+        <div className="text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
         <div className="text-2xl font-bold"><AnimatedNumber value={consumed} /></div>
-        <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{target !== null ? `of ${target} ${unit}` : unit}</div>
+        <div className="text-xs" style={{ color: "var(--text-muted)" }}>{target !== null ? `of ${target} ${unit}` : unit}</div>
       </div>
     </article>
   )
@@ -502,12 +502,12 @@ function MacroCard({ label, consumed, target, unit, color }: { label: string; co
 function BodyTile({ label, value, unit, note }: { label: string; value: string; unit?: string; note?: string }) {
   return (
     <article className="card-spot rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.4)" }}>
-      <div className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
+      <div className="mb-2 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-1">
         <span className="min-w-0 break-words text-2xl font-bold tracking-tight sm:text-3xl">{value}</span>
         {unit ? <span className="text-sm" style={{ color: "var(--text-muted)" }}>{unit}</span> : null}
       </div>
-      {note ? <div className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>{note}</div> : null}
+      {note ? <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{note}</div> : null}
     </article>
   )
 }

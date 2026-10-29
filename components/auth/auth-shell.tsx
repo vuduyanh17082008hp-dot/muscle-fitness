@@ -49,7 +49,7 @@ export function AuthShell({
 
               <span className="h-px w-20 bg-gradient-to-r from-[var(--mf-brand)] to-transparent" />
 
-              <span className="text-xs font-bold uppercase tracking-[0.28em] text-zinc-600">
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-600">
                 Secure access
               </span>
             </div>
@@ -69,7 +69,7 @@ export function AuthShell({
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.25em] text-zinc-700">
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.12em] text-zinc-700">
             <span>Muscle Fitness System</span>
             <span>Authentication 05</span>
           </div>
@@ -84,7 +84,7 @@ export function AuthShell({
                 <div className="mb-4 flex items-center gap-3">
                   <span className="h-px w-8 bg-[var(--mf-brand)]" />
 
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--mf-brand)]">
+                  <p className="text-xs font-black uppercase tracking-[0.3em] text-[var(--mf-brand)]">
                     {eyebrow}
                   </p>
                 </div>
@@ -101,7 +101,7 @@ export function AuthShell({
               {children}
             </div>
 
-            <p className="mt-6 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-700">
+            <p className="mt-6 text-center text-xs font-bold uppercase tracking-[0.12em] text-zinc-700">
               Encrypted session · Secure authentication
             </p>
           </div>
@@ -124,7 +124,7 @@ function Feature({
         {value}
       </p>
 
-      <p className="mt-3 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+      <p className="mt-3 text-xs font-black uppercase tracking-[0.12em] text-zinc-500">
         {label}
       </p>
     </div>

@@ -318,7 +318,7 @@ function ExerciseCard({ record, onSelect }: { record: ExerciseRecord; onSelect: 
         <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-mf-glass-border bg-white/[0.02] text-mf-glass-text-muted">
           <Dumbbell className="size-4" aria-hidden="true" />
         </span>
-        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase", DIFFICULTY_TONE[record.difficulty])}>
+        <span className={cn("rounded-full border px-2 py-0.5 text-xs font-bold uppercase", DIFFICULTY_TONE[record.difficulty])}>
           {record.difficulty}
         </span>
       </div>
@@ -330,7 +330,7 @@ function ExerciseCard({ record, onSelect }: { record: ExerciseRecord; onSelect: 
         </p>
       </div>
 
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-mf-glass-text-muted">
+      <p className="text-xs font-semibold uppercase tracking-wide text-mf-glass-text-muted">
         {hasAnimation ? (
           <span className="text-mf-glass-brand">● Technique available</span>
         ) : (

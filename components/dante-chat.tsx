@@ -255,12 +255,12 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
                       key={item.label}
                       className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5"
                     >
-                      <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-600">
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-600">
                         {item.label}
                       </p>
                       <p className="mt-0.5 text-sm font-bold text-white">{item.value}</p>
                       {item.note ? (
-                        <p className="mt-0.5 text-[11px] text-zinc-500">{item.note}</p>
+                        <p className="mt-0.5 text-xs text-zinc-500">{item.note}</p>
                       ) : null}
                     </div>
                   ))}
@@ -268,7 +268,7 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
               ) : null}
 
               {insight.confidence ? (
-                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-zinc-600">
                   {insight.confidence} confidence
                 </p>
               ) : null}
@@ -320,7 +320,7 @@ function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
                 {source.title}
               </a>
               {source.type ? (
-                <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-600">
+                <span className="ml-2 text-xs font-bold uppercase tracking-[0.1em] text-zinc-600">
                   {source.type}
                 </span>
               ) : null}
@@ -1180,7 +1180,7 @@ export default function DanteChat({
                 </div>
 
                 {earlierBoundary ? (
-                  <p role="note" className="flex items-center gap-3 text-[11px] font-semibold text-mf-glass-text-muted">
+                  <p role="note" className="flex items-center gap-3 text-xs font-semibold text-mf-glass-text-muted">
                     <span className="h-px flex-1 bg-mf-glass-border" aria-hidden="true" />
                     <span className="text-center">Earlier conversation · figures above were current {formatAsOf(restored.asOf)}</span>
                     <span className="h-px flex-1 bg-mf-glass-border" aria-hidden="true" />

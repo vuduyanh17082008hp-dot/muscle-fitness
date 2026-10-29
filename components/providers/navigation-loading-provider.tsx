@@ -313,7 +313,7 @@ function GlobalLoadingOverlay() {
 
             uppercase
 
-            tracking-[0.25em]
+            tracking-[0.12em]
 
             text-(--color-accent-light)
           "

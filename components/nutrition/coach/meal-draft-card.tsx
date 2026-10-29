@@ -63,7 +63,7 @@ export function MealDraftCard({ draft, proposal, skippedSuggestions, blockedIngr
     <article className="rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-6" aria-label="Active meal draft">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand">Active Meal Draft</p>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand">Active Meal Draft</p>
           <h3 className="mt-1 text-xl font-bold text-mf-glass-text">{draft.name}</h3>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -86,7 +86,7 @@ export function MealDraftCard({ draft, proposal, skippedSuggestions, blockedIngr
       <div className="relative mt-4 overflow-x-auto">
         <table className="w-full min-w-[320px] border-collapse text-sm">
           <thead>
-            <tr className="border-b border-mf-glass-border text-left text-[11px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
+            <tr className="border-b border-mf-glass-border text-left text-xs uppercase tracking-[0.14em] text-mf-glass-text-muted">
               <th className="pb-2 font-semibold">Ingredient</th>
               <th className="pb-2 pl-3 text-right font-semibold">Grams</th>
               <th className="pb-2 pl-3 font-semibold">Swap</th>
@@ -102,7 +102,7 @@ export function MealDraftCard({ draft, proposal, skippedSuggestions, blockedIngr
                   <td className="py-2 text-mf-glass-text-secondary">
                     <span className="block">{item.name}</span>
                     {current ? (
-                      <span className="block text-[10px] uppercase tracking-wide text-mf-glass-text-muted">
+                      <span className="block text-xs uppercase tracking-wide text-mf-glass-text-muted">
                         Per 100 g {BASIS_LABEL[current.measurementBasis]} · {PROVENANCE_LABEL[current.provenance]}
                       </span>
                     ) : null}
@@ -177,7 +177,7 @@ export function MealDraftCard({ draft, proposal, skippedSuggestions, blockedIngr
 
       {draft.craving ? (
         <section className="mt-5 rounded-xl border border-mf-glass-border bg-white/[0.03] p-4 text-sm">
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-text-muted">Craving Makeover · {draft.craving.label}</p>
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">Craving Makeover · {draft.craving.label}</p>
           <p className="mt-2 text-mf-glass-text-secondary">Keeps: {draft.craving.preserved.join(", ")}.</p>
           <ul className="mt-2 space-y-1 text-xs text-mf-glass-text-muted">
             {draft.craving.swaps.map((swap) => (
@@ -197,7 +197,7 @@ export function MealDraftCard({ draft, proposal, skippedSuggestions, blockedIngr
 
       {suggestions.length > 0 && !locked ? (
         <section className="mt-5" aria-label="Make it better">
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand">Make it better</p>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand">Make it better</p>
           <ul className="mt-3 space-y-3">
             {suggestions.map((s) => (
               <li key={s.ingredientId} className="rounded-xl border border-mf-glass-border bg-white/[0.03] p-3">
@@ -212,7 +212,7 @@ export function MealDraftCard({ draft, proposal, skippedSuggestions, blockedIngr
                       {s.impact.protein >= 1 ? ` · +${Math.round(s.impact.protein)}g protein` : ""}
                     </p>
                   </div>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${s.necessity === "REQUIRED_FOR_TARGET" ? "border-rose-400/30 text-rose-300" : "border-mf-glass-border text-mf-glass-text-muted"}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wide ${s.necessity === "REQUIRED_FOR_TARGET" ? "border-rose-400/30 text-rose-300" : "border-mf-glass-border text-mf-glass-text-muted"}`}>
                     {s.necessity === "REQUIRED_FOR_TARGET" ? "Needed for target" : "Optional"}
                   </span>
                 </div>

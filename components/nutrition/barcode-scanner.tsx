@@ -323,7 +323,7 @@ export function BarcodeScanner({ onFound, onSwitchToSearch, onSwitchToManual, on
       ) : null}
 
       <form onSubmit={handleManualSubmit} className="flex flex-col gap-2">
-        <label htmlFor="manual-barcode" className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+        <label htmlFor="manual-barcode" className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
           Enter barcode manually
         </label>
         <div className="flex gap-2">

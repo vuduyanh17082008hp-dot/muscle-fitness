@@ -84,7 +84,7 @@ export function ForgotPasswordForm({
         </StatusMessage>
 
         <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-5">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-zinc-500">
             Sent to
           </p>
 
@@ -99,14 +99,14 @@ export function ForgotPasswordForm({
             setSent(false)
             setEmail("")
           }}
-          className="flex h-13 min-h-13 w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.16em] transition hover:bg-white/[0.07]"
+          className="flex h-13 min-h-13 w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.12em] transition hover:bg-white/[0.07]"
         >
           Use another email
         </button>
 
         <Link
           href="/login"
-          className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-mf-brand-hover"
+          className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-mf-brand-hover"
         >
           Return to login
         </Link>
@@ -152,7 +152,7 @@ export function ForgotPasswordForm({
         <button
           type="submit"
           disabled={loading || !hydrated || !email.trim()}
-          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
             <>

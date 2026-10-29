@@ -86,7 +86,7 @@ export default function WorkoutsError({
           </div>
 
           {/* Main message */}
-          <p className="mt-7 text-xs font-black uppercase tracking-[0.28em] text-red-400">
+          <p className="mt-7 text-xs font-black uppercase tracking-[0.12em] text-red-400">
             Workout system error
           </p>
 
@@ -103,7 +103,7 @@ export default function WorkoutsError({
           {/* Development error information */}
           {process.env.NODE_ENV === "development" ? (
             <div className="mt-8 rounded-2xl border border-red-500/20 bg-red-500/[0.06] p-5">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-red-300">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-red-300">
                 Development error
               </p>
 

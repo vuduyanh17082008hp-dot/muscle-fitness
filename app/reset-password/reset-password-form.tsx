@@ -139,7 +139,7 @@ export function ResetPasswordForm() {
         <button
           type="submit"
           disabled={loading || !hydrated}
-          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
             <>
@@ -164,7 +164,7 @@ function Requirement({
 }) {
   return (
     <div
-      className={`rounded-xl border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.1em] transition ${
+      className={`rounded-xl border px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] transition ${
         completed
           ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-300"
           : "border-white/10 bg-white/[0.025] text-zinc-700"

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import {
   ArrowRight,
   BookOpen,
+  ChevronDown,
   Dumbbell,
   ExternalLink,
   Layers3,
@@ -269,6 +270,24 @@ const BANNER_TONE = {
 } as const;
 
 /**
+ * New-plan options (recommended, splits, wger). With an active plan they sit
+ * behind one closed disclosure so the hub leads with today's session and
+ * the current plan; without one they stay open as the page's main content.
+ */
+function PlanOptions({ collapsed, children }: { collapsed: boolean; children: React.ReactNode }) {
+  if (!collapsed) return <>{children}</>;
+  return (
+    <details className="group rounded-[20px] border border-mf-glass-border bg-mf-glass-surface">
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 rounded-[20px] px-5 py-3 text-base font-semibold text-mf-glass-text transition-colors hover:bg-white/[0.03] [&::-webkit-details-marker]:hidden">
+        Build a different plan
+        <ChevronDown aria-hidden="true" className="size-5 text-mf-glass-text-muted transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+      </summary>
+      <div className="space-y-10 border-t border-mf-glass-border p-5 sm:p-6">{children}</div>
+    </details>
+  );
+}
+
+/**
  * A single reusable horizontal promo/status pattern — replaces four
  * near-identical hand-rolled card blocks (Form Coach, SetVision,
  * Active plan, Recommended split) that previously duplicated the
@@ -310,7 +329,7 @@ function PromoBanner({
       )}
     >
       <div className="min-w-0">
-        <span className={cn("rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider", t.badge)}>
+        <span className={cn("rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider", t.badge)}>
           {badge}
         </span>
 
@@ -478,7 +497,7 @@ export default async function WorkoutsPage() {
             <div className="flex items-center gap-2 text-mf-glass-brand">
               <Dumbbell className="h-4 w-4" />
 
-              <p className="text-xs font-black uppercase tracking-[0.28em]">
+              <p className="text-xs font-black uppercase tracking-[0.12em]">
                 {heroAction.eyebrow}
               </p>
             </div>
@@ -556,23 +575,6 @@ export default async function WorkoutsPage() {
       </header>
 
       {/* ===================================================
-          MUSCLE INTELLIGENCE — the Train domain's entry point
-          into the existing /dashboard/training-intelligence
-          Atlas. A core capability, not a beta feature, so it
-          gets the lime CTA pill and sits above the Beta
-          banners rather than inside that grid.
-      =================================================== */}
-
-      <PromoBanner
-        href="/dashboard/training-intelligence"
-        badge="Insights"
-        tone="amber"
-        title="Muscle Intelligence"
-        description="Explore muscle anatomy, training exposure, exercises and personal insights."
-        ctaLabel="Explore Muscles"
-      />
-
-      {/* ===================================================
           BETA FEATURES — quieter secondary surface; the hero
           above carries the page's one primary/glowing CTA.
       =================================================== */}
@@ -604,7 +606,7 @@ export default async function WorkoutsPage() {
           <div className="mb-5 flex items-center gap-2 text-emerald-400">
             <Dumbbell className="h-4 w-4" />
 
-            <p className="text-xs font-black uppercase tracking-[0.22em]">
+            <p className="text-xs font-black uppercase tracking-[0.12em]">
               Your current training plan
             </p>
           </div>
@@ -621,7 +623,7 @@ export default async function WorkoutsPage() {
         </section>
       ) : (
         <section className="rounded-[20px] border border-dashed border-mf-glass-border bg-white/[0.02] p-6 sm:p-8">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Your current training plan
           </p>
 
@@ -634,6 +636,7 @@ export default async function WorkoutsPage() {
         </section>
       )}
 
+      <PlanOptions collapsed={Boolean(activePlan)}>
       {/* ===================================================
           RECOMMENDED
       =================================================== */}
@@ -643,7 +646,7 @@ export default async function WorkoutsPage() {
           <div className="flex items-center gap-2 text-mf-glass-brand">
             <Sparkles className="h-4 w-4" />
 
-            <p className="text-xs font-black uppercase tracking-[0.22em]">
+            <p className="text-xs font-black uppercase tracking-[0.12em]">
               Recommended for you
             </p>
           </div>
@@ -669,7 +672,7 @@ export default async function WorkoutsPage() {
 
       <section>
         <div className="mb-5">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Choose your structure
           </p>
 
@@ -732,7 +735,7 @@ export default async function WorkoutsPage() {
             <div className="flex items-center gap-2 text-emerald-400">
               <BookOpen className="h-4 w-4" />
 
-              <p className="text-xs font-black uppercase tracking-[0.22em]">
+              <p className="text-xs font-black uppercase tracking-[0.12em]">
                 Open-source source
               </p>
             </div>
@@ -775,7 +778,7 @@ export default async function WorkoutsPage() {
                   className="rounded-[20px] border border-emerald-500/15 bg-emerald-500/5 p-5 transition hover:-translate-y-0.5 hover:border-emerald-500/30 hover:bg-emerald-500/8"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-400">
+                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-black uppercase text-emerald-400">
                       wger
                     </span>
 
@@ -831,13 +834,15 @@ export default async function WorkoutsPage() {
         </p>
       </section>
 
+      </PlanOptions>
+
       {/* ===================================================
           EXISTING PLANS
       =================================================== */}
 
       {plans.length > 0 && (
         <section>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Saved plans
           </p>
 
@@ -862,7 +867,7 @@ export default async function WorkoutsPage() {
                       }
                     </h3>
 
-                    <span className="text-[10px] font-black uppercase text-mf-glass-text-muted">
+                    <span className="text-xs font-black uppercase text-mf-glass-text-muted">
                       {
                         plan.status
                       }

@@ -7,7 +7,7 @@ export function ProgressJourneyPanel({ journey }: { journey: ProgressJourney }) 
   return (
     <div className="space-y-6">
       <section className="rounded-[20px] border border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-6 sm:p-8">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-brand">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-brand">
           Your journey
         </p>
         <h2 className="mt-2 text-3xl font-black tracking-tight text-mf-glass-text">

@@ -93,7 +93,7 @@ export function WhatIfPreview({ base }: { base: WhatIfBaseInput }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-zinc-600 transition-colors hover:text-zinc-400"
+        className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.06em] text-zinc-600 transition-colors hover:text-zinc-400"
       >
         <FlaskConical className="size-3" aria-hidden="true" />
         What if?
@@ -103,7 +103,7 @@ export function WhatIfPreview({ base }: { base: WhatIfBaseInput }) {
 
   return (
     <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
-      <p className="text-[10px] font-black uppercase tracking-wider text-zinc-600">What if?</p>
+      <p className="text-xs font-black uppercase tracking-wider text-zinc-600">What if?</p>
 
       <div className="mt-2 flex flex-wrap gap-2">
         {SCENARIOS.map((scenario) => (
@@ -130,7 +130,7 @@ export function WhatIfPreview({ base }: { base: WhatIfBaseInput }) {
             return (
               <span
                 className={cn(
-                  "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.06em]",
+                  "shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-[0.06em]",
                   accent.text,
                   accent.border,
                   accent.bg,

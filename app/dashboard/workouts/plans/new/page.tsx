@@ -187,7 +187,7 @@ export default async function NewWorkoutPlanPage({
         <div className="flex items-center gap-2 text-amber-400">
           <Dumbbell className="h-4 w-4" />
 
-          <p className="text-xs font-black uppercase tracking-[0.25em]">
+          <p className="text-xs font-black uppercase tracking-[0.12em]">
             Workout Plan Builder
           </p>
         </div>

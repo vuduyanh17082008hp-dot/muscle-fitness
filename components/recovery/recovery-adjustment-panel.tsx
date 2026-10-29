@@ -200,7 +200,7 @@ export function RecoveryAdjustmentPanel({
               ))}
             </ul>
             <div className="mt-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-text-muted">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
                 Why
               </p>
               <p className="mt-1 text-sm leading-6 text-mf-glass-text-secondary">

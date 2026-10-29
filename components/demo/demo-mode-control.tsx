@@ -64,7 +64,7 @@ export function DemoModeControl() {
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <TestTube2 className="size-4 text-sky-400" aria-hidden="true" />
-        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-sky-300">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-sky-300">
           Demo Data Control (this account only)
         </p>
       </div>
@@ -89,7 +89,7 @@ export function DemoModeControl() {
             }`}
           >
             <p className="text-xs font-bold text-white">{s.label}</p>
-            <p className="mt-1 text-[11px] leading-4 text-zinc-500">{s.description}</p>
+            <p className="mt-1 text-xs leading-4 text-zinc-500">{s.description}</p>
           </button>
         ))}
       </div>

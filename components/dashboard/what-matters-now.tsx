@@ -63,7 +63,7 @@ export function WhatMattersNow({ items, hold = null, statusUnknown = false }: Wh
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
+        <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
           What matters now
         </p>
       </div>
@@ -90,7 +90,7 @@ export function WhatMattersNow({ items, hold = null, statusUnknown = false }: Wh
                   {item.title}
                 </p>
                 {item.subtitle ? (
-                  <p className="mt-0.5 text-[11px] text-mf-glass-text-muted">
+                  <p className="mt-0.5 text-xs text-mf-glass-text-muted">
                     {item.subtitle}
                   </p>
                 ) : null}

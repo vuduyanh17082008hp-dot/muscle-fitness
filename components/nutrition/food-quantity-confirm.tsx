@@ -183,13 +183,13 @@ export function FoodQuantityConfirm({
     return (
       <div className="flex flex-col gap-5">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-400">Product found</p>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Product found</p>
           <h3 className="mt-1 text-lg font-bold text-white">{food.name}</h3>
           {food.brand ? <p className="text-sm text-zinc-400">{food.brand}</p> : null}
         </div>
 
         <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">Last portion</p>
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">Last portion</p>
           <p className="mt-1 text-base font-bold text-white">{label}</p>
           <p className="mt-1 text-xs text-zinc-500">
             {previewScaled.calories} kcal · {previewScaled.protein} P / {previewScaled.carbs} C / {previewScaled.fat} F
@@ -236,7 +236,7 @@ export function FoodQuantityConfirm({
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-400">Product found</p>
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Product found</p>
         <h3 className="mt-1 text-lg font-bold text-white">{food.name}</h3>
         {food.brand ? <p className="text-sm text-zinc-400">{food.brand}</p> : null}
 
@@ -253,7 +253,7 @@ export function FoodQuantityConfirm({
       </div>
 
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">How much did you eat?</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">How much did you eat?</p>
 
         <div className="mb-3 flex gap-2">
           <UnitTab label="Grams" active={unit === "grams"} onClick={() => setUnit("grams")} />
@@ -418,7 +418,7 @@ export function FoodQuantityConfirm({
       </div>
 
       <div>
-        <label htmlFor={mealSelectId} className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+        <label htmlFor={mealSelectId} className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
           Meal
         </label>
         <select
@@ -441,7 +441,7 @@ export function FoodQuantityConfirm({
         </p>
       ) : (
         <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
-          <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.12em] text-amber-400">
             For {effectiveGrams} g
           </p>
           <div className="grid grid-cols-4 gap-2 text-center">
@@ -510,7 +510,7 @@ function MacroPreview({ label, value, suffix }: { label: string; value: number; 
         {value}
         {suffix ? <span className="text-xs font-semibold text-zinc-500">{suffix}</span> : null}
       </p>
-      <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-zinc-500">{label}</p>
     </div>
   )
 }

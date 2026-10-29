@@ -66,8 +66,8 @@ export default function StoryTeaser() {
 
           <p
             className="
-              text-[10px] font-bold
-              uppercase tracking-[0.35em]
+              text-xs font-bold
+              uppercase tracking-[0.12em]
               text-[#c8a97e]
               sm:text-xs
             "
@@ -220,7 +220,7 @@ export default function StoryTeaser() {
             <p
               className="
                 relative z-10
-                text-[10px] font-bold
+                text-xs font-bold
                 uppercase tracking-[0.3em]
                 text-white/35
               "
@@ -286,7 +286,7 @@ export default function StoryTeaser() {
               "
             >
               <div>
-                <p className="text-[9px] uppercase tracking-[0.3em] text-white/30">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/30">
                   Where it began
                 </p>
 
@@ -296,7 +296,7 @@ export default function StoryTeaser() {
               </div>
 
               <div className="border-l border-white/[0.08] pl-6">
-                <p className="text-[9px] uppercase tracking-[0.3em] text-white/30">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/30">
                   Not the finish line
                 </p>
 
@@ -349,8 +349,8 @@ export default function StoryTeaser() {
               <p
                 className="
                   mb-5
-                  text-[10px] font-bold
-                  uppercase tracking-[0.35em]
+                  text-xs font-bold
+                  uppercase tracking-[0.12em]
                   text-[#c8a97e]
                 "
               >
@@ -404,7 +404,7 @@ export default function StoryTeaser() {
                 pb-2
                 text-xs font-bold
                 uppercase
-                tracking-[0.22em]
+                tracking-[0.12em]
                 text-white
                 transition-colors
                 duration-300

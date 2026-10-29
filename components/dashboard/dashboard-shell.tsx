@@ -29,7 +29,6 @@ import {
   LogOut,
   Menu,
   Settings,
-  Sparkles,
   Utensils,
   X,
 } from "lucide-react";
@@ -234,7 +233,7 @@ function SidebarContent({
           return (
             <div key={section.title}>
               {!isPrimary ? (
-                <p className="mb-1.5 px-3 text-[10px] font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">
+                <p className="mb-1.5 px-3 text-xs font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">
                   {section.title}
                 </p>
               ) : null}
@@ -302,18 +301,6 @@ function SidebarContent({
           <Home className="size-4 shrink-0" />
 
           Back to homepage
-        </Link>
-
-        <Link
-          href="/dashboard/ai-coach"
-          onClick={
-            onNavigate
-          }
-          className="mb-3 flex w-full items-center gap-3 rounded-xl border border-mf-glass-border bg-white/[0.02] px-3 py-2.5 text-sm font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:bg-mf-glass-brand-soft hover:text-mf-glass-text"
-        >
-          <Sparkles className="size-4 shrink-0" />
-
-          Ask Dante
         </Link>
 
         <form

@@ -63,7 +63,7 @@ export function ExerciseTechniquePanel({ exercise }: { exercise: ExerciseLibrary
               <p className="text-xs font-semibold text-mf-glass-text-secondary">
                 Technique animation unavailable
               </p>
-              <p className="text-[11px] leading-5 text-mf-glass-text-muted">
+              <p className="text-xs leading-5 text-mf-glass-text-muted">
                 We only publish an animation once its motion data has been verified.
               </p>
             </div>
@@ -75,7 +75,7 @@ export function ExerciseTechniquePanel({ exercise }: { exercise: ExerciseLibrary
 
           {exercise.commonMistakes && exercise.commonMistakes.length > 0 ? (
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-mf-glass-danger">
+              <p className="text-xs font-black uppercase tracking-wider text-mf-glass-danger">
                 Common mistakes
               </p>
               <ul className="mt-2 space-y-1.5">

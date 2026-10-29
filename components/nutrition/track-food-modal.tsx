@@ -346,7 +346,7 @@ const OTHER_SOURCES: Array<{ mode: Mode; icon: typeof Barcode; label: string; hi
 function OtherSources({ onPick }: { onPick: (mode: Mode) => void }) {
   return (
     <section aria-label="Other ways to add food">
-      <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-text-muted">Other ways to add</p>
+      <p className="mb-2 text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">Other ways to add</p>
       <div className="grid grid-cols-2 gap-2">
         {OTHER_SOURCES.map(({ mode, icon: Icon, label, hint }) => (
           <button
@@ -358,7 +358,7 @@ function OtherSources({ onPick }: { onPick: (mode: Mode) => void }) {
             <Icon className="size-4 shrink-0 text-mf-glass-brand" aria-hidden="true" />
             <span className="min-w-0">
               <span className="block text-sm font-bold leading-tight text-mf-glass-text">{label}</span>
-              <span className="block text-[11px] leading-tight text-mf-glass-text-muted">{hint}</span>
+              <span className="block text-xs leading-tight text-mf-glass-text-muted">{hint}</span>
             </span>
           </button>
         ))}
@@ -370,7 +370,7 @@ function OtherSources({ onPick }: { onPick: (mode: Mode) => void }) {
 function QuickAddList({ items, onAdd }: { items: FoodHistoryItem[]; onAdd: (item: FoodHistoryItem) => void }) {
   return (
     <section aria-label="Recent foods">
-      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-text-muted">
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
         <History className="size-3.5" aria-hidden="true" /> Recent · same portion as last time
       </p>
       <ul className="space-y-1.5">

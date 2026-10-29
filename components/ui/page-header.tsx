@@ -39,7 +39,7 @@ export function PageHeader({
       <div className="relative z-10">
         <p
           className={cn(
-            "text-[11px] font-bold uppercase tracking-[0.3em]",
+            "text-xs font-bold uppercase tracking-[0.3em]",
             glass ? "text-mf-glass-brand" : "text-amber-400",
           )}
         >
@@ -95,7 +95,7 @@ export function SectionHeader({
     <div className={cn("flex items-center justify-between gap-3", className)}>
       <div>
         {eyebrow ? (
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-text-muted">{eyebrow}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-text-muted">{eyebrow}</p>
         ) : null}
         <h2 className="mt-1 text-section-title font-black text-white">{title}</h2>
       </div>

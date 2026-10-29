@@ -47,7 +47,7 @@ export default function HomeCTA() {
           transition={{ duration: 0.6, delay: 0.1 }}
           className="
             mb-6 text-xs font-semibold
-            uppercase tracking-[0.35em]
+            uppercase tracking-[0.12em]
             text-zinc-500
           "
         >

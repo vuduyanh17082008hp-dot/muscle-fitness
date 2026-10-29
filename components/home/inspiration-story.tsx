@@ -118,7 +118,7 @@ export function InspirationStory() {
             >
               <DanteMascot state={danteState} size="lg" interactive />
 
-              <p className="mt-5 text-[11px] font-black uppercase tracking-[0.18em] text-[var(--mf-violet)]">
+              <p className="mt-5 text-xs font-black uppercase tracking-[0.12em] text-[var(--mf-violet)]">
                 Dante
               </p>
 

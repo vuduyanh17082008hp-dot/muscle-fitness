@@ -108,17 +108,17 @@ export function MenuPhotoPanel({ onReview, onClose }: { onReview: (seed: ReviewS
             <ol className="space-y-3">
               {analysis.recommendations.map((rec, index) => (
                 <li key={rec.slot} className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-testid="menu-recommendation">
-                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">
                     {index + 1}. {rec.label}
                   </p>
-                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">On the menu</p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">On the menu</p>
                   <p className="break-words text-base font-bold text-white">{rec.option.menu.name}</p>
                   {rec.option.menu.description || rec.option.menu.price ? (
                     <p className="break-words text-xs text-zinc-400">
                       {[rec.option.menu.description, rec.option.menu.price].filter(Boolean).join(" · ")}
                     </p>
                   ) : null}
-                  <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Our estimate (not the restaurant&apos;s data)</p>
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Our estimate (not the restaurant&apos;s data)</p>
                   <p className="text-sm font-semibold text-white">
                     {rec.option.estimate!.calories.low}–{rec.option.estimate!.calories.high} kcal · {rec.option.estimate!.protein.low}–{rec.option.estimate!.protein.high} g protein
                   </p>
@@ -130,7 +130,7 @@ export function MenuPhotoPanel({ onReview, onClose }: { onReview: (seed: ReviewS
                       ))}
                     </ul>
                   ) : null}
-                  <p className="mt-2 break-words text-[11px] leading-4 text-zinc-500">{rec.uncertainty}</p>
+                  <p className="mt-2 break-words text-xs leading-4 text-zinc-500">{rec.uncertainty}</p>
                   <button
                     type="button"
                     onClick={() =>

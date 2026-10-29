@@ -183,7 +183,7 @@ export function TodaysPlanCard({ todaySession, actions, timeZone }: TodaysPlanCa
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full border border-mf-glass-border bg-white/[0.02] px-2.5 py-1 text-[11px] font-semibold text-mf-glass-text-secondary"
+                  className="rounded-full border border-mf-glass-border bg-white/[0.02] px-2.5 py-1 text-xs font-semibold text-mf-glass-text-secondary"
                 >
                   {tag}
                 </span>
@@ -215,7 +215,7 @@ export function TodaysPlanCard({ todaySession, actions, timeZone }: TodaysPlanCa
               />
             ) : null}
           </svg>
-          <span className="absolute text-[11px] font-bold text-mf-glass-text">
+          <span className="absolute text-xs font-bold text-mf-glass-text">
             {completionPercent !== null ? `${completionPercent}%` : "…"}
           </span>
         </div>

@@ -174,7 +174,7 @@ export default async function TrainingSplitPage() {
           <Layers3 className="size-6" />
         </span>
 
-        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand">
+        <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand">
           Weekly Structure
         </p>
 
@@ -262,7 +262,7 @@ export default async function TrainingSplitPage() {
                 </span>
 
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-mf-glass-text-muted">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-mf-glass-text-muted">
                     {row.label}
                   </p>
                   <p className="text-base font-bold text-mf-glass-text">{row.title}</p>
@@ -274,7 +274,7 @@ export default async function TrainingSplitPage() {
                   {row.muscles.map((muscle) => (
                     <span
                       key={muscle}
-                      className="rounded-full border border-mf-glass-border bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-mf-glass-text-secondary"
+                      className="rounded-full border border-mf-glass-border bg-white/5 px-2.5 py-1 text-xs font-semibold text-mf-glass-text-secondary"
                     >
                       {muscle}
                     </span>

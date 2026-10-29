@@ -564,7 +564,7 @@ export function RegisterForm() {
             disabled ||
             !hydrated
           }
-          className="flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand px-5 py-4 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-mf-brand-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand px-5 py-4 text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-mf-brand-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ===
           "email" ? (
@@ -767,7 +767,7 @@ function PasswordStrength({
         )}
       </div>
 
-      <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-600">
+      <p className="mt-2 text-xs font-bold uppercase tracking-[0.15em] text-zinc-600">
         Password strength:{" "}
 
         <span className="text-zinc-400">
@@ -791,7 +791,7 @@ function Divider() {
     <div className="flex items-center gap-3">
       <span className="h-px flex-1 bg-white/10" />
 
-      <span className="text-[9px] font-black uppercase tracking-[0.25em] text-zinc-700">
+      <span className="text-xs font-black uppercase tracking-[0.12em] text-zinc-700">
         or
       </span>
 

@@ -27,7 +27,7 @@ export default function FormCoachPage() {
           <ScanEye className="size-6" />
         </span>
 
-        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+        <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-amber-300">
           Form Coach — Beta
         </p>
 

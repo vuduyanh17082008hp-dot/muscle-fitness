@@ -32,7 +32,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
           <div>
             <div className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-amber-400" />
-              <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
+              <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
                 {hold === "recovery" ? "Recovery First Today" : "Check Recovery First"}
               </p>
             </div>
@@ -67,7 +67,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
       <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-5 sm:p-7">
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">Today&apos;s Training</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">Today&apos;s Training</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-mf-glass-text sm:text-3xl">Workout schedule needs review</h2>
             <p className="mt-1 text-sm text-mf-glass-text-muted">
               Your plan has today as a rest day, but {todaySession?.name || "a workout"} is also scheduled. Check Training before you start.
@@ -94,7 +94,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
       <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-5 sm:p-7">
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">Today&apos;s Training</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">Today&apos;s Training</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-mf-glass-text sm:text-3xl">Workout status unavailable</h2>
             <p className="mt-1 text-sm text-mf-glass-text-muted">
               Today&apos;s session couldn&apos;t be loaded. Check Training before you start.
@@ -120,7 +120,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
           <div>
             <div className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-mf-glass-brand" />
-              <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
+              <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
                 {plannedDay.kind === "SCHEDULED" ? "Today's Training" : "Next In Your Plan"}
               </p>
             </div>
@@ -154,7 +154,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
           <div>
             <div className="flex items-center gap-2">
               <span className={`size-2 rounded-full ${restDay ? "bg-emerald-400" : "bg-zinc-500"}`} />
-              <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
+              <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
                 {restDay ? "Scheduled Rest Day" : "No Plan Day Today"}
               </p>
             </div>
@@ -216,7 +216,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
                   : "bg-mf-glass-brand"
               }`}
             />
-            <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
+            <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
               {isCompleted ? "Session Complete" : isPostponed ? "Session Postponed · Rest Day" : isInProgress ? "Session In Progress" : "Today's Training"}
             </p>
           </div>

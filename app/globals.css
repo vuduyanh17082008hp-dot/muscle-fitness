@@ -436,9 +436,9 @@ select {
   font: inherit;
 }
 
-/* Food logging surfaces: phones zoom into any editable field under 16px, so keep them at 16px there. */
+/* Phones zoom into any editable field under 16px, so every one stays at 16px there (was food logging only). */
 @media (max-width: 639px) {
-  .mf-touch-inputs :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]), select, textarea) {
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]), select, textarea) {
     font-size: 16px;
   }
 }
@@ -474,14 +474,28 @@ button:disabled {
    TYPOGRAPHY
    ========================================================= */
 
+/* Margin and colour are layered (like the link reset above) so Tailwind
+   margin and text colour utilities on headings and paragraphs apply. Family,
+   weight, leading and tracking stay unlayered: they are the app-wide
+   heading identity and many headings carry font-black/leading utilities
+   that would otherwise turn them heavier and taller. */
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    color: var(--color-text-primary);
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
 h1,
 h2,
 h3,
 h4,
 h5,
 h6 {
-  margin: 0;
-  color: var(--color-text-primary);
   font-family: var(--font-heading);
   font-weight: 600;
   line-height: 0.98;
@@ -491,10 +505,6 @@ h6 {
      so tracking is dialed back and uppercase is opt-in per heading
      rather than a blanket rule. */
   letter-spacing: 0.01em;
-}
-
-p {
-  margin: 0;
 }
 
 .font-heading {

@@ -48,7 +48,7 @@ export default async function EditAccountPage() {
             </Link>
 
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-500">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-500">
                 Account centre
               </p>
 

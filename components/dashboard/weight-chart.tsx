@@ -88,7 +88,7 @@ export function WeightChart({
             tickLine={false}
             tick={{
               fill: '#71717a',
-              fontSize: 11,
+              fontSize: 12,
             }}
             minTickGap={24}
           />
@@ -102,7 +102,7 @@ export function WeightChart({
             tickLine={false}
             tick={{
               fill: '#71717a',
-              fontSize: 11,
+              fontSize: 12,
             }}
             width={48}
             unit=" kg"

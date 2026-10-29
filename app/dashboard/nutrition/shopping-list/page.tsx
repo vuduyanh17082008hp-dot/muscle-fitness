@@ -51,7 +51,7 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
             <ShoppingCart className="size-6" />
           </span>
 
-          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+          <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-amber-300">
             Shopping List
           </p>
 
@@ -93,7 +93,7 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
           <ShoppingCart className="size-6" />
         </span>
 
-        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+        <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-amber-300">
           Shopping List
         </p>
 
@@ -107,7 +107,7 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
         </p>
 
         <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/8 px-4 py-2.5">
-          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-400">
+          <span className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">
             Estimated market price
           </span>
           <span className="text-lg font-black text-white">

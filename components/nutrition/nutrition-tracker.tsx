@@ -344,7 +344,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     <section className="mf-touch-inputs space-y-5" aria-label="Food log">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-mf-glass-brand">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-brand">
             {isToday ? "Today's Nutrition" : "Food Log"}
           </p>
           <h2 className="mt-1 text-2xl font-black text-mf-glass-text">{formatDateLabel(selectedDate, athleteToday)}</h2>
@@ -455,7 +455,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
           <div className="space-y-5">
             {MEAL_TYPES.filter((meal) => grouped[meal].length > 0).map((meal) => (
               <div key={meal}>
-                <p className="mb-2 flex items-baseline justify-between gap-3 text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-text-muted">
+                <p className="mb-2 flex items-baseline justify-between gap-3 text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
                   <span>{MEAL_TYPE_LABEL[meal]}</span>
                   <span className="tracking-normal normal-case">{Math.round(computeDailyTotals(grouped[meal]).calories)} kcal</span>
                 </p>
@@ -570,7 +570,7 @@ function MacroCard({
       className={`min-w-0 rounded-2xl border ${accent ? "border-mf-glass-brand-border bg-mf-glass-brand-soft p-4" : "border-mf-glass-border bg-white/[0.035] p-3"}`}
     >
       <div className={accent ? "flex flex-wrap items-baseline justify-between gap-x-3" : undefined}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-mf-glass-text-muted">{label}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-mf-glass-text-muted">{label}</p>
         <p className={`font-black ${accent ? "text-2xl text-mf-glass-brand" : "mt-1 text-lg text-mf-glass-text"}`}>
           {unavailable ? "—" : <AnimatedNumber value={consumed} />}
           <span className={`font-semibold text-mf-glass-text-muted ${accent ? "text-sm" : "text-xs"}`}> / {target}{accent ? ` ${unit}` : unit}</span>
@@ -593,10 +593,10 @@ function MacroCard({
 /** Verified = a USDA / Open Food Facts profile the server re-resolved itself; anything else says where the numbers came from. */
 function ProvenanceBadge({ entry }: { entry: FoodLogEntry }) {
   if (entry.isEstimated) {
-    return <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">Estimate</span>
+    return <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-amber-300">Estimate</span>
   }
   if (entry.source === "usda" || entry.source === "open-food-facts") {
-    return <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300">Verified source</span>
+    return <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-emerald-300">Verified source</span>
   }
   return null
 }

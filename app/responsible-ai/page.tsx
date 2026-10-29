@@ -135,7 +135,7 @@ export default function ResponsibleAIPage() {
 
                 uppercase
 
-                tracking-[0.26em]
+                tracking-[0.12em]
               "
             >
               Responsible AI

@@ -57,7 +57,7 @@ export function RecoveryTrendsChart({
     <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Recovery Trends
           </p>
           <h2 className="mt-1 text-xl font-black text-mf-glass-text">
@@ -120,13 +120,13 @@ export function RecoveryTrendsChart({
                 dataKey="label"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "#71717a", fontSize: 11 }}
+                tick={{ fill: "#a1a1aa", fontSize: 12 }}
                 minTickGap={24}
               />
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "#71717a", fontSize: 11 }}
+                tick={{ fill: "#a1a1aa", fontSize: 12 }}
                 width={30}
                 domain={metric === "score" ? [0, 100] : undefined}
               />

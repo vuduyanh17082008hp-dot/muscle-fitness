@@ -43,7 +43,7 @@ export function GlassCardHeader({
     <div className={cn("flex items-center justify-between gap-3", className)}>
       <div className="flex items-center gap-2">
         {Icon ? <Icon className="size-3.5 text-mf-glass-text-muted" aria-hidden="true" /> : null}
-        <h3 className="text-[12px] font-bold uppercase tracking-[0.16em] text-mf-glass-text-secondary">
+        <h3 className="text-[12px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-secondary">
           {title}
         </h3>
       </div>

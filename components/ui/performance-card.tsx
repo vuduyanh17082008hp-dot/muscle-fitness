@@ -188,7 +188,7 @@ export function PerformanceCard({
           <div className="min-w-0">
             {eyebrow ? (
               <p
-                className="text-[11px] font-bold uppercase tracking-[0.18em]"
+                className="text-xs font-bold uppercase tracking-[0.12em]"
                 style={{ color: accent }}
               >
                 {eyebrow}
@@ -268,7 +268,7 @@ export function PerformanceCard({
                   />
                 </div>
                 {progress?.label ? (
-                  <p className="mt-1.5 text-[11px]" style={{ color: textMuted }}>
+                  <p className="mt-1.5 text-xs" style={{ color: textMuted }}>
                     {progress.label}
                   </p>
                 ) : null}

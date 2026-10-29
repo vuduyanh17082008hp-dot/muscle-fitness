@@ -44,7 +44,7 @@ export function NutritionCoachHeader({ busy }: { busy: boolean }) {
         <h2 className="text-base font-black leading-tight text-mf-glass-text">Nutrition Coach</h2>
         <p className="truncate text-xs text-mf-glass-text-muted">Meals, cravings &amp; macros</p>
       </div>
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-mf-glass-text-muted">
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-mf-glass-text-muted">
         <span className={`size-1.5 rounded-full bg-mf-glass-brand ${busy ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true" />
         {busy ? "Working" : "Ready"}
       </span>
@@ -75,7 +75,7 @@ export function NutritionContextStrip({ context }: { context: { caloriesRemainin
 
 export function NutritionTopicChip({ label }: { label: string | null }) {
   if (!label) return null
-  return <span className="inline-flex max-w-full items-center truncate rounded-full border border-mf-glass-brand-border bg-mf-glass-brand-soft px-2.5 py-0.5 text-[11px] font-semibold text-mf-glass-brand">{label}</span>
+  return <span className="inline-flex max-w-full items-center truncate rounded-full border border-mf-glass-brand-border bg-mf-glass-brand-soft px-2.5 py-0.5 text-xs font-semibold text-mf-glass-brand">{label}</span>
 }
 
 /** Plain text with "•" / "-" lines rendered as a list. Never HTML. */
@@ -180,7 +180,7 @@ export function NutritionMessage({ role, text, blocks, disabled = false, onPick 
     <li className="dante-message-in flex items-start gap-2.5">
       <NutritionCoachAvatar size={28} />
       <div className="min-w-0 max-w-[92%] sm:max-w-[min(80%,40rem)]">
-        <p className="mb-0.5 text-[11px] font-bold text-mf-glass-text-muted">Nutrition Coach</p>
+        <p className="mb-0.5 text-xs font-bold text-mf-glass-text-muted">Nutrition Coach</p>
         <div className="break-words text-sm leading-6 text-mf-glass-text-secondary"><MessageBody text={text} /></div>
         {blocks?.length && onPick ? <NutritionBlocks blocks={blocks} disabled={disabled} onPick={onPick} /> : null}
       </div>
@@ -193,7 +193,7 @@ export function NutritionTypingState({ label }: { label: string }) {
     <li className="dante-message-in flex items-start gap-2.5" aria-live="polite">
       <NutritionCoachAvatar size={28} glow />
       <div>
-        <p className="mb-0.5 text-[11px] font-bold text-mf-glass-text-muted">Nutrition Coach</p>
+        <p className="mb-0.5 text-xs font-bold text-mf-glass-text-muted">Nutrition Coach</p>
         <p className="flex items-center gap-2 text-sm text-mf-glass-text-muted">
           <span className="inline-flex gap-1" aria-hidden="true">
             {[0, 150, 300].map((delay) => <span key={delay} className="size-1.5 rounded-full bg-mf-glass-brand motion-safe:animate-bounce" style={{ animationDelay: `${delay}ms` }} />)}
@@ -241,7 +241,7 @@ export function NutritionActiveDraftMini({ name, calories, protein, background, 
     <details className="group rounded-xl border border-mf-glass-border bg-white/[0.03] text-sm">
       <summary className={`flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-2 [&::-webkit-details-marker]:hidden ${focusRing}`}>
         <ChevronRight className="size-3.5 shrink-0 text-mf-glass-text-muted transition group-open:rotate-90" aria-hidden="true" />
-        <span className="text-[11px] font-black uppercase tracking-wider text-mf-glass-brand">{background ? "Draft · paused" : "Active draft"}</span>
+        <span className="text-xs font-black uppercase tracking-wider text-mf-glass-brand">{background ? "Draft · paused" : "Active draft"}</span>
         <span className="min-w-0 flex-1 truncate font-semibold text-mf-glass-text">{name}</span>
       </summary>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-mf-glass-border px-3 py-2">

@@ -126,7 +126,7 @@ export function RecoveryCheckinForm({
     >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Daily Recovery Check-in
           </p>
           <h2 className="mt-1 text-xl font-black text-mf-glass-text">
@@ -135,7 +135,7 @@ export function RecoveryCheckinForm({
         </div>
 
         {existing && (
-          <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300">
+          <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-emerald-300">
             Logged today
           </span>
         )}
@@ -198,7 +198,7 @@ export function RecoveryCheckinForm({
               aria-valuetext={`${form[field.key]} of 10`}
               className="mt-1 h-11 w-full cursor-pointer accent-mf-glass-brand"
             />
-            <p className="text-[11px] text-mf-glass-text-muted">{field.helper}</p>
+            <p className="text-xs text-mf-glass-text-muted">{field.helper}</p>
           </div>
         ))}
       </div>

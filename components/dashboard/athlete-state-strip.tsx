@@ -32,16 +32,16 @@ export function AthleteStateStrip({
         className="group flex flex-col justify-between rounded-xl border border-white/10 bg-mf-glass-surface/80 p-3 transition hover:border-white/20 hover:bg-mf-glass-surface"
       >
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-mf-glass-text-muted">Recovery</span>
+          <span className="text-xs font-semibold text-mf-glass-text-muted">Recovery</span>
           <HeartPulse className="size-3.5 text-mf-glass-dante" />
         </div>
         <div className="mt-2 flex items-baseline gap-1.5">
           {recoveryScore !== null ? (
             <>
               <span className="text-lg font-black text-mf-glass-text">{recoveryScore}</span>
-              <span className="text-[10px] text-mf-glass-text-muted">/100</span>
+              <span className="text-xs text-mf-glass-text-muted">/100</span>
               {recoveryStatus ? (
-                <span className="ml-auto text-[10px] font-bold uppercase text-mf-glass-dante">
+                <span className="ml-auto text-xs font-bold uppercase text-mf-glass-dante">
                   {recoveryStatus}
                 </span>
               ) : null}
@@ -58,7 +58,7 @@ export function AthleteStateStrip({
         className="group flex flex-col justify-between rounded-xl border border-white/10 bg-mf-glass-surface/80 p-3 transition hover:border-white/20 hover:bg-mf-glass-surface"
       >
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-mf-glass-text-muted">Fuel</span>
+          <span className="text-xs font-semibold text-mf-glass-text-muted">Fuel</span>
           <Flame className="size-3.5 text-amber-400" />
         </div>
         <div className="mt-2 flex items-baseline gap-1">
@@ -69,11 +69,11 @@ export function AthleteStateStrip({
             {caloriesConsumed.toLocaleString()}
           </span>
           {caloriesTarget ? (
-            <span className="text-[10px] text-mf-glass-text-muted">
+            <span className="text-xs text-mf-glass-text-muted">
               / {caloriesTarget.toLocaleString()} kcal
             </span>
           ) : (
-            <span className="text-[10px] text-mf-glass-text-muted">kcal</span>
+            <span className="text-xs text-mf-glass-text-muted">kcal</span>
           )}
           </>)}
         </div>
@@ -85,7 +85,7 @@ export function AthleteStateStrip({
         className="group flex flex-col justify-between rounded-xl border border-white/10 bg-mf-glass-surface/80 p-3 transition hover:border-white/20 hover:bg-mf-glass-surface"
       >
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-mf-glass-text-muted">Protein</span>
+          <span className="text-xs font-semibold text-mf-glass-text-muted">Protein</span>
           <Beef className="size-3.5 text-emerald-400" />
         </div>
         <div className="mt-2 flex items-baseline gap-1">
@@ -94,9 +94,9 @@ export function AthleteStateStrip({
           ) : (<>
           <span className="text-lg font-black text-mf-glass-text">{Math.round(proteinConsumed)}</span>
           {proteinTarget ? (
-            <span className="text-[10px] text-mf-glass-text-muted">/ {proteinTarget}g</span>
+            <span className="text-xs text-mf-glass-text-muted">/ {proteinTarget}g</span>
           ) : (
-            <span className="text-[10px] text-mf-glass-text-muted">g</span>
+            <span className="text-xs text-mf-glass-text-muted">g</span>
           )}
           </>)}
         </div>
@@ -108,14 +108,14 @@ export function AthleteStateStrip({
         className="group flex flex-col justify-between rounded-xl border border-white/10 bg-mf-glass-surface/80 p-3 transition hover:border-white/20 hover:bg-mf-glass-surface"
       >
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-mf-glass-text-muted">Weight</span>
+          <span className="text-xs font-semibold text-mf-glass-text-muted">Weight</span>
           <Scale className="size-3.5 text-mf-glass-analytics" />
         </div>
         <div className="mt-2 flex items-baseline gap-1">
           {weightKg !== null ? (
             <>
               <span className="text-lg font-black text-mf-glass-text">{weightKg}</span>
-              <span className="text-[10px] text-mf-glass-text-muted">kg</span>
+              <span className="text-xs text-mf-glass-text-muted">kg</span>
             </>
           ) : (
             <span className="text-xs font-semibold text-mf-glass-text-muted">Log weight</span>

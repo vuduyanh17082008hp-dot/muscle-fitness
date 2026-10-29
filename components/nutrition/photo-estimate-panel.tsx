@@ -470,7 +470,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
       {phase === "results" ? (
         <div className="flex min-w-0 flex-col gap-4">
           <label className="block">
-            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Meal</span>
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Meal</span>
             <select
               id={mealSelectId}
               value={mealType}
@@ -491,18 +491,18 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
                 <figure className="min-w-0">
                   {/* eslint-disable-next-line @next/next/no-img-element -- local data URL preview */}
                   <img src={beforeImage} alt="Before: your meal as served" className="aspect-square w-full rounded-xl object-cover" />
-                  <figcaption className="mt-1 text-center text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Before</figcaption>
+                  <figcaption className="mt-1 text-center text-xs font-semibold uppercase tracking-wide text-zinc-500">Before</figcaption>
                 </figure>
                 <figure className="min-w-0">
                   {after.image ? (
                     // eslint-disable-next-line @next/next/no-img-element -- local data URL preview
                     <img src={after.image} alt="After: what was left" className="aspect-square w-full rounded-xl object-cover" />
                   ) : (
-                    <div className="grid aspect-square w-full place-items-center rounded-xl border border-dashed border-white/15 p-2 text-center text-[11px] text-zinc-500">
+                    <div className="grid aspect-square w-full place-items-center rounded-xl border border-dashed border-white/15 p-2 text-center text-xs text-zinc-500">
                       Optional: photo of what&apos;s left
                     </div>
                   )}
-                  <figcaption className="mt-1 text-center text-[11px] font-semibold uppercase tracking-wide text-zinc-500">After</figcaption>
+                  <figcaption className="mt-1 text-center text-xs font-semibold uppercase tracking-wide text-zinc-500">After</figcaption>
                 </figure>
               </div>
 
@@ -543,7 +543,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
                 </p>
               ) : null}
               {after.phase === "done" ? (
-                <p className="mt-2 text-center text-[11px] text-zinc-500">The eaten amounts below are AI suggestions from the two photos, not measurements. Adjust any of them.</p>
+                <p className="mt-2 text-center text-xs text-zinc-500">The eaten amounts below are AI suggestions from the two photos, not measurements. Adjust any of them.</p>
               ) : null}
             </section>
           ) : null}
@@ -576,7 +576,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
             </div>
           ) : null}
 
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-400">{seed ? "Dish components — estimate" : "AI-detected meal — estimate"}</p>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-400">{seed ? "Dish components — estimate" : "AI-detected meal — estimate"}</p>
 
           <ul className="space-y-3">
             {items.map((item, index) => {
@@ -609,7 +609,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
                   {food && item.included ? (
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <label className="block min-w-0">
-                        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Served (g)</span>
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Served (g)</span>
                         <input
                           type="number"
                           inputMode="decimal"
@@ -622,7 +622,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
                         />
                       </label>
                       <label className="block min-w-0">
-                        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Cooking</span>
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Cooking</span>
                         <select
                           value={item.method}
                           onChange={(event) => updateItem(index, { method: event.target.value as CookingMethod, methodSet: true })}
@@ -638,7 +638,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
                       </label>
 
                       <div className="col-span-2">
-                        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500">How much did you eat?</span>
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">How much did you eat?</span>
                         <div className="flex flex-wrap items-center gap-1.5">
                           {EATEN_STEPS.map((pct) => (
                             <button
@@ -663,7 +663,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
                           />
                         </div>
                         {item.suggestion ? (
-                          <p className="mt-1 text-[11px] text-sky-300" data-testid="after-suggestion">
+                          <p className="mt-1 text-xs text-sky-300" data-testid="after-suggestion">
                             {item.suggestion.eatenPercent === null
                               ? `After photo: couldn't tell${item.suggestion.note ? ` (${item.suggestion.note})` : ""} — set it yourself.`
                               : `After photo suggests ~${item.suggestion.eatenPercent}% eaten (${item.suggestion.confidence} confidence)${item.eatenSource === "user" ? " — your value is kept" : ""}.`}
@@ -698,7 +698,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
 
                   {food ? (
                     <div className="mt-3 border-t border-white/5 pt-3">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">
                         Nutrition from · <span className={provenance === "VERIFIED_REFERENCE" ? "text-emerald-400" : "text-amber-300"}>{NUTRIENT_PROVENANCE_LABEL[provenance]}</span>
                       </p>
                       <p className="mt-0.5 break-words text-xs text-zinc-300">
@@ -800,7 +800,7 @@ export function PhotoEstimatePanel({ mealType, onMealTypeChange, onConfirmMultip
           </button>
 
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4" data-testid="photo-eaten-total">
-            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">Estimated total eaten</p>
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.12em] text-amber-400">Estimated total eaten</p>
             <p className="text-base font-bold text-white">{Math.round(totals.calories)} kcal</p>
             <p className="text-sm text-zinc-300">
               {Math.round(totals.protein)} g protein · {Math.round(totals.carbs)} g carbs · {Math.round(totals.fat)} g fat

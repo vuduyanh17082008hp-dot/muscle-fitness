@@ -22,7 +22,7 @@ export function TrainingHoldNotice({
     <section role="status" className="rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-5 sm:p-6">
       <div className="flex items-center gap-2">
         <span className="size-2 rounded-full bg-amber-400" />
-        <p className="text-[11px] font-bold uppercase tracking-wider text-amber-200">{action.eyebrow}</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-200">{action.eyebrow}</p>
       </div>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">{action.note}</p>
       <div className="mt-4 flex flex-wrap gap-3">

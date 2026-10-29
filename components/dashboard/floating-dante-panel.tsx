@@ -70,7 +70,7 @@ function DesktopPanel({
           <div className="flex items-center gap-2.5">
             <div>
               <p className="text-xs font-bold text-mf-glass-text">Dante</p>
-              <p className="text-[11px] text-mf-glass-text-muted">Training, nutrition and recovery</p>
+              <p className="text-xs text-mf-glass-text-muted">Training, nutrition and recovery</p>
             </div>
           </div>
 

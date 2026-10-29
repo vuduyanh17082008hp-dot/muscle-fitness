@@ -46,7 +46,7 @@ export function RecoveryScoreCard({
 
   return (
     <article aria-labelledby="recovery-verdict" className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-7">
-      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-mf-glass-text-muted">Today&apos;s recovery</p>
+      <p className="text-xs font-bold uppercase tracking-[0.2em] text-mf-glass-text-muted">Today&apos;s recovery</p>
 
       <div className="mt-2 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
         <h2 id="recovery-verdict" className={cn("text-2xl font-black tracking-tight sm:text-3xl", verdict.tone)}>
@@ -89,7 +89,7 @@ export function RecoveryScoreCard({
 
       {!checkinUnavailable && availableDrivers.length > 0 ? (
         <div className="mt-5 border-t border-mf-glass-border pt-4">
-          <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-text-muted">
+          <p className="mb-2.5 text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
             From today&apos;s check-in
           </p>
           <ul className="space-y-2">

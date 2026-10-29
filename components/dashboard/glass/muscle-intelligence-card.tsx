@@ -99,7 +99,7 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
 
             <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1">
               {LEGEND.map((item) => (
-                <span key={item.label} className="flex items-center gap-1.5 text-[10px] font-semibold text-mf-glass-text-muted">
+                <span key={item.label} className="flex items-center gap-1.5 text-xs font-semibold text-mf-glass-text-muted">
                   <span
                     className="size-2 rounded-full bg-mf-glass-brand"
                     style={{ opacity: item.opacity }}
@@ -123,7 +123,7 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
 
         {selected ? (
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
               {MUSCLE_DISPLAY_NAME[selected.muscle]}
             </p>
 
@@ -145,7 +145,7 @@ export function MuscleIntelligenceCard({ entries, error = false }: MuscleIntelli
 
             {selected.topExercises.length > 0 ? (
               <div className="mt-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
                   Top Exercises
                 </p>
                 <ol className="mt-2 space-y-1.5">

@@ -33,7 +33,7 @@ export default async function EmailConfirmationPage({
             </span>
 
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-mf-brand">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-brand">
                 Confirmation sent
               </p>
 
@@ -68,7 +68,7 @@ export default async function EmailConfirmationPage({
 
         <Link
           href="/login"
-          className="flex h-13 min-h-13 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.16em] text-white transition hover:border-mf-brand/30 hover:bg-mf-brand/10 hover:text-mf-brand-hover"
+          className="flex h-13 min-h-13 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.12em] text-white transition hover:border-mf-brand/30 hover:bg-mf-brand/10 hover:text-mf-brand-hover"
         >
           Return to login
         </Link>

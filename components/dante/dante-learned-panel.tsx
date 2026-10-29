@@ -58,7 +58,7 @@ function PatternCard({
 
         <span
           className={cn(
-            "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em]",
+            "shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-[0.1em]",
             pattern.tier === "policy"
               ? "border-mf-glass-dante/30 bg-mf-glass-dante/10 text-mf-glass-dante"
               : "border-mf-glass-border bg-white/[0.04] text-mf-glass-text-muted",
@@ -80,19 +80,19 @@ function PatternCard({
       {expanded ? (
         <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3 sm:grid-cols-4">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Comparable situations</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Comparable situations</p>
             <p className="mt-0.5 text-sm font-bold text-mf-glass-text">{pattern.sampleCount}</p>
           </div>
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Positive outcomes</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Positive outcomes</p>
             <p className="mt-0.5 text-sm font-bold text-mf-glass-text">{pattern.positiveCount}</p>
           </div>
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Confidence</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Confidence</p>
             <p className="mt-0.5 text-sm font-bold text-mf-glass-text">{confidenceLabel(pattern.confidence)}</p>
           </div>
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Last seen</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Last seen</p>
             <p className="mt-0.5 text-sm font-bold text-mf-glass-text">
               {new Date(pattern.lastReinforcedAt).toLocaleDateString()}
             </p>
@@ -219,11 +219,11 @@ export function DanteLearnedPanel() {
             <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-mf-glass-dante/25 bg-mf-glass-dante/10">
               <Brain className="size-3.5 text-mf-glass-dante" aria-hidden="true" />
             </span>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-mf-glass-dante">Dante learned</p>
+            <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-dante">Dante learned</p>
           </div>
 
           {patterns && patterns.length > 0 ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-mf-glass-text-muted">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-mf-glass-text-muted">
               <span className="size-1.5 rounded-full bg-mf-glass-dante" aria-hidden="true" />
               {patterns.length} active
             </span>

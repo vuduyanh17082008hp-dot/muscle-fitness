@@ -134,7 +134,7 @@ export function ExerciseMotionPlayer({ data, className }: ExerciseMotionPlayerPr
         <circle cx={pose.head.x} cy={pose.head.y} r={7} fill="#fff" />
       </svg>
 
-      <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-500">
+      <p className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500">
         {fromPhase.label}
         {progress > 0.5 ? ` → ${toPhase.label}` : ""}
       </p>

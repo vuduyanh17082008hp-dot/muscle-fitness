@@ -90,7 +90,7 @@ async function loadAiCoachContext(
 function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section aria-label={title}>
-      <h2 className="mb-2 px-1 text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">{title}</h2>
+      <h2 className="mb-2 px-1 text-xs font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">{title}</h2>
       <div className="overflow-hidden rounded-2xl border border-mf-glass-border bg-mf-glass-surface [&>*+*]:border-t [&>*+*]:border-mf-glass-border">
         {children}
       </div>
@@ -264,7 +264,7 @@ export default async function DashboardSectionPage({
           screen, so it's skipped for ai-coach specifically. */}
       {sectionKey !== "ai-coach" ? (
         <header id="overview" className="scroll-mt-24">
-          <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">
+          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">
             <Icon className="size-4" aria-hidden="true" />
             {section.project}
           </p>

@@ -149,7 +149,7 @@ export function FoodSearchPanel({ mealType, onMealTypeChange, onConfirm, onClose
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-white">{food.name}</span>
-                  <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-amber-400">
+                  <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-amber-400">
                     {food.sourceLabel}
                   </span>
                 </div>

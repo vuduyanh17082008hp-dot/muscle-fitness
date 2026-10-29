@@ -110,7 +110,7 @@ export function UserMenu() {
             {displayName}
           </p>
 
-          <p className="max-w-32 truncate text-left text-[11px] text-zinc-500">
+          <p className="max-w-32 truncate text-left text-xs text-zinc-500">
             {user.email}
           </p>
         </div>

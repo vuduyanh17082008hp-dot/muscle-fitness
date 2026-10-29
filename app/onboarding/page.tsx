@@ -638,7 +638,7 @@ export default async function OnboardingPage({
         {isEditMode && (
           <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-amber-500">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-500">
                 Edit Profile
               </p>
 

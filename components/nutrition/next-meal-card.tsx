@@ -90,7 +90,7 @@ export function NextMealCard({
     <div className="rounded-2xl border border-mf-glass-brand-border bg-gradient-to-br from-mf-glass-brand-soft to-transparent p-4">
       <div className="flex items-center gap-2">
         <Sparkles className="size-4 text-mf-glass-brand" aria-hidden="true" />
-        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand">
           Next meal idea
         </p>
       </div>
@@ -138,7 +138,7 @@ export function NextMealCard({
             <p className="mt-1 text-xs text-mf-glass-text-muted">
               ~{option.estimatedNutrition.calories} kcal · {option.estimatedNutrition.protein}g protein
             </p>
-            <p className="mt-0.5 text-[11px] leading-4 text-mf-glass-text-muted">
+            <p className="mt-0.5 text-xs leading-4 text-mf-glass-text-muted">
               {option.provenance}
             </p>
           </div>

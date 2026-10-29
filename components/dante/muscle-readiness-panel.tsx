@@ -87,7 +87,7 @@ export function MuscleReadinessPanel() {
     <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="flex items-center gap-2">
         <Activity className="size-4 text-mf-glass-dante" aria-hidden="true" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
           Per-muscle readiness · training-load estimate
         </p>
       </div>
@@ -101,7 +101,7 @@ export function MuscleReadinessPanel() {
         </div>
 
         <div className="text-right">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-mf-glass-text-muted">
+          <p className="text-xs uppercase tracking-[0.14em] text-mf-glass-text-muted">
             Systemic fatigue
           </p>
           <p className={cn("text-sm font-black", fatigue.className)}>
@@ -143,7 +143,7 @@ export function MuscleReadinessPanel() {
           {readiness.limitingFactors.map((factor) => (
             <span
               key={factor}
-              className="rounded-full border border-mf-glass-border bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-mf-glass-text-secondary"
+              className="rounded-full border border-mf-glass-border bg-white/[0.04] px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-mf-glass-text-secondary"
             >
               {factor.replace(/_/g, " ")}
             </span>

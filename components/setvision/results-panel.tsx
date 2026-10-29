@@ -21,9 +21,9 @@ function StatTile({
 }) {
   return (
     <div className="rounded-xl border border-white/[0.07] bg-black/20 p-3">
-      <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">{label}</p>
+      <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">{label}</p>
       <p className="mt-1 text-lg font-black text-white">{value}</p>
-      {sub ? <p className="mt-0.5 text-[11px] text-zinc-500">{sub}</p> : null}
+      {sub ? <p className="mt-0.5 text-xs text-zinc-500">{sub}</p> : null}
     </div>
   );
 }
@@ -64,11 +64,11 @@ export function SetVisionResultsPanel({ analysis }: { analysis: SetVisionAnalysi
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Activity className="size-4 text-amber-400" aria-hidden="true" />
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
             SetVision analysis
           </p>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-400">
+        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-bold uppercase tracking-[0.1em] text-zinc-400">
           {Math.round(analysis.confidence * 100)}% confidence
         </span>
       </div>
@@ -112,12 +112,12 @@ export function SetVisionResultsPanel({ analysis }: { analysis: SetVisionAnalysi
             aria-hidden="true"
           />
           <div>
-            <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">Velocity loss</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">Velocity loss</p>
             <p className="text-lg font-black text-white">
               {Math.round(velocity.velocityLoss * 100)}%
             </p>
           </div>
-          <p className="ml-auto max-w-[55%] text-right text-[11px] leading-4 text-zinc-500">
+          <p className="ml-auto max-w-[55%] text-right text-xs leading-4 text-zinc-500">
             First rep {velocity.peak ?? "—"} {velocity.unit} → final rep {velocity.final ?? "—"}{" "}
             {velocity.unit}
           </p>
@@ -127,7 +127,7 @@ export function SetVisionResultsPanel({ analysis }: { analysis: SetVisionAnalysi
       <div className="mt-6 space-y-3">
         <div className="flex items-center gap-2">
           <Gauge className="size-3.5 text-zinc-500" aria-hidden="true" />
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
             Technique consistency
           </p>
         </div>
@@ -146,7 +146,7 @@ export function SetVisionResultsPanel({ analysis }: { analysis: SetVisionAnalysi
         <div className="mt-6">
           <div className="flex items-center gap-2">
             <Waves className="size-3.5 text-zinc-500" aria-hidden="true" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
               Per-rep detail
             </p>
           </div>

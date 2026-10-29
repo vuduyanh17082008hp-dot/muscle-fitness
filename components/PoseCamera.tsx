@@ -614,7 +614,7 @@ export default function PoseCamera() {
 
                   uppercase
 
-                  tracking-[0.18em]
+                  tracking-[0.12em]
 
                   text-white
 

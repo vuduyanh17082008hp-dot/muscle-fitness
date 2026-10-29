@@ -81,8 +81,8 @@ export function Logo({
         <span
           className="
             mt-1 block
-            text-[0.62rem] font-bold
-            tracking-[0.42em]
+            text-xs font-bold
+            tracking-[0.3em]
             text-[var(--mf-brand)]
           "
         >

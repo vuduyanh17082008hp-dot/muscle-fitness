@@ -270,7 +270,7 @@ function LoginContent() {
 
         {/* Heading */}
         <div className="mt-10">
-          <p className="text-sm font-black uppercase tracking-[0.25em] text-mf-brand">
+          <p className="text-sm font-black uppercase tracking-[0.12em] text-mf-brand">
             Member access
           </p>
 
@@ -427,7 +427,7 @@ function LoginContent() {
           <button
             type="submit"
             disabled={isLoading || !hydrated}
-            className="flex h-16 w-full items-center justify-center gap-3 rounded-full bg-mf-brand px-6 text-base font-semibold uppercase tracking-[0.18em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-16 w-full items-center justify-center gap-3 rounded-full bg-mf-brand px-6 text-base font-semibold uppercase tracking-[0.12em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loadingType === "email" ? (
               <>
@@ -444,7 +444,7 @@ function LoginContent() {
         <div className="my-8 flex items-center gap-4">
           <div className="h-px flex-1 bg-white/10" />
 
-          <span className="text-xs font-black uppercase tracking-[0.28em] text-zinc-600">
+          <span className="text-xs font-black uppercase tracking-[0.12em] text-zinc-600">
             Or continue with
           </span>
 
