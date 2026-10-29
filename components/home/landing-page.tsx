@@ -9,34 +9,31 @@ import {
 } from "lucide-react";
 
 import { Logo } from "@/components/brand/logo";
+import { checkpoints, SignalHero } from "@/components/home/signal-hero";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
 /**
- * Public landing (`/`). Static and editorial: no live metrics, no canvas,
- * no scroll-driven reveal — every line is readable on first paint.
- * Copy describes features that exist in the app today; nothing here is a
- * user's data.
+ * Public landing (`/`). Editorial: no live metrics, no canvas, no
+ * scroll-driven reveal. The only motion is the hero's one-shot CSS
+ * opening, and every line is readable without it. Copy describes
+ * features that exist in the app today; nothing here is a user's data.
  */
 
 const day = [
   {
-    when: "Morning",
     title: "Check in",
     body: "Log sleep, soreness, stress and any pain or illness. The recovery score comes from a fixed formula, not from AI. Report pain or illness and today's training is held until you clear it.",
   },
   {
-    when: "Training",
     title: "Run today's session",
     body: "Start the session your plan scheduled. Each exercise shows what you lifted last time, and every set is saved the moment you log it.",
   },
   {
-    when: "Meals",
     title: "Log what you eat",
     body: "Search, scan a barcode or take a photo. Macros are recalculated on the server from the portion you confirm, and photo estimates stay labelled as estimates.",
   },
   {
-    when: "Evening",
     title: "Ask Dante",
     body: "Dante reads the same day — the workout, the food log, the check-in — and answers from it. Plan changes arrive as proposals that you review and confirm.",
   },
@@ -134,7 +131,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
                   Log in
                 </Link>
                 <Link href="/signup" className={buttonVariants()}>
-                  Start now
+                  Get started
                 </Link>
               </>
             )}
@@ -143,74 +140,9 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
       </header>
 
       <main>
-        <section
-          aria-labelledby="hero-title"
-          className={cn(
-            container,
-            "grid gap-12 pb-16 pt-12 sm:pb-20 sm:pt-20 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-center lg:gap-16 lg:pb-24 lg:pt-24",
-          )}
-        >
-          <div>
-            <p className="text-sm font-semibold text-mf-action">
-              Training · Nutrition · Recovery · Coaching
-            </p>
-            <h1
-              id="hero-title"
-              className="mt-4 max-w-[15ch] font-heading text-[2.5rem] font-bold leading-[1.02] tracking-[-0.01em] sm:text-6xl lg:text-[4.5rem]"
-            >
-              Know what to train, eat and recover today.
-            </h1>
-            <p className="mt-6 max-w-[58ch] text-base leading-7 text-mf-pub-text-secondary sm:text-lg sm:leading-8">
-              Muscle Fitness connects your workouts, food log and recovery
-              check-ins, so today&apos;s plan reflects what actually happened
-              yesterday. Dante, the in-app coach, explains that plan from your
-              own data — and you stay in control of every change.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Link
-                href={signedIn ? "/dashboard" : "/signup"}
-                className={buttonVariants({ size: "lg" })}
-              >
-                {signedIn ? "Open dashboard" : "Start now"}
-                <ArrowRight aria-hidden="true" className="size-4" />
-              </Link>
-              <a
-                href="#day"
-                className={buttonVariants({ size: "lg", variant: "secondary" })}
-              >
-                See how a day works
-              </a>
-            </div>
-          </div>
-          <aside
-            aria-labelledby="trust-title"
-            className="rounded-2xl border border-[var(--mf-pub-border)] bg-mf-pub-surface p-6 sm:p-7"
-          >
-            <h2 id="trust-title" className="text-lg font-semibold text-white">
-              What you can rely on
-            </h2>
-            <ul className="mt-4 space-y-3 text-[15px] leading-6 text-mf-pub-text-secondary">
-              {commitments.map((line) => (
-                <li key={line} className="flex gap-3">
-                  <Check
-                    aria-hidden="true"
-                    className="mt-1 size-4 shrink-0 text-mf-action"
-                  />
-                  {line}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-5 border-t border-[var(--mf-pub-border)] pt-4 text-sm text-mf-pub-text-muted">
-              A training tool, not medical advice.{" "}
-              <Link
-                href="/responsible-ai"
-                className="text-mf-pub-text-secondary underline underline-offset-4 hover:text-white"
-              >
-                How we use AI
-              </Link>
-            </p>
-          </aside>
-        </section>
+        <div className={container}>
+          <SignalHero signedIn={signedIn} />
+        </div>
 
         <section
           id="day"
@@ -231,8 +163,12 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
             <ol className="mt-10 grid gap-px overflow-hidden rounded-2xl border border-[var(--mf-pub-border)] bg-[var(--mf-pub-border)] sm:grid-cols-2 lg:grid-cols-4">
               {day.map((step, index) => (
                 <li key={step.title} className="bg-mf-pub-surface p-6">
-                  <p className="text-sm font-medium tabular-nums text-mf-pub-text-muted">
-                    {index + 1} · {step.when}
+                  <p className="flex items-center gap-2 text-sm font-medium tabular-nums text-mf-pub-text-muted">
+                    <span
+                      aria-hidden="true"
+                      className="size-[7px] rounded-full bg-mf-brand"
+                    />
+                    0{index + 1} · {checkpoints[index]}
                   </p>
                   <h3 className="mt-2 text-lg font-semibold text-white">
                     {step.title}
@@ -286,6 +222,40 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
         </section>
 
         <section
+          aria-labelledby="trust-title"
+          className="border-t border-[var(--mf-pub-border)]"
+        >
+          <div className={cn(container, "py-16 sm:py-20")}>
+            <h2
+              id="trust-title"
+              className="font-heading text-3xl font-bold sm:text-4xl"
+            >
+              What you can rely on
+            </h2>
+            <ul className="mt-8 grid gap-x-10 gap-y-4 text-[15px] leading-6 text-mf-pub-text-secondary sm:grid-cols-2">
+              {commitments.map((line) => (
+                <li key={line} className="flex gap-3">
+                  <Check
+                    aria-hidden="true"
+                    className="mt-1 size-4 shrink-0 text-mf-action"
+                  />
+                  {line}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-8 text-sm text-mf-pub-text-muted">
+              A training tool, not medical advice.{" "}
+              <Link
+                href="/responsible-ai"
+                className="text-mf-pub-text-secondary underline underline-offset-4 hover:text-white"
+              >
+                How we use AI
+              </Link>
+            </p>
+          </div>
+        </section>
+
+        <section
           aria-labelledby="cta-title"
           className="border-t border-[var(--mf-pub-border)] bg-mf-pub-bg-deep"
         >
@@ -310,7 +280,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
               href={signedIn ? "/dashboard" : "/signup"}
               className={buttonVariants({ size: "lg", className: "shrink-0" })}
             >
-              {signedIn ? "Open dashboard" : "Start now"}
+              {signedIn ? "Open dashboard" : "Get started"}
               <ArrowRight aria-hidden="true" className="size-4" />
             </Link>
           </div>
