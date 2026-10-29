@@ -35,6 +35,11 @@ function obligationCarriesAsk(obligation: Scoped): boolean {
   return /should i|train anyway|get (?:myself )?to the gym|co nen|có nên/i.test(text);
 }
 
+function obligationAsksGoOrSkip(obligation: Scoped): boolean {
+  const text = `${obligation.payload?.normalized ?? ""} ${obligation.sourceSpan?.text ?? ""}`;
+  return /should i (?:keep |still |just )?(?:train|go|skip|attend|get|hit|work ?out)|train anyway|get (?:myself )?to the gym|enough reason|co nen|có nên/i.test(text);
+}
+
 /**
  * Write DecisionState when the obligation is resolved from structured state.
  * Does not read draft prose.
@@ -52,8 +57,11 @@ export function decideObligationDecisionState(
     if (!/\b(?:train|gym|skip|workout|session|tap|tập|nghi|nghỉ)\b/i.test(text)) return "NONE";
   }
   const scope = obligation.reasoningScope;
+  // A scoped basis only makes this a go/skip call when the ask itself is go/skip/train:
+  // "Based on my workout and food log, what should I prioritize tonight?" is planning, not a skip decision.
   if (
     current.trainingDecisionRequested
+    && obligationAsksGoOrSkip(obligation)
     && scope?.mode === "ONLY"
     && (scope.allowedFactors?.length ?? 0) > 0
   ) {
