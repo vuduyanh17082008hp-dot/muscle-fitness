@@ -1417,6 +1417,11 @@ export async function startWorkoutAction(
     },
   );
 
+  // The DB enforces the same hold (workout_sessions_training_hold): a hold set after the check above lands here.
+  if (error?.hint === "training_hold") {
+    redirect("/dashboard/recovery");
+  }
+
   if (
     error ||
     !sessionId

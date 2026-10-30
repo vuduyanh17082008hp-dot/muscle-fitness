@@ -158,7 +158,9 @@ describe("P1-B: a REST plan day vs a session row", () => {
       expect(d.hero).not.toMatch(TRAIN_CTA);
       expect(d.brief).toMatch(/Workout schedule needs review — your plan has today as a rest day/);
       expect(d.brief).not.toMatch(/Proceed with today's session/);
-      expect(d.item).toBeNull();
+      // Surfaced for review (never "on track"), and never a link that starts the session.
+      expect(d.item?.title).toBe("Workout schedule needs review");
+      expect(d.item?.href).toBe("/dashboard/workouts");
     }
   });
 

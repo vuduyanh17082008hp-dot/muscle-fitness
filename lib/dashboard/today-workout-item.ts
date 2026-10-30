@@ -17,6 +17,16 @@ export function todayWorkoutItem(
       urgency: "high",
     };
   }
+  // A not-started session on the plan's rest day: the hero says "needs review", so this list never says "on track".
+  if (status === "conflict") {
+    return {
+      id: "schedule-conflict",
+      title: "Workout schedule needs review",
+      subtitle: "Your plan has today as a rest day",
+      href: "/dashboard/workouts",
+      urgency: "normal",
+    };
+  }
   if (!todaySession || (status !== "planned" && status !== "active")) return null;
   return {
     id: "pending-session",

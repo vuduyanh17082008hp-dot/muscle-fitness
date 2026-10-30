@@ -32,6 +32,7 @@ import { guardFoodLookup, takeLookupSlot } from "@/lib/nutrition/food-data/looku
 import { formatDateLabel } from "@/lib/nutrition/date-utils";
 import { NutritionTracker } from "@/components/nutrition/nutrition-tracker";
 import { WhatMattersNow } from "@/components/dashboard/what-matters-now";
+import { todayWorkoutItem } from "@/lib/dashboard/today-workout-item";
 
 const read = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 const DAY = "11111111-1111-4111-8111-111111111111";
@@ -78,6 +79,16 @@ describe("QA-01 server-side training hold", () => {
     vi.mocked(loadDailyDecision).mockResolvedValue(decision(null));
     await expect(startWorkoutAction(form())).rejects.toThrow("REDIRECT:/dashboard/workouts/session/session-9");
     expect(supabase.rpc.mock.calls.map((c) => c[0])).toContain("start_workout");
+  });
+
+  it("a hold the DB trigger catches after the app check (race) still redirects to Recovery", async () => {
+    vi.mocked(loadDailyDecision).mockResolvedValue(decision(null));
+    supabase.rpc.mockImplementation(async (name: string) =>
+      name === "start_workout"
+        ? ({ data: null, error: { message: "Training is on hold today", hint: "training_hold" } } as never)
+        : { data: true, error: null },
+    );
+    await expect(startWorkoutAction(form())).rejects.toThrow("REDIRECT:/dashboard/recovery");
   });
 
   it("an unreadable decision fails closed as 'unverified'", async () => {
@@ -140,6 +151,14 @@ describe("QA-06 What matters now", () => {
     expect(unknown).not.toContain("Plan is on track");
     expect(unknown).toContain("couldn&#x27;t be loaded");
     expect(renderToStaticMarkup(createElement(WhatMattersNow, { items: [] }))).toContain("Plan is on track");
+  });
+
+  it("a REST-plan conflict is surfaced for review, never 'on track' (and a hold still wins)", () => {
+    const item = todayWorkoutItem(null, "conflict", null);
+    expect(item?.title).toBe("Workout schedule needs review");
+    expect(renderToStaticMarkup(createElement(WhatMattersNow, { items: [item!] }))).not.toContain("Plan is on track");
+    expect(todayWorkoutItem(null, "conflict", "recovery")?.id).toBe("training-hold");
+    expect(todayWorkoutItem(null, "none", null)).toBeNull();
   });
 });
 
