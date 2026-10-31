@@ -132,3 +132,33 @@ Environment notes (verified 2026-10-31):
 - **Server hold (srvhold):** SEC1 replayed Start under hold → no session; SEC2 planned row stays
   `not_started` (reduce-only apply = QA-02 design); SEC3 direct RPC and direct insert with the
   athlete JWT → 403 `training_hold`; SEC4 no hold → idempotent; cleanup restored.
+
+### Phase 3 — Train, Iron Logbook, History — DONE
+- `PAPER_ROUTES` + `/dashboard/workouts`, `session/*`, `history/*`, `library/*`, `plans/*`.
+- `features/workouts/workout-player.tsx` (real player, real actions, offline queue, idempotent
+  save, undo, carry-forward hints and explicit-kg guard all unchanged):
+  - **Rest timer is now timestamp-based.** It was a `setInterval` "minus one" countdown, so a
+    backgrounded phone (throttled timers) fell behind. It now stores the end time and every tick
+    / `visibilitychange` recomputes `restRemaining(endsAt, now)` (`lib/training/rest-timer.ts`,
+    tested). Pause keeps the remainder, resume restarts from it, reset clears it; V4's **+30 s**.
+  - Iron Logbook look: iron-bordered header/timer/open exercise, lime progress bar, set rows on
+    paper; a logged set is **stamped** (iron check tile, "Set n logged" for screen readers) and the
+    Undo stays a separate, secondary action; Log is lime with an iron edge, 12px (was 11px).
+    Finish dialog restyled ("Continue Workout" primary, "Finish Anyway" secondary).
+  - Preserved decision (UX-R1.1B): inputs start empty; the carry-forward suggestion is only a
+    placeholder ("Suggested from set 1 — not logged yet"). Tapping Log on an empty field accepts
+    that visible suggestion; nothing is pre-filled, and a loaded lift still requires a typed kg.
+- `components/training/microcycle-strip.tsx`: V4 week strip on the Training hub from the active
+  plan's real `scheduled_weekday` values (today outlined; unscheduled days shown as the rotation).
+  Read-only — no Start; a failed read renders nothing.
+- a11y: plan builder "Day name" input labelled; "Back to workouts" / "Back to login" ≥44px.
+- **Live journey (disposable uxr1, 320px, fixture restored, 3 runs):** Today Start → session
+  `in_progress`, tab bar shows **Active** → that session; first set inputs empty (placeholders
+  60/8), 16px, Log 52×48 inside the row; typed 42.5 × 8 → DB `42.50x8 completed`; stamped +
+  Undo; timer 02:25 → after a 61 s clock jump with no ticks **01:24**, +30 s → 01:54; Undo → 0
+  completed in DB; Complete → "You logged 1 of 18 sets. Finish this workout?" → Finish Anyway →
+  History, session `completed`, tab back to **Train**; created session deleted, plan days reset.
+- Gates: tsc 0, eslint 0 (touched files), `app/dashboard` + `lib/training` + `lib/workouts`
+  324 pass; surveys at 320/1440 of hub, history, library, plan detail, plan builder, completed
+  session: 0 contrast violations, no horizontal scroll, no sub-12px text (History had 14 contrast
+  failures in the dark BEFORE).

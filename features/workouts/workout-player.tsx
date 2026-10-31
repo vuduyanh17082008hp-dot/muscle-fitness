@@ -35,6 +35,7 @@ import {
   saveWorkoutSetAction,
   skipSessionExerciseAction,
 } from "@/app/dashboard/workouts/actions";
+import { restRemaining } from "@/lib/training/rest-timer";
 import { formatSessionClock } from "@/lib/training/session-time";
 
 import {
@@ -263,6 +264,9 @@ export function WorkoutPlayer({
   ] =
     useState(false);
 
+  // When the running rest ends (epoch ms); null while paused or idle.
+  const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
+
   const [
     sessionRpe,
     setSessionRpe,
@@ -408,30 +412,24 @@ export function WorkoutPlayer({
       return;
     }
 
-    const timer =
-      window.setInterval(
-        () => {
-          setRestSeconds(
-            (
-              current,
-            ) =>
-              Math.max(
-                0,
-                current -
-                  1,
-              ),
-          );
-        },
-        1000,
-      );
+    if (restEndsAt === null) {
+      return;
+    }
+
+    // Timestamp-based: each tick (and the return from a backgrounded tab, where
+    // intervals are throttled) recomputes from the end time, so it never drifts.
+    const tick = () => setRestSeconds(restRemaining(restEndsAt, Date.now()));
+    tick();
+    const timer = window.setInterval(tick, 250);
+    document.addEventListener("visibilitychange", tick);
 
     return () => {
-      window.clearInterval(
-        timer,
-      );
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
     };
   }, [
     timerActive,
+    restEndsAt,
   ]);
 
   /* =======================================================
@@ -691,6 +689,8 @@ export function WorkoutPlayer({
           setRestSeconds(
             exercise.restSeconds,
           );
+
+          setRestEndsAt(Date.now() + exercise.restSeconds * 1000);
 
           setTimerRunning(
             true,
@@ -978,8 +978,8 @@ export function WorkoutPlayer({
           HEADER
       =================================================== */}
 
-      <header className="rounded-2xl border border-white/10 bg-mf-surface px-4 py-3 sm:p-5">
-        <div className="flex flex-wrap items-center gap-x-2 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400">
+      <header className="rounded-2xl border-2 border-mf-glass-text bg-mf-surface px-4 py-3 sm:p-5">
+        <div className="flex flex-wrap items-center gap-x-2 text-xs font-bold uppercase tracking-[0.12em] text-amber-400">
           <Dumbbell aria-hidden="true" className="size-4" />
           <span><span className="max-sm:hidden">Workout </span>in progress</span>
           <span className="whitespace-nowrap font-semibold normal-case tracking-normal text-mf-text-muted">
@@ -988,7 +988,7 @@ export function WorkoutPlayer({
           </span>
         </div>
 
-        <h1 className="mt-0.5 text-xl font-black tracking-tight text-white sm:mt-1 sm:text-3xl">
+        <h1 className="mt-0.5 font-heading text-2xl font-black tracking-tight text-white sm:mt-1 sm:text-4xl">
           {sessionName}
         </h1>
 
@@ -999,10 +999,10 @@ export function WorkoutPlayer({
             aria-valuemin={0}
             aria-valuemax={progress.total}
             aria-valuenow={progress.completed}
-            className="h-2 flex-1 overflow-hidden rounded-full bg-white/5"
+            className="h-3 flex-1 overflow-hidden rounded-full border border-mf-glass-text bg-mf-glass-bg"
           >
             <div
-              className="h-full rounded-full bg-amber-400 transition-all duration-300"
+              className="h-full bg-mf-glass-brand transition-all duration-300"
               style={{ width: `${progress.percent}%` }}
             />
           </div>
@@ -1022,15 +1022,15 @@ export function WorkoutPlayer({
       <div className="sticky top-[4.5rem] z-20 space-y-2 lg:top-4">
         <section
           aria-label="Rest timer"
-          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-mf-surface-elevated/95 px-3 py-1.5 shadow-lg shadow-black/40 backdrop-blur-xl"
+          className="flex items-center gap-2 rounded-2xl border-2 border-mf-glass-text bg-mf-surface-elevated/95 px-3 py-1.5 shadow-[var(--shadow-card)] backdrop-blur-xl"
         >
-          <Clock3 aria-hidden="true" className={`size-5 shrink-0 ${timerActive ? "text-amber-400" : "text-mf-text-muted"}`} />
+          <Clock3 aria-hidden="true" className={`size-5 shrink-0 max-sm:hidden ${timerActive ? "text-amber-400" : "text-mf-text-muted"}`} />
 
           {/* One line: label, time and status side by side, so the timer costs one row of height on a phone. */}
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-mf-text-muted">Rest</span>
-              <span className="text-xl font-black tabular-nums text-white">
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-mf-text-muted">Rest</span>
+              <span className="font-heading text-2xl font-black leading-none tabular-nums text-white sm:text-3xl">
                 {formatTimer(restSeconds)}
               </span>
               {/* Idle hint ("Log a set to start") wraps to two lines on a 320px phone: kept for screen readers only there. */}
@@ -1042,10 +1042,20 @@ export function WorkoutPlayer({
 
           <button
             type="button"
-            onClick={() => setTimerRunning((current) => (restSeconds > 0 ? !current : false))}
+            onClick={() => {
+              if (restSeconds <= 0) return;
+              if (timerActive) {
+                // Pause keeps what is left; resume restarts the clock from it.
+                setRestEndsAt(null);
+                setTimerRunning(false);
+              } else {
+                setRestEndsAt(Date.now() + restSeconds * 1000);
+                setTimerRunning(true);
+              }
+            }}
             disabled={restSeconds <= 0}
             aria-label={timerActive ? "Pause rest timer" : "Start rest timer"}
-            className="grid size-11 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-200 transition hover:bg-white/5 disabled:opacity-30"
+            className="grid size-11 shrink-0 place-items-center rounded-md border border-mf-glass-border-strong text-zinc-200 transition hover:bg-white/5 disabled:opacity-30"
           >
             {timerActive ? <Pause className="size-5" /> : <Play className="size-5" />}
           </button>
@@ -1053,11 +1063,24 @@ export function WorkoutPlayer({
           <button
             type="button"
             onClick={() => {
+              setRestSeconds((current) => current + 30);
+              if (timerActive && restEndsAt !== null) setRestEndsAt(restEndsAt + 30_000);
+            }}
+            aria-label="Add 30 seconds of rest"
+            className="grid h-11 shrink-0 place-items-center rounded-md border border-mf-glass-border-strong px-2 text-sm font-bold tabular-nums text-zinc-200 transition hover:bg-white/5"
+          >
+            +30s
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
               setRestSeconds(0);
+              setRestEndsAt(null);
               setTimerRunning(false);
             }}
             aria-label="Reset rest timer"
-            className="grid size-11 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-200 transition hover:bg-white/5"
+            className="grid size-11 shrink-0 place-items-center rounded-md border border-mf-glass-border-strong text-zinc-200 transition hover:bg-white/5"
           >
             <TimerReset className="size-5" />
           </button>
@@ -1107,8 +1130,8 @@ export function WorkoutPlayer({
           <section
             key={exercise.id}
             id={`exercise-${exercise.id}`}
-            className={`scroll-mt-40 overflow-hidden rounded-2xl border bg-mf-surface ${
-              isOpen ? "border-amber-400/30" : "border-white/10"
+            className={`scroll-mt-40 overflow-hidden rounded-2xl bg-mf-surface ${
+              isOpen ? "border-2 border-mf-glass-text" : "border border-mf-glass-border"
             } ${exercise.isSkipped ? "opacity-70" : ""}`}
           >
             <h2>
@@ -1125,7 +1148,7 @@ export function WorkoutPlayer({
                     allLogged
                       ? "bg-emerald-400/15 text-emerald-300"
                       : isOpen
-                        ? "bg-amber-400 text-black"
+                        ? "bg-mf-glass-text text-mf-glass-bg"
                         : "bg-white/5 text-mf-text-muted"
                   }`}
                 >
@@ -1133,7 +1156,7 @@ export function WorkoutPlayer({
                 </span>
 
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-base font-black text-white">{exercise.name}</span>
+                  <span className="block truncate font-heading text-lg font-black uppercase leading-tight text-white sm:text-xl">{exercise.name}</span>
                   <span className="block text-xs text-mf-text-muted">
                     {exercise.isSkipped
                       ? "Skipped"
@@ -1154,7 +1177,7 @@ export function WorkoutPlayer({
                   <>
                     <div
                       aria-hidden="true"
-                      className={`grid ${columns} gap-1.5 px-1 pb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-mf-text-muted`}
+                      className={`grid ${columns} gap-1.5 px-1 pb-1 text-xs font-bold uppercase tracking-[0.08em] text-mf-text-muted`}
                     >
                       <span className="text-center">Set</span>
                       <span className="text-center">kg</span>
@@ -1192,13 +1215,23 @@ export function WorkoutPlayer({
                         return (
                           <li key={set.id}>
                             <div
-                              className={`grid ${columns} items-center gap-1.5 rounded-xl border p-1 ${
+                              className={`grid ${columns} items-center gap-1.5 rounded-md border p-1 ${
                                 set.completed
-                                  ? "border-emerald-400/20 bg-emerald-400/5"
-                                  : "border-white/10 bg-black/20"
+                                  ? "border-mf-glass-text bg-mf-glass-bg"
+                                  : "border-mf-glass-border bg-mf-glass-surface"
                               }`}
                             >
-                              <span className="text-center text-sm font-black text-white">{set.setNumber}</span>
+                              {set.completed ? (
+                                <span
+                                  title="Logged"
+                                  className="mx-auto grid size-6 place-items-center rounded-sm bg-mf-glass-text text-mf-glass-bg"
+                                >
+                                  <Check aria-hidden="true" className="size-4" />
+                                  <span className="sr-only">Set {set.setNumber} logged</span>
+                                </span>
+                              ) : (
+                                <span className="text-center font-heading text-lg font-black tabular-nums text-white">{set.setNumber}</span>
+                              )}
                               {field("weightKg", "weight (kg)", 0.5, weightHint)}
                               {field("reps", "reps", 1, repsHint)}
                               {field("rir", "RIR", 0.5, null)}
@@ -1216,12 +1249,12 @@ export function WorkoutPlayer({
                                       })
                                 }
                                 aria-label={`${set.completed ? (isDirty ? "Save changes to" : "Undo") : "Log"} ${label}`}
-                                className={`flex h-12 flex-col items-center justify-center rounded-lg text-[11px] font-black uppercase tracking-wide transition disabled:opacity-50 ${
+                                className={`flex h-12 min-w-0 flex-col items-center justify-center rounded-md text-xs font-black uppercase tracking-wide transition disabled:opacity-50 ${
                                   set.completed && !isDirty
-                                    ? "border border-emerald-400/30 bg-emerald-400/15 text-emerald-200"
+                                    ? "border border-mf-glass-border-strong bg-mf-glass-surface text-mf-glass-text-secondary"
                                     : set.completed
-                                      ? "border border-amber-400/60 text-amber-300"
-                                      : "bg-amber-400 text-black hover:bg-amber-300"
+                                      ? "border-2 border-amber-400 text-amber-300"
+                                      : "border-2 border-mf-glass-text bg-mf-glass-brand text-mf-glass-brand-ink hover:bg-mf-glass-brand-hover"
                                 }`}
                               >
                                 {isSaving ? (
@@ -1240,7 +1273,7 @@ export function WorkoutPlayer({
                             </div>
 
                             {hintId && suggestion ? (
-                              <p id={hintId} className="px-2 pt-0.5 text-[11px] text-mf-text-muted">
+                              <p id={hintId} className="px-2 pt-0.5 text-xs text-mf-text-muted">
                                 {suggestionLabel(suggestion)} — not logged yet
                               </p>
                             ) : null}
@@ -1379,7 +1412,7 @@ export function WorkoutPlayer({
             type="button"
             disabled={isPending || progress.completed === 0}
             onClick={requestFinish}
-            className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-mf-action px-4 font-black text-mf-action-ink transition hover:bg-mf-action-hover disabled:cursor-not-allowed disabled:opacity-50 sm:h-12"
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-md border-2 border-mf-glass-text bg-mf-action px-4 font-heading text-lg font-bold uppercase tracking-[0.06em] text-mf-action-ink transition hover:bg-mf-action-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPending ? <LoaderCircle className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}
             {isPending ? "Saving workout..." : "Complete workout"}
@@ -1390,9 +1423,9 @@ export function WorkoutPlayer({
       <dialog
         ref={finishDialogRef}
         aria-labelledby="finish-dialog-title"
-        className="m-auto w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-mf-surface-elevated p-5 text-white backdrop:bg-black/70"
+        className="m-auto w-[min(24rem,calc(100vw-2rem))] rounded-2xl border-2 border-mf-glass-text bg-mf-surface-elevated p-5 text-white backdrop:bg-black/70"
       >
-        <h2 id="finish-dialog-title" className="text-lg font-black">
+        <h2 id="finish-dialog-title" className="font-heading text-2xl font-black uppercase leading-tight">
           You logged {progress.completed} of {progress.total} sets. Finish this workout?
         </h2>
         <p className="mt-2 text-sm text-mf-text-muted">Sets you didn&apos;t log stay unlogged.</p>
@@ -1401,7 +1434,7 @@ export function WorkoutPlayer({
             type="button"
             autoFocus
             onClick={() => finishDialogRef.current?.close()}
-            className="min-h-12 flex-1 rounded-xl bg-amber-400 px-4 font-black text-black transition hover:bg-amber-300"
+            className="min-h-12 flex-1 rounded-md border-2 border-mf-glass-text bg-mf-glass-brand px-4 font-black text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
           >
             Continue Workout
           </button>
@@ -1411,7 +1444,7 @@ export function WorkoutPlayer({
               finishDialogRef.current?.close();
               finishWorkout();
             }}
-            className="min-h-12 flex-1 rounded-xl border border-white/15 px-4 font-bold text-zinc-200 transition hover:bg-white/5"
+            className="min-h-12 flex-1 rounded-md border border-mf-glass-border-strong px-4 font-bold text-zinc-200 transition hover:bg-white/5"
           >
             Finish Anyway
           </button>
@@ -1461,7 +1494,7 @@ function SetInput({ label, value, step, inputMode, placeholder, describedBy, onC
       value={value ?? ""}
       placeholder={placeholder === null ? "–" : String(placeholder)}
       onChange={(event) => onChange(nullableNumber(event.target.value))}
-      className="h-12 w-full min-w-0 scroll-mb-40 scroll-mt-40 rounded-lg border border-white/10 bg-black/40 px-1 text-center text-base! font-semibold tabular-nums text-white outline-none [appearance:textfield] placeholder:font-normal placeholder:italic placeholder:text-mf-text-muted/70 focus:border-amber-400/70 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      className="h-12 w-full min-w-0 scroll-mb-40 scroll-mt-40 rounded-md border border-white/10 bg-black/40 px-1 text-center text-base! font-semibold tabular-nums text-white outline-none [appearance:textfield] placeholder:font-normal placeholder:italic placeholder:text-mf-text-muted/70 focus:border-amber-400/70 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
     />
   );
 }

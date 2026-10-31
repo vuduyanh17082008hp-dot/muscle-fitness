@@ -167,7 +167,7 @@ export function ForgotPasswordForm({
 
       <Link
         href="/login"
-        className="block text-center text-sm font-black text-zinc-600 transition hover:text-mf-brand-hover"
+        className="flex min-h-11 items-center justify-center text-sm font-black text-zinc-600 transition hover:text-mf-brand-hover"
       >
         Back to login
       </Link>

@@ -21,6 +21,7 @@ import { trainingHeroAction } from "@/lib/dashboard/training-hero-action";
 import { resolveCanonicalMuscle, MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MicrocycleStrip } from "@/components/training/microcycle-strip";
 
 /** A rough, honestly-labeled ("~") estimate from each exercise's own target sets and rest time — never a fabricated fixed number. 45s is an assumed average set-execution time, not measured. */
 const ASSUMED_SET_EXECUTION_SECONDS = 45;
@@ -610,6 +611,8 @@ export default async function WorkoutsPage() {
               Your current training plan
             </p>
           </div>
+
+          <MicrocycleStrip planId={activePlan.id} userId={user.id} />
 
           <PromoBanner
             href={`/dashboard/workouts/plans/${activePlan.id}`}

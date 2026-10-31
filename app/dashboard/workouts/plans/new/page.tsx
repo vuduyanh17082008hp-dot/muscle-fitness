@@ -161,7 +161,7 @@ export default async function NewWorkoutPlanPage({
       <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <Link
           href="/dashboard/workouts"
-          className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
+          className="inline-flex min-h-11 w-fit items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
 

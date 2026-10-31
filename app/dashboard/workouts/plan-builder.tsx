@@ -2245,6 +2245,7 @@ export default function PlanBuilder({
                     .value,
                 )
               }
+              aria-label="Day name"
               className="w-full bg-transparent text-xl font-black outline-none"
             />
 
