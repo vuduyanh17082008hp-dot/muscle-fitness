@@ -15,9 +15,9 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 5px;
-  height: 1px;
-  background: var(--mf-brand);
+  top: 4px;
+  height: 2px;
+  background: var(--mf-pub-text);
   transform-origin: left center;
 }
 

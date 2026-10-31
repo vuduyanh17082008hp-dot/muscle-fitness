@@ -106,7 +106,7 @@ export function ForgotPasswordForm({
 
         <Link
           href="/login"
-          className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-mf-brand-hover"
+          className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.12em] text-mf-brand-ink transition hover:bg-mf-brand-hover"
         >
           Return to login
         </Link>
@@ -152,7 +152,7 @@ export function ForgotPasswordForm({
         <button
           type="submit"
           disabled={loading || !hydrated || !email.trim()}
-          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-13 min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand text-xs font-black uppercase tracking-[0.12em] text-mf-brand-ink transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
             <>

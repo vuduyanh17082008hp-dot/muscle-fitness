@@ -49,6 +49,8 @@ describe("Iron & Paper theme", () => {
     expect(contrast("--iron", "--lime")).toBeGreaterThanOrEqual(4.5);
     expect(contrast("--iron", "--lime-hover")).toBeGreaterThanOrEqual(4.5);
     expect(contrast("--dante-ink", "--dante-fill")).toBeGreaterThanOrEqual(4.5);
+    // bg-amber-500 text-black buttons become white text on the rust fill.
+    expect(contrast("--paper-white", "--rust-fill")).toBeGreaterThanOrEqual(4.5);
   });
 
   it("gives form-control and warning-fill boundaries at least 3:1", () => {
@@ -70,6 +72,8 @@ describe("Iron & Paper theme", () => {
     for (const scale of ["slate", "gray", "zinc", "neutral", "stone"]) {
       expect(contrast(`--color-${scale}-500`, "--paper-2")).toBeGreaterThanOrEqual(4.5);
       expect(contrast(`--color-${scale}-600`, "--paper-2")).toBeGreaterThanOrEqual(4.5);
+      // -700 is used as dim text far more often than as a fill.
+      expect(contrast(`--color-${scale}-700`, "--paper-2")).toBeGreaterThanOrEqual(4.5);
     }
   });
 

@@ -564,7 +564,7 @@ export function RegisterForm() {
             disabled ||
             !hydrated
           }
-          className="flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand px-5 py-4 text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-mf-brand-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand px-5 py-4 text-xs font-black uppercase tracking-[0.12em] text-mf-brand-ink transition hover:bg-mf-brand-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ===
           "email" ? (

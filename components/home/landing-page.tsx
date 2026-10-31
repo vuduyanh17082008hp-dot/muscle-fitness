@@ -8,7 +8,8 @@ import {
   Utensils,
 } from "lucide-react";
 
-import { Logo } from "@/components/brand/logo";
+import { GymPartnersFigure, PlannerFigure, SquatLifterFigure } from "@/components/brand/athletic-figures";
+import { Wordmark } from "@/components/brand/wordmark";
 import { checkpoints, SignalHero } from "@/components/home/signal-hero";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/cn";
  * scroll-driven reveal. The only motion is the hero's one-shot CSS
  * opening, and every line is readable without it. Copy describes
  * features that exist in the app today; nothing here is a user's data.
+ * Rendered in Iron & Paper (data-theme="paper", app/paper-theme.css).
  */
 
 const day = [
@@ -93,7 +95,7 @@ const container = "mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8";
 
 export function LandingPage({ signedIn }: { signedIn: boolean }) {
   return (
-    <div className="min-h-screen bg-mf-pub-bg text-mf-pub-text">
+    <div data-theme="paper" className="min-h-screen bg-mf-pub-bg text-mf-pub-text">
       <header className="sticky top-0 z-40 border-b border-[var(--mf-pub-border)] bg-mf-pub-bg/90 backdrop-blur">
         <div
           className={cn(
@@ -101,17 +103,17 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
             "flex h-16 items-center justify-between gap-3",
           )}
         >
-          <Logo />
+          <Wordmark className="shrink" />
           <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
             <a
               href="#day"
-              className="hidden h-11 items-center rounded-xl px-3 text-sm font-medium text-mf-pub-text-secondary transition-colors hover:text-white md:inline-flex"
+              className="hidden h-11 items-center rounded-xl px-3 text-sm font-medium text-mf-pub-text-secondary transition-colors hover:text-mf-pub-text md:inline-flex"
             >
               How it works
             </a>
             <a
               href="#features"
-              className="hidden h-11 items-center rounded-xl px-3 text-sm font-medium text-mf-pub-text-secondary transition-colors hover:text-white md:inline-flex"
+              className="hidden h-11 items-center rounded-xl px-3 text-sm font-medium text-mf-pub-text-secondary transition-colors hover:text-mf-pub-text md:inline-flex"
             >
               Features
             </a>
@@ -149,10 +151,11 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
           aria-labelledby="day-title"
           className="scroll-mt-16 border-t border-[var(--mf-pub-border)] bg-mf-pub-bg-deep"
         >
-          <div className={cn(container, "py-16 sm:py-20")}>
+          <div className={cn(container, "relative py-16 sm:py-20")}>
+            <SquatLifterFigure className="pointer-events-none absolute right-4 top-6 hidden size-40 lg:block xl:size-48" />
             <h2
               id="day-title"
-              className="font-heading text-3xl font-bold sm:text-4xl"
+              className="font-heading text-4xl font-black uppercase tracking-tight sm:text-5xl"
             >
               One day, one thread
             </h2>
@@ -166,11 +169,11 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
                   <p className="flex items-center gap-2 text-sm font-medium tabular-nums text-mf-pub-text-muted">
                     <span
                       aria-hidden="true"
-                      className="size-[7px] rounded-full bg-mf-brand"
+                      className="size-2 rounded-full border border-mf-pub-text bg-mf-brand"
                     />
                     0{index + 1} · {checkpoints[index]}
                   </p>
-                  <h3 className="mt-2 text-lg font-semibold text-white">
+                  <h3 className="mt-2 font-heading text-xl font-bold uppercase text-mf-pub-text">
                     {step.title}
                   </h3>
                   <p className="mt-2 text-[15px] leading-6 text-mf-pub-text-secondary">
@@ -190,7 +193,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
           <div className={cn(container, "py-16 sm:py-20")}>
             <h2
               id="features-title"
-              className="font-heading text-3xl font-bold sm:text-4xl"
+              className="font-heading text-4xl font-black uppercase tracking-tight sm:text-5xl"
             >
               What&apos;s inside
             </h2>
@@ -200,7 +203,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
                   key={title}
                   className="rounded-2xl border border-[var(--mf-pub-border)] bg-mf-pub-surface p-6"
                 >
-                  <h3 className="flex items-center gap-3 text-lg font-semibold text-white">
+                  <h3 className="flex items-center gap-3 font-heading text-xl font-bold uppercase text-mf-pub-text">
                     <Icon aria-hidden="true" className={cn("size-5", tone)} />
                     {title}
                   </h3>
@@ -226,9 +229,10 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
           className="border-t border-[var(--mf-pub-border)]"
         >
           <div className={cn(container, "py-16 sm:py-20")}>
+            <PlannerFigure className="float-right ml-6 hidden size-36 sm:block" />
             <h2
               id="trust-title"
-              className="font-heading text-3xl font-bold sm:text-4xl"
+              className="font-heading text-4xl font-black uppercase tracking-tight sm:text-5xl"
             >
               What you can rely on
             </h2>
@@ -247,7 +251,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
               A training tool, not medical advice.{" "}
               <Link
                 href="/responsible-ai"
-                className="text-mf-pub-text-secondary underline underline-offset-4 hover:text-white"
+                className="text-mf-pub-text-secondary underline underline-offset-4 hover:text-mf-pub-text"
               >
                 How we use AI
               </Link>
@@ -265,16 +269,19 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
               "flex flex-col gap-6 py-16 sm:flex-row sm:items-center sm:justify-between sm:py-20",
             )}
           >
-            <div>
+            <div className="flex items-center gap-5">
+              <GymPartnersFigure className="size-24 shrink-0 sm:size-28" />
+              <div>
               <h2
                 id="cta-title"
-                className="font-heading text-3xl font-bold sm:text-4xl"
+                className="font-heading text-4xl font-black uppercase tracking-tight sm:text-5xl"
               >
                 Start with today.
               </h2>
               <p className="mt-2 text-base text-mf-pub-text-secondary">
                 Set up your profile and plan in a few minutes.
               </p>
+              </div>
             </div>
             <Link
               href={signedIn ? "/dashboard" : "/signup"}
@@ -305,7 +312,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
               <Link
                 key={href}
                 href={href}
-                className="inline-flex h-11 items-center hover:text-white"
+                className="inline-flex h-11 items-center hover:text-mf-pub-text"
               >
                 {label}
               </Link>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 
-import { Logo } from "@/components/brand/logo"
+import { PlannerFigure } from "@/components/brand/athletic-figures"
+import { Wordmark } from "@/components/brand/wordmark"
 
 type AuthShellProps = {
   eyebrow: string
@@ -22,43 +23,33 @@ export function AuthShell({
   children,
 }: AuthShellProps) {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(216,255,32,0.1),transparent_30%),radial-gradient(circle_at_90%_90%,rgba(239,68,68,0.08),transparent_28%),linear-gradient(135deg,#050505,#090909_55%,#030303)]" />
-
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.035]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.35) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-      />
-
-      <div className="pointer-events-none absolute -left-40 top-1/3 h-96 w-96 rounded-full bg-[var(--mf-brand)]/8 blur-[130px]" />
-      <div className="pointer-events-none absolute -right-40 bottom-0 h-96 w-96 rounded-full bg-red-500/10 blur-[130px]" />
+    // Iron & Paper: plain paper page, no glow blobs (they also held a 600px+ layer at 320px).
+    <main data-theme="paper" className="relative min-h-screen bg-mf-glass-bg text-mf-glass-text">
 
       <div className="relative z-10 grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(440px,560px)]">
-        <section className="hidden min-h-screen flex-col justify-between border-r border-white/10 p-10 lg:flex xl:p-14">
-          <Logo showTextOnMobile tagline="Built through discipline" />
+        <section className="hidden min-h-screen flex-col justify-between border-r border-mf-glass-border bg-mf-glass-bg-deep p-10 lg:flex xl:p-14">
+          <Wordmark />
 
           <div className="max-w-2xl">
             <div className="mb-7 flex items-center gap-4">
-              <span className="text-xs font-black tracking-[0.3em] text-[var(--mf-brand)]">
+              <span className="rounded bg-mf-glass-text px-2 py-1 text-xs font-bold tracking-[0.12em] text-mf-glass-bg">
                 {step}
               </span>
 
-              <span className="h-px w-20 bg-gradient-to-r from-[var(--mf-brand)] to-transparent" />
+              <span className="h-0.5 w-20 bg-mf-glass-text" />
 
-              <span className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-600">
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
                 Secure access
               </span>
             </div>
 
-            <h2 className="max-w-xl text-6xl font-black uppercase leading-[0.92] tracking-[-0.055em] xl:text-7xl">
+            <PlannerFigure className="mb-6 size-40" />
+
+            <h2 className="max-w-xl font-heading text-6xl font-black uppercase leading-[0.92] tracking-tight xl:text-7xl">
               {sideTitle}
             </h2>
 
-            <p className="mt-7 max-w-xl text-base leading-8 text-zinc-500">
+            <p className="mt-7 max-w-xl text-base leading-8 text-mf-glass-text-secondary">
               {sideDescription}
             </p>
 
@@ -69,31 +60,28 @@ export function AuthShell({
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.12em] text-zinc-700">
-            <span>Muscle Fitness System</span>
-            <span>Authentication 05</span>
-          </div>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Muscle Fitness</p>
         </section>
 
         <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8 lg:px-10">
           <div className="w-full max-w-md">
-            <Logo showTextOnMobile className="mb-8 lg:hidden" />
+            <Wordmark className="mb-8 lg:hidden" />
 
-            <div className="rounded-[32px] border border-white/10 bg-zinc-950/75 p-6 shadow-[0_32px_100px_rgba(0,0,0,0.65)] backdrop-blur-2xl sm:p-8">
+            <div className="rounded-2xl border-2 border-mf-glass-text bg-mf-glass-surface p-6 shadow-[var(--shadow-card)] sm:p-8">
               <div className="mb-8">
                 <div className="mb-4 flex items-center gap-3">
-                  <span className="h-px w-8 bg-[var(--mf-brand)]" />
+                  <span className="h-0.5 w-8 bg-mf-glass-text" />
 
-                  <p className="text-xs font-black uppercase tracking-[0.3em] text-[var(--mf-brand)]">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-secondary">
                     {eyebrow}
                   </p>
                 </div>
 
-                <h1 className="text-3xl font-black uppercase tracking-[-0.04em] sm:text-4xl">
+                <h1 className="font-heading text-4xl font-black uppercase tracking-tight sm:text-5xl">
                   {title}
                 </h1>
 
-                <p className="mt-4 text-sm leading-7 text-zinc-500">
+                <p className="mt-4 text-sm leading-7 text-mf-glass-text-secondary">
                   {description}
                 </p>
               </div>
@@ -101,9 +89,7 @@ export function AuthShell({
               {children}
             </div>
 
-            <p className="mt-6 text-center text-xs font-bold uppercase tracking-[0.12em] text-zinc-700">
-              Encrypted session · Secure authentication
-            </p>
+            
           </div>
         </section>
       </div>
@@ -119,12 +105,12 @@ function Feature({
   label: string
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-      <p className="text-2xl font-black text-zinc-700">
+    <div className="rounded-xl border border-mf-glass-border bg-mf-glass-surface p-4">
+      <p className="font-heading text-2xl font-black text-mf-glass-text">
         {value}
       </p>
 
-      <p className="mt-3 text-xs font-black uppercase tracking-[0.12em] text-zinc-500">
+      <p className="mt-3 text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
         {label}
       </p>
     </div>

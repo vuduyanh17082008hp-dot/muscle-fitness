@@ -57,9 +57,12 @@ describe("PF-02: Quick Capture & Floating Controls Architecture", () => {
     // the mobile bottom nav already carries every Quick Capture destination and Dante.
     expect(shellFile).toContain("fixed bottom-6 right-6 z-40 hidden flex-col-reverse items-center gap-3 lg:flex");
     expect(shellFile).toContain('<main className="min-h-screen pb-28 lg:pb-10 lg:pl-72 lg:pr-20">');
-    for (const href of ["/dashboard/nutrition", "/dashboard/workouts", "/dashboard/recovery", "/dashboard/progress", "/dashboard/ai-coach"]) {
+    for (const href of ["/dashboard/nutrition", "/dashboard/workouts", "/dashboard/recovery", "/dashboard/ai-coach"]) {
       expect(shellFile).toMatch(new RegExp(`mobilePrimaryNav[\\s\\S]*href: "${href}"`));
     }
+    // V4: five tabs; Progress moved to the More drawer (and Today's secondary strip), still one tap from the header.
+    expect(shellFile).toMatch(/title: "Track",[\s\S]*href: "\/dashboard\/progress"/);
+    expect(shellFile).toContain('aria-label="More: Progress, Calendar, History, Library, Settings"');
   });
 
   it("uses column-reverse layout to prevent overlap between Dante and Quick Capture", () => {

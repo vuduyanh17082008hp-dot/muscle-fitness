@@ -39,7 +39,7 @@
   --dante-border: #b7a6d6;
   --dante-ink: #5e4790;
   --rust: #a8461f;
-  --rust-fill: #c85a32;
+  --rust-fill: #b34d27;
   --danger-ink: #b42318;
   --success-ink: #1e6b42;
   --info-ink: #0e6a85;
@@ -134,16 +134,16 @@
 
   /* Neutral scales invert onto a warm iron ramp (light shades were text
      on dark; dark shades were surfaces and hairlines). */
-  --color-slate-50: #181b19; --color-slate-100: #1f2320; --color-slate-200: #2b2f2c; --color-slate-300: #3a3f3b; --color-slate-400: #4a4f4b; --color-slate-500: #555b56; --color-slate-600: #5c625d; --color-slate-700: #b9b5aa; --color-slate-800: #d7d4ca; --color-slate-900: #eae7de; --color-slate-950: #f4f1e8;
-  --color-gray-50: #181b19; --color-gray-100: #1f2320; --color-gray-200: #2b2f2c; --color-gray-300: #3a3f3b; --color-gray-400: #4a4f4b; --color-gray-500: #555b56; --color-gray-600: #5c625d; --color-gray-700: #b9b5aa; --color-gray-800: #d7d4ca; --color-gray-900: #eae7de; --color-gray-950: #f4f1e8;
-  --color-zinc-50: #181b19; --color-zinc-100: #1f2320; --color-zinc-200: #2b2f2c; --color-zinc-300: #3a3f3b; --color-zinc-400: #4a4f4b; --color-zinc-500: #555b56; --color-zinc-600: #5c625d; --color-zinc-700: #b9b5aa; --color-zinc-800: #d7d4ca; --color-zinc-900: #eae7de; --color-zinc-950: #f4f1e8;
-  --color-neutral-50: #181b19; --color-neutral-100: #1f2320; --color-neutral-200: #2b2f2c; --color-neutral-300: #3a3f3b; --color-neutral-400: #4a4f4b; --color-neutral-500: #555b56; --color-neutral-600: #5c625d; --color-neutral-700: #b9b5aa; --color-neutral-800: #d7d4ca; --color-neutral-900: #eae7de; --color-neutral-950: #f4f1e8;
-  --color-stone-50: #181b19; --color-stone-100: #1f2320; --color-stone-200: #2b2f2c; --color-stone-300: #3a3f3b; --color-stone-400: #4a4f4b; --color-stone-500: #555b56; --color-stone-600: #5c625d; --color-stone-700: #b9b5aa; --color-stone-800: #d7d4ca; --color-stone-900: #eae7de; --color-stone-950: #f4f1e8;
+  --color-slate-50: #181b19; --color-slate-100: #1f2320; --color-slate-200: #2b2f2c; --color-slate-300: #3a3f3b; --color-slate-400: #4a4f4b; --color-slate-500: #555b56; --color-slate-600: #5c625d; --color-slate-700: #5c625d; --color-slate-800: #d7d4ca; --color-slate-900: #eae7de; --color-slate-950: #f4f1e8;
+  --color-gray-50: #181b19; --color-gray-100: #1f2320; --color-gray-200: #2b2f2c; --color-gray-300: #3a3f3b; --color-gray-400: #4a4f4b; --color-gray-500: #555b56; --color-gray-600: #5c625d; --color-gray-700: #5c625d; --color-gray-800: #d7d4ca; --color-gray-900: #eae7de; --color-gray-950: #f4f1e8;
+  --color-zinc-50: #181b19; --color-zinc-100: #1f2320; --color-zinc-200: #2b2f2c; --color-zinc-300: #3a3f3b; --color-zinc-400: #4a4f4b; --color-zinc-500: #555b56; --color-zinc-600: #5c625d; --color-zinc-700: #5c625d; --color-zinc-800: #d7d4ca; --color-zinc-900: #eae7de; --color-zinc-950: #f4f1e8;
+  --color-neutral-50: #181b19; --color-neutral-100: #1f2320; --color-neutral-200: #2b2f2c; --color-neutral-300: #3a3f3b; --color-neutral-400: #4a4f4b; --color-neutral-500: #555b56; --color-neutral-600: #5c625d; --color-neutral-700: #5c625d; --color-neutral-800: #d7d4ca; --color-neutral-900: #eae7de; --color-neutral-950: #f4f1e8;
+  --color-stone-50: #181b19; --color-stone-100: #1f2320; --color-stone-200: #2b2f2c; --color-stone-300: #3a3f3b; --color-stone-400: #4a4f4b; --color-stone-500: #555b56; --color-stone-600: #5c625d; --color-stone-700: #5c625d; --color-stone-800: #d7d4ca; --color-stone-900: #eae7de; --color-stone-950: #f4f1e8;
 
   /* amber / orange are MF's sunset scale (globals.css @theme); on paper
      the text shades become rust and the dark tints light rust washes. */
-  --color-amber-50: #5a2410; --color-amber-100: #6e2c13; --color-amber-200: #7a3216; --color-amber-300: #8f3a18; --color-amber-400: var(--rust); --color-amber-500: var(--rust-fill); --color-amber-600: #b34d27; --color-amber-700: #f2cdbb; --color-amber-800: #f6dccd; --color-amber-900: #fae9df; --color-amber-950: #fcf2ec;
-  --color-orange-50: #5a2410; --color-orange-100: #6e2c13; --color-orange-200: #7a3216; --color-orange-300: #8f3a18; --color-orange-400: var(--rust); --color-orange-500: var(--rust-fill); --color-orange-600: #b34d27; --color-orange-700: #f2cdbb; --color-orange-800: #f6dccd; --color-orange-900: #fae9df; --color-orange-950: #fcf2ec;
+  --color-amber-50: #5a2410; --color-amber-100: #6e2c13; --color-amber-200: #7a3216; --color-amber-300: #8f3a18; --color-amber-400: var(--rust); --color-amber-500: var(--rust-fill); --color-amber-600: #9a3f1b; --color-amber-700: #f2cdbb; --color-amber-800: #f6dccd; --color-amber-900: #fae9df; --color-amber-950: #fcf2ec;
+  --color-orange-50: #5a2410; --color-orange-100: #6e2c13; --color-orange-200: #7a3216; --color-orange-300: #8f3a18; --color-orange-400: var(--rust); --color-orange-500: var(--rust-fill); --color-orange-600: #9a3f1b; --color-orange-700: #f2cdbb; --color-orange-800: #f6dccd; --color-orange-900: #fae9df; --color-orange-950: #fcf2ec;
 
   /* Chromatic scales: 200-400 (text on dark) -> 700/800 (text on paper),
      900/950 (dark tints) -> 100/50. Generated from tailwindcss/theme.css. */
@@ -167,6 +167,22 @@
 :root:has([data-theme="paper"]) body {
   color: var(--iron);
   background: var(--paper);
+}
+
+/* globals.css sets the default border colour in an UNLAYERED `*` rule,
+   which outranks every layered Tailwind border-colour utility — so
+   border-mf-glass-text, border-red-400/30 etc. silently rendered as the
+   hairline. On paper the default moves into @layer base and the
+   unlayered rule is reverted, so utilities win and plain borders keep
+   the hairline. (The dark system is left as demo-verified.) */
+@layer base {
+  :root:has([data-theme="paper"]) :is(*, ::before, ::after) {
+    border-color: var(--paper-border);
+  }
+}
+
+:root:has([data-theme="paper"]) :is(*, ::before, ::after) {
+  border-color: revert-layer;
 }
 
 /* Faint ruled-paper grid instead of the steel grid. */

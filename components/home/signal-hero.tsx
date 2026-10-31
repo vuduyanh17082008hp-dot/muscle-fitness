@@ -32,12 +32,14 @@ export function SignalHero({
       <div>
         <h1
           id="hero-title"
-          className="font-heading text-[clamp(2.25rem,11.5vw,3.25rem)] font-bold uppercase leading-[0.95] tracking-[-0.005em] sm:text-6xl lg:text-[4rem] lg:leading-[0.92] xl:text-[4.5rem]"
+          className="font-heading text-[clamp(2.25rem,11.5vw,3.25rem)] font-black uppercase leading-[0.95] tracking-[-0.005em] sm:text-6xl lg:text-[4rem] lg:leading-[0.92] xl:text-[4.5rem]"
         >
           <span className={cn(styles.line, "block")}>Train smarter.</span>
           <span className={cn(styles.line, "block")}>Recover better.</span>
-          <span className={cn(styles.line, "block text-mf-brand")}>
-            Know what to do next.
+          <span className={cn(styles.line, "block")}>
+            <span className="bg-mf-brand px-1.5 text-mf-brand-ink [box-decoration-break:clone]">
+              Know what to do next.
+            </span>
           </span>
         </h1>
         <div className={styles.fade}>
@@ -85,12 +87,12 @@ export function SignalHero({
             <li key={label} className={cn(styles.node, "lg:pl-6")}>
               <span
                 aria-hidden="true"
-                className="block size-[11px] rounded-full bg-mf-brand ring-4 ring-mf-pub-bg"
+                className="block size-[11px] rounded-full bg-mf-brand ring-2 ring-mf-pub-text"
               />
               <span className="mt-3 block text-xs font-medium tabular-nums text-mf-pub-text-muted">
                 0{index + 1}
               </span>
-              <span className="block font-heading text-[15px] font-semibold uppercase leading-tight tracking-[0.04em] text-white sm:text-lg">
+              <span className="block font-heading text-[15px] font-bold uppercase leading-tight tracking-[0.04em] text-mf-pub-text sm:text-lg">
                 {label}
               </span>
             </li>
@@ -104,7 +106,7 @@ export function SignalHero({
 }
 
 const card =
-  "rounded-2xl border border-[var(--mf-pub-border-strong)] bg-mf-pub-surface-elevated shadow-[0_24px_48px_-24px_rgba(0,0,0,0.8)]";
+  "rounded-2xl border border-[var(--mf-pub-border-strong)] bg-mf-pub-surface-elevated shadow-[var(--shadow-card)]";
 
 /* Curated sample values, internally consistent: breakfast 780 kcal / 54 g
    protein + the lunch card below = the day's fuel totals. */
@@ -135,11 +137,11 @@ function ProductPreview() {
           className={cn(
             styles.card,
             card,
-            "relative z-10 mr-3 p-4 sm:mr-12 sm:p-5",
+            "relative z-10 mr-3 border-2 border-mf-pub-text p-4 sm:mr-12 sm:p-5",
           )}
         >
           <div className="flex items-baseline justify-between">
-            <p className="font-heading text-xl font-bold uppercase text-white">
+            <p className="font-heading text-xl font-black uppercase text-mf-pub-text">
               Today
             </p>
             <p className="text-xs text-mf-pub-text-muted">Check-in done</p>

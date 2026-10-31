@@ -21,7 +21,8 @@ import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 
 import { getSafeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/client";
-import { Logo } from "@/components/brand/logo";
+import { SquatLifterFigure } from "@/components/brand/athletic-figures";
+import { Wordmark } from "@/components/brand/wordmark";
 
 type LoadingType = "email" | "google" | null;
 
@@ -247,38 +248,25 @@ function LoginContent() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050505] px-4 py-10 text-white">
-      {/* Background */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-      >
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:90px_90px]" />
-
-        <div className="absolute left-1/2 top-[-260px] h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-mf-brand/[0.08] blur-[130px]" />
-
-        <div className="absolute bottom-[-350px] right-[-150px] h-[700px] w-[700px] rounded-full bg-violet-500/[0.07] blur-[150px]" />
-
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.8)_75%)]" />
-      </div>
-
-      <section className="relative w-full max-w-[580px] rounded-[34px] border border-white/10 bg-black/90 p-6 shadow-[0_30px_120px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:p-10">
+    <main data-theme="paper" className="relative flex min-h-screen items-center justify-center bg-mf-glass-bg px-4 py-10 text-mf-glass-text">
+      <section className="relative w-full max-w-[540px] rounded-2xl border-2 border-mf-glass-text bg-mf-glass-surface p-6 shadow-[var(--shadow-card)] sm:p-10">
         {/* Brand */}
-        <Logo showTextOnMobile />
-
-        <p className="mt-3 text-sm text-zinc-600">Built through discipline</p>
+        <div className="flex items-center justify-between gap-4">
+          <Wordmark />
+          <SquatLifterFigure className="hidden size-16 shrink-0 sm:block" />
+        </div>
 
         {/* Heading */}
         <div className="mt-10">
-          <p className="text-sm font-black uppercase tracking-[0.12em] text-mf-brand">
+          <p className="text-sm font-bold uppercase tracking-[0.12em] text-mf-glass-text-secondary">
             Member access
           </p>
 
-          <h1 className="mt-1 text-4xl font-light uppercase tracking-tight sm:text-5xl">
+          <h1 className="mt-1 font-heading text-5xl font-black uppercase tracking-tight">
             Welcome back
           </h1>
 
-          <p className="mt-2 max-w-md text-base leading-7 text-zinc-500">
+          <p className="mt-2 max-w-md text-base leading-7 text-mf-glass-text-secondary">
             Continue your transformation. Your
             training, nutrition and progress are
             waiting.
@@ -348,7 +336,7 @@ function LoginContent() {
                   }
                 }}
                 placeholder="your@email.com"
-                className="h-16 w-full rounded-full border border-white/10 bg-[#151515] pl-14 pr-6 text-base text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-mf-brand/70 focus:ring-4 focus:ring-mf-brand/10 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-14 w-full rounded-md border bg-mf-glass-surface pl-14 pr-6 text-base text-mf-glass-text outline-none transition placeholder:text-mf-glass-text-muted focus:ring-4 focus:ring-mf-brand/40 disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
           </div>
@@ -397,7 +385,7 @@ function LoginContent() {
                   }
                 }}
                 placeholder="Enter your password"
-                className="h-16 w-full rounded-full border border-white/10 bg-[#151515] pl-14 pr-14 text-base text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-mf-brand/70 focus:ring-4 focus:ring-mf-brand/10 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-14 w-full rounded-md border bg-mf-glass-surface pl-14 pr-14 text-base text-mf-glass-text outline-none transition placeholder:text-mf-glass-text-muted focus:ring-4 focus:ring-mf-brand/40 disabled:cursor-not-allowed disabled:opacity-60"
               />
 
               <button
@@ -413,7 +401,7 @@ function LoginContent() {
                     ? "Hide password"
                     : "Show password"
                 }
-                className="absolute right-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full text-zinc-500 transition hover:text-white disabled:cursor-not-allowed"
+                className="absolute right-2 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-md text-mf-glass-text-muted transition hover:text-mf-glass-text disabled:cursor-not-allowed"
               >
                 {showPassword ? (
                   <EyeOff className="h-5 w-5" />
@@ -427,7 +415,7 @@ function LoginContent() {
           <button
             type="submit"
             disabled={isLoading || !hydrated}
-            className="flex h-16 w-full items-center justify-center gap-3 rounded-full bg-mf-brand px-6 text-base font-semibold uppercase tracking-[0.12em] text-black transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-14 w-full items-center justify-center gap-3 rounded-md border-2 border-mf-glass-text bg-mf-brand px-6 font-heading text-lg font-bold uppercase tracking-[0.08em] text-mf-brand-ink transition hover:bg-mf-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loadingType === "email" ? (
               <>
@@ -456,7 +444,7 @@ function LoginContent() {
           type="button"
           disabled={isLoading}
           onClick={handleGoogleLogin}
-          className="flex h-16 w-full items-center justify-center gap-3 rounded-full border border-white/10 bg-white/[0.04] px-6 font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex h-14 w-full items-center justify-center gap-3 rounded-md border border-mf-glass-border-strong bg-mf-glass-surface px-6 font-semibold text-mf-glass-text transition hover:bg-mf-glass-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loadingType === "google" ? (
             <>
@@ -475,7 +463,7 @@ function LoginContent() {
           New to Muscle Fitness?{" "}
           <Link
             href="/register"
-            className="font-bold text-mf-brand transition hover:text-mf-brand-hover"
+            className="font-bold text-mf-glass-text underline underline-offset-4"
           >
             Create an account
           </Link>
@@ -517,7 +505,7 @@ function GoogleIcon() {
 
 function LoginFallback() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#050505] text-white">
+    <main data-theme="paper" className="flex min-h-screen items-center justify-center bg-mf-glass-bg text-mf-glass-text">
       <div className="flex items-center gap-3 text-sm font-semibold text-zinc-400">
         <Loader2 className="h-5 w-5 animate-spin text-mf-brand" />
         Loading secure login...
