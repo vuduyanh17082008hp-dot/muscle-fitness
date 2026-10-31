@@ -5,7 +5,7 @@
  * other route keeps the dark system. An entry is an exact path, or a
  * subtree when it ends in "/*". Public pages mark their own root.
  */
-export const PAPER_ROUTES: readonly string[] = [];
+export const PAPER_ROUTES: readonly string[] = ["/dashboard", "/dashboard/recovery/*"];
 
 export function isPaperRoute(pathname: string, routes: readonly string[] = PAPER_ROUTES): boolean {
   return routes.some((route) => {

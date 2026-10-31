@@ -97,3 +97,38 @@ Environment notes (verified 2026-10-31):
   1440: all six secondary routes reached via More/sidebar, scroll reset to 0.
 - Updated test: `quick-capture.test.ts` pinned Progress in the mobile bar (old 6-tab decision);
   it now asserts the 5 tabs plus Progress in the Track group / More button.
+
+### Phase 2 — Today + Recovery — DONE
+- `PAPER_ROUTES`: `/dashboard` (Today) and `/dashboard/recovery/*`.
+- Today (presentation over the same canonical decision — `resolveDailyDecision`, `trainingHold`,
+  `classifyTodaySession`): `daily-action-hero.tsx` iron-bordered card, condensed uppercase
+  title, lime Start/Resume with iron edge (Resume no longer amber, nothing pulses), rust-bordered
+  hold card whose one primary action is Recovery Guidance (View Session demoted to a text link),
+  V4 stat tiles fed only by real session values (exercises, sets planned/logged, est. time when
+  present). `dashboard-header.tsx` "Today · date" + stamped greeting. `athlete-state-strip.tsx`
+  paper tiles. `what-matters-now.tsx` numbered priorities on the secondary sheet (same
+  deterministic items incl. hold / unknown / conflict). `dante-daily-brief.tsx` lavender card with
+  the static Dante avatar (was an unreadable hard-coded dark gradient on paper). Secondary strip on
+  Today: Progress, Calendar, Workout history, Muscle intelligence, Form Coach.
+- Recovery: `recovery-checkin-form.tsx` compact — pain/illness (no/minor/yes, aria-pressed,
+  rust when "yes", note that it holds training) first; sleep hours; the six 1–10 sliders in two
+  columns with boxed values; resting HR / steps / notes in a disclosure (opens when they already
+  hold values; never collapses while typing). Payload and field set unchanged.
+  `recovery-score-card.tsx`: rust border while held/unavailable; V4 score ring only when no hold
+  (under a hold the score stays a plain number). No wearable metrics invented; the existing
+  "Wearable: not connected" disclosure stays. No sleep-based hold, no diagnosis language.
+- Typography role: `main h1` on paper is black uppercase condensed (sizes untouched).
+- Gates: tsc 0; eslint 0; `app/dashboard` + `lib/dante-core` + `lib/recovery` suites pass
+  (1,906 + 264); paper surveys of Today/Recovery at 320/390/1440: 0 contrast violations, no
+  horizontal scroll; remaining axe `nested-interactive` ×2 and 2 sub-12px labels are the
+  pre-existing muscle map (present in BEFORE).
+- **Safety matrix (14 states, disposable uxr1 on mf-lrg-7f83, restored + DB-verified):** every
+  hold/unconfirmed state (X2, X4, X5, X8, X9, X12, X14) shows no Start/Resume/"on track" on Today,
+  Training, Recovery, Plan or Session and 0 Plan Start buttons; X1–X14 match the e3b49e2 run
+  except X1/X3 Today, which the old case-sensitive regex missed once V4 uppercased the label (the
+  hero text itself is unchanged: START/RESUME WORKOUT in non-hold states). The harness now uses
+  `gi`. The fixed regex also exposed a **pre-existing** item: in X10 (REST-day conflict, no pain)
+  the session page shows "START WORKOUT" (Plan Detail's per-day Start there was a known residual).
+- **Server hold (srvhold):** SEC1 replayed Start under hold → no session; SEC2 planned row stays
+  `not_started` (reduce-only apply = QA-02 design); SEC3 direct RPC and direct insert with the
+  athlete JWT → 403 `training_hold`; SEC4 no hold → idempotent; cleanup restored.

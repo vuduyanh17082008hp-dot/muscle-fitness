@@ -69,6 +69,8 @@ export function RecoveryCheckinForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  // Opened once from what is already saved; never re-driven by typing (clearing a field must not collapse it).
+  const [optionalOpen] = useState(() => Boolean(existing?.resting_hr || existing?.steps || existing?.notes));
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -122,14 +124,14 @@ export function RecoveryCheckinForm({
     <form
       id="checkin"
       onSubmit={handleSubmit}
-      className="mf-touch-inputs scroll-mt-24 rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-7"
+      className="mf-touch-inputs scroll-mt-24 rounded-2xl border-2 border-mf-glass-text bg-mf-glass-surface p-5 sm:p-7"
     >
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Daily Recovery Check-in
           </p>
-          <h2 className="mt-1 text-xl font-black text-mf-glass-text">
+          <h2 className="mt-1 font-heading text-3xl font-black uppercase leading-none tracking-tight text-mf-glass-text">
             Under 30 seconds
           </h2>
         </div>
@@ -141,9 +143,35 @@ export function RecoveryCheckinForm({
         )}
       </div>
 
+      {/* V4 compact layout. Same fields, same payload; pain/illness leads because it is the one that holds training. */}
+      <fieldset className="mt-6">
+        <legend className="mb-1.5 block text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-secondary">Unusual pain or illness</legend>
+        <div className="grid grid-cols-3 gap-2">
+          {(["no", "minor", "yes"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={form.painIllness === option}
+              onClick={() => update("painIllness", option)}
+              className={cn(
+                "min-h-12 rounded-md border-2 px-3 font-heading text-lg font-bold uppercase tracking-[0.06em] transition",
+                form.painIllness !== option
+                  ? "border-mf-glass-border-strong bg-mf-glass-surface text-mf-glass-text-secondary hover:border-mf-glass-text"
+                  : option === "yes"
+                  ? "border-amber-400 bg-amber-400 text-mf-glass-bg"
+                  : "border-mf-glass-text bg-mf-glass-text text-mf-glass-bg",
+              )}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-xs text-mf-glass-text-muted">&ldquo;Yes&rdquo; puts today&apos;s training on hold until you clear it.</p>
+      </fieldset>
+
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
+          <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-secondary">
             Sleep hours
           </span>
           <input
@@ -154,34 +182,20 @@ export function RecoveryCheckinForm({
             value={form.sleepHours}
             onChange={(event) => update("sleepHours", event.target.value)}
             placeholder="e.g. 7.5"
-            className="w-full rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
+            className="w-full rounded-md border border-mf-glass-border bg-mf-glass-surface px-4 py-3 text-base text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
           />
         </label>
 
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
-            Resting heart rate (optional)
-          </span>
-          <input
-            type="number"
-            min={25}
-            max={220}
-            value={form.restingHr}
-            onChange={(event) => update("restingHr", event.target.value)}
-            placeholder="bpm"
-            className="w-full rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
-          />
-        </label>
       </div>
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 grid gap-x-8 gap-y-4 sm:grid-cols-2">
         {SLIDER_FIELDS.map((field) => (
           <div key={field.key}>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-mf-glass-text-secondary">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-secondary">
                 {field.label}
               </span>
-              <span className="text-xs font-bold text-mf-glass-brand">
+              <span className="min-w-9 rounded border border-mf-glass-text px-1.5 text-center font-heading text-lg font-bold leading-6 tabular-nums text-mf-glass-text">
                 {form[field.key]}
               </span>
             </div>
@@ -196,55 +210,54 @@ export function RecoveryCheckinForm({
               }
               aria-label={field.label}
               aria-valuetext={`${form[field.key]} of 10`}
-              className="mt-1 h-11 w-full cursor-pointer accent-mf-glass-brand"
+              className="h-11 w-full cursor-pointer accent-mf-glass-text"
             />
             <p className="text-xs text-mf-glass-text-muted">{field.helper}</p>
           </div>
         ))}
       </div>
 
-      <div className="mt-6 grid gap-5 sm:grid-cols-2">
+      <details
+        open={optionalOpen || undefined}
+        className="mt-6 rounded-md border border-mf-glass-border bg-mf-glass-bg px-4 py-1"
+      >
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-bold text-mf-glass-text">
+          Optional: resting heart rate, steps, notes
+        </summary>
+      <div className="mb-3 mt-2 grid gap-5 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
-            Steps (optional)
+          <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-secondary">
+            Resting heart rate
+          </span>
+          <input
+            type="number"
+            min={25}
+            max={220}
+            value={form.restingHr}
+            onChange={(event) => update("restingHr", event.target.value)}
+            placeholder="bpm"
+            className="w-full rounded-md border border-mf-glass-border bg-mf-glass-surface px-4 py-3 text-base text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-secondary">
+            Steps
           </span>
           <input
             type="number"
             min={0}
             value={form.steps}
             onChange={(event) => update("steps", event.target.value)}
-            className="w-full rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
+            className="w-full rounded-md border border-mf-glass-border bg-mf-glass-surface px-4 py-3 text-base text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
           />
         </label>
 
-        <div>
-          <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
-            Unusual pain or illness
-          </span>
-          <div className="flex gap-2">
-            {(["no", "minor", "yes"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={form.painIllness === option}
-                onClick={() => update("painIllness", option)}
-                className={cn(
-                  "min-h-11 flex-1 rounded-xl border px-3 text-sm font-bold capitalize transition",
-                  form.painIllness === option
-                    ? "border-mf-glass-brand-border bg-mf-glass-brand-soft text-mf-glass-brand"
-                    : "border-mf-glass-border bg-mf-glass-bg-deep text-mf-glass-text-muted hover:border-mf-glass-border-strong",
-                )}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
-      <label className="mt-5 block">
-        <span className="mb-1.5 block text-xs font-semibold text-mf-glass-text-secondary">
-          Notes (optional)
+      <label className="mb-3 block">
+        <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-secondary">
+          Notes
         </span>
         <textarea
           value={form.notes}
@@ -252,18 +265,19 @@ export function RecoveryCheckinForm({
           maxLength={600}
           rows={2}
           placeholder="Anything else worth remembering about today?"
-          className="w-full resize-none rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
+          className="w-full resize-none rounded-md border border-mf-glass-border bg-mf-glass-surface px-4 py-3 text-base text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
         />
       </label>
+      </details>
 
       {error && (
-        <p role="alert" className="mt-4 text-sm text-rose-400">{error}</p>
+        <p role="alert" className="mt-4 text-sm font-semibold text-rose-400">{error}</p>
       )}
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-5 py-3.5 text-sm font-black uppercase tracking-wider text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+        className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md border-2 border-mf-glass-text bg-mf-glass-brand px-6 font-heading text-lg font-bold uppercase tracking-[0.06em] text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
       >
         {isSubmitting ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />

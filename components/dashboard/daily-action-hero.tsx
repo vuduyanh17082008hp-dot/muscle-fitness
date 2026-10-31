@@ -16,8 +16,29 @@ export type DailyActionHeroProps = {
   hasCheckinToday?: boolean;
 };
 
-const SECONDARY_LINK =
-  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-bold text-mf-glass-text transition hover:border-white/20 hover:bg-white/[0.08]";
+/* Iron & Paper (V4): one iron-bordered card, condensed uppercase title, lime action with an iron
+   edge. Presentation only — every branch below is the same canonical state as before. */
+const CARD = "relative overflow-hidden rounded-2xl border-2 border-mf-glass-text bg-mf-glass-surface p-5 shadow-[var(--shadow-card)] sm:p-7";
+const QUIET_CARD = "relative overflow-hidden rounded-2xl border border-mf-glass-border-strong bg-mf-glass-surface p-5 sm:p-7";
+const HOLD_CARD = "relative overflow-hidden rounded-2xl border-2 border-amber-400 bg-mf-glass-surface p-5 sm:p-7";
+const EYEBROW = "text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted";
+const TITLE = "mt-2 font-heading text-3xl font-black uppercase leading-none tracking-tight text-mf-glass-text sm:text-4xl";
+const PRIMARY = "inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md border-2 border-mf-glass-text bg-mf-glass-brand px-6 font-heading text-lg font-bold uppercase tracking-[0.06em] text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover sm:w-auto";
+const SECONDARY_LINK = "inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-mf-glass-border-strong bg-mf-glass-surface px-4 text-sm font-bold text-mf-glass-text transition hover:bg-mf-glass-hover";
+
+/* Logbook-style figures from the real session only; a tile with no value is not drawn. */
+function StatTiles({ tiles }: { tiles: Array<[label: string, value: string]> }) {
+  return (
+    <dl className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {tiles.map(([label, value]) => (
+        <div key={label} className="rounded-lg border border-mf-glass-border bg-mf-glass-bg px-3 py-2.5">
+          <dt className="text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-muted">{label}</dt>
+          <dd className="mt-0.5 font-heading text-xl font-bold tabular-nums text-mf-glass-text">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null, hold = null }: DailyActionHeroProps) {
   const workoutHref = todaySession ? `/dashboard/workouts/session/${todaySession.id}` : "/dashboard/workouts";
@@ -27,16 +48,16 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
   if (hold && (sessionStatus === "planned" || sessionStatus === "active" || sessionStatus === "conflict")) {
     const name = todaySession?.name || (plannedDay && plannedDay.kind !== "REST" ? plannedDay.name : null) || "Today's workout";
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-5 sm:p-7">
+      <section className={HOLD_CARD}>
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
             <div className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-amber-400" />
-              <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-400">
                 {hold === "recovery" ? "Recovery First Today" : "Check Recovery First"}
               </p>
             </div>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-mf-glass-text sm:text-3xl">{name} · on hold</h2>
+            <h2 className={TITLE}>{name} · on hold</h2>
             <p className="mt-1 text-sm text-mf-glass-text-muted">
               {hold === "recovery"
                 ? "Your check-in flagged pain or illness, so Dante recommends recovery over training today. Your workout isn't cancelled — see a medical professional if it persists or worsens."
@@ -46,12 +67,12 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/dashboard/recovery"
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-4 py-2.5 text-xs font-bold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+              className={PRIMARY}
             >
               <CheckCircle2 className="size-4" />
               Recovery Guidance
             </Link>
-            <Link href={workoutHref} className={SECONDARY_LINK}>
+            <Link href={workoutHref} className="inline-flex min-h-11 items-center gap-2 px-2 text-sm font-semibold text-mf-glass-text-secondary underline underline-offset-4 hover:text-mf-glass-text">
               <Calendar className="size-4" />
               {todaySession ? "View Session" : "Review Plan"}
             </Link>
@@ -64,11 +85,11 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
   // A not-started session on a plan REST day: neither record wins, so no Start until the schedule is reviewed.
   if (sessionStatus === "conflict") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-5 sm:p-7">
+      <section className={QUIET_CARD}>
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">Today&apos;s Training</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-mf-glass-text sm:text-3xl">Workout schedule needs review</h2>
+            <p className={EYEBROW}>Today&apos;s Training</p>
+            <h2 className={TITLE}>Workout schedule needs review</h2>
             <p className="mt-1 text-sm text-mf-glass-text-muted">
               Your plan has today as a rest day, but {todaySession?.name || "a workout"} is also scheduled. Check Training before you start.
             </p>
@@ -91,18 +112,18 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
   // The session couldn't be read or confirmed: offer neither a workout nor a rest day.
   if (sessionStatus === "unknown") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-5 sm:p-7">
+      <section className={QUIET_CARD}>
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">Today&apos;s Training</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-mf-glass-text sm:text-3xl">Workout status unavailable</h2>
+            <p className={EYEBROW}>Today&apos;s Training</p>
+            <h2 className={TITLE}>Workout status unavailable</h2>
             <p className="mt-1 text-sm text-mf-glass-text-muted">
               Today&apos;s session couldn&apos;t be loaded. Check Training before you start.
             </p>
           </div>
           <Link
             href="/dashboard/workouts"
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-bold text-mf-glass-text transition hover:border-white/20 hover:bg-white/[0.08]"
+            className={SECONDARY_LINK}
           >
             <Calendar className="size-4" />
             Review Schedule
@@ -115,17 +136,17 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
   // A plan day has no session row until it is started: offer it, with a 1-tap Start (start_workout creates or begins it).
   if (!todaySession && plannedDay && plannedDay.kind !== "REST") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-5 sm:p-7 shadow-lg">
+      <section className={CARD}>
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
             <div className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-mf-glass-brand" />
-              <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
+              <p className={EYEBROW}>
                 {plannedDay.kind === "SCHEDULED" ? "Today's Training" : "Next In Your Plan"}
               </p>
             </div>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-mf-glass-text sm:text-3xl">{plannedDay.name}</h2>
-            <p className="mt-1 text-sm text-mf-glass-text-muted">
+            <h2 className={TITLE}>{plannedDay.name}</h2>
+            <p className="mt-2 text-sm text-mf-glass-text-muted">
               {plannedDay.exerciseCount} exercises · not started yet
             </p>
           </div>
@@ -133,7 +154,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
             <input type="hidden" name="workout_day_id" value={plannedDay.dayId} />
             <button
               type="submit"
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-5 py-2.5 text-sm font-bold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+              className={PRIMARY}
             >
               <Play className="size-4" />
               Start Workout
@@ -149,16 +170,16 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
   if (!todaySession) {
     const restDay = plannedDay?.kind === "REST";
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-5 sm:p-7">
+      <section className={QUIET_CARD}>
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
             <div className="flex items-center gap-2">
               <span className={`size-2 rounded-full ${restDay ? "bg-emerald-400" : "bg-zinc-500"}`} />
-              <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
+              <p className={EYEBROW}>
                 {restDay ? "Scheduled Rest Day" : "No Plan Day Today"}
               </p>
             </div>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-mf-glass-text sm:text-3xl">
+            <h2 className={TITLE}>
               {restDay ? "Active Recovery" : "No workout planned"}
             </h2>
             <p className="mt-1 text-sm text-mf-glass-text-muted">
@@ -171,14 +192,14 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/dashboard/workouts"
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-bold text-mf-glass-text transition hover:border-white/20 hover:bg-white/[0.08]"
+              className={SECONDARY_LINK}
             >
               <Calendar className="size-4" />
               Review Schedule
             </Link>
             <Link
               href="/dashboard/workouts/plans/new"
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-4 py-2.5 text-xs font-bold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+              className={PRIMARY}
             >
               <PlusCircle className="size-4" />
               Plan Workout
@@ -203,7 +224,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
       : `${totalSets} sets planned`;
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg p-5 sm:p-7 shadow-lg">
+    <section className={CARD}>
       <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
         <div>
           <div className="flex items-center gap-2">
@@ -212,37 +233,30 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
                 isCompleted || isPostponed
                   ? "bg-emerald-400"
                   : isInProgress
-                  ? "bg-amber-400 animate-pulse"
+                  ? "bg-amber-400"
                   : "bg-mf-glass-brand"
               }`}
             />
-            <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
+            <p className={EYEBROW}>
               {isCompleted ? "Session Complete" : isPostponed ? "Session Postponed · Rest Day" : isInProgress ? "Session In Progress" : "Today's Training"}
             </p>
           </div>
 
-          <h2 className="mt-2 text-2xl font-black tracking-tight text-mf-glass-text sm:text-3xl">
+          <h2 className={TITLE}>
             {todaySession.name || "Scheduled Workout"}
           </h2>
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-mf-glass-text-muted">
-            <span>{exerciseCount} exercises</span>
-            <span>·</span>
-            <span>{setsLabel}</span>
-            {estimatedMin > 0 ? (
-              <>
-                <span>·</span>
-                <span>~{estimatedMin} min</span>
-              </>
-            ) : null}
-          </div>
+          <p className="sr-only">
+            {exerciseCount} exercises · {setsLabel}
+            {estimatedMin > 0 ? ` · ~${estimatedMin} min` : ""}
+          </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
           {isCompleted ? (
             <Link
               href={`/dashboard/workouts/session/${todaySession.id}`}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-500/20"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border-2 border-emerald-500 px-5 font-heading text-lg font-bold uppercase tracking-[0.06em] text-emerald-300 transition hover:bg-emerald-500/10"
             >
               <CheckCircle2 className="size-4" />
               Review Session
@@ -250,7 +264,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
           ) : isPostponed ? (
             <Link
               href={`/dashboard/workouts/session/${todaySession.id}`}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-bold text-mf-glass-text transition hover:border-white/20 hover:bg-white/[0.08]"
+              className={SECONDARY_LINK}
             >
               <Calendar className="size-4" />
               Review Session
@@ -258,7 +272,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
           ) : isInProgress ? (
             <Link
               href={`/dashboard/workouts/session/${todaySession.id}`}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 py-2.5 text-sm font-bold text-zinc-950 transition hover:bg-amber-300"
+              className={PRIMARY}
             >
               <Play className="size-4 fill-current" />
               Resume Workout
@@ -266,7 +280,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
           ) : (
             <Link
               href={`/dashboard/workouts/session/${todaySession.id}`}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-mf-glass-brand px-6 py-2.5 text-sm font-bold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover shadow-md"
+              className={PRIMARY}
             >
               <Dumbbell className="size-4" />
               Start Workout
@@ -274,6 +288,13 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
           )}
         </div>
       </div>
+      <StatTiles
+        tiles={[
+          ["Exercises", String(exerciseCount)],
+          setsLabel.endsWith(" sets logged") ? ["Sets logged", setsLabel.replace(" sets logged", "")] : ["Sets planned", String(totalSets)],
+          ...(estimatedMin > 0 ? ([["Est. time", `~${estimatedMin} min`]] as Array<[string, string]>) : []),
+        ]}
+      />
     </section>
   );
 }

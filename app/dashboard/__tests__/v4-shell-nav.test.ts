@@ -12,7 +12,7 @@ const { DashboardShell } = await import("@/components/dashboard/dashboard-shell"
 
 const render = (path: string, activeSessionId: string | null = null) => {
   pathname = path;
-  return renderToStaticMarkup(createElement(DashboardShell, { activeSessionId }, "content"));
+  return renderToStaticMarkup(createElement(DashboardShell, { activeSessionId, children: "content" }));
 };
 const tabBar = (html: string) => html.slice(html.indexOf('aria-label="Primary"'));
 const current = (html: string) => [...html.matchAll(/aria-current="page"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => m[1].replace(/<[^>]+>/g, "").trim());

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
@@ -323,6 +324,25 @@ export default async function DashboardPage() {
             <NutritionOpportunity plan={nutritionPlan} totals={foodLog.totals} />
             <DanteDailyBrief narrative={dailyIntelligence?.narrative ?? null} decision={dailyDecision} />
           </div>
+
+          {/* Secondary strip (V4): the Track routes one tap from Today, mobile included. */}
+          <nav aria-label="More from today" className="flex flex-wrap gap-2">
+            {[
+              ["Progress", "/dashboard/progress"],
+              ["Calendar", "/dashboard/calendar"],
+              ["Workout history", "/dashboard/workouts/history"],
+              ["Muscle intelligence", "/dashboard/training-intelligence"],
+              ["Form Coach", "/dashboard/workouts/form-coach"],
+            ].map(([label, href]) => (
+              <Link
+                key={href}
+                href={href}
+                className="inline-flex min-h-11 items-center rounded-md border border-mf-glass-border-strong bg-mf-glass-surface px-3 text-sm font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-text hover:text-mf-glass-text"
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
 
           {/* 5. Trajectory & Detailed Analytics (Below the Fold) */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12">

@@ -45,14 +45,29 @@ export function RecoveryScoreCard({
           : { title: RECOVERY_STATUS_LABEL[result.status ?? "moderate"], tone: STATUS_TONE[result.status ?? "moderate"].text };
 
   return (
-    <article aria-labelledby="recovery-verdict" className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-7">
-      <p className="text-xs font-bold uppercase tracking-[0.2em] text-mf-glass-text-muted">Today&apos;s recovery</p>
+    <article
+      aria-labelledby="recovery-verdict"
+      className={cn(
+        "rounded-2xl border-2 bg-mf-glass-surface p-5 sm:p-7",
+        hold || checkinUnavailable ? "border-amber-400" : "border-mf-glass-text",
+      )}
+    >
+      <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Today&apos;s recovery</p>
 
       <div className="mt-2 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-        <h2 id="recovery-verdict" className={cn("text-2xl font-black tracking-tight sm:text-3xl", verdict.tone)}>
+        <h2 id="recovery-verdict" className={cn("font-heading text-3xl font-black uppercase leading-none tracking-tight sm:text-4xl", verdict.tone)}>
           {verdict.title}
         </h2>
-        {!checkinUnavailable && result.score !== null ? (
+        {/* The V4 ring only when nothing holds training; under a hold the score stays a plain number. */}
+        {!checkinUnavailable && result.score !== null && !hold ? (
+          <p className="flex items-center gap-3 text-sm text-mf-glass-text-muted">
+            Check-in score
+            <span className="grid size-16 place-items-center rounded-full border-4 border-mf-glass-text bg-mf-glass-bg font-heading text-2xl font-black tabular-nums text-mf-glass-text">
+              {result.score}
+            </span>
+            <span className="sr-only">out of 100</span>
+          </p>
+        ) : !checkinUnavailable && result.score !== null ? (
           <p className="text-sm text-mf-glass-text-muted">
             Check-in score <span className="text-lg font-black text-mf-glass-text">{result.score}</span>/100
           </p>
@@ -96,7 +111,7 @@ export function RecoveryScoreCard({
             {availableDrivers.map((driver) => (
               <li key={driver.key} className="grid grid-cols-[6.5rem_1fr_2rem] items-center gap-3">
                 <span className="truncate text-xs text-mf-glass-text-secondary">{driver.label}</span>
-                <span className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]" aria-hidden="true">
+                <span className="h-2 overflow-hidden rounded-full bg-white/[0.08]" aria-hidden="true">
                   <span
                     className={cn(
                       "block h-full rounded-full",

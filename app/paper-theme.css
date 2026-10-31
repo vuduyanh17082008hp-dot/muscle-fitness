@@ -193,6 +193,14 @@
   background-size: 24px 24px;
 }
 
+/* Typography role: page titles are the logbook's stamped headline. Sizes stay with each page. */
+:root:has([data-theme="paper"]) main h1 {
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  line-height: 0.95;
+}
+
 :root:has([data-theme="paper"]) ::selection {
   color: var(--iron);
   background: var(--lime);
