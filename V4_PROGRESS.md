@@ -162,3 +162,25 @@ Environment notes (verified 2026-10-31):
   324 pass; surveys at 320/1440 of hub, history, library, plan detail, plan builder, completed
   session: 0 contrast violations, no horizontal scroll, no sub-12px text (History had 14 contrast
   failures in the dark BEFORE).
+
+### Phase 4 — Fuel / Nutrition + Gemma — DONE (live Gemma reply not exercised)
+- `PAPER_ROUTES` + `/dashboard/nutrition/*` (Today, plan & targets, shopping list).
+- `nutrition-tracker.tsx`: meal groups get a stamped condensed heading with the kcal subtotal
+  (groups/subtotals already existed — now V4-styled); food rows on paper; the source
+  (`FOOD_LOG_SOURCE_LABEL`) is a visible chip beside the existing Estimate / Verified badge;
+  Remove keeps white text on red (`text-white` would turn iron on paper). The compact calories +
+  three-macro summary is kept (V4's four stacked cards rejected).
+- Gemma coach (`coach/coach-chat-ui.tsx`): hard-coded dark hexes replaced with tokens — the
+  composer was `#17191b` (1.01:1 on paper); send button 44px. Shopping list header gradient no
+  longer passes through `#111111`.
+- Untouched: search-first Add Food and all input methods, athlete-local dates, server-recomputed
+  macros, server-owned provenance, edit/delete/retry, provider fallbacks, Gemma runtime.
+- Live journey (disposable uxr1, 390px, cleaned up): Next meal idea → Log this → DB
+  `Hainanese Chicken Rice 405 g 746 kcal src=user_provided est=true`, UI 746 kcal with ESTIMATE +
+  "Entered manually"; edit to 300 g → server **552.6 kcal** (=746×300/405), UI 553; delete → DB
+  and UI 0. Add Food modal: search + Scan barcode + Food photo + HawkerLens SG + Vietnamese dish +
+  Menu photo + Manual entry, 0 axe violations, 16px search input.
+- Not verified: a live Gemma reply (no message sent, to avoid provider calls); barcode/photo/
+  HawkerLens/menu flows beyond opening (camera/upload + external providers).
+- Gates: tsc 0, eslint 0; nutrition suites 1,097 pass; surveys 390/1440 of the three routes:
+  0 contrast violations after the composer fix, no horizontal scroll.

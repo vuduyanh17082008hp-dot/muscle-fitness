@@ -13,6 +13,7 @@ export const PAPER_ROUTES: readonly string[] = [
   "/dashboard/workouts/history/*",
   "/dashboard/workouts/library/*",
   "/dashboard/workouts/plans/*",
+  "/dashboard/nutrition/*",
 ];
 
 export function isPaperRoute(pathname: string, routes: readonly string[] = PAPER_ROUTES): boolean {

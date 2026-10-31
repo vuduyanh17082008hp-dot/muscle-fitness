@@ -46,7 +46,7 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
   if (!plan) {
     return (
       <div className="mx-auto max-w-3xl space-y-6">
-        <header className="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-8">
+        <header className="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-8">
           <span className="inline-grid size-14 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
             <ShoppingCart className="size-6" />
           </span>
@@ -80,7 +80,7 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 pb-16">
-      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
+      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-7 sm:p-9">
         <Link
           href="/dashboard/nutrition"
           className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-400 transition hover:text-white"

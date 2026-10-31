@@ -455,9 +455,9 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
           <div className="space-y-5">
             {MEAL_TYPES.filter((meal) => grouped[meal].length > 0).map((meal) => (
               <div key={meal}>
-                <p className="mb-2 flex items-baseline justify-between gap-3 text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
-                  <span>{MEAL_TYPE_LABEL[meal]}</span>
-                  <span className="tracking-normal normal-case">{Math.round(computeDailyTotals(grouped[meal]).calories)} kcal</span>
+                <p className="mb-2 flex items-baseline justify-between gap-3 border-b-2 border-mf-glass-text pb-1">
+                  <span className="font-heading text-xl font-black uppercase tracking-tight text-mf-glass-text">{MEAL_TYPE_LABEL[meal]}</span>
+                  <span className="text-sm font-bold tabular-nums text-mf-glass-text-secondary">{Math.round(computeDailyTotals(grouped[meal]).calories)} kcal</span>
                 </p>
                 <ul className="space-y-2">
                   {grouped[meal].map((entry) => (
@@ -632,15 +632,16 @@ function FoodLogRow({
       : `${entry.quantityGrams} g`
 
   return (
-    <li className="rounded-xl border border-mf-glass-border bg-white/[0.03] py-3 pl-4 pr-2">
+    <li className="rounded-md border border-mf-glass-border bg-mf-glass-surface py-3 pl-4 pr-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-mf-glass-text">
             <span className="min-w-0 break-words">{entry.foodName}</span>
             <ProvenanceBadge entry={entry} />
           </p>
-          <p className="mt-0.5 text-xs text-mf-glass-text-muted">
-            {quantityLabel} · {FOOD_LOG_SOURCE_LABEL[entry.source]}
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-mf-glass-text-muted">
+            <span>{quantityLabel}</span>
+            <span className="rounded border border-mf-glass-border-strong px-1.5 py-px font-semibold text-mf-glass-text-secondary">{FOOD_LOG_SOURCE_LABEL[entry.source]}</span>
           </p>
           <p className="mt-1 text-xs text-mf-glass-text-muted">
             <span className="font-semibold text-mf-glass-text-secondary">{entry.calories} kcal</span>
@@ -690,7 +691,7 @@ function FoodLogRow({
               type="button"
               disabled={isPending}
               onClick={onConfirmDelete}
-              className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-red-500/90 text-sm font-bold text-white disabled:opacity-40"
+              className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-red-500/90 text-sm font-bold text-[#ffffff] disabled:opacity-40"
             >
               {isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
               {isPending ? "Removing…" : "Remove"}

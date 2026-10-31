@@ -12,14 +12,14 @@ import type { StructuredBlock } from "@/lib/nutrition/coach/followup"
 
 // globals.css sets unlayered `font: inherit` on controls, `border-color` on *, and an outline on :focus-visible,
 // all of which beat Tailwind utilities: control font comes from the wrapper; outline/border overrides need `!`.
-const focusRing = "focus-visible:outline-none! focus-visible:ring-2 focus-visible:ring-mf-glass-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[#101112]"
+const focusRing = "focus-visible:outline-none! focus-visible:ring-2 focus-visible:ring-mf-glass-brand focus-visible:ring-offset-2 focus-visible:ring-offset-mf-glass-bg"
 
 /** Small rounded coach: lime leaf-sprout on a dark face. Decorative; the name is always next to it. */
 export function NutritionCoachAvatar({ size = 32, glow = false }: { size?: number; glow?: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`relative inline-flex shrink-0 items-center justify-center rounded-full border border-mf-glass-brand-border bg-[#14170d] ${glow ? "shadow-[0_0_14px_rgba(216,255,32,0.22)]" : ""}`}
+      className={`relative inline-flex shrink-0 items-center justify-center rounded-full border border-mf-glass-brand-border bg-mf-glass-bg-deep ${glow ? "shadow-[0_0_14px_rgba(216,255,32,0.22)]" : ""}`}
       style={{ width: size, height: size }}
     >
       <svg viewBox="0 0 32 32" width={size * 0.8} height={size * 0.8} fill="none">
@@ -172,7 +172,7 @@ export function NutritionMessage({ role, text, blocks, disabled = false, onPick 
   if (role === "user") {
     return (
       <li className="dante-message-in flex justify-end">
-        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-mf-glass-brand-border/60 bg-[#232a12] px-3.5 py-2 text-sm leading-6 text-mf-glass-text sm:max-w-[min(70%,32rem)]">{text}</p>
+        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-mf-glass-brand-border/60 bg-mf-glass-brand-soft px-3.5 py-2 text-sm leading-6 text-mf-glass-text sm:max-w-[min(70%,32rem)]">{text}</p>
       </li>
     )
   }
@@ -273,7 +273,7 @@ export function NutritionComposer({ value, onChange, onSend, busy }: { value: st
   }
   return (
     <form
-      className="flex items-end gap-2 rounded-2xl border border-mf-glass-border bg-[#17191b] p-2 text-base leading-6 transition focus-within:border-mf-glass-brand/70! focus-within:ring-2 focus-within:ring-mf-glass-brand/20 sm:text-sm"
+      className="flex items-end gap-2 rounded-2xl border border-mf-glass-border bg-mf-glass-surface p-2 text-base leading-6 transition focus-within:border-mf-glass-brand/70! focus-within:ring-2 focus-within:ring-mf-glass-brand/20 sm:text-sm"
       onSubmit={(event) => {
         event.preventDefault()
         if (canSend) onSend()
@@ -295,7 +295,7 @@ export function NutritionComposer({ value, onChange, onSend, busy }: { value: st
         type="submit"
         disabled={!canSend}
         aria-label="Send message"
-        className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#c47a3d] text-[#1a0f05] transition hover:bg-[#d58a4b] disabled:bg-white/10 disabled:text-mf-glass-text-muted ${focusRing}`}
+        className={`inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#c47a3d] text-[#1a0f05] transition hover:bg-[#d58a4b] disabled:bg-white/10 disabled:text-mf-glass-text-muted ${focusRing}`}
       >
         {busy ? <Sparkles className="size-4 motion-safe:animate-pulse" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
       </button>
