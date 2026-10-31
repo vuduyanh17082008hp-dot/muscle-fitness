@@ -1051,7 +1051,11 @@ export default function DanteChat({
               value={threadId ?? ""}
               disabled={isLoading || isRestoring}
               onChange={(event) => void selectThread(event.target.value)}
-              className="h-11 min-w-0 flex-1 truncate rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-3 text-sm text-mf-glass-text-secondary disabled:opacity-50"
+              className={cn(
+                "h-11 min-w-0 flex-1 truncate rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-3 text-sm text-mf-glass-text-secondary disabled:opacity-50",
+                // Full page on desktop: the conversation rail below replaces the picker.
+                !compact && "lg:hidden"
+              )}
             >
               <option value="">{isRestoring ? "Loading conversations…" : "New conversation"}</option>
               {threads.map((thread) => (
@@ -1072,6 +1076,37 @@ export default function DanteChat({
         ) : null}
       </header>
 
+      <div className="flex min-h-0 flex-1">
+      {/* CONVERSATION RAIL — full page, desktop only; the same saved threads as the picker. */}
+      {restoreHistory && !compact ? (
+        <nav aria-label="Conversation history" className="hidden w-60 shrink-0 flex-col border-r border-mf-glass-border lg:flex">
+          <p className="px-4 pb-2 pt-3 text-xs font-semibold uppercase tracking-[0.12em] text-mf-glass-text-muted">Conversations</p>
+          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-3">
+            {threads.length === 0 ? (
+              <li className="px-2 py-2 text-sm text-mf-glass-text-muted">{isRestoring ? "Loading conversations…" : "No saved conversations yet."}</li>
+            ) : null}
+            {threads.map((thread) => (
+              <li key={thread.id}>
+                <button
+                  type="button"
+                  onClick={() => void selectThread(thread.id)}
+                  disabled={isLoading || isRestoring}
+                  aria-current={thread.id === threadId ? "true" : undefined}
+                  className={cn(
+                    "flex min-h-11 w-full flex-col justify-center rounded-md px-3 py-2 text-left text-sm transition disabled:opacity-50",
+                    thread.id === threadId ? "bg-mf-glass-bg-deep font-semibold text-mf-glass-text" : "text-mf-glass-text-secondary hover:bg-white/5"
+                  )}
+                >
+                  <span className="w-full truncate">{thread.title}</span>
+                  <span className="text-xs font-normal text-mf-glass-text-muted">{new Date(thread.updatedAt).toLocaleDateString()}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {contextLine ? (
         <p className="shrink-0 border-b border-mf-glass-border px-3 py-2 text-xs leading-5 text-mf-glass-text-muted sm:px-4">
           <span className="font-semibold text-mf-glass-text-secondary">Your data now</span> · {contextLine}
@@ -1235,6 +1270,8 @@ export default function DanteChat({
           </button>
         )}
       </form>
+      </div>
+      </div>
     </section>
   );
 }

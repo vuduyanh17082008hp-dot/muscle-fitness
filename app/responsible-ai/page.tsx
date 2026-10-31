@@ -63,6 +63,7 @@ const safeguards = [
 export default function ResponsibleAIPage() {
   return (
     <main
+      data-theme="paper"
       className="
         min-h-screen
 

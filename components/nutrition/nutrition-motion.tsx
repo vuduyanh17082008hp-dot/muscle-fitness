@@ -17,7 +17,9 @@ export function NutritionSectionReveal({
   return (
     <motion.div
       className={className}
-      initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+      // Same initial state on server and client (useReducedMotion is null during SSR); reduced motion
+      // gets a zero-length transition instead, so the hydrated markup never differs.
+      initial={{ opacity: 0, y: 10 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.15 }}
       transition={{ duration: reduceMotion ? 0 : 0.3, ease: "easeOut" }}

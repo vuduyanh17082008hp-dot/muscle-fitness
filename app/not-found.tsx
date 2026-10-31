@@ -3,6 +3,7 @@ import Link from "next/link";
 export default function NotFound() {
   return (
     <main
+      data-theme="paper"
       className={[
         "mx-auto grid min-h-[70vh] max-w-2xl",
         "place-content-center px-4 text-center text-white",

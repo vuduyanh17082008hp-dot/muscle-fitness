@@ -45,6 +45,7 @@ const standout = [
 export default function AIFairPage() {
   return (
     <main
+      data-theme="paper"
       className="
         min-h-screen
 
@@ -97,7 +98,7 @@ export default function AIFairPage() {
             border
             border-white/10
 
-            bg-[radial-gradient(circle_at_80%_20%,rgba(216,255,32,0.10),transparent_30%),#0d0d0d]
+            bg-[radial-gradient(circle_at_80%_20%,rgba(216,255,32,0.10),transparent_30%),var(--color-mf-surface)]
 
             p-7
 
