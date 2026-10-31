@@ -64,7 +64,7 @@ function DesktopPanel({
         ref={panelRef}
         role="dialog"
         aria-label="Ask Dante"
-        className="pointer-events-auto fixed bottom-24 right-6 z-40 flex h-[min(80vh,640px)] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d111a]/95 backdrop-blur-xl p-4 shadow-2xl"
+        className="pointer-events-auto fixed bottom-24 right-6 z-40 flex h-[min(80vh,640px)] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-mf-glass-bg-deep/95 backdrop-blur-xl p-4 shadow-2xl"
       >
         <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b border-white/10 pb-3">
           <div className="flex items-center gap-2.5">

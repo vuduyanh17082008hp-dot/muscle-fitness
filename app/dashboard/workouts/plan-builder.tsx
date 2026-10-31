@@ -2292,7 +2292,7 @@ export default function PlanBuilder({
                     key={
                       exercise.localId
                     }
-                    className="rounded-xl border border-white/10 bg-[#101010] p-4"
+                    className="rounded-xl border border-white/10 bg-mf-glass-surface p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>

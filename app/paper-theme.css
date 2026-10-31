@@ -254,6 +254,71 @@
   outline-offset: 2px;
 }
 
+/* Progress (components/progress/progress.css) keeps its own palette on .pj-root. */
+:root:has([data-theme="paper"]) .pj-root {
+  --bg: var(--paper);
+  --bg-2: var(--paper-2);
+  --bg-elev: var(--paper-white);
+  --border: var(--paper-border);
+  --border-hi: var(--paper-border-strong);
+  --text: var(--iron);
+  --text-muted: var(--iron-muted);
+  --text-dim: var(--iron-muted);
+  --accent: var(--success-ink);
+  --accent-2: var(--info-ink);
+  --accent-3: var(--dante-ink);
+  --accent-warm: var(--rust);
+  --accent-red: var(--danger-ink);
+  --glass-from: rgba(255, 255, 255, 0.95);
+  --glass-to: rgba(255, 255, 255, 0.85);
+}
+
+:root:has([data-theme="paper"]) :is(.pj-bg-base, .pj-bg-grid) {
+  background: var(--paper);
+}
+
+:root:has([data-theme="paper"]) .hud-corner {
+  border-color: var(--iron);
+}
+
+:root:has([data-theme="paper"]) .pj-root .week-dot.done {
+  background: var(--lime);
+  color: var(--iron);
+  border: 1px solid var(--iron);
+}
+
+:root:has([data-theme="paper"]) .pj-root .week-dot.missed {
+  color: var(--danger-ink);
+}
+
+:root:has([data-theme="paper"]) .pj-root .dante-card {
+  background: var(--dante-fill);
+  border-color: var(--dante-border);
+}
+
+:root:has([data-theme="paper"]) .pj-root .dante-avatar {
+  color: var(--paper-white);
+}
+
+:root:has([data-theme="paper"]) .pj-root .btn-secondary {
+  background: var(--paper-white);
+}
+
+/* Cinematic photo backdrops (components/visual/page-visual.tsx) are a dark-system moment. */
+:root:has([data-theme="paper"]) .mf-page-visual {
+  display: none;
+}
+
+/* Muscle map (components/training/muscle-map/MuscleMapClient.tsx) paints regions through SVG
+   presentation attributes; on paper the anatomy fill (white) and its white hairline vanish. */
+:root:has([data-theme="paper"]) svg [fill="var(--mf-glass-elevated)"] {
+  fill: var(--paper-border);
+}
+
+:root:has([data-theme="paper"]) svg [stroke="rgba(255,255,255,0.1)"] {
+  stroke: rgba(24, 27, 25, 0.35);
+}
+
 /* No perpetual motion on paper surfaces when the athlete asks for less. */
 @media (prefers-reduced-motion: reduce) {
   :root:has([data-theme="paper"]) :is(.animate-pulse, .animate-spin, .animate-bounce, .animate-ping) {

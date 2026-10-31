@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default function SetVisionPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-16">
-      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
+      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-7 sm:p-9">
         <Link
           href="/dashboard/workouts"
           className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-400 transition hover:text-white"

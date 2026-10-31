@@ -25,7 +25,8 @@ export function PageVisual({ page, className, intensity, glow }: PageVisualProps
       overlayVariant={config.overlayVariant}
       intensity={intensity ?? config.intensity}
       glow={glow}
-      className={className}
+      // mf-page-visual: hidden on Iron & Paper surfaces (app/paper-theme.css); the photo is a dark-system moment.
+      className={`mf-page-visual ${className ?? ""}`}
     />
   );
 }

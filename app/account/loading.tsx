@@ -1,6 +1,6 @@
 export default function AccountLoading() {
   return (
-    <main className="min-h-screen animate-pulse bg-mf-bg px-4 py-6 text-white sm:px-6 lg:px-8">
+    <main data-theme="paper" className="min-h-screen animate-pulse bg-mf-bg px-4 py-6 text-white sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex items-center gap-4">
           <div className="size-11 rounded-xl bg-white/5" />

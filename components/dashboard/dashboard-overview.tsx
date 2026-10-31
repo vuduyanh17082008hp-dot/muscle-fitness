@@ -316,7 +316,7 @@ export function DashboardOverview({
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+        <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
@@ -397,7 +397,7 @@ export function DashboardOverview({
           )}
         </article>
 
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+        <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
@@ -451,7 +451,7 @@ export function DashboardOverview({
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+        <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
@@ -499,7 +499,7 @@ export function DashboardOverview({
         </article>
 
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
-          <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+          <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
@@ -552,7 +552,7 @@ export function DashboardOverview({
             )}
           </article>
 
-          <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+          <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
@@ -604,7 +604,7 @@ export function DashboardOverview({
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+        <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">

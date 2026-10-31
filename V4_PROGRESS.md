@@ -199,3 +199,25 @@ Environment notes (verified 2026-10-31):
 - **Pending as separate, unapproved features (not implemented here):** D4.1 PDF uploads with
   verified provenance / 20 MB policy; D4.2 video ≤ 30 s; D4.4 plugin architecture.
 - Gates: tsc 0, eslint 0, Dante chat suites 54 pass; surveys 390/1440: 0 violations.
+
+### Phase 6 — remaining surfaces — DONE (with listed residuals)
+- `PAPER_ROUTES = ["/dashboard/*"]` — every dashboard route is paper. `/account`, `/account/edit`
+  (+ loading) mark their own root. `/settings` redirects to `/dashboard/settings`.
+- Progress: its private palette on `.pj-root` gets gated paper values; dark background layers,
+  HUD corners, week dots, Dante card and secondary buttons converted; hard-coded `#4ade80` etc.
+  in `progress-experience.tsx` now read the same variables (identical in dark). Loading/error/page
+  wrappers use tokens.
+- Muscle Intelligence: the cinematic photo backdrop (`PageVisual`, also on Split) is hidden on
+  paper via `.mf-page-visual`; front/back anatomy regions repainted through gated SVG attribute
+  selectors (white fill + white hairline were invisible on paper) — now clearly drawn.
+- Remaining dark hexes on dashboard surfaces (`#101216`, `#121422`, `#0d111a`, `#101010`,
+  `#171717`, `#111111`, `#0a1622`) replaced with tokens that match in dark.
+- Form Coach entry states its limitation: on-device estimates, not validated measurements.
+- Onboarding verified with a fresh disposable user (created via admin API, deleted after):
+  paper at 320/1440, 0 axe violations. Its CTA is rust (remapped amber), not V4 lime; later
+  wizard steps were not walked.
+- Surveys at 320/390/1440 (Progress, Calendar, Settings, Experiments, Muscle Intelligence, Form
+  Coach, SetVision, Split, plan builder, Account, Account edit): 0 contrast violations, no
+  horizontal scroll, mobile inputs 16px. Pre-existing and still open: muscle-map
+  `nested-interactive` (SVG regions are buttons inside a labelled img) and its small "Front/Back"
+  labels; Account pages failed 15/12 contrast checks in dark BEFORE and pass on paper.

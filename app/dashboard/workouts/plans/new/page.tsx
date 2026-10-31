@@ -183,7 +183,7 @@ export default async function NewWorkoutPlanPage({
         </div>
       </div>
 
-      <header className="mb-8 rounded-3xl border border-white/10 bg-linear-to-br from-[#171717] to-black p-7">
+      <header className="mb-8 rounded-3xl border border-white/10 bg-linear-to-br from-zinc-900 to-black p-7">
         <div className="flex items-center gap-2 text-amber-400">
           <Dumbbell className="h-4 w-4" />
 

@@ -120,10 +120,10 @@ function Journey({ model }: { model: ProgressPageModel }) {
           </div>
 
           <div className="space-y-3 md:col-span-3">
-            <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.5)" }}>
+            <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Level</span>
-                <span className="mono text-xs text-[#4ade80]">LVL {level.level}</span>
+                <span className="mono text-xs text-[var(--accent)]">LVL {level.level}</span>
               </div>
               <div className="mb-2 text-sm font-semibold">{level.title}</div>
               <div className="level-bar"><div className="level-bar-fill" data-w={level.progressPercent} /></div>
@@ -132,10 +132,10 @@ function Journey({ model }: { model: ProgressPageModel }) {
               </div>
             </article>
             {model.next ? (
-              <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.5)" }}>
+              <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
                 <div className="mb-2 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Next milestone</div>
                 <div className="text-sm font-semibold">
-                  {model.next.title} → <span className="text-[#4ade80]">{model.next.current}/{model.next.target}</span>
+                  {model.next.title} → <span className="text-[var(--accent)]">{model.next.current}/{model.next.target}</span>
                 </div>
                 <div className="mt-2 h-1 overflow-hidden rounded-full" style={{ background: "rgba(74,222,128,0.1)" }}>
                   <div className="level-bar-fill" data-w={Math.min(100, (model.next.current / model.next.target) * 100)} />
@@ -151,10 +151,10 @@ function Journey({ model }: { model: ProgressPageModel }) {
           {model.insights.map((insight) => (
             <article key={insight.id} className="glass flex items-center gap-3 rounded-2xl p-4">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl" style={{ background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.25)" }}>
-                {insight.id === "best_day" ? <Zap className="h-5 w-5 text-[#4ade80]" /> : null}
-                {insight.id === "most_missed" ? <AlertTriangle className="h-5 w-5 text-[#fbbf24]" /> : null}
-                {insight.id === "avg_session" ? <Clock className="h-5 w-5 text-[#22d3ee]" /> : null}
-                {insight.id === "trend" ? <TrendingUp className="h-5 w-5 text-[#a78bfa]" /> : null}
+                {insight.id === "best_day" ? <Zap className="h-5 w-5 text-[var(--accent)]" /> : null}
+                {insight.id === "most_missed" ? <AlertTriangle className="h-5 w-5 text-[var(--accent-warm)]" /> : null}
+                {insight.id === "avg_session" ? <Clock className="h-5 w-5 text-[var(--accent-2)]" /> : null}
+                {insight.id === "trend" ? <TrendingUp className="h-5 w-5 text-[var(--accent-3)]" /> : null}
               </div>
               <div className="min-w-0">
                 <div className="text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{insight.label}</div>
@@ -245,7 +245,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
           </div>
           <div className="flex items-center gap-3 text-sm">
             <span style={{ color: "var(--text-muted)" }}>
-              <span className="font-semibold text-[#4ade80]">{model.catalog.filter((item) => item.unlocked).length}</span> of {model.catalog.length}
+              <span className="font-semibold text-[var(--accent)]">{model.catalog.filter((item) => item.unlocked).length}</span> of {model.catalog.length}
             </span>
             <div className="h-1.5 w-24 overflow-hidden rounded-full" style={{ background: "rgba(74,222,128,0.1)" }}>
               <div className="level-bar-fill" data-w={model.catalog.length ? Math.round((model.catalog.filter((item) => item.unlocked).length / model.catalog.length) * 100) : 0} />
@@ -265,7 +265,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
             <span className="s-title">Personal records</span>
             <h2 className="mt-2 text-2xl font-bold tracking-tight">Lifetime bests</h2>
           </div>
-          <span className="mono rounded-md px-2.5 py-1 text-xs" style={{ background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>
+          <span className="mono rounded-md px-2.5 py-1 text-xs" style={{ background: "rgba(74,222,128,0.1)", color: "var(--accent)", border: "1px solid rgba(74,222,128,0.25)" }}>
             {model.personalRecords.length} lift{model.personalRecords.length === 1 ? "" : "s"} tracked
           </span>
         </div>
@@ -281,7 +281,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
                 <div className="mono text-sm line-through md:col-span-2" style={{ color: "var(--text-dim)" }}>
                   {record.previousKg !== null ? `${record.previousKg} kg` : "—"}
                 </div>
-                <div className="mono text-lg font-bold text-[#4ade80] md:col-span-2">{record.currentKg} kg</div>
+                <div className="mono text-lg font-bold text-[var(--accent)] md:col-span-2">{record.currentKg} kg</div>
                 <div className="delta-up text-right text-xs font-semibold md:col-span-1">
                   {record.deltaKg !== null ? `+${record.deltaKg}` : ""}
                 </div>
@@ -310,7 +310,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
           <p className="mt-4" style={{ color: "var(--text-muted)" }}>Nutrition history couldn&apos;t be loaded.</p>
         ) : model.nutrition.available ? (
           <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-            {model.nutrition.rings.map((ring, index) => <MacroCard key={ring.label} {...ring} color={["#4ade80", "#22d3ee", "#a78bfa", "#fbbf24"][index]} />)}
+            {model.nutrition.rings.map((ring, index) => <MacroCard key={ring.label} {...ring} color={["var(--accent)", "var(--accent-2)", "var(--accent-3)", "var(--accent-warm)"][index]} />)}
           </div>
         ) : (
           <p className="mt-4 text-[16px]" style={{ color: "var(--text-muted)" }}>No food logged today yet.</p>
@@ -339,7 +339,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
           <div className="flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <span className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--text-muted)" }}>Dante</span>
-              <span className="mono rounded-md px-2 py-0.5 text-xs" style={{ background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>
+              <span className="mono rounded-md px-2 py-0.5 text-xs" style={{ background: "rgba(74,222,128,0.1)", color: "var(--accent)", border: "1px solid rgba(74,222,128,0.25)" }}>
                 Week {journey.currentWeek} snapshot
               </span>
             </div>
@@ -377,9 +377,9 @@ function EmptyState() {
 
 function MiniStat({ label, value, hint, up }: { label: string; value: string; hint: string; up?: boolean }) {
   return (
-    <div className="card-spot rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.5)" }}>
+    <div className="card-spot rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
       <div className="mb-1 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
-      <div className={`text-xl font-bold ${label === "Adherence" ? "text-[#4ade80]" : ""}`}>
+      <div className={`text-xl font-bold ${label === "Adherence" ? "text-[var(--accent)]" : ""}`}>
         <AnimatedNumber value={value} />
       </div>
       <div className={`mt-0.5 text-xs ${up ? "delta-up" : ""}`} style={up ? undefined : { color: "var(--text-dim)" }}>{hint}</div>
@@ -421,11 +421,11 @@ function MuscleRadar({ muscle }: { muscle: NonNullable<ProgressPageModel["muscle
       <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
         <div className="flex justify-between rounded-lg border px-2 py-1.5" style={{ borderColor: "var(--border)" }}>
           <span style={{ color: "var(--text-muted)" }}>Most trained</span>
-          <span className="font-semibold text-[#4ade80]">{muscle.mostTrained}</span>
+          <span className="font-semibold text-[var(--accent)]">{muscle.mostTrained}</span>
         </div>
         <div className="flex justify-between rounded-lg border px-2 py-1.5" style={{ borderColor: "var(--border)" }}>
           <span style={{ color: "var(--text-muted)" }}>Least trained</span>
-          <span className="font-semibold text-[#fbbf24]">{muscle.leastTrained}</span>
+          <span className="font-semibold text-[var(--accent-warm)]">{muscle.leastTrained}</span>
         </div>
         <div className="flex justify-between rounded-lg border px-2 py-1.5" style={{ borderColor: "var(--border)" }}>
           <span style={{ color: "var(--text-muted)" }}>Balance</span>
@@ -441,7 +441,7 @@ function MilestoneBadge({ item }: { item: ProgressPageModel["catalog"][number] }
   return (
     <button type="button" data-ms className={`ms-badge flex flex-col items-center text-center ${item.unlocked ? "unlocked" : "locked"}`} onClick={() => setOpen((value) => !value)}>
       <div className="ms-icon mb-2 grid h-14 w-14 place-items-center rounded-2xl" style={{ background: item.unlocked ? "rgba(74,222,128,0.1)" : "rgba(80,100,120,0.1)", border: `1px solid ${item.unlocked ? "rgba(74,222,128,0.3)" : "var(--border)"}` }}>
-        {item.unlocked ? <Award className="h-6 w-6 text-[#4ade80]" /> : <Lock className="h-6 w-6" style={{ color: "var(--text-dim)" }} />}
+        {item.unlocked ? <Award className="h-6 w-6 text-[var(--accent)]" /> : <Lock className="h-6 w-6" style={{ color: "var(--text-dim)" }} />}
       </div>
       <div className="text-xs font-semibold">{item.title}</div>
       <div className="mono text-xs" style={{ color: "var(--text-dim)" }}>{item.unlocked ? item.unlocked.achievedAt.slice(0, 10) : "Locked"}</div>
@@ -453,17 +453,17 @@ function MilestoneBadge({ item }: { item: ProgressPageModel["catalog"][number] }
 function CompareCard({ item }: { item: ProgressComparison }) {
   const path = sparkPath(item.series ?? [item.thenValue, item.nowValue])
   return (
-    <article className="card-spot rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.4)" }}>
+    <article className="card-spot rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
       <div className="mb-3 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{item.label}</div>
       <div className="flex items-baseline gap-4">
         <div>
           <div className="text-xs uppercase" style={{ color: "var(--text-dim)" }}>{item.thenLabel}</div>
           <div className="text-3xl font-bold" style={{ color: "var(--text-dim)" }}>{item.thenValue}{item.unit ?? ""}</div>
         </div>
-        <span aria-hidden="true" className="text-[#4ade80]">→</span>
+        <span aria-hidden="true" className="text-[var(--accent)]">→</span>
         <div>
           <div className="text-xs uppercase" style={{ color: "var(--text-dim)" }}>{item.nowLabel}</div>
-          <div className="glow-green text-3xl font-bold text-[#4ade80]">{item.nowValue}{item.unit ?? ""}</div>
+          <div className="glow-green text-3xl font-bold text-[var(--accent)]">{item.nowValue}{item.unit ?? ""}</div>
         </div>
       </div>
       <svg viewBox="0 0 200 40" className="mt-4 h-10 w-full" preserveAspectRatio="none" aria-hidden="true">
@@ -482,7 +482,7 @@ function MacroCard({ label, consumed, target, unit, color }: { label: string; co
   const pct = target && target > 0 ? Math.min(100, Math.round((consumed / target) * 100)) : 0
   const dash = (pct / 100) * 163
   return (
-    <article className="card-spot flex items-center gap-4 rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.4)" }}>
+    <article className="card-spot flex items-center gap-4 rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
       <div className="relative h-16 w-16 shrink-0">
         <svg viewBox="0 0 60 60" className="h-full w-full" style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
           <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(74,222,128,0.12)" strokeWidth="5" />
@@ -501,7 +501,7 @@ function MacroCard({ label, consumed, target, unit, color }: { label: string; co
 
 function BodyTile({ label, value, unit, note }: { label: string; value: string; unit?: string; note?: string }) {
   return (
-    <article className="card-spot rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.4)" }}>
+    <article className="card-spot rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
       <div className="mb-2 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-1">
         <span className="min-w-0 break-words text-2xl font-bold tracking-tight sm:text-3xl">{value}</span>

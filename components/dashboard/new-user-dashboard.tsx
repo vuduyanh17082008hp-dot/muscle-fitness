@@ -108,7 +108,7 @@ export function NewUserDashboard({
       </section>
 
       {/* 3. Meet Dante */}
-      <section className="rounded-2xl border border-white/10 bg-[#121422] p-6">
+      <section className="rounded-2xl border border-white/10 bg-mf-glass-surface p-6">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-start gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-mf-violet/10 text-mf-violet border border-mf-violet/20">
