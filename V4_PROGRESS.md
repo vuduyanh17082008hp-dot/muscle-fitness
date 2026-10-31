@@ -221,3 +221,94 @@ Environment notes (verified 2026-10-31):
   horizontal scroll, mobile inputs 16px. Pre-existing and still open: muscle-map
   `nested-interactive` (SVG regions are buttons inside a labelled img) and its small "Front/Back"
   labels; Account pages failed 15/12 contrast checks in dark BEFORE and pass on paper.
+
+### Final closure
+- `/privacy`, `/terms` on paper; shared `components/ui/page-header.tsx` non-glass gradient no
+  longer passes through `#0a1622` (consumers: Experiments, Privacy, Terms — all re-checked).
+  `/unauthorized` was tried and **reverted to dark**: its hard-coded black backdrop half-converted.
+- Shell test updated: every dashboard route is now paper (rollback stays a one-line registry edit).
+
+## Final gates (2026-10-31, tree at the final commit)
+| Gate | Result |
+|---|---|
+| `tsc --noEmit` | 0 errors |
+| ESLint, files changed vs e3b49e2 | 0 errors, 0 warnings |
+| ESLint, whole repo | 0 errors after the test fix; 49 warnings, all in untouched files |
+| Vitest, full, `MF_TEST_DB_CONTAINER=supabase_db_mf-lrg-7f83` | 5,679 pass / 209 skip / 10 fail = 1 stale V4 test (fixed, 4/4) + 9 live-PostgREST DB tests (`role-authority.db`, `coach-signal-store.db`) that pair the mf-lrg DB container with the *other* stack's API (127.0.0.1:54331). **The same 9 fail identically on untouched e3b49e2 (mf-ux-r1) with the same env**, so they are environmental, not a regression. Without the env var: 0 fail. |
+| Focused re-run after last edits (`app`, `lib/training`, `lib/recovery`) | 875 pass / 19 skip / 0 fail |
+| `next build` | **PRODUCTION_BUILD_UNVERIFIED**: needs an authorized HTTPS production-like Supabase; the env guard rejects loopback http by design and was not weakened. |
+| Responsive sweep 320/360/390/430/768/1024/1440 x 11 routes (/, Today, Train, History, Fuel, Recovery, Dante, Progress, Calendar, Settings, Account) | 77/77: paper, no horizontal scroll, 0 contrast violations, mobile inputs 16px. Only finding: pre-existing muscle-map `nested-interactive` on Today. One 1024 Nutrition probe hit Next dev's automatic memory-threshold restart; retried clean. |
+| Reduced motion (/, Today, Train, Dante) | 0 running animations; zoom allowed (`maximum-scale=5`). |
+| Dark fallback | `/privacy` (before conversion) and `/responsible-ai` render the original dark system (html `#07111b`). |
+| 14-state safety matrix + server hold | see Phase 2: hold states show 0 affirmations / 0 Start; RPC and direct insert 403 `training_hold`. |
+| Cross-tenant (uxr1 JWT via PostgREST) | another athlete's sessions/food/check-ins/threads return 0 rows; PATCH of another's session changes 0 rows. |
+
+## Golden journeys (disposable uxr1 on mf-lrg-7f83, fixtures restored)
+| # | Journey | Pass 1 | Pass 2 |
+|---|---|---|---|
+| 1 | Auth to Today | login lands on /dashboard (every run) | same, 1440 |
+| 2 | Start, log, undo, finish, History | 320 x3: pass | 1440: pass (lands on the completed session page; listed in History) |
+| 3 | Fuel add, edit, delete | 390: pass (746 to 552.6 kcal server-side, then 0) | 1440: pass |
+| 4 | Dante send and restore | 390: **one real OpenAI send**, streamed, grounded; restored after reload | 1440: restore only (no second send) |
+| 5 | Recovery hold, clear, Today | 390: pass (hold: no ring, 0 Start; clear: ring, Start) | 1440: pass |
+| 6 | Progress / Calendar | navigation + survey at 7 widths, 0 violations | none beyond the sweep |
+| 7 | Settings / Account | navigation + survey at 7 widths (Account dark had 15/12 contrast failures; paper 0) | no settings writes performed |
+
+## Acceptance matrix
+| Requirement | Status |
+|---|---|
+| Isolated branch/worktree from verified e3b49e2; demo 466f783 untouched | done |
+| Scoped paper tokens, dark fallback intact, contrast test | done (gate test enforces every rule is gated) |
+| Shell: 5 tabs, real Active swap, Progress and co. reachable, real URLs, no demo login/strip | done |
+| Landing / login / auth / onboarding on paper, honest sample preview, no orbitals/LIVE | done (onboarding CTA rust; deeper steps not walked) |
+| Toast placement | done: mounted bottom-centre (none existed) |
+| Today/Recovery V4 hierarchy over canonical decisions; holds intact | done, matrix parity |
+| Compact check-in, all fields, pain_illness no/minor/yes | done, DB row verified |
+| Iron Logbook, stamped sets, explicit values, timestamp timer, finish confirm, microcycle | done (timer was setInterval, fixed) |
+| Fuel: compact summary, meal groups, source chips, all input methods | done (live Gemma reply unverified) |
+| Dante visuals, no fake MCP/scripted replies, naming | done; **thread rail not built** |
+| Remaining dashboard surfaces + account + legal | done; `/responsible-ai`, `/ai-fair`, `/meal-plan`, `/story`, `/unauthorized`, `/auth/error`, `/not-found`, business/admin portals remain dark |
+| 7 golden journeys x2 | done (J6/J7 as navigation + survey; J4 pass 2 restore-only by design) |
+| Production build | NOT DONE: PRODUCTION_BUILD_UNVERIFIED |
+| D4.1 PDF / D4.2 video / D4.4 plugins | out of scope, pending separate approval |
+
+## UX/UI score (same 100-point rubric; self-assessed, not independent)
+| Criterion | Max | MF e3b49e2 | V4 proto | This branch | Evidence |
+|---|---|---|---|---|---|
+| Visual craftsmanship & originality | 20 | 13 | 16 | 17 | V4 identity on every dashboard, public and auth route; residual dark public pages, rust onboarding CTA |
+| Information architecture & navigation | 15 | 12 | 9 | 13 | 5 tabs + real Active, More drawer, Today strip, most-specific active, scroll reset |
+| Mobile usability & platform fit | 15 | 11 | 9 | 13 | 77/77 sweep; Log 52x48 in-row at 320; 16px inputs; 12px tab labels (were 10px) |
+| Interaction design & feedback | 15 | 11 | 10 | 12 | stamped sets, separate Undo, +30 s, finish dialog, toasts mounted; Undo status message not observed |
+| Real-world task efficiency | 10 | 7 | 6 | 8 | compact check-in, microcycle, logbook rows |
+| Accessibility & readability | 10 | 7 | 4 | 8 | 0 contrast violations on paper (History 14 / Account 15 before); reduced motion; muscle map nested-interactive open |
+| Product coherence & state continuity | 10 | 9 | 4 | 9 | 14-state parity, srvhold, RLS, journeys |
+| Implementation feasibility | 5 | 5 | 4 | 5 | scoped, per-route rollback, tests |
+| **Total** | 100 | 75 | 62 | **85** | not 90+: thread rail, build, remaining dark pages |
+
+## Remaining defects / release limitations
+1. PRODUCTION_BUILD_UNVERIFIED (env-blocked by design).
+2. Dante desktop thread rail not implemented (select retained).
+3. Dark-only public/secondary routes listed above; business (`/business`, `/admin/login`) and
+   platform admin untouched.
+4. Live Gemma reply and the barcode/photo/HawkerLens/menu camera flows not exercised end-to-end.
+5. Pre-existing: muscle map `nested-interactive` + small Front/Back labels; the X10 session page
+   offers Start on a REST-day conflict; register checkbox 13x16.
+6. 9 DB tests need a matched stack (API + DB) to run; they fail identically on e3b49e2.
+7. **Environment risk for the 2 Nov demo (not caused by this branch):** after this boot Windows
+   reserves TCP 57738-57837, so `mf-lrg-7f83`'s Kong (57831) is unpublished and the demo
+   `.env.local` URL refuses connections. This branch used a loopback relay
+   (`mf-v4-kong-relay`, 127.0.0.1:58831). Fix before the demo (reboot / restart winnat as admin /
+   re-port the stack / a relay).
+8. Self-tests are not independent certification; Codex review still outstanding.
+
+## Rollback
+- Whole branch (local only): `git worktree remove C:\Dev\Projects\mf-v4-iron-paper`, then
+  `git branch -D design/v4-iron-paper-integration` from mf-ux-r1. Nothing else references it.
+- One route back to dark: remove it from `PAPER_ROUTES` (`lib/paper-theme.ts`) or delete the
+  `data-theme="paper"` marker on a public page. One phase: `git revert <phase commit>`.
+- Environment: `docker rm -f mf-v4-kong-relay`; stop the :3830 dev server.
+
+NO_PUSH_NO_MERGE_NO_DEPLOY: nothing pushed, merged, deployed or migrated on a hosted DB.
+
+**Verdict: V4_PARTIAL_WITH_VERIFIED_GAPS** (production build unverified; thread rail and the
+listed dark routes remain).

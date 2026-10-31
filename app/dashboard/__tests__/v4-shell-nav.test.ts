@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -12,7 +12,7 @@ const { DashboardShell } = await import("@/components/dashboard/dashboard-shell"
 
 const render = (path: string, activeSessionId: string | null = null) => {
   pathname = path;
-  return renderToStaticMarkup(createElement(DashboardShell, { activeSessionId, children: "content" }));
+  return renderToStaticMarkup(createElement(DashboardShell, { activeSessionId } as { activeSessionId: string | null; children: ReactNode }, "content"));
 };
 const tabBar = (html: string) => html.slice(html.indexOf('aria-label="Primary"'));
 const current = (html: string) => [...html.matchAll(/aria-current="page"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => m[1].replace(/<[^>]+>/g, "").trim());
@@ -37,7 +37,8 @@ describe("V4 shell navigation", () => {
     expect(current(render("/dashboard/training-intelligence"))).toEqual(["Train", "Train"]); // sidebar + tab bar
   });
 
-  it("does not paper-theme a route that has not been converted", () => {
-    expect(render("/dashboard/experiments")).not.toContain('data-theme="paper"');
+  it("marks dashboard routes paper (all converted; rollback = edit PAPER_ROUTES)", () => {
+    expect(render("/dashboard/experiments")).toContain('data-theme="paper"');
+    expect(render("/dashboard")).toContain('data-theme="paper"');
   });
 });

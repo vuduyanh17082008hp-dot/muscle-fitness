@@ -32,7 +32,7 @@ export function PageHeader({
         "relative overflow-hidden rounded-[24px] border p-6 sm:p-8",
         glass
           ? "border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg"
-          : "border-white/10 bg-gradient-to-br from-mf-surface via-[#0a1622] to-mf-bg",
+          : "border-white/10 bg-gradient-to-br from-mf-surface via-mf-bg to-mf-bg",
         className,
       )}
     >
