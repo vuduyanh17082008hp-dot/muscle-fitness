@@ -40,6 +40,7 @@ import {
 import { Logo } from "@/components/brand/logo";
 import { FloatingDante } from "@/components/dashboard/floating-dante";
 import { QuickCapture } from "@/components/dashboard/quick-capture";
+import { isPaperRoute } from "@/lib/paper-theme";
 
 /* =========================================================
    TYPES
@@ -397,7 +398,7 @@ export function DashboardShell({
   }
 
   return (
-    <div className="min-h-screen bg-mf-glass-bg text-mf-glass-text">
+    <div data-theme={isPaperRoute(pathname) ? "paper" : undefined} className="min-h-screen bg-mf-glass-bg text-mf-glass-text">
       {/* ===================================================
           DESKTOP SIDEBAR
       =================================================== */}

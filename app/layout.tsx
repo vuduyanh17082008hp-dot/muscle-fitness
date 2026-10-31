@@ -18,6 +18,7 @@ import {
 } from "@/app/context/AuthContext";
 
 import "./globals.css";
+import "./paper-theme.css";
 
 /*
  * Typography system:
