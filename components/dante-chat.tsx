@@ -41,6 +41,7 @@ import {
   type ChatStreamSource,
 } from "@/lib/dante-core/chat-stream-protocol";
 import type { StoredDanteMessage } from "@/lib/dante-core/conversation-store";
+import { DanteAvatar } from "@/components/dante/dante-avatar";
 
 /* =========================================================
    TYPES
@@ -1040,8 +1041,8 @@ export default function DanteChat({
 
       {/* HEADER — who you're talking to, and (full page) which conversation. */}
       <header className="flex shrink-0 items-center gap-2 border-b border-mf-glass-border px-3 py-2 sm:px-4">
-        <DanteMonogram />
-        <span className={cn("text-sm font-bold text-mf-glass-text", restoreHistory && "max-sm:sr-only")}>Dante</span>
+        <DanteAvatar size="sm" className="size-9" />
+        <span className={cn("font-heading text-lg font-black uppercase tracking-tight text-mf-glass-dante", restoreHistory && "max-sm:sr-only")}>Dante</span>
 
         {restoreHistory ? (
           <>
@@ -1117,11 +1118,11 @@ export default function DanteChat({
               <React.Fragment key={message.id}>
                 <div className={cn("dante-message-in flex w-full", isUser ? "justify-end" : "justify-start")}>
                   {isUser ? (
-                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-white/[0.07] px-4 py-2.5 text-[15px] leading-relaxed text-mf-glass-text sm:max-w-[75%]">
+                    <div className="max-w-[85%] rounded-2xl rounded-br-md border border-mf-glass-border bg-white/[0.07] px-4 py-2.5 text-[15px] leading-relaxed text-mf-glass-text sm:max-w-[75%]">
                       <p className="whitespace-pre-wrap break-words">{message.content}</p>
                     </div>
                   ) : (
-                    <div className="flex w-full min-w-0 flex-col gap-2">
+                    <div className="flex w-full min-w-0 flex-col gap-2 border-l-2 border-mf-glass-dante/40 pl-3">
                       {message.content.length === 0 && !message.isComplete ? (
                         <p aria-live="polite" className="flex items-center gap-2 py-1 text-sm text-mf-glass-text-muted">
                           <span className="flex gap-1" aria-hidden="true">
@@ -1235,15 +1236,6 @@ export default function DanteChat({
         )}
       </form>
     </section>
-  );
-}
-
-/** Dante's small mark: a monogram, never an illustration. */
-function DanteMonogram() {
-  return (
-    <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-lg border border-mf-glass-dante/35 bg-mf-glass-dante/10 text-xs font-black text-mf-glass-dante">
-      D
-    </span>
   );
 }
 

@@ -184,3 +184,18 @@ Environment notes (verified 2026-10-31):
   HawkerLens/menu flows beyond opening (camera/upload + external providers).
 - Gates: tsc 0, eslint 0; nutrition suites 1,097 pass; surveys 390/1440 of the three routes:
   0 contrast violations after the composer fix, no horizontal scroll.
+
+### Phase 5 — Dante workspace (visuals only) — DONE with a noted gap
+- `PAPER_ROUTES` + `/dashboard/ai-coach/*`. `components/dante-chat.tsx`: static Dante avatar
+  + condensed violet "DANTE" in the header (replaces the "D" monogram), lavender rule on Dante's
+  replies, hairline on the athlete's bubbles. Runtime, streaming, persistence, tools, proposal
+  confirmation, safety layer, "Your data now" snapshot strip, Sources / Why-this — unchanged.
+- **Live (one real OpenAI send, disposable uxr1):** reply streamed in ~18 s and matched the
+  real state (no check-in, nothing logged); reload restored the same thread (both messages in
+  `ai_messages`); no "AI Coach / Dante Bot / MCP" text; composer inside the 390 viewport, 16px.
+  Residue: one extra thread with that exchange on uxr1.
+- Gap: V4's **desktop thread rail** was not built; the existing thread `<select>` + New chat
+  remain (responsive, works at every width). No skills/MCP panel, no scripted replies.
+- **Pending as separate, unapproved features (not implemented here):** D4.1 PDF uploads with
+  verified provenance / 20 MB policy; D4.2 video ≤ 30 s; D4.4 plugin architecture.
+- Gates: tsc 0, eslint 0, Dante chat suites 54 pass; surveys 390/1440: 0 violations.
