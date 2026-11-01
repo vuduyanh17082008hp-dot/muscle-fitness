@@ -326,10 +326,8 @@ export function VideoAnalyzer() {
       {labelOnly && active ? (
         <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-label-only">
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">No automated analysis</p>
-          <div className="mt-3">
-            <SelectedCard selection={active} />
-          </div>
-          <p className="mt-3 text-sm leading-6 text-zinc-400">
+          <p className="mt-2 break-words text-base font-black text-white">{active.label}</p>
+          <p className="mt-1 text-sm leading-6 text-zinc-400">
             {video
               ? "Your video stays on this page for review — play and scrub it above. No reps, tempo, range or technique are reported, and nothing is saved."
               : "Add a video above to review it here. No reps, tempo, range or technique are reported, and nothing is saved."}
