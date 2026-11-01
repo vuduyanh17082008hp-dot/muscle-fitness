@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
 import { LandingPage } from "@/components/home/landing-page"
+import { findAlternatives, findCatalogueExercise } from "@/lib/training/exercise-substitution"
 
 const render = (signedIn: boolean) => renderToStaticMarkup(createElement(LandingPage, { signedIn }))
 const hrefs = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1])
@@ -37,6 +38,20 @@ describe("public landing", () => {
     expect(at.every((i) => i > 0)).toBe(true)
     expect([...at].sort((a, b) => a - b)).toEqual(at)
     expect(html).toContain("not your data")
+  })
+
+  it("hero headline is four fixed, unwrappable lines, so 'next.' can never strand alone", () => {
+    const h1 = render(false).match(/<h1[\s\S]*?<\/h1>/)![0]
+    const lines = [...h1.matchAll(/whitespace-nowrap[^>]*>(?:<span[^>]*>)?([^<]+)</g)].map((m) => m[1])
+    expect(lines).toEqual(["Train smarter.", "Recover better.", "Know what", "to do next."])
+  })
+
+  it("the adaptive-workouts preview is the real substitution engine's output, not hand-written names", () => {
+    const html = render(false)
+    const bench = findCatalogueExercise({ slug: "barbell-bench-press" })!
+    const names = findAlternatives({ current: bench, reasons: ["machine_occupied"] }).alternatives.slice(0, 3).map((a) => a.item.name)
+    expect(names).toHaveLength(3)
+    for (const name of names) expect(html).toContain(name)
   })
 
   it("every hero animation is gated behind prefers-reduced-motion: no-preference", () => {

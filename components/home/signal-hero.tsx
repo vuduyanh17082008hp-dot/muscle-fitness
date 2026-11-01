@@ -30,20 +30,24 @@ export function SignalHero({
       )}
     >
       <div>
+        {/* Four fixed lines, never browser-wrapped: the widest ("Recover
+            better.") sets the size, so "to do next." can't strand a word.
+            Sizes keep that line inside its column at every breakpoint. */}
         <h1
           id="hero-title"
-          className="font-heading text-[clamp(2.25rem,11.5vw,3.25rem)] font-black uppercase leading-[0.95] tracking-[-0.005em] sm:text-6xl lg:text-[4rem] lg:leading-[0.92] xl:text-[4.5rem]"
+          className="font-heading text-[clamp(2.25rem,10.8vw,3.5rem)] font-black uppercase leading-[0.96] tracking-[-0.005em] sm:text-[3.75rem] lg:text-[3.5rem] lg:leading-[0.94] xl:text-[4rem]"
         >
-          <span className={cn(styles.line, "block")}>Train smarter.</span>
-          <span className={cn(styles.line, "block")}>Recover better.</span>
-          <span className={cn(styles.line, "block")}>
-            <span className="bg-mf-brand px-1.5 text-mf-brand-ink [box-decoration-break:clone]">
-              Know what to do next.
-            </span>
+          <span className={cn(styles.line, "block whitespace-nowrap")}>Train smarter.</span>
+          <span className={cn(styles.line, "block whitespace-nowrap")}>Recover better.</span>
+          <span className={cn(styles.line, "block whitespace-nowrap")}>
+            <span className="bg-mf-brand px-1.5 text-mf-brand-ink">Know what</span>
+          </span>
+          <span className={cn(styles.line, "block whitespace-nowrap")}>
+            <span className="bg-mf-brand px-1.5 text-mf-brand-ink">to do next.</span>
           </span>
         </h1>
         <div className={styles.fade}>
-          <p className="mt-5 max-w-[46ch] text-base leading-7 text-mf-pub-text-secondary sm:mt-7 sm:text-lg sm:leading-8">
+          <p className="mt-5 max-w-[46ch] text-pretty text-base leading-7 text-mf-pub-text-secondary sm:mt-7 sm:text-lg sm:leading-8">
             Training, nutrition, recovery and AI coaching — connected
             throughout your day.
             <span className="hidden sm:inline">
@@ -116,28 +120,15 @@ function ProductPreview() {
       <figcaption className="mb-3 text-xs font-medium text-mf-pub-text-muted">
         Product preview · sample day, not your data
       </figcaption>
-      <div aria-hidden="true" className="relative pb-[76px] pt-[60px]">
-        <div
-          className={cn(
-            styles.card,
-            styles.cardBack,
-            card,
-            "absolute right-0 top-0 w-[68%] bg-mf-pub-surface px-4 py-3",
-          )}
-        >
-          <p className="text-xs font-medium text-mf-training">
-            Workout · set 3 of 4
-          </p>
-          <p className="mt-0.5 text-sm font-semibold text-white">
-            Bench press · 80 kg × 6
-          </p>
-        </div>
-
+      {/* Stacked, never overlapped: the Today card, then the two moments
+          that fed it side by side. Nothing is absolutely positioned, so no
+          width can push one card over another. */}
+      <div aria-hidden="true" className="grid gap-3">
         <div
           className={cn(
             styles.card,
             card,
-            "relative z-10 mr-3 border-2 border-mf-pub-text p-4 sm:mr-12 sm:p-5",
+            "border-2 border-mf-pub-text p-4 sm:p-5",
           )}
         >
           <div className="flex items-baseline justify-between">
@@ -220,23 +211,31 @@ function ProductPreview() {
           </p>
         </div>
 
-        <div
-          className={cn(
-            styles.card,
-            styles.cardSide,
-            card,
-            "absolute bottom-0 right-0 z-20 w-[62%] px-4 py-3 sm:w-[52%]",
-          )}
-        >
-          <p className="text-xs font-medium text-mf-pub-text-muted">
-            Lunch · logged
-          </p>
-          <p className="mt-0.5 text-sm font-semibold text-white">
-            Chicken rice bowl
-          </p>
-          <p className="text-xs tabular-nums text-mf-pub-text-secondary">
-            640 kcal · 42 g protein
-          </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div
+            className={cn(styles.card, styles.cardBack, card, "min-w-0 px-4 py-3")}
+          >
+            <p className="text-xs font-medium text-mf-training">
+              Workout · set 3 of 4
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-white">Bench press</p>
+            <p className="text-xs tabular-nums text-mf-pub-text-secondary">
+              80 kg × 6
+            </p>
+          </div>
+          <div
+            className={cn(styles.card, styles.cardSide, card, "min-w-0 px-4 py-3")}
+          >
+            <p className="text-xs font-medium text-mf-pub-text-muted">
+              Lunch · logged
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-white">
+              Chicken rice bowl
+            </p>
+            <p className="text-xs tabular-nums text-mf-pub-text-secondary">
+              640 kcal · 42 g protein
+            </p>
+          </div>
         </div>
       </div>
     </figure>

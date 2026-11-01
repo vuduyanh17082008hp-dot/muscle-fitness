@@ -4,10 +4,10 @@
  * finished composition is the only thing ever rendered. Only opacity,
  * transform and (on three short headline lines) a small blur animate.
  *
- *   0–0.9 s     headline, three beats (0 / 0.15 / 0.3 s)
+ *   0–0.9 s     headline, three beats (0 / 0.15 / 0.3 s; lines 3–4 share the third)
  *   0.35–0.9 s  proposition and CTAs
  *   0.6–1.5 s   signal line draws left → right; checkpoints at 0/25/50/75 %
- *   0.9–1.8 s   product preview: workout, today, meal
+ *   0.9–1.8 s   product preview: workout, today, meal (stacked cards, no overlap)
  *   1.9–2.6 s   one highlight sweep across the primary CTA, then nothing
  */
 
@@ -52,6 +52,9 @@
     animation-delay: 150ms;
   }
   .line:nth-child(3) {
+    animation-delay: 300ms;
+  }
+  .line:nth-child(4) {
     animation-delay: 300ms;
   }
 
