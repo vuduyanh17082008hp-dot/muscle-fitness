@@ -485,15 +485,15 @@ function Results({
         <p id="sv-quality" className={eyebrow}>{abstained ? "3" : "4"} · Evidence quality and limits</p>
         <ul className="mt-4 divide-y divide-mf-glass-border" data-testid="sv-quality-list">
           {analysis.quality.checks.map((c) => (
-            <li key={c.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-start sm:gap-4">
-              <div className="flex shrink-0 flex-wrap items-center gap-2 sm:w-64">
+            <li key={c.id} className="flex flex-col gap-1 py-3 lg:flex-row lg:items-start lg:gap-4">
+              <div className="flex shrink-0 flex-wrap items-center gap-2 lg:w-56">
                 <span className="text-sm font-semibold text-mf-glass-text">{c.label}</span>
               </div>
-              <div className="flex shrink-0 flex-wrap gap-2 sm:w-72">
+              <div className="flex shrink-0 flex-wrap gap-2 lg:w-64">
                 <StatusBadge label={c.result.replace("_", " ")} tone={RESULT_TONE[c.result]} className="whitespace-nowrap" />
                 <StatusBadge label={STATUS_LABEL[c.status]} tone="neutral" className="whitespace-nowrap" />
               </div>
-              <p className="min-w-0 text-sm text-mf-glass-text-secondary">{c.detail}</p>
+              <p className="min-w-0 break-words text-sm text-mf-glass-text-secondary">{c.detail}</p>
             </li>
           ))}
         </ul>
