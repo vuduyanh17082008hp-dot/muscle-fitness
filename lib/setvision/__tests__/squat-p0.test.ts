@@ -7,7 +7,6 @@ import {
   sampleObservations,
   validateDecodedMedia,
   validateVideoFile,
-  type PoseObservation,
   type RepCorrection,
 } from "@/lib/setvision/squat-p0";
 
