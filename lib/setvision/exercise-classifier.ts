@@ -140,7 +140,7 @@ export function classifyExercise(frames: PoseFrame[]): ExerciseClassification {
       exercise: null,
       confidence: 0,
       signals: [
-        `The camera appears to face the lifter (hips ${hipSeparationRatio}× torso length apart), so squat and deadlift cannot be told apart reliably from 2D joint angles. Select the exercise to analyse reps.`,
+        `The camera appears to face the lifter (hips ${hipSeparationRatio}× torso length apart), so squat and deadlift cannot be told apart reliably from 2D joint angles.`,
         ...signals,
       ],
     };
@@ -154,7 +154,7 @@ export function classifyExercise(frames: PoseFrame[]): ExerciseClassification {
       exercise: null,
       confidence: 0,
       signals: [
-        "Not enough clearly visible knee/hip landmarks to distinguish squat from deadlift. Select the exercise to analyse reps.",
+        "Not enough clearly visible knee/hip landmarks to distinguish squat from deadlift.",
         ...signals,
       ],
     };
@@ -197,7 +197,7 @@ export function classifyExercise(frames: PoseFrame[]): ExerciseClassification {
     exercise: null,
     confidence: 0,
     signals: [
-      `Knee/hip pattern is between a squat and a hinge (${detail}), so the exercise is uncertain. Select it to analyse reps.`,
+      `Knee/hip pattern is between a squat and a hinge (${detail}), so the exercise is uncertain.`,
       ...signals,
     ],
   };

@@ -230,6 +230,7 @@ export function VideoAnalyzer() {
           </label>
 
           <select
+            aria-label="Exercise"
             value={exerciseOverride}
             onChange={(e) => setExerciseOverride(e.target.value as SetVisionExerciseId | "auto")}
             className="rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm font-semibold text-white"
