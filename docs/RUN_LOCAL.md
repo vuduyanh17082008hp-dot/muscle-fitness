@@ -42,6 +42,22 @@ npm run lint
 npm run build
 ```
 
+## Database tests (`*.db.test.ts`)
+
+These run SQL through `docker exec` against a local Supabase stack. Without
+`MF_TEST_*` they use `supabase_db_muscle-fitness-claude`, the one stack every
+worktree on the machine shares — it is usually behind your branch's
+migrations, and must not be migrated from a feature branch. Build a
+disposable stack from this checkout's migrations instead (local Docker only,
+ports 566xx, rebuilt from scratch on every run):
+
+```bash
+node scripts/test-db-stack.mjs        # prints the exact env line below
+MF_TEST_DB_CONTAINER=supabase_db_mf-test-db MF_TEST_AUTH_CONTAINER=supabase_auth_mf-test-db \
+  MF_TEST_API_URL=http://127.0.0.1:56631 MF_TEST_SUPABASE_URL=http://127.0.0.1:56631 npm test
+node scripts/test-db-stack.mjs stop   # remove it
+```
+
 ## Test checklist
 
 1. **Landing** — `/`
