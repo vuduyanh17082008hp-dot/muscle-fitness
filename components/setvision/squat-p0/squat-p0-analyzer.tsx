@@ -72,6 +72,7 @@ const REASON_TEXT: Record<RepReason, string> = {
 };
 const ISSUE_TEXT: Record<TrackingLossInterval["issue"], string> = {
   invalid_timestamp: "invalid timestamps",
+  stale_frame: "video could not be decoded here",
   no_pose: "no person detected",
   multiple_people: "more than one person",
   low_visibility: "joints not clearly visible",

@@ -318,7 +318,7 @@ describe("SetVision P0 — media validation and bounded sampling", () => {
     const seen: number[] = [];
     const { observations, stats } = await sampleObservations({
       durationMs: 1000,
-      seek: async (ms) => ms,
+      seek: async (ms) => ({ mediaTimeMs: ms, fresh: true }),
       detect: (ts) => {
         seen.push(ts);
         return detect();
@@ -332,10 +332,31 @@ describe("SetVision P0 — media validation and bounded sampling", () => {
   it("skips a frame when the decoder does not advance (no duplicate timestamps)", async () => {
     const { observations } = await sampleObservations({
       durationMs: 400,
-      seek: async (ms) => Math.min(ms, 250), // decoder stuck at 250 ms
+      seek: async (ms) => ({ mediaTimeMs: Math.min(ms, 250), fresh: true }), // decoder stuck at 250 ms
       detect,
     });
     expect(observations.map((o) => o.timestampMs)).toEqual([0, 100, 200, 250]);
+  });
+
+  it("never runs pose detection on a stale (undecoded) frame and abstains on a truncated video", async () => {
+    let detections = 0;
+    const { observations } = await sampleObservations({
+      durationMs: 3000,
+      seek: async (ms) => ({ mediaTimeMs: ms, fresh: ms < 1200 }), // decoding stops after 1.1 s
+      detect: () => {
+        detections += 1;
+        return detect();
+      },
+    });
+    expect(detections).toBe(12);
+    expect(observations.filter((o) => o.frameStatus === "stale")).toHaveLength(19);
+
+    const { keys, end } = repKeys(1);
+    const obs = observe(keys, end, (t, o) => (t >= 1200 ? { ...o, frameStatus: "stale", poseCount: 0, landmarks: null } : o));
+    const a = analyzeSquatObservations(obs, end);
+    expect(a.status).toBe("INSUFFICIENT_EVIDENCE");
+    expect(a.insufficientReasons.join(" ")).toMatch(/stopped producing new frames from 1\.2 s/);
+    expect(a.trackingLoss.at(-1)?.issue).toBe("stale_frame");
   });
 
   it("stops promptly on cancellation without further detections", async () => {
@@ -345,7 +366,7 @@ describe("SetVision P0 — media validation and bounded sampling", () => {
       durationMs: 30_000,
       seek: async (ms) => {
         if (ms === 500) controller.abort();
-        return ms;
+        return { mediaTimeMs: ms, fresh: true };
       },
       detect: () => {
         detections += 1;

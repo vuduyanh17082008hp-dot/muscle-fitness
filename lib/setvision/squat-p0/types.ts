@@ -37,6 +37,11 @@ export type PoseObservation = {
    * "frame": exact presented-frame media time (e.g. requestVideoFrameCallback).
    */
   timestampSource: "seek" | "frame";
+  /**
+   * "stale": the decoder produced no new picture for this position (e.g. a
+   * truncated file keeps showing its last good frame). No pose is run on it.
+   */
+  frameStatus?: "decoded" | "stale";
   frameWidth: number;
   frameHeight: number;
   /** How many people the detector returned for this frame. */
@@ -49,6 +54,7 @@ export type PoseObservation = {
 
 export type FrameIssue =
   | "invalid_timestamp"
+  | "stale_frame"
   | "no_pose"
   | "multiple_people"
   | "low_visibility"

@@ -65,6 +65,11 @@ export function assessFrames(observations: PoseObservation[], side: Side | null)
     }
     lastT = t;
 
+    if (o.frameStatus === "stale") {
+      out.push({ ...base, issue: "stale_frame" });
+      continue;
+    }
+
     if (o.poseCount === 0 || !o.landmarks || !side) {
       out.push({ ...base, issue: o.poseCount > 1 ? "multiple_people" : "no_pose" });
       continue;
@@ -163,6 +168,19 @@ export function clipQualityChecks(
     status: "IMPLEMENTED_AND_MEASURED",
     result: tsFail ? "fail" : badTs > 0 ? "warn" : "pass",
     detail: `${badTs} of ${n} frames rejected for a non-finite, negative or non-increasing media timestamp.`,
+  });
+
+  const stale = frames.filter((f) => f.issue === "stale_frame");
+  const staleFail = n > 0 && stale.length / n > SQUAT_P0.maxStaleFrameRatio;
+  if (staleFail) {
+    abstain.push(`The video stopped producing new frames from ${(stale[0].timestampMs / 1000).toFixed(1)} s; the file may be damaged or truncated.`);
+  }
+  checks.push({
+    id: "decoded",
+    label: "Every sampled position decoded",
+    status: "HEURISTIC_ONLY",
+    result: staleFail ? "fail" : stale.length > 0 ? "warn" : "pass",
+    detail: `${stale.length} of ${n} seeks produced no newly decoded frame (browser decoded-frame counter did not advance); those frames are never analysed. Relies on getVideoPlaybackQuality().`,
   });
 
   const multi = count("multiple_people");

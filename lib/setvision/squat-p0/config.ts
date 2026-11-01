@@ -35,6 +35,8 @@ export const SQUAT_P0 = {
   minValidRatio: 0.5,
   maxMultiPersonRatio: 0.2,
   maxInvalidTimestampRatio: 0.05,
+  /** More than this share of seeks without a newly decoded frame → damaged/truncated file. */
+  maxStaleFrameRatio: 0.1,
   /** Median |leftHip.x − rightHip.x| / torso length above this → not a side view (hips separate in a frontal view). */
   sideViewMaxHipSeparation: 0.35,
   /** Ankle displacement from its early median > this × leg length → feet or camera moved (warn only). */

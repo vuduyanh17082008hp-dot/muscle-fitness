@@ -58,8 +58,11 @@ export class AnalysisCancelledError extends Error {
 
 export type SamplerDeps = {
   durationMs: number;
-  /** Seek the decoder to `ms` (media time). Resolves with the media time actually reached. */
-  seek: (ms: number) => Promise<number>;
+  /**
+   * Seek the decoder to `ms` (media time). Resolves with the media time
+   * reached and whether a new picture was actually decoded for it.
+   */
+  seek: (ms: number) => Promise<{ mediaTimeMs: number; fresh: boolean }>;
   /** Run pose detection on the current frame; `timestampMs` must strictly increase. */
   detect: (timestampMs: number) => Omit<PoseObservation, "timestampMs" | "timestampSource">;
   signal?: AbortSignal;
@@ -97,9 +100,16 @@ export async function sampleObservations(deps: SamplerDeps): Promise<{ observati
     if (deps.signal?.aborted) throw new AnalysisCancelledError();
 
     // Media time of the decoded frame, rounded to whole ms; skip if the decoder did not advance.
-    const ts = Math.round(reached);
+    const ts = Math.round(reached.mediaTimeMs);
     if (ts <= lastTs) continue;
     lastTs = ts;
+
+    if (!reached.fresh) {
+      // Never run pose on a picture left over from an earlier position.
+      observations.push({ timestampMs: ts, timestampSource: "seek", frameStatus: "stale", frameWidth: 0, frameHeight: 0, poseCount: 0, landmarks: null });
+      deps.onProgress?.({ done: i + 1, total, lastInferenceMs: 0 });
+      continue;
+    }
 
     const t0 = now();
     const detected = deps.detect(ts);
@@ -107,7 +117,7 @@ export async function sampleObservations(deps: SamplerDeps): Promise<{ observati
     inferSum += inferMs;
     inferMax = Math.max(inferMax, inferMs);
 
-    observations.push({ ...detected, timestampMs: ts, timestampSource: "seek" });
+    observations.push({ ...detected, timestampMs: ts, timestampSource: "seek", frameStatus: "decoded" });
     deps.onProgress?.({ done: i + 1, total, lastInferenceMs: inferMs });
     if (deps.yieldToMain) await deps.yieldToMain();
   }

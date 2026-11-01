@@ -111,15 +111,29 @@ export async function openDecodedVideo(url: string, signal?: AbortSignal) {
   };
 }
 
-/** Seek and resolve with the media time (ms) the decoder settled on. */
-export async function seekVideo(video: HTMLVideoElement, ms: number, signal?: AbortSignal): Promise<number> {
+const decodedFrames = (video: HTMLVideoElement) => video.getVideoPlaybackQuality?.().totalVideoFrames;
+
+/**
+ * Seek and resolve with the media time (ms) the decoder settled on, plus
+ * whether it decoded a new picture. A truncated file still fires "seeked"
+ * and keeps showing its last good frame; Chrome's decoded-frame counter is
+ * the observable that stops advancing (readyState and buffered do not).
+ */
+export async function seekVideo(
+  video: HTMLVideoElement,
+  ms: number,
+  signal?: AbortSignal,
+): Promise<{ mediaTimeMs: number; fresh: boolean }> {
   const target = ms / 1000;
-  if (Math.abs(video.currentTime - target) > 0.0005 || video.readyState < 2) {
-    const settled = once(video, ["seeked"], SQUAT_P0.seekTimeoutMs, signal);
-    video.currentTime = target;
-    await settled;
+  if (Math.abs(video.currentTime - target) <= 0.0005 && video.readyState >= 2) {
+    return { mediaTimeMs: video.currentTime * 1000, fresh: true };
   }
-  return video.currentTime * 1000;
+  const before = decodedFrames(video);
+  const settled = once(video, ["seeked"], SQUAT_P0.seekTimeoutMs, signal);
+  video.currentTime = target;
+  await settled;
+  const after = decodedFrames(video);
+  return { mediaTimeMs: video.currentTime * 1000, fresh: before === undefined || after === undefined || after > before };
 }
 
 export function releaseVideo(video: HTMLVideoElement) {
