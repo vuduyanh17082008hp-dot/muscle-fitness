@@ -184,6 +184,12 @@ is a separate MediaPipe-based spike: bodyweight squat, side view, ≤ 30 s,
 timestamped COMPLETED/PARTIAL/UNCERTAIN cycles with abstention. Unvalidated,
 no persistence — see docs/setvision.md "P0".
 
+Form Coach **P1A** (`/dashboard/workouts/form-coach/live`,
+`lib/setvision/squat-p0/live.ts`, `components/form-coach/live/`) drives that
+same P0 engine from a live camera (explicit Start, 10 Hz, no recording or
+persistence). It is the squat only, tested on camera-like input. Accuracy is
+unevaluated — see docs/setvision.md "Form Coach P1A".
+
 ## HawkerLens SG
 
 This doc previously said "do not build yet" — that's stale. It's already

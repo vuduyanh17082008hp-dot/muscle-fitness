@@ -679,11 +679,165 @@ Mobile devices are unmeasured. `requestVideoFrameCallback` does not fire on
 the detached analysis video, so timestamps are seek targets (true frame PTS
 ≤ target by < 1 frame).
 
-## Future live adapter (Form Coach) requirements
+## Live adapter
 
-A camera adapter must emit the same `PoseObservation`s with
-`timestampSource: "frame"` from `requestVideoFrameCallback` media time, feed
-`createSquatRepCounter().push()` with a 1-sample smoothing delay, lock the
-side from the first ~1 s instead of the whole clip, and never call
-`finish()` until the session ends. Live cues, athlete-follow framing and form
-grading are out of scope until counting has been evaluated.
+Implemented as Form Coach P1A (below). It follows the requirements this
+section used to list, with one change: timestamps come from the performance
+clock, not `mediaTime` (see "Timestamps").
+
+# Form Coach P1A — live camera rep counting (pilot)
+
+Route `/dashboard/workouts/form-coach/live`, linked from Form Coach and from
+the P0 squat page. **Scope: bodyweight squat, side-on fixed camera, one
+person, set ≤ 180 s.** Technical pilot: counts movement cycles live with the
+P0 engine, then the user reviews and corrects them. No recording, upload or
+persistence; no workout, set or PR mutation. The older MoveNet Form Coach
+(`/dashboard/workouts/form-coach`, squat/push-up/plank cues) is untouched.
+
+## Pipeline
+
+```
+Start camera (click) → getUserMedia {audio:false}       lib/form-coach/live-camera.ts
+  → <video> → requestVideoFrameCallback (rAF fallback)   components/form-coach/live/live-squat-coach.tsx
+  → createFrameScheduler: ≥ ~100 ms apart, never queued  lib/setvision/squat-p0/live.ts
+  → MediaPipe detectForVideo (sync → one inference at a time; P0 createPoseLandmarker, numPoses 2)
+  → PoseObservation { timestampSource: "clock" }
+  → setup: assessReadiness (last 1 s)                     live.ts
+  → set:   createLiveSquatSession(side locked at setup)
+           createFrameAssessor (P0 frame gate) → median-of-3 one sample late
+           → createSquatRepCounter().push / interrupt
+  → End Set: finish() → assembleSquatAnalysis (P0 clip-level gate) → review
+```
+
+The live session is the clip engine driven one frame at a time. On an
+uninterrupted stream its events equal `analyzeSquatObservations` on the same
+observations and side (unit-tested, including a short gap and a recovered
+tracking loss). Shared, not copied: `createFrameAssessor` (quality-gate.ts),
+`assembleSquatAnalysis` (analyze.ts), the counter, `applyCorrections`,
+`createPoseLandmarker`/`toObservationParts`, the P0 review rows and the
+SetVision exercise picker (Auto-detect hidden for live).
+
+**Timestamps.** `captureTime ?? presentationTime` of the rVFC metadata —
+both on the monotonic `performance.now()` clock — minus the Start Set time,
+rounded to ms. Chrome reported `captureTime` for the fake camera; the basis
+on the physical camera was not recorded (no set was run on it). `mediaTime` is not used: a timer tick (below) has to compare
+"now" with frame times, and that only works if both are on one clock.
+Wall-clock time is never used. Dropped frames are not movement evidence: they
+only widen the gap between valid samples, which the P0 bridge/gap/lost rules
+already handle.
+
+**Scheduling.** A frame is analysed only if ≥ 98 ms after the last analysed
+one, and never while an inference is running (structurally impossible today,
+since `detectForVideo` is synchronous, but the guard stays for a worker).
+Skipped frames are discarded, not queued. A 250 ms timer calls `tick()`, so
+a camera that stops sending frames still pauses counting and closes the open
+cycle. The first inference (GPU warm-up, ~4.8–5.0 s blocking) runs once
+behind a "warming up" overlay before setup.
+
+## Live states and interruption rules
+
+| State | Rule |
+|---|---|
+| Ready / Adjust camera / Cannot verify | Last 1 s (≥ 6 analysed frames): > 20 % two-person frames → Adjust; > 50 % no person, or no person as the dominant issue → Cannot verify; < 80 % frames pass the P0 gate → Adjust (dominant issue); P0 side-view check fails → Adjust; latest knee < 155° → "stand tall"; knee swing > 13° → "hold still". Framing only, HEURISTIC_ONLY, not technique. |
+| Counting | a valid frame within the last 250 ms |
+| Counting paused | no valid frame for > 250 ms (shows the frame issue) |
+| Tracking lost | > 1000 ms: the open cycle closes UNCERTAIN `tracking_lost` **immediately**, state → unknown |
+| Paused (user / page hidden) | `interrupt("session_interrupted")`; frames ignored; Resume restarts from "unknown" and needs a standing frame. The ascent seen after Resume is its own UNCERTAIN `onset_not_observed` fragment and is never joined to the descent before the pause |
+| Frame size change (rotation) | treated as an interruption |
+| Camera track `ended` mid-set | the set ends into review with a notice |
+| Live view warning | every ~1 s the set-so-far is re-checked with the clip side-view rule; failing → "this set will probably not be confirmed" |
+| End Set | open cycle → UNCERTAIN `video_ended_mid_cycle`; clip-level gate; on INSUFFICIENT_EVIDENCE the live cycles are still listed, marked unconfirmed |
+
+Review: completed / partial / uncertain, tracking-loss intervals and
+interruptions, per-cycle relabel and "add a rep the camera missed"
+(`RepCorrection`, `by: "user"`; detected events never mutated), JSON
+download, Discard. There is no recording, so there is nothing to seek to.
+
+## Movement-family live compatibility
+
+| Family / engine | Live status | Why |
+|---|---|---|
+| Bodyweight squat — P0 MediaPipe engine | **LIVE_PILOT_TESTED** (camera-like input only) | Streaming counter + frame gate exist. Run on real footage through Chrome's fake camera and a lifecycle check on a physical camera. No independent accuracy data. |
+| Squat (MoveNet `exercise-config` engine, "Verified" for uploads) | TECHNICALLY_COMPATIBLE_UNVERIFIED | Different pose model (MoveNet COCO-17), per-frame side, clip-level abstention. A live port would need a second pose model or a MediaPipe→COCO keypoint map. Not wired. |
+| Hip hinge (deadlift) | TECHNICALLY_COMPATIBLE_UNVERIFIED | Same push-based `createRepStateMachine`, per-frame side. Unvalidated even for uploads. |
+| Horizontal / vertical press, vertical / horizontal pull, curl, triceps pushdown, overhead extension, lateral raise | INSUFFICIENT_EVIDENCE | Per-clip side choice and the body-position check are computed over the whole clip. Live would need both locked at setup, and none of these engines has been validated even on uploads. |
+| Every manual-review exercise | NOT_COMPATIBLE | No movement model. |
+
+Adapter design for the next family: map MediaPipe landmarks to the COCO
+names `exercise-config` uses (`left_shoulder` = 11 …), lock the side and run
+the `PositionCheck` on the setup window, then feed the push-based
+`createRepStateMachine` per frame. No second family is exposed in the live
+UI; the picker sends every non-squat exercise to SetVision upload.
+
+## Measured (2026-11-02, dev laptop, Chrome stable via Playwright, GPU delegate)
+
+Camera-like input = Chrome `--use-fake-device-for-media-stream
+--use-file-for-fake-video-capture` with MJPEG transcodes of the openly
+licensed Wikimedia `kb-side-A` clip (640×480, 30 fps, looped by Chrome).
+**This is not a physical-camera or mobile-device benchmark.**
+
+| Metric | 32 s set @390 px | 14 s sets @320/768/1440 |
+|---|---|---|
+| Analysed frames / s | 8.4 (target 10) | 8.4–8.5 |
+| Inference mean / p95 / max | 42 / 54 / 65 ms | 43–47 / 54–58 / 59–65 ms |
+| Frame → result mean / p95 | 46 / 59 ms | 48–52 / 60–64 ms |
+| Rep confirmed → on screen | mean 52, max 63 ms (5 reps) | 47–57 ms |
+| Long tasks during the set | ~2 / s, 50–65 ms each (each inference + render) | same |
+| GPU warm-up (first inference) | 4.8–5.0 s, blocking, before setup | same |
+| JS heap | ~105 MB | 103–105 MB |
+
+Same-input consistency (not accuracy): two 32 s live sets on the looped clip
+both gave C, C, U, C, C. That is the same cycle sequence the upload path finds
+on the same footage, with boundaries within ~0.2 s. The U is the clip's loop
+point, which "teleports" the person (tracking jump). On the physical
+Integrated Camera (1280×720) only the lifecycle was checked: permission,
+preview, readiness verdicts from real frames, Turn off, restart, and tracks
+stopped on route change. No squats were performed in front of it, so it gives
+no counting or performance evidence.
+
+**Worker execution — investigated, not done.** Steady state blocks the main
+thread ~50 ms per analysed frame (~40 % duty at 8.4 Hz). The UI stayed
+operable in every journey (Pause/End/keyboard), but input can wait up to one
+inference. Moving `detectForVideo` to a worker (ImageBitmap transfer;
+tasks-vision 0.10.17 needs a classic worker) would remove both that and the
+warm-up freeze. It is the first P1B performance item.
+
+## Known limitations (measured)
+
+- **Second person.** In VIDEO (tracking) mode MediaPipe does not reliably
+  report a person who walks in. In the composite test it returned 2 poses for
+  only ~0.3 s of a ~2.5 s overlap. The surrounding frames dropped out and the
+  overlapping cycle came out UNCERTAIN, but a second person tracked *instead
+  of* the athlete is not reliably detected. The only guard is the
+  hip-discontinuity rule. No identity tracking is claimed.
+- A borderline oblique view passes the 1 s setup check; the live view
+  warning and End Set abstention catch it (real goblet clip).
+- Effective rate is ~8.4 Hz, not 10: rVFC drops frames while the main
+  thread is busy (~220 per 32 s not delivered).
+- Mobile devices, Safari and Firefox are unmeasured.
+
+## P1A accuracy-evaluation criteria (proposed, not run)
+
+≥ 30 consenting live sessions recorded *alongside* the live run (the
+recording is for annotation only and is never part of the product), ≥ 10
+people, ≥ 3 phone models + 1 laptop, varied light, side view; two independent
+annotators mark each rep's start / turning point / end and full vs partial.
+Report: per-set count absolute error (target median 0, ≤ 1 in ≥ 90 % of sets),
+false COMPLETED per set (target ≤ 0.1), boundary error vs annotation (median
+≤ 200 ms), UNCERTAIN rate on clean sets, abstention precision/recall on
+deliberately bad setups (frontal, two people, partial body, hand-held),
+pause/loss behaviour (no joined phases), and live-vs-upload agreement on the
+same recording. Device metrics per class: analysed fps, inference p95,
+rep-to-screen p95, warm-up time, heap after 3 sets. Thresholds may only be
+tuned on a split that is not then used to report.
+
+## Tests
+
+`lib/setvision/__tests__/form-coach-live.test.ts` (24, synthetic): scheduler,
+live == clip equivalence, unique emission, phases, pause/loss/stall/
+mid-rep start/two people/frame size, live view warning, End-Set abstention,
+corrections provenance, readiness, camera error mapping, no-network/DB source
+guard. Browser harness (session scratchpad, not committed): main journey at
+320/390/768/1440, tracking loss, second person, oblique, pause + route
+change, denied, simulated device errors, unsupported exercise, keyboard, and
+the physical-camera lifecycle.
