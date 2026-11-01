@@ -19,6 +19,10 @@ import {
 
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 
+import {
+  GOOGLE_UNAVAILABLE_MESSAGE,
+  useGoogleAuthEnabled,
+} from "@/lib/auth/google-availability";
 import { getSafeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/client";
 import { SquatLifterFigure } from "@/components/brand/athletic-figures";
@@ -100,6 +104,7 @@ function LoginContent() {
   );
 
   const isLoading = loadingType !== null;
+  const googleEnabled = useGoogleAuthEnabled();
 
   async function handleEmailLogin(
     event: FormEvent<HTMLFormElement>,
@@ -442,7 +447,10 @@ function LoginContent() {
         {/* Google */}
         <button
           type="button"
-          disabled={isLoading}
+          disabled={isLoading || googleEnabled === false}
+          aria-describedby={
+            googleEnabled === false ? "google-unavailable" : undefined
+          }
           onClick={handleGoogleLogin}
           className="flex h-14 w-full items-center justify-center gap-3 rounded-md border border-mf-glass-border-strong bg-mf-glass-surface px-6 font-semibold text-mf-glass-text transition hover:bg-mf-glass-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -458,6 +466,15 @@ function LoginContent() {
             </>
           )}
         </button>
+
+        {googleEnabled === false ? (
+          <p
+            id="google-unavailable"
+            className="mt-3 text-center text-sm text-zinc-400"
+          >
+            {GOOGLE_UNAVAILABLE_MESSAGE}
+          </p>
+        ) : null}
 
         <p className="mt-8 text-center text-sm text-zinc-400">
           New to Muscle Fitness?{" "}

@@ -30,6 +30,11 @@ import {
 } from "@/lib/auth/redirect-url";
 
 import {
+  GOOGLE_UNAVAILABLE_MESSAGE,
+  useGoogleAuthEnabled,
+} from "@/lib/auth/google-availability";
+
+import {
   createClient,
 } from "@/lib/supabase/client";
 
@@ -398,6 +403,9 @@ export function RegisterForm() {
     pending !==
     null;
 
+  const googleEnabled =
+    useGoogleAuthEnabled();
+
   // Until hydration the submit handler isn't attached; a native submit would send the fields as a GET query string.
   const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
 
@@ -588,7 +596,13 @@ export function RegisterForm() {
       <button
         type="button"
         disabled={
-          disabled
+          disabled ||
+          googleEnabled === false
+        }
+        aria-describedby={
+          googleEnabled === false
+            ? "google-unavailable"
+            : undefined
         }
         onClick={
           handleGoogleRegister
@@ -610,6 +624,15 @@ export function RegisterForm() {
           </>
         )}
       </button>
+
+      {googleEnabled === false ? (
+        <p
+          id="google-unavailable"
+          className="text-center text-sm text-zinc-400"
+        >
+          {GOOGLE_UNAVAILABLE_MESSAGE}
+        </p>
+      ) : null}
 
       <p className="text-center text-sm text-zinc-400">
         Already have an account?{" "}
