@@ -489,9 +489,9 @@ function Results({
               <div className="flex shrink-0 flex-wrap items-center gap-2 sm:w-64">
                 <span className="text-sm font-semibold text-mf-glass-text">{c.label}</span>
               </div>
-              <div className="flex shrink-0 gap-2 sm:w-56">
-                <StatusBadge label={c.result.replace("_", " ")} tone={RESULT_TONE[c.result]} />
-                <StatusBadge label={STATUS_LABEL[c.status]} tone="neutral" />
+              <div className="flex shrink-0 flex-wrap gap-2 sm:w-72">
+                <StatusBadge label={c.result.replace("_", " ")} tone={RESULT_TONE[c.result]} className="whitespace-nowrap" />
+                <StatusBadge label={STATUS_LABEL[c.status]} tone="neutral" className="whitespace-nowrap" />
               </div>
               <p className="min-w-0 text-sm text-mf-glass-text-secondary">{c.detail}</p>
             </li>
