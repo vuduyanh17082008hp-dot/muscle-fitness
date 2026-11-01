@@ -804,12 +804,16 @@ warm-up freeze. It is the first P1B performance item.
 
 ## Known limitations (measured)
 
-- **Second person.** In VIDEO (tracking) mode MediaPipe does not reliably
-  report a person who walks in. In the composite test it returned 2 poses for
-  only ~0.3 s of a ~2.5 s overlap. The surrounding frames dropped out and the
-  overlapping cycle came out UNCERTAIN, but a second person tracked *instead
-  of* the athlete is not reliably detected. The only guard is the
-  hip-discontinuity rule. No identity tracking is claimed.
+- **Second person — multi-person abstention FAILS on the test input.** In
+  VIDEO (tracking) mode MediaPipe does not reliably report a person who walks
+  in. Composite test (second real squatter visible for 2.5 s beside the
+  athlete): in one run it returned 2 poses for ~0.4 s and the overlapping
+  cycle was UNCERTAIN; in the rerun it never returned 2 poses, so nothing was
+  discarded for that reason. A second person, or one tracked *instead of*
+  the athlete, is not reliably detected. The only other guard is the
+  hip-discontinuity rule. No identity tracking is claimed. Candidate fixes
+  for P1B: periodic IMAGE-mode re-detection, or a person-count check on a
+  separate detector.
 - A borderline oblique view passes the 1 s setup check; the live view
   warning and End Set abstention catch it (real goblet clip).
 - Effective rate is ~8.4 Hz, not 10: rVFC drops frames while the main
