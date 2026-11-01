@@ -48,6 +48,8 @@ export type CompletedRep = {
   repNumber: number;
   /** Timestamp (ms) the descent phase started — i.e. the rep's "top". */
   topAtMs: number;
+  /** False when the rep was already at the bottom when tracking (re)started — its descent and hold were not observed. */
+  startObserved: boolean;
   bottomAtMs: number;
   ascentStartAtMs: number;
   ascentEndAtMs: number;
@@ -80,9 +82,16 @@ export type RepRom = {
 
 export type RepTempo = {
   repNumber: number;
-  eccentricSec: number;
-  pauseSec: number;
+  /** Null when the descent was not observed (clip/tracking began at the bottom). */
+  eccentricSec: number | null;
+  /** Time held at the bottom (isometric hold) — kept separate from eccentric/concentric. Null when not observed. */
+  pauseSec: number | null;
   concentricSec: number;
+  /** Video-relative phase boundaries (ms), so every duration above is traceable to a moment in the clip. */
+  descentStartMs: number | null;
+  bottomReachedMs: number | null;
+  ascentStartMs: number;
+  repEndMs: number;
 };
 
 export type RepVelocity = {

@@ -1,4 +1,3 @@
-import { checkVisibility } from "@/lib/form-coach/geometry";
 import type { ExerciseConfig } from "@/lib/setvision/exercise-config";
 import type {
   CompletedRep,
@@ -29,6 +28,13 @@ const SMOOTHING_WINDOW = 3;
 const MIN_TRANSITION_HOLD_MS = 60;
 const MIN_MS_BETWEEN_REPS = 400;
 const HYSTERESIS_DEG = 5;
+/**
+ * A gap between clearly tracked frames longer than this means the
+ * movement in between was not observed: any rep in progress is dropped
+ * (never stitched across the gap) and the machine re-arms only once
+ * the lifter is seen at the top or bottom position again.
+ */
+export const MAX_TRACKING_GAP_MS = 1000;
 
 export function createRepStateMachine(config: ExerciseConfig) {
   let phase: RepPhase = "top";
@@ -36,6 +42,12 @@ export function createRepStateMachine(config: ExerciseConfig) {
   let repCount = 0;
   let lastRepCompletedAtMs = -Infinity;
   let hasPassedBottom = false;
+  /** False until the lifter has been seen clearly at the top (or bottom) — i.e. at clip start and after tracking loss. */
+  let armed = false;
+  /** Whether the current rep's descent was actually observed from the top. */
+  let repStartObserved = true;
+  let lastVisibleAtMs = -Infinity;
+  let droppedReps = 0;
 
   const angleBuffer: number[] = [];
 
@@ -60,6 +72,10 @@ export function createRepStateMachine(config: ExerciseConfig) {
     repCount = 0;
     lastRepCompletedAtMs = -Infinity;
     hasPassedBottom = false;
+    armed = false;
+    repStartObserved = true;
+    lastVisibleAtMs = -Infinity;
+    droppedReps = 0;
     angleBuffer.length = 0;
     repTopAtMs = 0;
     repBottomAtMs = 0;
@@ -71,25 +87,62 @@ export function createRepStateMachine(config: ExerciseConfig) {
     repBarProxyTrack = [];
   }
 
+  function beginRep(timestampMs: number, angle: number) {
+    repTopAtMs = timestampMs;
+    repMinAngle = angle;
+    repMaxAngle = angle;
+    repBottomBarProxy = null;
+    repBottomFrame = null;
+    repBarProxyTrack = [];
+    hasPassedBottom = false;
+  }
+
   function processFrame({ timestampMs, frame }: TimedPoseFrame): RepStateMachineResult {
-    const requiredPoints = config.requiredLandmarks.map(
-      (base) => frame[`left_${base}`] ?? frame[`right_${base}`] ?? null,
-    );
-
-    const visibility = checkVisibility(requiredPoints);
-
-    if (!visibility.ok) {
-      return { phase, repCount, lastCompletedRep: null, visible: false };
-    }
-
+    // primaryAngleDeg is null unless one body side's joints are all
+    // clearly tracked (exercise-config.ts::sameSidePoints).
     const rawAngle = config.primaryAngleDeg(frame);
 
     if (rawAngle === null) {
       return { phase, repCount, lastCompletedRep: null, visible: false };
     }
 
+    if (timestampMs - lastVisibleAtMs > MAX_TRACKING_GAP_MS && lastVisibleAtMs > -Infinity) {
+      if (phase !== "top") droppedReps += 1;
+      phase = "top";
+      phaseEnteredAt = timestampMs;
+      hasPassedBottom = false;
+      armed = false;
+      angleBuffer.length = 0;
+    }
+    lastVisibleAtMs = timestampMs;
+
     const angle = smooth(rawAngle);
     const barProxy = config.barProxy(frame);
+
+    if (!armed) {
+      // Clip start or resumed tracking: only a clearly observed top or
+      // bottom position is a trustworthy place to start counting from.
+      if (angle >= config.topAngleThresholdDeg) {
+        armed = true;
+        repStartObserved = true;
+        phase = "top";
+        phaseEnteredAt = timestampMs;
+      } else if (angle <= config.bottomAngleThresholdDeg) {
+        // Already at the bottom (e.g. a deadlift set starting from the
+        // floor, or a clip cut mid-rep): the ascent can still be
+        // observed, but this rep's descent and hold were not.
+        armed = true;
+        repStartObserved = false;
+        beginRep(timestampMs, angle);
+        hasPassedBottom = true;
+        repBottomAtMs = timestampMs;
+        if (barProxy) repBottomBarProxy = barProxy;
+        repBottomFrame = frame;
+        phase = "bottom";
+        phaseEnteredAt = timestampMs;
+      }
+      return { phase, repCount, lastCompletedRep: null, visible: true };
+    }
 
     const timeInPhase = timestampMs - phaseEnteredAt;
 
@@ -98,13 +151,8 @@ export function createRepStateMachine(config: ExerciseConfig) {
 
     if (phase === "top" && angle < config.topAngleThresholdDeg - HYSTERESIS_DEG) {
       nextPhase = "descent";
-      repTopAtMs = timestampMs;
-      repMinAngle = angle;
-      repMaxAngle = angle;
-      repBottomBarProxy = null;
-      repBottomFrame = null;
-      repBarProxyTrack = [];
-      hasPassedBottom = false;
+      repStartObserved = true;
+      beginRep(timestampMs, angle);
     } else if (
       phase === "descent" &&
       angle <= config.bottomAngleThresholdDeg &&
@@ -124,6 +172,15 @@ export function createRepStateMachine(config: ExerciseConfig) {
       repAscentStartAtMs = timestampMs;
     } else if (
       phase === "ascent" &&
+      angle <= config.bottomAngleThresholdDeg &&
+      timeInPhase >= MIN_TRANSITION_HOLD_MS
+    ) {
+      // Sank back into the hole (a wobble during a long bottom hold):
+      // still the same hold — the concentric clock restarts on the real
+      // drive up instead of absorbing the rest of the pause.
+      nextPhase = "bottom";
+    } else if (
+      phase === "ascent" &&
       angle >= config.topAngleThresholdDeg &&
       timeInPhase >= MIN_TRANSITION_HOLD_MS
     ) {
@@ -136,6 +193,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
         completedRep = {
           repNumber: repCount,
           topAtMs: repTopAtMs,
+          startObserved: repStartObserved,
           bottomAtMs: repBottomAtMs,
           ascentStartAtMs: repAscentStartAtMs,
           ascentEndAtMs: timestampMs,
@@ -173,7 +231,10 @@ export function createRepStateMachine(config: ExerciseConfig) {
     return { phase, repCount, lastCompletedRep: completedRep, visible: true };
   }
 
-  return { processFrame, reset };
+  /** In-progress reps discarded because tracking was lost mid-rep. */
+  const getDroppedReps = () => droppedReps;
+
+  return { processFrame, reset, getDroppedReps };
 }
 
 export type RepStateMachine = ReturnType<typeof createRepStateMachine>;

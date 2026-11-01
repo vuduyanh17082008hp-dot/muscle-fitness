@@ -1,4 +1,4 @@
-import { classifyExercise } from "@/lib/setvision/exercise-classifier";
+import { classifyExercise, estimateCameraView } from "@/lib/setvision/exercise-classifier";
 import { getExerciseConfig } from "@/lib/setvision/exercise-config";
 import { averageTorsoLength } from "@/lib/setvision/normalization";
 import { createRepStateMachine } from "@/lib/setvision/rep-state-machine";
@@ -26,6 +26,8 @@ import type {
  */
 
 const MIN_VISIBILITY_RATIO = 0.7;
+/** First classification signal when the user picked the exercise — the UI keys off it to say so. */
+export const MANUAL_SELECTION_SIGNAL = "Exercise was selected manually, not auto-detected.";
 const MIN_REPS_FOR_RELIABLE_CONSISTENCY = 3;
 
 function round(value: number, decimals = 2): number {
@@ -101,7 +103,7 @@ export function analyzeFrameSequence(
     ? {
         exercise: options.exercise,
         confidence: 1,
-        signals: ["Exercise was specified by the caller, not auto-classified."],
+        signals: [MANUAL_SELECTION_SIGNAL],
       }
     : classifyExercise(frames.map((f) => f.frame));
 
@@ -118,12 +120,14 @@ export function analyzeFrameSequence(
 
   const completedReps: CompletedRep[] = [];
   let visibleFrameCount = 0;
+  let finalPhase = "top";
 
   for (const timedFrame of frames) {
     const result = machine.processFrame(timedFrame);
 
     if (result.visible) {
       visibleFrameCount += 1;
+      finalPhase = result.phase;
     }
 
     if (result.lastCompletedRep) {
@@ -150,6 +154,31 @@ export function analyzeFrameSequence(
     );
   }
 
+  if (machine.getDroppedReps() > 0) {
+    limitations.push(
+      `Tracking was lost mid-movement ${machine.getDroppedReps()} time(s); those movements were not counted as reps.`,
+    );
+  }
+
+  if (finalPhase !== "top") {
+    limitations.push("The clip ends mid-movement; that last movement was not counted as a rep.");
+  }
+
+  if (completedReps.some((rep) => !rep.startObserved)) {
+    limitations.push(
+      "A rep began before tracking did (already at the bottom), so its eccentric and bottom-hold times are not reported.",
+    );
+  }
+
+  const { view } = estimateCameraView(frames.map((f) => f.frame));
+  const frontal = view === "frontal";
+
+  if (frontal) {
+    limitations.push(
+      "The camera faces the lifter, so joint angles are 2D projections: ROM % is not reported, and rep timing comes from the projected joint-angle trace.",
+    );
+  }
+
   const torsoLength = averageTorsoLength(frames.map((f) => f.frame));
 
   if (!torsoLength) {
@@ -158,7 +187,7 @@ export function analyzeFrameSequence(
     );
   }
 
-  const repRoms = computeAllRepRom(completedReps, config);
+  const repRoms = frontal ? [] : computeAllRepRom(completedReps, config);
   const repTempos = computeAllRepTempo(completedReps);
 
   const velocity = computeVelocity(completedReps, torsoLength, {

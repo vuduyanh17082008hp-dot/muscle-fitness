@@ -61,12 +61,53 @@ labeled video dataset in this project to train one on
    code comment explaining why the raw `inclinationFromVertical` output
    isn't symmetric around "vertical") distinguishes bench press (torso
    near-horizontal, ≥55°) from a standing lift.
-2. For standing lifts, squat vs. deadlift: first checks whether the sequence
-   starts already hip-flexed (a deadlift starts from the floor; a squat
-   starts standing) via the hip angle on the first frame; falls back to
-   comparing observed knee-angle-range vs. squat's reference range against
-   observed hip-angle-range vs. deadlift's reference range, picking whichever
-   residual is smaller.
+2. Camera view gate: when the two hips sit more than 0.35× torso length
+   apart (median over clearly tracked frames), the camera faces the lifter.
+   Sagittal knee/hip angles are then 2D projections (a front-view squat's
+   thigh foreshortens and its "hip angle" collapses like a hinge), so the
+   classifier **abstains** (`exercise: null`) and asks the user to choose.
+3. Side-on (or unknown) view: squat vs. deadlift by the ratio of robust
+   (p95 − p5) knee-flexion range to hip-flexion range. ≥ 0.8 → squat (knee
+   and hip bend together); ≤ 0.55 → deadlift (hip-dominant hinge); between
+   → abstain. Under 30° of movement on both joints → abstain.
+
+All joint angles take every point from **one body side** — the side whose
+weakest keypoint scores higher — and only when that score is ≥ 0.4
+(`exercise-config.ts::sameSidePoints`).
+
+**Correction 2026-11-01.** Until then each joint's side was chosen
+independently (`getBestSide` per joint) with no score floor, and squat vs.
+deadlift was decided by (a) "the FIRST frame's hip angle < 110° → deadlift,
+0.75" and (b) which observed range sat closer to an arbitrary reference
+range. On a real front-view bodyweight squat with an ~8 s bottom hold, the
+side mixing made a standing knee read 107° one sample and 178° the next and
+the mid-hold hip angle 52°, so the clip came out as "deadlift — 1 rep" with
+6–7 s eccentric/concentric phases (the 75% vs 76% shown depended on which of
+the two wrong branches a run hit). Replaying real MoveNet frames from eight
+clips through the old code: all five squat clips (including two side-on
+kettlebell squats) were labelled deadlift, and a real deadlift demo was
+labelled squat. Rule (b) also penalised deep squats for exceeding the
+reference range.
+
+Results of the corrected classifier on those same real frames (author's
+visual labels, not independent annotation; MoveNet output varies slightly
+run to run):
+
+| Clip (view) | Visual label | Old | New |
+|---|---|---|---|
+| 10-count squat (front, 35 s) | squat, 1 rep, ~8 s hold | deadlift, 1 rep | abstain (front view) |
+| kettlebell squat A (side) | squat, 3 reps + pickup + cut final rep | deadlift, 4 reps | squat, 3 reps |
+| kettlebell squat B (side) | squat, 4 reps (1st starts in the hole) + put-down | deadlift, 4 reps | squat, 4 reps (1st: descent not observed) |
+| barbell back squat (rear-oblique, 7 s) | squat, 2 reps | deadlift, 1 rep | squat, 2 reps |
+| CDC half squat (front/oblique) | squat | deadlift | abstain (front view) |
+| goblet squat (front/oblique) | squat | deadlift | abstain (front view) |
+| deadlift demo (rear-oblique, real person) | deadlift | squat | abstain (front/rear view) |
+| deadlift (side, rendered mannequin) | deadlift | deadlift | abstain (knee/hip ratio 0.70) |
+
+**No real clip was recognised as deadlift by the corrected classifier**;
+deadlift recognition is exercised only by synthetic side-view poses. Eight
+clips cannot establish accuracy for either class. The score in
+`confidence` is an uncalibrated margin, never shown as a percentage.
 
 This is deliberately simple and inspectable — every classification returns
 its own `signals: string[]` explaining what drove it. **It has not been
@@ -100,6 +141,27 @@ An aborted rep (stood back up without reaching the bottom threshold) is
 explicitly detected and not counted — same principle as the live Form Coach
 squat analyzer.
 
+Observation rules (2026-11-01):
+
+- **Arming.** Counting starts only once the lifter is clearly seen at the
+  top (angle ≥ top threshold) or the bottom (≤ bottom threshold). A clip
+  that starts at the bottom (deadlift from the floor, clip cut mid-rep)
+  still counts the observed ascent, but that rep's eccentric and hold are
+  `null` ("not observed"), never measured from the first frame.
+- **Tracking loss.** A gap > 1 s between clearly tracked frames drops the
+  rep in progress (listed in `limitations`) and re-arms; reps are never
+  stitched across unobserved time.
+- **Bottom hold.** Sinking back to ≤ bottom threshold during the ascent
+  returns to BOTTOM, so a wobble mid-hold neither adds a rep nor starts the
+  concentric clock early.
+- **Clip ends mid-movement.** Not counted; noted in `limitations`.
+- A completed rep is an observed down-and-up cycle — not a judgement of
+  depth standard, form or safety. Picking up equipment with a hip hinge
+  does not reach the squat's 90° knee threshold and is not counted; a
+  squat-depth pickup would be (no object awareness).
+- Camera facing the lifter + exercise chosen manually: reps and timing still
+  come from the projected angle trace, ROM % is withheld.
+
 ## Range of motion (spec §15)
 
 `romPercent = (observed angle range this rep) / (per-exercise reference
@@ -113,7 +175,16 @@ that silently hidden by a cap.
 Directly derived from the rep state machine's own phase-transition
 timestamps — eccentric = descent duration, pause = bottom-hold duration,
 concentric = ascent duration. Cannot disagree with the rep boundaries shown
-elsewhere, because there is no separate estimation step.
+elsewhere, because there is no separate estimation step. Each rep also
+carries its video-relative boundaries (`descentStartMs`, `bottomReachedMs`,
+`ascentStartMs`, `repEndMs`), shown as a seekable rep timeline.
+
+Boundaries are threshold crossings of a 3-sample smoothed angle at 10 Hz, so
+they trail the visible start of a movement. On the 10-count squat (squat
+selected manually) they were 17.4 / 18.2 / 26.7 / 27.3 s against the
+author's frame-by-frame reading (5 fps) of ≈17.0 / 18.1 / 26.3 / 27.1 s
+(±0.2 s): within +0.4 s. Treat ±0.5 s as the expected tolerance; this
+single comparison is not an evaluation.
 
 ## Bar path (spec §17) — explicitly labeled MVP method
 
@@ -273,6 +344,16 @@ known 4x-slowdown case, graceful degradation with no torso length),
 exercise-classifier (all three exercises, too-few-frames degradation), full
 `analyzeFrameSequence` integration (schema shape, explicit-exercise
 override, empty-input handling), and the benchmark framework itself.
+
+`legacy-regression.test.ts` (2026-11-01, 21 tests, synthetic poses) pins
+the misclassification correction: one-side angles, front-view abstention,
+side-view squat/deadlift/ambiguous, hip-flexed or low-score first frame,
+long bottom hold + mid-hold wobble, slow/partial reps, equipment pickup,
+clip starting/ending mid-rep, tracking loss, single-rep consistency,
+unusable video, and P0's duration rejection of the regression clip. 14 of
+them fail against the pre-correction code. The real clips stay out of the
+repo (third-party media); replays of their pose frames are summarised in
+the classification section.
 
 ## Known limitations
 

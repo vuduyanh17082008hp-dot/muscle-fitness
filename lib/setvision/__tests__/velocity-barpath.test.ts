@@ -15,6 +15,7 @@ function rep(overrides: Partial<CompletedRep> = {}): CompletedRep {
   return {
     repNumber: 1,
     topAtMs: 0,
+    startObserved: true,
     bottomAtMs: 500,
     ascentStartAtMs: 500,
     ascentEndAtMs: 1500,

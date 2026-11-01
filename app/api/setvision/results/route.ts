@@ -41,8 +41,8 @@ const analysisSchema = z.object({
     tempo: z.array(
       z.object({
         repNumber: z.number(),
-        eccentricSec: z.number(),
-        pauseSec: z.number(),
+        eccentricSec: z.number().nullable(),
+        pauseSec: z.number().nullable(),
         concentricSec: z.number(),
       }),
     ),

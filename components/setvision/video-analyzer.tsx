@@ -103,6 +103,13 @@ export function VideoAnalyzer() {
     }
   }, [exerciseOverride]);
 
+  const handleSeek = useCallback((ms: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = ms / 1000;
+    video.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, []);
+
   const handleSave = useCallback(async () => {
     if (!analysis || !videoFile) return;
 
@@ -298,9 +305,11 @@ export function VideoAnalyzer() {
         ) : null}
       </article>
 
-      {analysis ? (
+      {analysis ? <SetVisionResultsPanel analysis={analysis} onSeek={handleSeek} /> : null}
+
+      {/* An unidentified exercise has nothing truthful to save or hand to Dante. */}
+      {analysis && analysis.exerciseClassification.exercise !== null ? (
         <>
-          <SetVisionResultsPanel analysis={analysis} />
 
           <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">

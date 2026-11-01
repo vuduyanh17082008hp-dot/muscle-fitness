@@ -1,4 +1,4 @@
-import { angleAt, getBestSide, midpoint } from "@/lib/form-coach/geometry";
+import { angleAt, MIN_LANDMARK_SCORE, midpoint } from "@/lib/form-coach/geometry";
 import type { Landmark, PoseFrame, SetVisionExerciseId } from "@/lib/setvision/types";
 
 /**
@@ -37,35 +37,41 @@ export type ExerciseConfig = {
   referenceRangeDeg: number;
 };
 
-function benchElbowAngle(frame: PoseFrame): number | null {
-  const shoulder = getBestSide(frame, "shoulder");
-  const elbow = getBestSide(frame, "elbow");
-  const wrist = getBestSide(frame, "wrist");
+/**
+ * All joints of one angle from the SAME body side — whichever side's
+ * weakest keypoint scores higher — or null when neither side clears
+ * MIN_LANDMARK_SCORE. Picking each joint's side independently (the
+ * old getBestSide-per-joint approach) mixes left and right joints a
+ * hip-width apart whenever the camera is not side-on; on a real
+ * front-view squat that made a standing knee read 107° one frame and
+ * 178° the next, which drove both a false "deadlift" label and
+ * multi-second phantom eccentric/concentric phases.
+ */
+export function sameSidePoints(frame: PoseFrame, joints: string[]): Landmark[] | null {
+  let best: Landmark[] | null = null;
+  let bestScore = -Infinity;
 
-  if (!shoulder || !elbow || !wrist) return null;
+  for (const side of ["left", "right"]) {
+    const points = joints.map((joint) => frame[`${side}_${joint}`]);
+    if (points.some((p) => !p)) continue;
+    const score = Math.min(...points.map((p) => p!.score));
+    if (score > bestScore) {
+      best = points as Landmark[];
+      bestScore = score;
+    }
+  }
 
-  return angleAt(shoulder, elbow, wrist);
+  return best && bestScore >= MIN_LANDMARK_SCORE ? best : null;
 }
 
-function squatKneeAngle(frame: PoseFrame): number | null {
-  const hip = getBestSide(frame, "hip");
-  const knee = getBestSide(frame, "knee");
-  const ankle = getBestSide(frame, "ankle");
-
-  if (!hip || !knee || !ankle) return null;
-
-  return angleAt(hip, knee, ankle);
+function sameSideAngle(frame: PoseFrame, joints: [string, string, string]): number | null {
+  const points = sameSidePoints(frame, joints);
+  return points ? angleAt(points[0], points[1], points[2]) : null;
 }
 
-function deadliftHipAngle(frame: PoseFrame): number | null {
-  const shoulder = getBestSide(frame, "shoulder");
-  const hip = getBestSide(frame, "hip");
-  const knee = getBestSide(frame, "knee");
-
-  if (!shoulder || !hip || !knee) return null;
-
-  return angleAt(shoulder, hip, knee);
-}
+const benchElbowAngle = (frame: PoseFrame) => sameSideAngle(frame, ["shoulder", "elbow", "wrist"]);
+const squatKneeAngle = (frame: PoseFrame) => sameSideAngle(frame, ["hip", "knee", "ankle"]);
+const deadliftHipAngle = (frame: PoseFrame) => sameSideAngle(frame, ["shoulder", "hip", "knee"]);
 
 function wristMidpoint(frame: PoseFrame): Landmark | null {
   const left = frame.left_wrist;
