@@ -8,7 +8,7 @@ import { VideoAnalyzerClient } from "@/components/setvision/video-analyzer-clien
 export const metadata: Metadata = {
   title: "SetVision | Muscle Fitness",
   description:
-    "Upload a set of Bench Press, Squat or Deadlift and get rep count, ROM, tempo, velocity and technique consistency — analysed locally in your browser.",
+    "Choose your exercise and upload one set. Squats get rep count, phase timing and consistency analysed locally in your browser; deadlift is experimental; other exercises can be reviewed but are not measured.",
 };
 
 export default function SetVisionPage() {
@@ -32,15 +32,16 @@ export default function SetVisionPage() {
         </p>
 
         <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
-          Video analysis for Bench Press, Squat &amp; Deadlift
+          Video analysis of one set
         </h1>
 
         <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
-          Upload a video of one set. Pose estimation runs locally in your browser to
-          count reps, and estimate range of motion, tempo, bar-path consistency and
-          velocity loss. Velocity is a normalized, per-lifter speed measure unless you
-          note otherwise — never presented as true m/s without calibration. Nothing is
-          uploaded unless you choose to save.
+          Choose the exercise, then upload one set. For squats, pose estimation runs
+          locally in your browser to count reps and estimate phase timing, joint range,
+          bar-path consistency and velocity loss; deadlift analysis is experimental; any
+          other exercise can be labelled and reviewed, but SetVision does not measure it.
+          Velocity is a normalized, per-lifter speed measure — never true m/s without
+          calibration. Nothing is uploaded unless you choose to save.
         </p>
 
         <Link

@@ -594,7 +594,7 @@ export default async function WorkoutsPage() {
           badge="Beta"
           tone="neutral"
           title="SetVision"
-          description="Upload a set for rep count, ROM, tempo, bar-path consistency and velocity loss on Bench, Squat and Deadlift."
+          description="Choose your exercise and upload a set: rep count, phase timing and consistency for squats; deadlift is experimental; other lifts can be reviewed, not measured."
         />
       </div>
 
