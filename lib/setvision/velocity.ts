@@ -25,6 +25,14 @@ import type { CompletedRep, RepVelocity, VelocityResult } from "@/lib/setvision/
  * training tools like this are normally used for).
  */
 
+/**
+ * A barbell's mean concentric speed is roughly 0.2–2 m/s and a torso roughly
+ * 0.4–0.6 m, i.e. well under 10 torso-lengths/s. A higher normalized speed means
+ * the proxy jumped between mis-tracked points, so the rep gets no speed at all.
+ */
+// ponytail: a-priori bound, not fitted to labeled clips.
+export const MAX_PLAUSIBLE_TORSO_LENGTHS_PER_SEC = 10;
+
 function round(value: number, decimals = 3): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
@@ -61,6 +69,11 @@ function computeRepConcentricSpeed(
   }
 
   const speedTorsoLengthsPerSec = pathLength / torsoLength / durationSec;
+
+  // Not a value: tracking noise, not motion (see MAX_PLAUSIBLE_TORSO_LENGTHS_PER_SEC).
+  if (!Number.isFinite(speedTorsoLengthsPerSec) || speedTorsoLengthsPerSec > MAX_PLAUSIBLE_TORSO_LENGTHS_PER_SEC) {
+    return null;
+  }
 
   return { repNumber: rep.repNumber, meanSpeed: round(speedTorsoLengthsPerSec) };
 }

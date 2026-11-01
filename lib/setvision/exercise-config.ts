@@ -53,7 +53,7 @@ export function sameSidePoints(frame: PoseFrame, joints: string[]): Landmark[] |
 
   for (const side of ["left", "right"]) {
     const points = joints.map((joint) => frame[`${side}_${joint}`]);
-    if (points.some((p) => !p)) continue;
+    if (points.some((p) => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) continue;
     const score = Math.min(...points.map((p) => p!.score));
     if (score > bestScore) {
       best = points as Landmark[];
@@ -73,21 +73,32 @@ const benchElbowAngle = (frame: PoseFrame) => sameSideAngle(frame, ["shoulder", 
 const squatKneeAngle = (frame: PoseFrame) => sameSideAngle(frame, ["hip", "knee", "ankle"]);
 const deadliftHipAngle = (frame: PoseFrame) => sameSideAngle(frame, ["shoulder", "hip", "knee"]);
 
-function wristMidpoint(frame: PoseFrame): Landmark | null {
-  const left = frame.left_wrist;
-  const right = frame.right_wrist;
-
-  if (left && right) return midpoint(left, right);
-  return left ?? right ?? null;
+/** The named keypoint only when it is clearly tracked (score ≥ MIN_LANDMARK_SCORE) and has finite coordinates. */
+export function confidentPoint(frame: PoseFrame, name: string): Landmark | null {
+  const point = frame[name];
+  return point && point.score >= MIN_LANDMARK_SCORE && Number.isFinite(point.x) && Number.isFinite(point.y)
+    ? point
+    : null;
 }
 
-function shoulderMidpoint(frame: PoseFrame): Landmark | null {
-  const left = frame.left_shoulder;
-  const right = frame.right_shoulder;
+/**
+ * Bar-proxy point: midpoint of both sides when both are clearly tracked,
+ * else the one clearly tracked side (in a side view the two project onto
+ * nearly the same point), else null — a low-score keypoint never moves the
+ * bar-path or velocity trace.
+ */
+// ponytail: a front view where one side flickers below the floor makes the proxy
+// hop half a grip-width; a per-rep fixed side is the upgrade if that shows up in real clips.
+function confidentMidpoint(frame: PoseFrame, joint: string): Landmark | null {
+  const left = confidentPoint(frame, `left_${joint}`);
+  const right = confidentPoint(frame, `right_${joint}`);
 
   if (left && right) return midpoint(left, right);
-  return left ?? right ?? null;
+  return left ?? right;
 }
+
+const wristMidpoint = (frame: PoseFrame) => confidentMidpoint(frame, "wrist");
+const shoulderMidpoint = (frame: PoseFrame) => confidentMidpoint(frame, "shoulder");
 
 export const EXERCISE_CONFIGS: Record<SetVisionExerciseId, ExerciseConfig> = {
   bench_press: {

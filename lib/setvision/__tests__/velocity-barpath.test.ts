@@ -23,6 +23,7 @@ function rep(overrides: Partial<CompletedRep> = {}): CompletedRep {
     maxAngleDeg: 160,
     bottomBarProxy: null,
     bottomFrame: null,
+    deepestFrame: null,
     barProxyTrack: [],
     ...overrides,
   };

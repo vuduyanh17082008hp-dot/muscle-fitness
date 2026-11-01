@@ -26,7 +26,7 @@ describe("analyzeFrameSequence", () => {
     const result = analyzeFrameSequence(frames, { exercise: "bench_press" });
 
     expect(result.exercise).toBe("bench_press");
-    expect(result.exerciseClassification.confidence).toBe(1);
+    expect(result.exerciseClassification.confidence).toBeNull();
     expect(result.reps).toBe(2);
   });
 

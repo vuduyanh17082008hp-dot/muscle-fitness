@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import { analyzeFrameSequence, MANUAL_SELECTION_SIGNAL } from "@/lib/setvision/analyze";
 import { classifyExercise, estimateCameraView } from "@/lib/setvision/exercise-classifier";
 import { getExerciseConfig } from "@/lib/setvision/exercise-config";
+import { estimateTorsoLength } from "@/lib/setvision/normalization";
+import { computeRepRom } from "@/lib/setvision/rom";
 import { validateDecodedMedia } from "@/lib/setvision/squat-p0/extract";
-import type { Landmark, PoseFrame, TimedPoseFrame } from "@/lib/setvision/types";
+import type { CompletedRep, Landmark, PoseFrame, TimedPoseFrame } from "@/lib/setvision/types";
 
 /**
  * Regression suite for the legacy (MoveNet) SetVision misclassification
@@ -274,5 +276,174 @@ describe("SetVision P0 boundaries are unchanged for the regression clip", () => 
   it("rejects the 35.374 s, 1280×720 clip on duration before any analysis", () => {
     // Front-view abstention is covered in squat-p0.test.ts ("abstains on a frontal camera view").
     expect(validateDecodedMedia({ durationSec: 35.374, width: 1280, height: 720 })?.code).toBe("too_long");
+  });
+});
+
+/* ---------------------------------------------------------------------------
+   Correction round 2 (independent audit, 2026-11-01)
+--------------------------------------------------------------------------- */
+
+const frames = (t: TimedPoseFrame[]) => t.map((f) => f.frame);
+
+/** Same pose with both wrists moved to image height `y` (directly over the knee). */
+function withWrists(frame: PoseFrame, y: number): PoseFrame {
+  const knee = frame.left_knee!;
+  return { ...frame, left_wrist: p(knee.x, y), right_wrist: p(knee.x, y) };
+}
+
+/** Squat-depth pickup: knees bend exactly like squatDepth while the hands travel from hip height to the floor. */
+const squatPickupDepth = (d: number) => withWrists(squatDepth(d), 0.4 + d * 0.55);
+/** Dumbbells held at the sides: hands reach knee level and lower at every bottom. */
+const sideDumbbellSquatDepth = (d: number) => withWrists(squatDepth(d), 0.55 + d * 0.3);
+
+/** Shifts every right-side keypoint horizontally — an angled camera separates the hips. */
+function angled(frame: PoseFrame, dx: number): PoseFrame {
+  const out: PoseFrame = {};
+  for (const [name, pt] of Object.entries(frame)) {
+    out[name] = name.startsWith("right_") && pt ? { ...pt, x: pt.x + dx } : pt;
+  }
+  return out;
+}
+
+const squatSet = (n: number, at: (d: number) => PoseFrame = squatDepth, startMs = 0) =>
+  track(at, [stand(1000), ...Array.from({ length: n }, () => [down(1000), hold(300), up(1000), stand(800)]).flat()], startMs);
+
+describe("correction R2 — camera view uncertainty", () => {
+  it("abstains on a view that is neither side-on nor frontal (hips partly separated)", () => {
+    const clip = squatSet(2, (d) => angled(squatDepth(d), 0.1));
+    expect(estimateCameraView(frames(clip)).view).toBe("uncertain");
+    const result = classifyExercise(frames(clip));
+    expect(result.exercise).toBeNull();
+    expect(result.confidence).toBe(0);
+    expect(result.signals[0]).toMatch(/does not look side-on/);
+  });
+
+  it("abstains when the view cannot be verified (far hip and shoulder never clearly tracked)", () => {
+    const occluded = (d: number) => {
+      const f = squatDepth(d);
+      return { ...f, right_hip: { ...f.right_hip!, score: 0.2 }, right_shoulder: { ...f.right_shoulder!, score: 0.2 } };
+    };
+    const clip = squatSet(2, occluded);
+    expect(estimateCameraView(frames(clip)).view).toBe("unknown");
+    const result = classifyExercise(frames(clip));
+    expect(result.exercise).toBeNull();
+    expect(result.signals[0]).toMatch(/could not be verified/);
+  });
+
+  it("does not report a joint range when the view is not verified side-on, but still times the reps", () => {
+    const result = analyzeFrameSequence(squatSet(2, (d) => angled(squatDepth(d), 0.1)), { exercise: "squat" });
+    expect(result.reps).toBe(2);
+    expect(result.perRep.rom).toHaveLength(0);
+    expect(result.limitations.join(" ")).toMatch(/could not be verified as side-on/);
+  });
+
+  it("still suggests squat for a clean side-on squat", () => {
+    expect(classifyExercise(frames(squatSet(2))).exercise).toBe("squat");
+  });
+});
+
+describe("correction R2 — squat-depth equipment pickup", () => {
+  const pickup = track(squatPickupDepth, [stand(1000), down(1200), hold(500), up(1200), stand(1000)]);
+
+  it("auto-detect abstains on a squat-depth pickup instead of calling it a squat", () => {
+    const result = classifyExercise(frames(pickup));
+    expect(result.exercise).toBeNull();
+    expect(result.signals[0]).toMatch(/hands are at or below the knees/);
+  });
+
+  it("with squat chosen, sets the pickup aside as an outlier and keeps every genuine rep", () => {
+    const result = analyzeFrameSequence([...pickup, ...squatSet(2, squatDepth, 4900)], { exercise: "squat" });
+    expect(result.reps).toBe(2);
+    expect(result.perRep.tempo.map((t) => t.repNumber)).toEqual([1, 2]);
+    expect(result.perRep.tempo[0].descentStartMs!).toBeGreaterThan(4900);
+    expect(result.limitations.join(" ")).toMatch(/picked up or put down, so it was not counted/);
+  });
+
+  it("never suppresses a whole set of genuine hands-low squats — it flags the count instead", () => {
+    const result = analyzeFrameSequence(squatSet(3, sideDumbbellSquatDepth), { exercise: "squat" });
+    expect(result.reps).toBe(3);
+    expect(result.limitations.join(" ")).toMatch(/cannot be told apart/);
+  });
+
+  it("keeps an ambiguous lone pickup + one squat as 2 counted, flagged — no majority to call an outlier", () => {
+    const result = analyzeFrameSequence([...pickup, ...squatSet(1, squatDepth, 4900)], { exercise: "squat" });
+    expect(result.reps).toBe(2);
+    expect(result.limitations.join(" ")).toMatch(/cannot be told apart/);
+  });
+
+  it("leaves genuine hands-high squats untouched (no pickup note)", () => {
+    const result = analyzeFrameSequence(squatSet(3), { exercise: "squat" });
+    expect(result.reps).toBe(3);
+    expect(result.limitations.join(" ")).not.toMatch(/picked up|told apart/);
+  });
+});
+
+describe("correction R2 — auxiliary landmark confidence", () => {
+  it("bar proxy ignores low-score and non-finite keypoints", () => {
+    const deadlift = getExerciseConfig("deadlift");
+    const squat = getExerciseConfig("squat");
+    const base = squatDepth(0);
+    expect(deadlift.barProxy({ ...base, left_wrist: p(0.1, 0.1, 0.2), right_wrist: p(0.9, 0.9, 0.3) })).toBeNull();
+    expect(deadlift.barProxy({ ...base, left_wrist: p(0.4, 0.5), right_wrist: p(9, 9, 0.1) })).toEqual(p(0.4, 0.5));
+    expect(deadlift.barProxy({ ...base, left_wrist: p(Number.NaN, 0.5), right_wrist: p(0.6, 0.5) })).toEqual(p(0.6, 0.5));
+    expect(squat.barProxy({ ...base, left_shoulder: p(0.2, 0.2, 0.1), right_shoulder: p(0.8, 0.2, 0.1) })).toBeNull();
+  });
+
+  it("torso length needs one clearly tracked shoulder–hip side", () => {
+    const base = squatDepth(0);
+    const low = (pt: Landmark | undefined) => ({ ...pt!, score: 0.2 });
+    expect(estimateTorsoLength({ ...base, left_shoulder: low(base.left_shoulder), right_hip: low(base.right_hip) })).toBeNull();
+    expect(estimateTorsoLength(base)).toBeCloseTo(0.4, 2);
+  });
+
+  it("a low-score far-side shoulder flickering to garbage does not change speed or bar path", () => {
+    const clean = analyzeFrameSequence(squatSet(3), { exercise: "squat" });
+    const noisy = analyzeFrameSequence(
+      squatSet(3).map((f, i) => (i % 3 === 0 ? { ...f, frame: { ...f.frame, right_shoulder: p(5, -5, 0.1) } } : f)),
+      { exercise: "squat" },
+    );
+    expect(noisy.velocity.mean).toBe(clean.velocity.mean);
+    expect(noisy.technique.barPathConsistency).toBe(clean.technique.barPathConsistency);
+  });
+
+  it("never emits NaN/Infinity metrics when aux keypoints are untracked", () => {
+    const blind = squatSet(3).map((f) => ({
+      ...f,
+      frame: { ...f.frame, left_shoulder: p(0.5, 0, 0.1), right_shoulder: p(0.5, 0, 0.1) },
+    }));
+    const result = analyzeFrameSequence(blind, { exercise: "squat" });
+    expect(result.reps).toBe(3);
+    expect(result.velocity.mean).toBeNull();
+    expect(result.technique.barPathConsistency).toBeNull();
+    expect(JSON.stringify(result)).not.toMatch(/NaN|Infinity/);
+  });
+});
+
+describe("correction R2 — ROM and signal integrity", () => {
+  it("reports the observed 2D joint range from standing to the deepest point", () => {
+    const result = analyzeFrameSequence(squatSet(2), { exercise: "squat" });
+    expect(result.perRep.rom).toHaveLength(2);
+    for (const rom of result.perRep.rom) {
+      expect(rom.rangeDeg).toBeGreaterThan(95); // knee 178° → 78°
+      expect(rom.rangeDeg).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("gives no ROM entry for an impossible joint range instead of a fabricated value", () => {
+    const config = getExerciseConfig("squat");
+    const rep = (minAngleDeg: number, maxAngleDeg: number) => ({ repNumber: 1, minAngleDeg, maxAngleDeg }) as CompletedRep;
+    expect(computeRepRom(rep(Number.NaN, 170), config)).toBeNull();
+    expect(computeRepRom(rep(90, 90), config)).toBeNull();
+    expect(computeRepRom(rep(-30, 170), config)).toBeNull();
+    expect(computeRepRom(rep(80, 170), config)?.rangeDeg).toBe(90);
+  });
+
+  it("choosing the exercise manually does not raise the analysis-quality score", () => {
+    const clip = squatSet(3);
+    const auto = analyzeFrameSequence(clip);
+    const manual = analyzeFrameSequence(clip, { exercise: "squat" });
+    expect(auto.exerciseClassification.exercise).toBe("squat");
+    expect(manual.confidence).toBe(auto.confidence);
+    expect(manual.exerciseClassification.confidence).toBeNull();
   });
 });

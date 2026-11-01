@@ -48,7 +48,8 @@ export function computeRepHorizontalDeviation(
     return Math.max(max, deviation);
   }, 0);
 
-  return round(maxDeviation / torsoLength);
+  const normalized = maxDeviation / torsoLength;
+  return Number.isFinite(normalized) ? round(normalized) : null;
 }
 
 /**

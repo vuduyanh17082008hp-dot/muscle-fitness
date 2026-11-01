@@ -58,6 +58,9 @@ export function createRepStateMachine(config: ExerciseConfig) {
   let repMaxAngle = 0;
   let repBottomBarProxy: Landmark | null = null;
   let repBottomFrame: PoseFrame | null = null;
+  let repDeepestFrame: PoseFrame | null = null;
+  /** Highest angle seen while standing/locked out before the current rep — its true top, for the joint range. */
+  let topPeakAngle = 0;
   let repBarProxyTrack: Array<{ timestampMs: number; landmark: Landmark }> = [];
 
   function smooth(value: number): number {
@@ -84,15 +87,19 @@ export function createRepStateMachine(config: ExerciseConfig) {
     repMaxAngle = 0;
     repBottomBarProxy = null;
     repBottomFrame = null;
+    repDeepestFrame = null;
+    topPeakAngle = 0;
     repBarProxyTrack = [];
   }
 
-  function beginRep(timestampMs: number, angle: number) {
+  function beginRep(timestampMs: number, angle: number, frame: PoseFrame) {
     repTopAtMs = timestampMs;
     repMinAngle = angle;
-    repMaxAngle = angle;
+    repMaxAngle = Math.max(angle, topPeakAngle);
+    topPeakAngle = 0;
     repBottomBarProxy = null;
     repBottomFrame = null;
+    repDeepestFrame = frame;
     repBarProxyTrack = [];
     hasPassedBottom = false;
   }
@@ -113,6 +120,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
       hasPassedBottom = false;
       armed = false;
       angleBuffer.length = 0;
+      topPeakAngle = 0;
     }
     lastVisibleAtMs = timestampMs;
 
@@ -133,7 +141,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
         // observed, but this rep's descent and hold were not.
         armed = true;
         repStartObserved = false;
-        beginRep(timestampMs, angle);
+        beginRep(timestampMs, angle, frame);
         hasPassedBottom = true;
         repBottomAtMs = timestampMs;
         if (barProxy) repBottomBarProxy = barProxy;
@@ -152,7 +160,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
     if (phase === "top" && angle < config.topAngleThresholdDeg - HYSTERESIS_DEG) {
       nextPhase = "descent";
       repStartObserved = true;
-      beginRep(timestampMs, angle);
+      beginRep(timestampMs, angle, frame);
     } else if (
       phase === "descent" &&
       angle <= config.bottomAngleThresholdDeg &&
@@ -185,6 +193,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
       timeInPhase >= MIN_TRANSITION_HOLD_MS
     ) {
       nextPhase = "top";
+      repMaxAngle = Math.max(repMaxAngle, angle);
 
       if (hasPassedBottom && timestampMs - lastRepCompletedAtMs >= MIN_MS_BETWEEN_REPS) {
         repCount += 1;
@@ -201,6 +210,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
           maxAngleDeg: repMaxAngle,
           bottomBarProxy: repBottomBarProxy,
           bottomFrame: repBottomFrame,
+          deepestFrame: repDeepestFrame,
           barProxyTrack: repBarProxyTrack,
         };
       }
@@ -219,7 +229,10 @@ export function createRepStateMachine(config: ExerciseConfig) {
 
     phase = nextPhase;
 
-    if (phase === "descent" || phase === "bottom" || phase === "ascent") {
+    if (phase === "top") {
+      topPeakAngle = Math.max(topPeakAngle, angle);
+    } else {
+      if (angle < repMinAngle) repDeepestFrame = frame;
       repMinAngle = Math.min(repMinAngle, angle);
       repMaxAngle = Math.max(repMaxAngle, angle);
 

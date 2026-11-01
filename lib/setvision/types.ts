@@ -35,7 +35,8 @@ export type TimedPoseFrame = {
 
 export type ExerciseClassification = {
   exercise: SetVisionExerciseId | null;
-  confidence: number;
+  /** Uncalibrated heuristic margin in [0, 1], never a probability. Null when nothing was classified (the user chose the exercise). */
+  confidence: number | null;
   /** Short, human-readable notes on what drove the classification — never opaque. */
   signals: string[];
 };
@@ -59,6 +60,8 @@ export type CompletedRep = {
   bottomBarProxy: Landmark | null;
   /** Full pose frame at the bottom transition, so per-side asymmetry can be computed generically without the state machine knowing exercise-specific joint pairs. */
   bottomFrame: PoseFrame | null;
+  /** Full pose frame at the rep's smallest primary angle (deepest point). */
+  deepestFrame: PoseFrame | null;
   /** Bar-proxy landmark position at ascent start and ascent end, for velocity/bar-path. */
   barProxyTrack: Array<{ timestampMs: number; landmark: Landmark }>;
 };
@@ -76,7 +79,14 @@ export type RepStateMachineResult = {
 
 export type RepRom = {
   repNumber: number;
-  /** 0-100+. Can exceed 100 if the lifter's ROM exceeded the reference range (e.g. very mobile lifter) — not clamped, so it stays honest. */
+  /** Observed 2D range of the primary joint angle (standing/lockout minus deepest), degrees. What the UI shows. */
+  rangeDeg: number;
+  /**
+   * rangeDeg as a % of a rough, uncalibrated per-exercise reference range
+   * (exercise-config.ts). Full-depth reps routinely exceed 100% (169–191% on
+   * real side-view squats), so it is kept for benchmarks/history only and
+   * not shown as a ROM score.
+   */
   romPercent: number;
 };
 
@@ -138,6 +148,11 @@ export type SetVisionAnalysis = {
   averageConcentricTime: number | null;
   velocity: VelocityResult;
   technique: TechniqueConsistency;
+  /**
+   * Uncalibrated movement-analysis quality in [0, 1] from tracking visibility,
+   * rep count and torso visibility only — never from how the exercise was
+   * chosen, so picking an exercise cannot raise it. Not a probability.
+   */
   confidence: number;
   /** Per-rep detail, for the analysis UI and the ground-truth benchmarking tool — not part of the spec's summary example, but needed to render anything useful. */
   perRep: {
