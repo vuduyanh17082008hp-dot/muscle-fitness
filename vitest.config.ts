@@ -18,6 +18,8 @@ export default defineConfig({
     // existing lib/ test.
     include: ["lib/**/*.test.ts", "app/**/*.test.ts"],
     setupFiles: ["./test/setup.ts"],
+    // Fails the run if a partial or unreachable MF_TEST_* DB selection would make the DB suites skip or cross stacks.
+    globalSetup: ["./test/db-target-guard.ts"],
     environment: "node",
   },
 });

@@ -58,6 +58,14 @@ MF_TEST_DB_CONTAINER=supabase_db_mf-test-db MF_TEST_AUTH_CONTAINER=supabase_auth
 node scripts/test-db-stack.mjs stop   # remove it
 ```
 
+Set all four `MF_TEST_*` vars or none: `test/db-target-guard.ts` (vitest
+globalSetup) fails the run on a partial selection or an unreachable stack,
+so the DB suites can't silently skip or mix one stack's DB with another's API.
+Plain `npm test` still uses the shared stack; when that stack is behind (e.g.
+missing `20261101120000_hypertrophy_catalogue.sql`), `workout-runtime.db`
+A/D and B fail and `training-hold.db` skips — an environment gap, not a
+product bug. Use the isolated command above for a full DB run.
+
 ## Test checklist
 
 1. **Landing** — `/`
