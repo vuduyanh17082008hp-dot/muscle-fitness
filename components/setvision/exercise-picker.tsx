@@ -159,6 +159,8 @@ export function ExercisePicker({
               setOpen(false);
             }
           }}
+          // Reopened from "Change": that button is gone, so focus moves here (not on first page load).
+          autoFocus={Boolean(selection || autoDetect)}
           placeholder="Search exercises, e.g. bench, pulldown, curl"
           autoComplete="off"
           className="w-full rounded-xl border border-white/10 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-zinc-600"
