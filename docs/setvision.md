@@ -305,3 +305,126 @@ override, empty-input handling), and the benchmark framework itself.
   once real labeled data exists (spec explicitly cautions against an
   oversized network without sufficient data — a small model trained on a
   real dataset, not a deep network trained on nothing).
+
+---
+
+# P0 — evidence-grounded squat clip review (MediaPipe)
+
+Experimental spike, separate from the MoveNet analyzer above (which is
+untouched). Route `/dashboard/workouts/setvision/squat`, linked from the
+SetVision page. **Scope: bodyweight squat, side-on fixed camera, one person,
+uploaded clip ≤ 30 s / ≤ 150 MB.** It answers "which movement cycles happened
+and where in the video", with traceable evidence — not "was the squat good".
+
+## Pipeline
+
+```
+File → validateVideoFile (type/size)            lib/setvision/squat-p0/extract.ts
+     → openDecodedVideo + validateDecodedMedia  components/setvision/squat-p0/browser-media.ts
+       (first frame must decode; duration finite and ≤ 30 s)
+     → sampleObservations: seek → detect → yield, 10 Hz, one frame in flight
+       (seek reports whether a NEW frame was decoded; stale frames skip pose)
+     → MediaPipe Pose Landmarker (VIDEO mode, numPoses 2, GPU → CPU fallback)
+     → PoseObservation[]                         lib/setvision/squat-p0/types.ts
+     → quality gate (per frame + clip)           quality-gate.ts
+     → 2D knee angle → median-of-3               rep-counter.ts
+     → streaming state machine → RepEvent[]      rep-counter.ts
+     → SquatAnalysis (ANALYZED | INSUFFICIENT_EVIDENCE)   analyze.ts
+     → review UI                                 components/setvision/squat-p0/squat-p0-analyzer.tsx
+```
+
+The engine (`lib/setvision/squat-p0`) is DOM-free and deterministic: it only
+accepts `PoseObservation { timestampMs, timestampSource, frameStatus?,
+frameWidth, frameHeight, poseCount, landmarks }`. Timestamps are media time
+(the seek target the decoder settled on), never wall-clock. Coordinates are
+MediaPipe normalized image coordinates; all angles are 2D image-plane angles
+in pixel space — not 3D joint angles. `z`/world landmarks are unused.
+
+**Dependency.** `@mediapipe/tasks-vision@0.10.17` is resolved from
+node_modules, where it is pinned exactly by `@react-three/drei`. It is **not
+yet a direct dependency** because package.json / package-lock.json carry
+unowned uncommitted changes; declare it directly (exact `0.10.17`) once those
+are resolved. The WASM runtime is loaded from jsDelivr at the same pinned
+version and the `pose_landmarker_full` model from Google's model bucket. Only
+those two downloads leave the browser; video frames and landmarks never do.
+Nothing is persisted, no workout/database write exists, Dante is not involved.
+
+## Operational counting criterion
+
+A cycle starts when the knee angle leaves the standing band (< 150°, held
+≥ 100 ms) and ends when it is back (≥ 155°, held ≥ 100 ms). Boundaries follow
+the monotonic run around each crossing (start: walk back while the angle was
+still falling ≥ 1°/sample; end: walk forward while it still rises).
+
+| Outcome | Rule |
+|---|---|
+| COMPLETED | onset and end observed, no gap > 250 ms inside, min knee angle ≤ 120°, duration ≥ 400 ms |
+| PARTIAL | as above but min knee angle stayed > 120° |
+| UNCERTAIN | onset before first usable frame, gap 250–1000 ms inside, tracking lost (> 1000 ms, state resets), video ended mid-cycle, or < 400 ms |
+| INSUFFICIENT_EVIDENCE (clip) | < 10 usable frames or < 50 % usable, > 20 % multi-person frames, > 5 % bad timestamps, > 10 % stale (undecoded) frames, not side-on, or never seen standing — no count is shown |
+
+COMPLETED certifies none of: depth, technique, safety, competition validity,
+prescribed ROM, injury risk. A pause changes no condition; a bounce inside a
+cycle is a `reversal`, not a new rep. Every threshold lives in
+`lib/setvision/squat-p0/config.ts`; **none has been empirically evaluated**.
+The onset rule was revised once after the first real clip showed the
+original "within 3° of the standing peak" rule anchoring starts 1.6–3.6 s
+early (knees drift while standing) — that clip is therefore not an
+independent test of boundary timing.
+
+## Quality checks and their status
+
+| Check | Status |
+|---|---|
+| Frame timestamps (finite, increasing) | IMPLEMENTED_AND_MEASURED (deterministic, unit-tested) |
+| Every sampled position decoded (stale-frame detection via `getVideoPlaybackQuality`) | HEURISTIC_ONLY (browser-dependent) |
+| Single person (detector returns > 1 pose → frame discarded) | HEURISTIC_ONLY |
+| Hip/knee/ankle/shoulder visibility ≥ 0.5 on one locked side | HEURISTIC_ONLY |
+| Joints inside frame | HEURISTIC_ONLY |
+| Tracking continuity (hip jump > 0.5 × leg length) | HEURISTIC_ONLY |
+| Side-on view (median hip separation ≤ 0.35 × torso) | HEURISTIC_ONLY |
+| Feet/camera stayed put (ankle drift, warn only) | HEURISTIC_ONLY |
+| Camera stability | NOT_IMPLEMENTED — fixed camera required |
+| Lighting | NOT_IMPLEMENTED — shows up only as low visibility |
+
+No athlete lock: frames with two detected people are discarded, never
+re-assigned. Stale landmarks are never reused across a gap.
+
+## Evaluation status
+
+`lib/setvision/__tests__/squat-p0.test.ts` is **synthetic** (logic only).
+Real-world counting accuracy is **not established**
+(REAL_WORLD_COUNTING_EVALUATION = BLOCKED): no independently annotated
+bodyweight side-view clips exist. A local spot check on openly licensed
+Wikimedia Commons clips (not committed; author-annotated, not independent)
+is recorded in the P0 hand-off only. Known failure modes seen there: a hip
+hinge to pick up equipment counts as COMPLETED (any knee-flexion cycle
+matches the criterion); a rear-oblique barbell clip passed the side-view
+check (0.29).
+
+Protocol for a real evaluation: ≥ 30 consenting clips (varied people, light,
+phones), two independent annotators marking each rep's start / turning point
+/ end and partial vs full, CVAT offline if needed; report count absolute
+error, boundary error, partial-rep confusion, false positives per clip,
+abstention precision/recall on deliberately bad clips, processing time per
+device class. Thresholds may only be tuned on a split that is not then used
+to report accuracy.
+
+## Performance and limits
+
+Desktop Chrome (GPU delegate): ~35 ms mean inference, ~17 s for a 30 s clip.
+The **first inference blocks the main thread ~3 s** (GPU warm-up) — the one
+measured long task; every later frame yields. A Web Worker (ImageBitmap
+transfer, classic worker for tasks-vision 0.10.17) is the upgrade path.
+Mobile devices are unmeasured. `requestVideoFrameCallback` does not fire on
+the detached analysis video, so timestamps are seek targets (true frame PTS
+≤ target by < 1 frame).
+
+## Future live adapter (Form Coach) requirements
+
+A camera adapter must emit the same `PoseObservation`s with
+`timestampSource: "frame"` from `requestVideoFrameCallback` media time, feed
+`createSquatRepCounter().push()` with a 1-sample smoothing delay, lock the
+side from the first ~1 s instead of the whole clip, and never call
+`finish()` until the session ends. Live cues, athlete-follow framing and form
+grading are out of scope until counting has been evaluated.

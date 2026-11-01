@@ -416,11 +416,14 @@ function Results({
           </div>
         ) : (
           <>
-            <dl className="mt-4 grid grid-cols-3 gap-3" data-testid="sv-counts">
+            <dl className="mt-4 grid gap-2 min-[400px]:grid-cols-3 min-[400px]:gap-3" data-testid="sv-counts">
               {(["completed", "partial", "uncertain"] as const).map((k) => (
-                <div key={k} className="rounded-2xl border border-mf-glass-border bg-mf-glass-bg p-3 text-center">
+                <div
+                  key={k}
+                  className="flex items-center justify-between rounded-2xl border border-mf-glass-border bg-mf-glass-bg px-4 py-2 min-[400px]:block min-[400px]:p-3 min-[400px]:text-center"
+                >
                   <dt className="text-xs font-semibold uppercase tracking-wide text-mf-glass-text-muted">{k}</dt>
-                  <dd className="mt-1 text-3xl font-black tabular-nums text-mf-glass-text" data-testid={`sv-count-${k}`}>
+                  <dd className="text-2xl font-black tabular-nums text-mf-glass-text min-[400px]:mt-1 min-[400px]:text-3xl" data-testid={`sv-count-${k}`}>
                     {analysis.counts![k]}
                   </dd>
                 </div>

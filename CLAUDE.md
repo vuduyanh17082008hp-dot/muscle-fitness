@@ -173,6 +173,11 @@ see docs/setvision.md's Benchmarking section before ever quoting one.
 Persistence needs `supabase/migrations/20260916090000_setvision.sql`
 applied (not done automatically by this pass — review before running).
 
+SetVision **P0** (`lib/setvision/squat-p0/`, `/dashboard/workouts/setvision/squat`)
+is a separate MediaPipe-based spike: bodyweight squat, side view, ≤ 30 s,
+timestamped COMPLETED/PARTIAL/UNCERTAIN cycles with abstention. Unvalidated,
+no persistence — see docs/setvision.md "P0".
+
 ## HawkerLens SG
 
 This doc previously said "do not build yet" — that's stale. It's already
