@@ -724,6 +724,11 @@ function LiveStatus({ snapshot }: { snapshot: LiveSnapshot }) {
           {v.text}
         </p>
       </div>
+      {snapshot.viewWarning ? (
+        <p className="rounded-xl border border-mf-warning/30 bg-mf-warning/5 p-3 text-sm text-mf-glass-text" role="status" data-testid="fc-view-warning">
+          The camera doesn&apos;t look side-on, so this set will probably not be confirmed at the end. Turn side-on to the camera.
+        </p>
+      ) : null}
       <dl className="grid grid-cols-3 gap-2" data-testid="fc-live-counts">
         {(["completed", "partial", "uncertain"] as const).map((k) => (
           <div key={k} className="rounded-2xl border border-mf-glass-border bg-mf-glass-bg p-2 text-center">

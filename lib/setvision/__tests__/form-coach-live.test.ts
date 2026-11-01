@@ -214,6 +214,18 @@ describe("Form Coach P1A — interruptions and uncertainty", () => {
     expect(result.liveEvents.length).toBeGreaterThan(0);
   });
 
+  it("warns live when the set so far is not side-on, and End Set abstains for that reason", () => {
+    const { keys, end } = repKeys(2);
+    const obs = live(observe(keys, end, undefined, { hipSeparation: 0.2 }));
+    const { snaps, result } = runLive(obs, end);
+    expect(snaps[0].viewWarning).toBe(false);
+    expect(snaps[snaps.length - 1].viewWarning).toBe(true);
+    expect(result.analysis.status).toBe("INSUFFICIENT_EVIDENCE");
+    expect(result.analysis.insufficientReasons.join(" ")).toMatch(/side-on/);
+    const clean = runLive(live(observe(keys, end)), end);
+    expect(clean.snaps.some((s) => s.viewWarning)).toBe(false);
+  });
+
   it("keeps detected events and user corrections apart", () => {
     const { keys, end } = repKeys(2);
     const { result } = runLive(live(observe(keys, end)), end);

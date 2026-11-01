@@ -141,6 +141,8 @@ export type LiveSnapshot = {
   /** Live time (set clock) of the frame whose push confirmed the newest event; null when this push confirmed none. */
   confirmedAtMs: number | null;
   userPaused: boolean;
+  /** The set-so-far fails the clip-level side-view check, so End Set will most likely abstain. Re-checked every ~1 s. */
+  viewWarning: boolean;
 };
 
 export type LiveInterruption = { startMs: number; endMs: number; reason: "paused" | "camera" | "frame_size" | "hidden" };
@@ -189,6 +191,7 @@ export function createLiveSquatSession(side: Side) {
   let paused: LiveInterruption | null = null;
   let lastSize: string | null = null;
   let finished = false;
+  let viewWarning = false;
 
   function emit(s: AngleSample) {
     smoothed.push(s);
@@ -254,6 +257,7 @@ export function createLiveSquatSession(side: Side) {
       events,
       confirmedAtMs,
       userPaused: paused !== null,
+      viewWarning,
     };
   }
 
@@ -281,6 +285,10 @@ export function createLiveSquatSession(side: Side) {
         lastIssue = null;
         valid.push({ t: f.timestampMs, kneeDeg: f.kneeAngleDeg! });
         drain();
+        // Same rule End Set applies; a 1 s setup window can pass a borderline view that the whole set fails.
+        if (valid.length % 10 === 0) {
+          viewWarning = clipQualityChecks(observations, frames, side).checks.find((c) => c.id === "side_view")?.result === "fail";
+        }
       } else {
         lastIssue = f.issue;
         checkLoss(o.timestampMs);
