@@ -26,6 +26,13 @@ export default function SetVisionSquatPage() {
         title="Squat clip review"
         description="Upload a short side-on clip of bodyweight squats. Each detected movement cycle links to its moment in the video so you can check it yourself. Counts are unvalidated estimates: they do not judge depth, technique or safety, and nothing is saved to your workouts."
       />
+      <Link
+        href="/dashboard/workouts/form-coach/live"
+        className="inline-flex items-center gap-2 text-sm font-semibold text-mf-glass-text underline-offset-4 hover:underline"
+        data-testid="sv-live-link"
+      >
+        Prefer to count live from your camera? Try the Form Coach pilot →
+      </Link>
       <SquatP0Client />
     </div>
   );

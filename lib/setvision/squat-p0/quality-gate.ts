@@ -49,47 +49,34 @@ export function lockSide(observations: PoseObservation[]): Side | null {
   return mean(score.left) >= mean(score.right) ? "left" : "right";
 }
 
-/** Per-frame validity + the knee-angle feature. Pure; one pass in time order. */
-export function assessFrames(observations: PoseObservation[], side: Side | null): FrameAssessment[] {
-  const out: FrameAssessment[] = [];
+/**
+ * Per-frame validity + the knee-angle feature, one observation at a time in
+ * time order. The live camera adapter calls `assess` per frame; the clip path
+ * maps a whole array through it (assessFrames), so both share one gate.
+ */
+export function createFrameAssessor(side: Side | null) {
   let lastT = -Infinity;
   let lastValidHip: { t: number; hip: Px; leg: number } | null = null;
 
-  for (const o of observations) {
+  return function assess(o: PoseObservation): FrameAssessment {
     const t = o.timestampMs;
     const base = { timestampMs: t, valid: false, kneeAngleDeg: null };
 
-    if (!Number.isFinite(t) || t < 0 || t <= lastT) {
-      out.push({ ...base, issue: "invalid_timestamp" });
-      continue;
-    }
+    if (!Number.isFinite(t) || t < 0 || t <= lastT) return { ...base, issue: "invalid_timestamp" };
     lastT = t;
 
-    if (o.frameStatus === "stale") {
-      out.push({ ...base, issue: "stale_frame" });
-      continue;
-    }
+    if (o.frameStatus === "stale") return { ...base, issue: "stale_frame" };
 
     if (o.poseCount === 0 || !o.landmarks || !side) {
-      out.push({ ...base, issue: o.poseCount > 1 ? "multiple_people" : "no_pose" });
-      continue;
+      return { ...base, issue: o.poseCount > 1 ? "multiple_people" : "no_pose" };
     }
-    if (o.poseCount > 1) {
-      out.push({ ...base, issue: "multiple_people" });
-      continue;
-    }
+    if (o.poseCount > 1) return { ...base, issue: "multiple_people" };
 
     const l = o.landmarks[side];
     const pts = REQUIRED.map((j) => l[j]);
-    if (pts.some((p) => p.visibility < SQUAT_P0.minVisibility)) {
-      out.push({ ...base, issue: "low_visibility" });
-      continue;
-    }
+    if (pts.some((p) => p.visibility < SQUAT_P0.minVisibility)) return { ...base, issue: "low_visibility" };
     const m = SQUAT_P0.frameMargin;
-    if (pts.some((p) => p.x < -m || p.x > 1 + m || p.y < -m || p.y > 1 + m)) {
-      out.push({ ...base, issue: "out_of_frame" });
-      continue;
-    }
+    if (pts.some((p) => p.x < -m || p.x > 1 + m || p.y < -m || p.y > 1 + m)) return { ...base, issue: "out_of_frame" };
 
     const hip = px(l.hip, o);
     const knee = px(l.knee, o);
@@ -102,14 +89,17 @@ export function assessFrames(observations: PoseObservation[], side: Side | null)
       dist(hip, lastValidHip.hip) > SQUAT_P0.discontinuityLegRatio * Math.max(leg, lastValidHip.leg)
     ) {
       // Do not update lastValidHip: the jump itself is the suspect frame.
-      out.push({ ...base, issue: "discontinuity" });
-      continue;
+      return { ...base, issue: "discontinuity" };
     }
 
     lastValidHip = { t, hip, leg };
-    out.push({ timestampMs: t, valid: true, issue: null, kneeAngleDeg: angleAt(hip, knee, ankle) });
-  }
-  return out;
+    return { timestampMs: t, valid: true, issue: null, kneeAngleDeg: angleAt(hip, knee, ankle) };
+  };
+}
+
+/** Per-frame validity + the knee-angle feature. Pure; one pass in time order. */
+export function assessFrames(observations: PoseObservation[], side: Side | null): FrameAssessment[] {
+  return observations.map(createFrameAssessor(side));
 }
 
 /** Runs of invalid frames → intervals bounded by the surrounding valid frames. */

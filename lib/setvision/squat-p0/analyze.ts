@@ -5,8 +5,15 @@ import {
   clipQualityChecks,
   lockSide,
 } from "@/lib/setvision/squat-p0/quality-gate";
-import { createSquatRepCounter, smoothMedian3 } from "@/lib/setvision/squat-p0/rep-counter";
-import type { PoseObservation, RepCorrection, RepEvent, SquatAnalysis } from "@/lib/setvision/squat-p0/types";
+import { createSquatRepCounter, smoothMedian3, type AngleSample } from "@/lib/setvision/squat-p0/rep-counter";
+import type {
+  FrameAssessment,
+  PoseObservation,
+  RepCorrection,
+  RepEvent,
+  Side,
+  SquatAnalysis,
+} from "@/lib/setvision/squat-p0/types";
 
 const LIMITATIONS = [
   "Counts movement cycles only. It does not judge squat depth, technique, safety, competition validity or injury risk.",
@@ -26,12 +33,40 @@ export function analyzeSquatObservations(
 ): SquatAnalysis {
   const side = lockSide(observations);
   const frames = assessFrames(observations, side);
-  const trackingLoss = buildTrackingLoss(frames, durationMs);
-  const { checks, abstainReasons } = clipQualityChecks(observations, frames, side);
-
   const smoothed = smoothMedian3(
     frames.filter((f) => f.valid).map((f) => ({ t: f.timestampMs, kneeDeg: f.kneeAngleDeg! })),
   );
+  return assembleSquatAnalysis({
+    observations,
+    frames,
+    side,
+    smoothed,
+    durationMs,
+    countEvents: () => {
+      const counter = createSquatRepCounter();
+      for (const s of smoothed) counter.push(s);
+      return counter.finish();
+    },
+  });
+}
+
+/**
+ * Clip-level gate + evidence assembly shared by the uploaded-clip path
+ * (above) and the live camera session (live.ts), so both abstain for the
+ * same reasons. `countEvents` runs only when the evidence is sufficient.
+ */
+export function assembleSquatAnalysis(input: {
+  observations: PoseObservation[];
+  frames: FrameAssessment[];
+  side: Side | null;
+  smoothed: AngleSample[];
+  durationMs: number;
+  countEvents: () => RepEvent[];
+}): SquatAnalysis {
+  const { observations, frames, side, smoothed, durationMs } = input;
+  const trackingLoss = buildTrackingLoss(frames, durationMs);
+  const { checks, abstainReasons } = clipQualityChecks(observations, frames, side);
+
   const byT = new Map(smoothed.map((s) => [s.t, s.kneeDeg]));
   const series = frames
     .filter((f) => f.issue !== "invalid_timestamp")
@@ -61,10 +96,7 @@ export function analyzeSquatObservations(
     return { ...base, status: "INSUFFICIENT_EVIDENCE", insufficientReasons: abstainReasons, counts: null, events: [] };
   }
 
-  const counter = createSquatRepCounter();
-  for (const s of smoothed) counter.push(s);
-  const events = counter.finish();
-
+  const events = input.countEvents();
   return {
     ...base,
     status: "ANALYZED",
@@ -74,7 +106,7 @@ export function analyzeSquatObservations(
   };
 }
 
-function summarize(outcomes: string[]) {
+export function summarize(outcomes: string[]) {
   return {
     completed: outcomes.filter((o) => o === "COMPLETED").length,
     partial: outcomes.filter((o) => o === "PARTIAL").length,

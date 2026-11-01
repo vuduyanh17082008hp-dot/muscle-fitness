@@ -29,14 +29,17 @@ export type PosePoint = {
  * adapter later. The engine never sees a <video>, a camera or React.
  */
 export type PoseObservation = {
-  /** Media time of the analysed frame in ms from the start of the video (never wall-clock). */
+  /** Media time of the analysed frame in ms from the start of the video / live set (never wall-clock). */
   timestampMs: number;
   /**
    * "seek": the analysed frame is the one the browser decoded for a seek to
    * `timestampMs` (true frame PTS is ≤ timestampMs by < 1 frame interval).
    * "frame": exact presented-frame media time (e.g. requestVideoFrameCallback).
+   * "clock": live camera whose frames carry no usable media time — the
+   * monotonic performance clock at frame presentation (rVFC
+   * `presentationTime`), relative to set start. Never wall-clock.
    */
-  timestampSource: "seek" | "frame";
+  timestampSource: "seek" | "frame" | "clock";
   /**
    * "stale": the decoder produced no new picture for this position (e.g. a
    * truncated file keeps showing its last good frame). No pose is run on it.
@@ -98,7 +101,9 @@ export type RepReason =
   | "tracking_lost"
   | "onset_not_observed"
   | "video_ended_mid_cycle"
-  | "implausibly_fast";
+  | "implausibly_fast"
+  /** Live only: the set was paused, the page hidden, the camera stopped or its frame size changed mid-cycle. */
+  | "session_interrupted";
 
 export type RepPhase = { phase: "descent" | "ascent"; startMs: number; endMs: number };
 

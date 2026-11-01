@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { Search, Sparkles, PenLine } from "lucide-react";
 
 import { getExerciseConfig } from "@/lib/setvision/exercise-config";
@@ -52,11 +52,15 @@ export function ExercisePicker({
   autoDetect,
   onSelect,
   onAutoDetect,
+  selectedDetail,
 }: {
   selection: SelectedExercise | null;
   autoDetect: boolean;
   onSelect: (selection: SelectedExercise) => void;
-  onAutoDetect: () => void;
+  /** Omit to hide the Auto-detect option (e.g. live Form Coach, which never guesses the exercise). */
+  onAutoDetect?: () => void;
+  /** Replaces the upload-analysis capability text on the selected card (e.g. live capability). */
+  selectedDetail?: (selection: SelectedExercise) => ReactNode;
 }) {
   const ids = useId();
   const [open, setOpen] = useState(!selection && !autoDetect);
@@ -74,15 +78,15 @@ export function ExercisePicker({
   const items: Item[] = useMemo(
     () => [
       ...(query.trim() && custom.ok ? [{ kind: "custom" as const, id: `${ids}-custom`, label: custom.label }] : []),
-      { kind: "auto" as const, id: `${ids}-auto` },
+      ...(onAutoDetect ? [{ kind: "auto" as const, id: `${ids}-auto` }] : []),
       ...groups.flatMap((g) => g.options.map((option) => ({ kind: "option" as const, id: `${ids}-${option.key}`, option }))),
     ],
-    [groups, query, custom, ids],
+    [groups, query, custom, ids, onAutoDetect],
   );
   const activeIndex = Math.min(active, items.length - 1);
 
   const choose = (item: Item) => {
-    if (item.kind === "auto") onAutoDetect();
+    if (item.kind === "auto") onAutoDetect?.();
     else if (item.kind === "custom") onSelect(customSelection(item.label));
     else onSelect(selectionFromOption(item.option));
     setOpen(false);
@@ -96,7 +100,7 @@ export function ExercisePicker({
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">1. Exercise</p>
         <div className="mt-3">
           {selection ? (
-            <SelectedCard selection={selection} onChange={() => setOpen(true)} />
+            <SelectedCard selection={selection} onChange={() => setOpen(true)} detail={selectedDetail?.(selection)} />
           ) : (
             <div className="max-w-2xl rounded-2xl border border-white/10 bg-black/20 p-4" data-testid="sv-auto-selected">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -239,7 +243,15 @@ export function ExercisePicker({
   );
 }
 
-export function SelectedCard({ selection, onChange }: { selection: SelectedExercise; onChange?: () => void }) {
+export function SelectedCard({
+  selection,
+  onChange,
+  detail,
+}: {
+  selection: SelectedExercise;
+  onChange?: () => void;
+  detail?: ReactNode;
+}) {
   const config = selection.engine ? getExerciseConfig(selection.engine) : null;
   return (
     <div className="max-w-2xl rounded-2xl border border-white/10 bg-black/20 p-4" data-testid="sv-selected-exercise">
@@ -251,7 +263,7 @@ export function SelectedCard({ selection, onChange }: { selection: SelectedExerc
           <p className="mt-0.5 text-xs text-zinc-500">{SOURCE_TEXT[selection.source]}</p>
         </div>
         <div className="flex items-center gap-2">
-          <CapabilityBadge capability={selection.capability} />
+          {detail === undefined ? <CapabilityBadge capability={selection.capability} /> : null}
           {onChange ? (
             <button type="button" onClick={onChange} className="text-xs font-semibold text-zinc-300 underline underline-offset-2 hover:text-white" data-testid="sv-change-exercise">
               Change
@@ -259,15 +271,21 @@ export function SelectedCard({ selection, onChange }: { selection: SelectedExerc
           ) : null}
         </div>
       </div>
-      <p className="mt-2 text-xs leading-5 text-zinc-400" data-testid="sv-capability-detail">
-        {CAPABILITY_TEXT[selection.capability].detail}
-        {selection.manualReason ? ` ${selection.manualReason}` : ""}
-      </p>
-      {config ? (
-        <p className="mt-1 text-xs leading-5 text-zinc-500" data-testid="sv-engine-criterion">
-          Measured as a {config.family.toLowerCase()} with the {config.signalLabel}. A rep counts when: {config.criterion} {config.views}
-        </p>
-      ) : null}
+      {detail !== undefined ? (
+        detail
+      ) : (
+        <>
+          <p className="mt-2 text-xs leading-5 text-zinc-400" data-testid="sv-capability-detail">
+            {CAPABILITY_TEXT[selection.capability].detail}
+            {selection.manualReason ? ` ${selection.manualReason}` : ""}
+          </p>
+          {config ? (
+            <p className="mt-1 text-xs leading-5 text-zinc-500" data-testid="sv-engine-criterion">
+              Measured as a {config.family.toLowerCase()} with the {config.signalLabel}. A rep counts when: {config.criterion} {config.views}
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

@@ -270,10 +270,25 @@ export function createSquatRepCounter(cfg = SQUAT_P0) {
     }
   }
 
+  /**
+   * Live only: observation stopped (tracking lost for > maxBridgeGapMs, set
+   * paused, camera interrupted). Closes any open cycle UNCERTAIN at its last
+   * observed sample and resets to "unknown" — exactly what push() does on a
+   * long gap, but without waiting for the next usable frame, so an
+   * unfinished rep is never carried through the interruption.
+   */
+  function interrupt(reason: "tracking_lost" | "session_interrupted") {
+    if (cycle) close(cycle.lastT, cycle.lastDeg, [reason]);
+    refine = null;
+    state = "unknown";
+    pending = null;
+    standHistory = [];
+  }
+
   function finish(): RepEvent[] {
     if (cycle) close(cycle.lastT, cycle.lastDeg, ["video_ended_mid_cycle"]);
     return events;
   }
 
-  return { push, finish, getState: () => state };
+  return { push, interrupt, finish, getState: () => state, getEvents: () => events };
 }

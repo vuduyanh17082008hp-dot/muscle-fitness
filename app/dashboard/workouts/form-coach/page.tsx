@@ -45,6 +45,14 @@ export default function FormCoachPage() {
           Beta: rep counts and cues are on-device estimates from your camera, not validated
           measurements. Treat a cue as something to check, and stop if anything hurts.
         </p>
+
+        <Link
+          href="/dashboard/workouts/form-coach/live"
+          className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-white underline-offset-4 hover:underline"
+          data-testid="form-coach-live-link"
+        >
+          Pilot: live squat rep counting with review and corrections →
+        </Link>
       </header>
 
       <FormCoachCameraClient />

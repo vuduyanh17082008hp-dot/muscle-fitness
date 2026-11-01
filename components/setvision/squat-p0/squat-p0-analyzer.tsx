@@ -45,13 +45,13 @@ type Run =
 
 type FileMeta = { name: string; size: number; durationSec: number; width: number; height: number };
 
-const OUTCOME_TONE: Record<RepOutcome | "NOT_A_REP", StatusTone> = {
+export const OUTCOME_TONE: Record<RepOutcome | "NOT_A_REP", StatusTone> = {
   COMPLETED: "good",
   PARTIAL: "warning",
   UNCERTAIN: "info",
   NOT_A_REP: "neutral",
 };
-const OUTCOME_LABEL: Record<RepOutcome | "NOT_A_REP", string> = {
+export const OUTCOME_LABEL: Record<RepOutcome | "NOT_A_REP", string> = {
   COMPLETED: "Completed",
   PARTIAL: "Partial",
   UNCERTAIN: "Uncertain",
@@ -62,15 +62,16 @@ const OUTCOME_BAR: Record<RepOutcome, string> = {
   PARTIAL: "bg-mf-warning",
   UNCERTAIN: "bg-mf-cyan",
 };
-const REASON_TEXT: Record<RepReason, string> = {
+export const REASON_TEXT: Record<RepReason, string> = {
   below_cycle_flexion: `Knee angle never went below ${SQUAT_P0.cycleFlexionMaxDeg}° (2D), so this was a smaller movement cycle.`,
   tracking_gap: "Tracking dropped out during this cycle.",
   tracking_lost: "Tracking was lost before this cycle finished.",
   onset_not_observed: "The cycle began before the first usable frame.",
-  video_ended_mid_cycle: "The video ended before this cycle finished.",
+  video_ended_mid_cycle: "The video or set ended before this cycle finished.",
   implausibly_fast: "Faster than a bodyweight squat plausibly moves; likely a tracking artefact.",
+  session_interrupted: "The set was paused, the page was hidden or the camera changed during this cycle.",
 };
-const ISSUE_TEXT: Record<TrackingLossInterval["issue"], string> = {
+export const ISSUE_TEXT: Record<TrackingLossInterval["issue"], string> = {
   invalid_timestamp: "invalid timestamps",
   stale_frame: "video could not be decoded here",
   no_pose: "no person detected",
@@ -79,25 +80,25 @@ const ISSUE_TEXT: Record<TrackingLossInterval["issue"], string> = {
   out_of_frame: "body partly out of frame",
   discontinuity: "tracking jumped",
 };
-const STATUS_LABEL: Record<QualityCheck["status"], string> = {
+export const STATUS_LABEL: Record<QualityCheck["status"], string> = {
   IMPLEMENTED_AND_MEASURED: "Measured",
   HEURISTIC_ONLY: "Heuristic",
   NOT_IMPLEMENTED: "Not implemented",
 };
-const RESULT_TONE: Record<QualityCheck["result"], StatusTone> = {
+export const RESULT_TONE: Record<QualityCheck["result"], StatusTone> = {
   pass: "good",
   warn: "warning",
   fail: "critical",
   not_assessed: "neutral",
 };
 
-function fmt(ms: number): string {
+export function fmt(ms: number): string {
   const s = Math.max(0, ms) / 1000;
   return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 }
 
-const card = "rounded-[24px] border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-6";
-const eyebrow = "text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted";
+export const card = "rounded-[24px] border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-6";
+export const eyebrow = "text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted";
 
 export function SquatP0Analyzer() {
   const playerRef = useRef<HTMLVideoElement | null>(null);
@@ -512,7 +513,8 @@ function Results({
   );
 }
 
-function EventRow({
+/** One detected cycle with the user's relabel control. Without `onSeek` (live sets: no recording) times are plain text. */
+export function EventRow({
   ev,
   outcome,
   corrected,
@@ -522,7 +524,7 @@ function EventRow({
   ev: RepEvent;
   outcome: RepOutcome | "NOT_A_REP";
   corrected: boolean;
-  onSeek: (ms: number) => void;
+  onSeek?: (ms: number) => void;
   onRelabel: (eventId: string, value: string) => void;
 }) {
   const descent = ev.phases.find((p) => p.phase === "descent");
@@ -533,24 +535,32 @@ function EventRow({
         <span className="text-sm font-black text-mf-glass-text">Cycle {ev.index}</span>
         <StatusBadge label={OUTCOME_LABEL[outcome]} tone={OUTCOME_TONE[outcome]} />
         {corrected ? <StatusBadge label={`Corrected by you · detected ${OUTCOME_LABEL[ev.outcome]}`} tone="neutral" /> : null}
-        <button
-          type="button"
-          onClick={() => onSeek(ev.startMs)}
-          className="ml-auto rounded-lg px-2 py-1 text-sm font-semibold tabular-nums text-mf-glass-text underline-offset-4 hover:bg-mf-glass-hover hover:underline"
-          aria-label={`Play cycle ${ev.index} from ${fmt(ev.startMs)}`}
-          data-testid="sv-event-seek"
-        >
-          {fmt(ev.startMs)} – {fmt(ev.endMs)}
-        </button>
+        {onSeek ? (
+          <button
+            type="button"
+            onClick={() => onSeek(ev.startMs)}
+            className="ml-auto rounded-lg px-2 py-1 text-sm font-semibold tabular-nums text-mf-glass-text underline-offset-4 hover:bg-mf-glass-hover hover:underline"
+            aria-label={`Play cycle ${ev.index} from ${fmt(ev.startMs)}`}
+            data-testid="sv-event-seek"
+          >
+            {fmt(ev.startMs)} – {fmt(ev.endMs)}
+          </button>
+        ) : (
+          <span className="ml-auto px-2 py-1 text-sm font-semibold tabular-nums text-mf-glass-text" data-testid="sv-event-time">
+            {fmt(ev.startMs)} – {fmt(ev.endMs)}
+          </span>
+        )}
       </div>
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-mf-glass-text-secondary sm:grid-cols-4">
         <div>
           <dt className="inline">Turning point </dt>
           <dd className="inline">
-            {ev.bottomMs === null ? "—" : (
+            {ev.bottomMs === null ? "—" : onSeek ? (
               <button type="button" className="font-semibold text-mf-glass-text underline-offset-4 hover:underline" onClick={() => onSeek(ev.bottomMs!)}>
                 {fmt(ev.bottomMs)}
               </button>
+            ) : (
+              <span className="font-semibold text-mf-glass-text">{fmt(ev.bottomMs)}</span>
             )}
           </dd>
         </div>
