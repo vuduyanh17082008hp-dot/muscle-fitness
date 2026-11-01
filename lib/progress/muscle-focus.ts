@@ -22,6 +22,7 @@ const GROUP_OF: Record<CanonicalMuscle, MuscleFocusGroup> = {
   triceps: "Arms",
   forearms: "Arms",
   abdominals: "Core",
+  obliques: "Core",
   quadriceps: "Legs",
   hamstrings: "Legs",
   glutes: "Legs",

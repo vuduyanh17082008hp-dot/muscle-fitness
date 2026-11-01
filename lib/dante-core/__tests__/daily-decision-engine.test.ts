@@ -106,6 +106,8 @@ function baseTrainingContext(
     lastSessionByExercise: new Map(),
     e1RmHistoryByExercise: new Map(),
     hasAnyLoggedData: true,
+    loggedSets: [],
+    completedSessions: [],
   };
 }
 

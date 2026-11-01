@@ -15,6 +15,7 @@ import {
 
 import {
   AlertCircle,
+  ArrowLeftRight,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -35,6 +36,8 @@ import {
   saveWorkoutSetAction,
   skipSessionExerciseAction,
 } from "@/app/dashboard/workouts/actions";
+import { ExerciseAlternativesSheet } from "@/components/training/exercise-alternatives";
+import { findCatalogueExercise } from "@/lib/training/exercise-substitution";
 import { restRemaining } from "@/lib/training/rest-timer";
 import { formatSessionClock } from "@/lib/training/session-time";
 
@@ -46,6 +49,7 @@ import {
 } from "./calculations";
 
 import type {
+  WorkoutAlternativeContext,
   WorkoutPlayerExercise,
   WorkoutPlayerSet,
   WorkoutReplacementOption,
@@ -79,6 +83,9 @@ type Props = {
 
   replacementOptions:
     WorkoutReplacementOption[];
+
+  alternativeContext?:
+    WorkoutAlternativeContext;
 };
 
 /* =========================================================
@@ -232,7 +239,14 @@ export function WorkoutPlayer({
   allowSubstitution,
   initialExercises,
   replacementOptions,
+  alternativeContext,
 }: Props) {
+  const [
+    alternativesFor,
+    setAlternativesFor,
+  ] =
+    useState<WorkoutPlayerExercise | null>(null);
+
   const router =
     useRouter();
 
@@ -807,24 +821,22 @@ export function WorkoutPlayer({
      REPLACE
   ======================================================= */
 
-  function replaceExercise(
+  async function replaceExercise(
     exercise:
       WorkoutPlayerExercise,
 
     replacementExerciseId:
       string,
-  ) {
+  ): Promise<{ success: boolean; message: string }> {
     if (
       !replacementExerciseId ||
       replacementExerciseId ===
         exercise.exerciseId
     ) {
-      return;
+      return { success: false, message: "That's the exercise you already have." };
     }
 
-    startTransition(
-      async () => {
-        const result =
+    const result =
           await replaceSessionExerciseAction(
             {
               sessionId,
@@ -847,7 +859,7 @@ export function WorkoutPlayer({
             result.message,
           );
 
-          return;
+          return { success: false, message: result.message };
         }
 
         setIsError(
@@ -876,8 +888,8 @@ export function WorkoutPlayer({
         });
 
         router.refresh();
-      },
-    );
+
+        return { success: true, message: result.message ?? "Exercise replaced." };
   }
 
   /* =======================================================
@@ -1327,31 +1339,15 @@ export function WorkoutPlayer({
                     {exercise.isSkipped ? "Restore" : "Skip"}
                   </button>
 
-                  {allowSubstitution ? (
-                    <label className="min-w-0 flex-1">
-                      <span className="sr-only">Replace {exercise.name}</span>
-                      <select
-                        defaultValue=""
-                        disabled={isPending}
-                        onChange={(event) => {
-                          replaceExercise(exercise, event.target.value);
-                          event.target.value = "";
-                        }}
-                        className="h-11 w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 text-base! text-zinc-300 outline-none focus:border-amber-400/70"
-                      >
-                        <option value="">Replace exercise…</option>
-                        {replacementOptions
-                          .filter(
-                            (option) =>
-                              option.id !== exercise.exerciseId && option.primaryMuscle === exercise.primaryMuscle,
-                          )
-                          .map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.name} — {option.equipment}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
+                  {findCatalogueExercise({ slug: exercise.slug, name: exercise.name }) ? (
+                    <button
+                      type="button"
+                      onClick={() => setAlternativesFor(exercise)}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-bold text-zinc-300 transition hover:bg-white/5"
+                    >
+                      <ArrowLeftRight aria-hidden="true" className="size-4" />
+                      Find alternative
+                    </button>
                   ) : null}
                 </div>
               </div>
@@ -1450,6 +1446,34 @@ export function WorkoutPlayer({
           </button>
         </div>
       </dialog>
+
+      {alternativesFor ? (
+        <ExerciseAlternativesSheet
+          open
+          onOpenChange={(next) => {
+            if (!next) setAlternativesFor(null);
+          }}
+          exercise={findCatalogueExercise({ slug: alternativesFor.slug, name: alternativesFor.name })!}
+          experience={alternativeContext?.experience ?? null}
+          familiarSlugs={alternativeContext?.familiarSlugs ?? []}
+          hold={alternativeContext?.hold ?? false}
+          initialReason="machine_occupied"
+          apply={{
+            resolveId: (slug) =>
+              replacementOptions.find((option) => option.slug === slug && option.id !== alternativesFor.exerciseId)?.id ?? null,
+            blockedReason: !allowSubstitution
+              ? "This plan doesn't allow swapping exercises — use the alternative as a reference."
+              : alternativesFor.sets.some((set) => set.completed)
+                ? "You've logged sets on this exercise, so it stays as it is. Use the alternative as a reference, or skip the rest."
+                : null,
+            onApply: async (_item, exerciseId) => {
+              const result = await replaceExercise(alternativesFor, exerciseId);
+              if (result.success) setAlternativesFor(null);
+              return result;
+            },
+          }}
+        />
+      ) : null}
     </div>
   );
 }

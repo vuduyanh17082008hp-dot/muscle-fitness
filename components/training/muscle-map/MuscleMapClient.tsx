@@ -1,421 +1,417 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 
-import { MUSCLE_DISPLAY_NAME, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
-import { MUSCLE_REGIONS, type MuscleRegion } from "@/lib/training/muscle-regions";
-import { MUSCLE_ATLAS_ENTRIES } from "@/lib/training/muscle-ontology";
-import { buildExerciseEmphasisMap, HIGHLIGHT_FILL, HIGHLIGHT_OPACITY } from "@/lib/training/muscle-highlight";
-import { useReducedMotion } from "@/lib/useReducedMotion";
-import type { MuscleMapEntry, MuscleMapProps } from "@/components/training/muscle-map/types";
+import { ANATOMY_COLOR, BodyFigure, type MuscleFills } from "@/components/training/anatomy/body-figure";
+import { ExerciseAlternativesSheet } from "@/components/training/exercise-alternatives";
 import { MuscleSearchBar } from "@/components/training/muscle-map/MuscleSearchBar";
-import { MuscleDetailPanel } from "@/components/training/muscle-map/MuscleDetailPanel";
-import { ExercisePicker } from "@/components/training/muscle-map/ExercisePicker";
-import { ExerciseEmphasisPanel } from "@/components/training/muscle-map/ExerciseEmphasisPanel";
-import type { ExerciseRecord } from "@/lib/workouts/providers/types";
+import { MuscleDetail, type DetailTab } from "@/components/training/muscle-map/MuscleDetail";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { musclesInView } from "@/lib/training/anatomy/body-atlas";
+import type { ExperienceLevel } from "@/lib/training/exercise-substitution";
+import {
+  loadLevel,
+  maxDirectSets,
+  MUSCLE_RANGES,
+  type LoadLevel,
+  type MuscleIntelligenceData,
+  type MuscleRangeId,
+} from "@/lib/training/muscle-intelligence";
+import { MUSCLE_ATLAS_ENTRIES } from "@/lib/training/muscle-ontology";
+import { CANONICAL_MUSCLES, MUSCLE_DISPLAY_NAME, resolveCanonicalMuscles, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
+import type { ExerciseLibraryItem } from "@/lib/workouts/exercise-library";
 import { cn } from "@/lib/cn";
 
-export type MapMode = "anatomy" | "volume" | "change" | "performance" | "exercise";
+type Mode = "anatomy" | "load";
 
-const MODE_LABEL: Record<MapMode, string> = {
-  anatomy: "Anatomy",
-  volume: "Volume",
-  change: "Change",
-  performance: "Performance",
-  exercise: "Exercise",
+const GROUPS: Array<{ label: string; muscles: CanonicalMuscle[] }> = [
+  { label: "Chest & shoulders", muscles: ["upper_chest", "chest", "anterior_deltoid", "lateral_deltoid", "rear_deltoid"] },
+  { label: "Back", muscles: ["trapezius", "upper_back", "latissimus_dorsi", "lower_back"] },
+  { label: "Arms", muscles: ["biceps", "triceps", "forearms"] },
+  { label: "Core", muscles: ["abdominals", "obliques"] },
+  { label: "Legs", muscles: ["glutes", "quadriceps", "hamstrings", "calves"] },
+];
+
+const LOAD_STYLE: Record<LoadLevel, { fill: string; opacity: number; label: string }> = {
+  high: { fill: ANATOMY_COLOR.accent, opacity: 0.95, label: "Most direct sets" },
+  moderate: { fill: ANATOMY_COLOR.accent, opacity: 0.6, label: "Some direct sets" },
+  low: { fill: ANATOMY_COLOR.accent, opacity: 0.32, label: "Few direct sets" },
+  indirect: { fill: ANATOMY_COLOR.outline, opacity: 0.35, label: "Indirect only" },
+  none: { fill: ANATOMY_COLOR.idle, opacity: 1, label: "No logged sets" },
 };
 
-function volumeFill(value: number, max: number): string {
-  if (max <= 0) return "var(--mf-glass-elevated)";
-  const ratio = Math.min(1, value / max);
-  const lightness = 78 - ratio * 46;
-  return `hsl(83 80% ${lightness}%)`; // acid-lime hue, intensity by exposure
-}
+export type MuscleIntelligenceWorkspaceProps = {
+  data: MuscleIntelligenceData;
+  experience: ExperienceLevel | null;
+  familiarSlugs: string[];
+  hold: boolean;
+  inProgressWorkouts: number;
+  initialMuscle?: CanonicalMuscle | null;
+  initialRange?: MuscleRangeId;
+  initialSessionId?: string | null;
+};
 
-function changeFill(changePercent: number | null): string {
-  if (changePercent === null) return "var(--mf-glass-elevated)";
-  const magnitude = Math.min(1, Math.abs(changePercent) / 50);
-  const lightness = 78 - magnitude * 46;
-  return `hsl(190 80% ${lightness}%)`; // analytics cyan — chart differentiation only, per Client OS color rules
-}
-
-function performanceFill(trend: string): string {
-  switch (trend) {
-    case "improving":
-      return "var(--mf-glass-brand)";
-    case "stable":
-      return "hsl(190 40% 58%)";
-    case "declining":
-      return "var(--mf-glass-warning)";
-    case "mixed":
-      return "hsl(35 60% 60%)";
-    default:
-      return "var(--mf-glass-elevated)";
-  }
+function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ id: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex rounded-md border border-mf-glass-border p-0.5">
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          aria-pressed={value === option.id}
+          onClick={() => onChange(option.id)}
+          className={cn(
+            "min-h-9 flex-1 whitespace-nowrap rounded px-2.5 text-xs font-bold transition-colors",
+            value === option.id ? "bg-mf-glass-text text-mf-glass-bg" : "text-mf-glass-text-muted hover:text-mf-glass-text",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function MuscleMapClient({
-  muscles,
-  exerciseNames,
-  hasAnyLoggedData,
-  dataWindow,
-  availableEquipment,
-}: MuscleMapProps) {
-  const [view, setView] = useState<"front" | "back">("front");
-  const [mode, setMode] = useState<MapMode>("anatomy");
-  const [selectedMuscle, setSelectedMuscle] = useState<CanonicalMuscle | null>(null);
-  const [selectedExercise, setSelectedExercise] = useState<ExerciseRecord | null>(null);
-  const reduceMotion = useReducedMotion();
+  data,
+  experience,
+  familiarSlugs,
+  hold,
+  inProgressWorkouts,
+  initialMuscle = null,
+  initialRange = "28d",
+  initialSessionId = null,
+}: MuscleIntelligenceWorkspaceProps) {
+  const [range, setRange] = useState<MuscleRangeId>(initialRange);
+  const snapshot = data.ranges[range];
+  const hasAnyData = data.ranges["84d"].workingSets > 0;
 
-  const byMuscle = useMemo(() => {
-    const map = new Map<CanonicalMuscle, MuscleMapEntry>();
-    for (const entry of muscles) {
-      map.set(entry.muscle, entry);
-    }
-    return map;
-  }, [muscles]);
-
-  const maxVolume = useMemo(
-    () => Math.max(0, ...muscles.map((m) => m.analytics.currentWeek.totalEffectiveSets)),
-    [muscles],
+  const [mode, setMode] = useState<Mode>(hasAnyData ? "load" : "anatomy");
+  const [selected, setSelected] = useState<CanonicalMuscle | null>(initialMuscle);
+  const [view, setView] = useState<"front" | "back">(initialMuscle ? MUSCLE_ATLAS_ENTRIES[initialMuscle].preferredView : "front");
+  const [tab, setTab] = useState<DetailTab>(hasAnyData ? "training" : "anatomy");
+  const [highlight, setHighlight] = useState<ExerciseLibraryItem | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(
+    initialSessionId && data.recentSessions.some((s) => s.id === initialSessionId) ? initialSessionId : null,
   );
+  const [alternativesFor, setAlternativesFor] = useState<ExerciseLibraryItem | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [pendingSets, setPendingSets] = useState(0);
 
-  const exerciseEmphasis = useMemo(
-    () => (selectedExercise ? buildExerciseEmphasisMap(selectedExercise) : {}),
-    [selectedExercise],
+  // Offline sets live only on this device until they sync; count them so the map never looks complete when it isn't.
+  useEffect(() => {
+    try {
+      let count = 0;
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (!key?.startsWith("mf:pending-sets:")) continue;
+        const parsed = JSON.parse(window.localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
+        count += Object.keys(parsed).length;
+      }
+      setPendingSets(count);
+    } catch {
+      setPendingSets(0);
+    }
+  }, []);
+
+  // Keep the selection, range and workout in the URL so a reload or shared link restores them (no server round-trip).
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const set = (key: string, value: string | null) => (value ? url.searchParams.set(key, value) : url.searchParams.delete(key));
+    set("muscle", selected);
+    set("range", range === "28d" ? null : range);
+    set("session", sessionId);
+    window.history.replaceState(window.history.state, "", url);
+  }, [selected, range, sessionId]);
+
+  const focusSession = data.recentSessions.find((s) => s.id === sessionId) ?? null;
+  const max = maxDirectSets(snapshot);
+
+  const fills = useMemo<MuscleFills>(() => {
+    const out: MuscleFills = {};
+    if (highlight) {
+      for (const m of resolveCanonicalMuscles([highlight.primaryMuscle])) out[m] = { fill: ANATOMY_COLOR.accent, opacity: 0.95 };
+      for (const m of resolveCanonicalMuscles(highlight.secondaryMuscles)) out[m] ??= { fill: ANATOMY_COLOR.accent, opacity: 0.42 };
+      return out;
+    }
+    if (focusSession) {
+      for (const m of focusSession.direct) out[m] = { fill: ANATOMY_COLOR.accent, opacity: 0.95 };
+      for (const m of focusSession.indirect) out[m] = { fill: ANATOMY_COLOR.accent, opacity: 0.42 };
+      return out;
+    }
+    if (mode === "load") {
+      for (const m of CANONICAL_MUSCLES) {
+        const level = loadLevel(snapshot.muscles[m], max);
+        if (level !== "none") out[m] = { fill: LOAD_STYLE[level].fill, opacity: LOAD_STYLE[level].opacity };
+      }
+    }
+    return out;
+  }, [highlight, focusSession, mode, snapshot, max]);
+
+  function select(muscle: CanonicalMuscle, fromSearch = false) {
+    setSelected(muscle);
+    setHighlight(null);
+    if (fromSearch || !musclesInView(view).has(muscle)) setView(MUSCLE_ATLAS_ENTRIES[muscle].preferredView);
+  }
+
+  const rangeLabel = MUSCLE_RANGES.find((r) => r.id === range)!.label;
+  const selectedSummary = selected ? snapshot.muscles[selected] : undefined;
+
+  const detail = (idPrefix: string) =>
+    selected ? (
+      <MuscleDetail
+        muscle={selected}
+        range={range}
+        snapshot={snapshot}
+        today={data.today}
+        sessions={data.recentSessions}
+        hasAnyData={hasAnyData}
+        tab={tab}
+        onTabChange={setTab}
+        highlightedSlug={highlight?.slug ?? null}
+        onHighlight={(item) => {
+          setHighlight(item);
+          setSessionId(null);
+          setSheetOpen(false);
+        }}
+        onFindAlternative={(item) => {
+          setSheetOpen(false);
+          setAlternativesFor(item);
+        }}
+        idPrefix={idPrefix}
+        hideTitle={idPrefix === "sheet"}
+      />
+    ) : null;
+
+  const figure = (v: "front" | "back") => (
+    <figure className="mx-auto w-full max-w-[240px]">
+      <BodyFigure view={v} fills={fills} selected={selected} onSelect={(m) => select(m)} />
+      <figcaption className="mt-1 text-center text-[11px] font-bold uppercase tracking-[0.18em] text-mf-glass-text-muted">
+        {v === "front" ? "Front" : "Back"}
+      </figcaption>
+    </figure>
   );
-
-  const selectedEntry = selectedMuscle ? byMuscle.get(selectedMuscle) ?? null : null;
-
-  /** The figure that best shows the current selection — used only to subtly emphasize one side on wide desktop; both figures stay visible regardless (spec §10). */
-  const preferredView = selectedMuscle
-    ? MUSCLE_ATLAS_ENTRIES[selectedMuscle].preferredView
-    : selectedExercise?.primaryMuscles[0]
-      ? MUSCLE_ATLAS_ENTRIES[selectedExercise.primaryMuscles[0]].preferredView
-      : null;
-
-  function fillFor(muscle: CanonicalMuscle): string {
-    if (mode === "exercise") {
-      const level = exerciseEmphasis[muscle];
-      return level ? HIGHLIGHT_FILL[level] : HIGHLIGHT_FILL.inactive;
-    }
-
-    if (mode === "anatomy") return "var(--mf-glass-elevated)";
-
-    const entry = byMuscle.get(muscle);
-    if (!entry) return "var(--mf-glass-elevated)";
-
-    if (mode === "volume") return volumeFill(entry.analytics.currentWeek.totalEffectiveSets, maxVolume);
-    if (mode === "change") return changeFill(entry.analytics.changePercent);
-    return performanceFill(entry.recommendation.inputs.performanceTrend);
-  }
-
-  /** Cinematic dim/highlight: only opacity-shifts when something is selected — never on plain hover/idle. */
-  function opacityFor(muscle: CanonicalMuscle): number {
-    if (mode === "exercise") {
-      if (selectedMuscle && muscle === selectedMuscle) return HIGHLIGHT_OPACITY.selected;
-      const level = exerciseEmphasis[muscle];
-      return level ? HIGHLIGHT_OPACITY[level] : HIGHLIGHT_OPACITY.inactive;
-    }
-
-    if (!selectedMuscle) return 1;
-    return muscle === selectedMuscle ? 1 : 0.32;
-  }
-
-  function ariaLabelFor(muscle: CanonicalMuscle): string {
-    const name = MUSCLE_DISPLAY_NAME[muscle];
-
-    if (mode === "exercise") {
-      if (!selectedExercise) return `${name} — select an exercise to see its training emphasis`;
-      const level = exerciseEmphasis[muscle];
-      return level
-        ? `${name} — ${level} emphasis for ${selectedExercise.canonicalName}`
-        : `${name} — not trained by ${selectedExercise.canonicalName}`;
-    }
-
-    const entry = byMuscle.get(muscle);
-
-    if (mode === "anatomy" || !entry) {
-      return `${name}${entry ? "" : " — no logged training data"}`;
-    }
-
-    if (mode === "volume") {
-      return `${name} — ${entry.analytics.currentWeek.totalEffectiveSets} modeled effective sets this week`;
-    }
-    if (mode === "change") {
-      return entry.analytics.changePercent === null
-        ? `${name} — no previous week to compare`
-        : `${name} — ${entry.analytics.changePercent > 0 ? "+" : ""}${entry.analytics.changePercent}% versus last week`;
-    }
-    return `${name} — performance trend: ${entry.recommendation.inputs.performanceTrend.replace("_", " ")}`;
-  }
-
-  /** Selecting via the body map itself doesn't change view — the user is already looking at the right one on mobile, and desktop shows both anyway. Explicit muscle selection always outranks Exercise Mode's visualization (spec §8), so it drops back to Anatomy so the right panel shows muscle detail immediately. */
-  function handleSelectFromMap(muscle: CanonicalMuscle) {
-    setSelectedMuscle(muscle);
-    if (mode === "exercise") {
-      setMode("anatomy");
-    }
-  }
-
-  /** Selecting via search auto-switches to the muscle's preferred view (spec §9) — a deliberate one-shot action, not a persistent fight with a manual toggle. */
-  function handleSelectFromSearch(muscle: CanonicalMuscle) {
-    setSelectedMuscle(muscle);
-    setMode("anatomy");
-    setView(MUSCLE_ATLAS_ENTRIES[muscle].preferredView);
-  }
-
-  /** Picking an exercise is an explicit mode switch — clears any lingering muscle selection so the map shows one coherent state, and (mobile only) jumps to the primary muscle's preferred view. */
-  function handleSelectExercise(record: ExerciseRecord) {
-    setSelectedExercise(record);
-    setSelectedMuscle(null);
-    setMode("exercise");
-
-    const primaryMuscle = record.primaryMuscles[0];
-    if (primaryMuscle) {
-      setView(MUSCLE_ATLAS_ENTRIES[primaryMuscle].preferredView);
-    }
-  }
-
-  function renderMapFigure(figureView: "front" | "back") {
-    const regions = MUSCLE_REGIONS.filter((region) => region.view === figureView);
-
-    return (
-      <svg
-        viewBox="0 0 200 400"
-        role="img"
-        aria-label={`Muscle map, ${figureView} view, ${MODE_LABEL[mode].toLowerCase()} mode`}
-        className="mx-auto w-full max-w-[260px]"
-      >
-        <rect x="70" y="20" width="60" height="60" rx="28" fill="var(--mf-glass-bg-deep)" />
-        <rect x="72" y="76" width="56" height="130" rx="18" fill="var(--mf-glass-bg-deep)" />
-
-        {regions.map((region, index) => {
-          const fill = fillFor(region.muscle);
-          const label = ariaLabelFor(region.muscle);
-          const regionKey = `${figureView}-${region.muscle}-${index}`;
-          const isSelected = region.muscle === selectedMuscle;
-
-          const commonProps = {
-            tabIndex: 0,
-            role: "button" as const,
-            "aria-label": label,
-            "aria-pressed": isSelected,
-            onClick: () => handleSelectFromMap(region.muscle),
-            onKeyDown: (event: React.KeyboardEvent) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                handleSelectFromMap(region.muscle);
-              }
-            },
-            className:
-              "cursor-pointer transition-colors hover:opacity-90 focus:outline-none focus-visible:stroke-mf-glass-brand",
-            stroke: isSelected ? "var(--mf-glass-brand)" : "rgba(255,255,255,0.1)",
-            // Animate opacity only. Framer `scale` on <ellipse> can
-            // decompose into rx/ry and emit SVG "Expected length, NaN".
-            style: {
-              strokeWidth: isSelected ? 2.5 : 1.5,
-              transformOrigin: "center" as const,
-              transform: isSelected ? "scale(1.03)" : "scale(1)",
-            },
-            fill,
-            initial: false as const,
-            animate: { opacity: opacityFor(region.muscle) },
-            transition: { duration: reduceMotion ? 0 : 0.35, ease: "easeOut" as const },
-          };
-
-          return renderRegionShape(region, regionKey, commonProps);
-        })}
-      </svg>
-    );
-  }
 
   return (
-    <div className="rounded-[22px] border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-6">
-      <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <MuscleSearchBar onResolve={handleSelectFromSearch} />
-            <ExercisePicker selected={selectedExercise} onSelect={handleSelectExercise} />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(MODE_LABEL) as MapMode[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={`min-h-9 rounded-full border px-3 text-xs font-medium transition-colors ${
-                  mode === m
-                    ? "border-mf-glass-border-strong bg-white/10 text-mf-glass-text"
-                    : "border-mf-glass-border text-mf-glass-text-muted hover:text-mf-glass-text"
-                }`}
-              >
-                {MODE_LABEL[m]}
-              </button>
-            ))}
-          </div>
-
-          {/* Front/Back toggle — mobile/tablet only. Desktop (lg+) shows both figures simultaneously, so a manual toggle would be redundant there (spec §39-40). */}
-          <div className="flex gap-2 lg:hidden">
-            {(["front", "back"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                className={`min-h-11 flex-1 rounded-xl border text-sm font-medium capitalize transition-colors ${
-                  view === v
-                    ? "border-mf-glass-border-strong bg-white/10 text-mf-glass-text"
-                    : "border-mf-glass-border text-mf-glass-text-muted hover:text-mf-glass-text"
-                }`}
-              >
-                {v} view
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <figure
-              className={cn(
-                "flex flex-col items-center gap-2 transition-opacity duration-300",
-                view === "back" && "hidden lg:flex",
-                preferredView === "back" && "lg:opacity-70",
-              )}
-            >
-              {renderMapFigure("front")}
-              <figcaption className="text-[10px] font-bold uppercase tracking-[0.2em] text-mf-glass-text-muted">
-                Front
-              </figcaption>
-            </figure>
-
-            <figure
-              className={cn(
-                "flex flex-col items-center gap-2 transition-opacity duration-300",
-                view === "front" && "hidden lg:flex",
-                preferredView === "front" && "lg:opacity-70",
-              )}
-            >
-              {renderMapFigure("back")}
-              <figcaption className="text-[10px] font-bold uppercase tracking-[0.2em] text-mf-glass-text-muted">
-                Back
-              </figcaption>
-            </figure>
-          </div>
-
-          <MuscleMapLegend mode={mode} />
+    <section aria-label="Muscle map" className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="flex min-w-0 flex-col gap-4 rounded-md border border-mf-glass-border bg-mf-glass-surface p-4 sm:p-5">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <MuscleSearchBar onResolve={(m) => select(m, true)} />
+          <Segmented<Mode>
+            label="Map mode"
+            value={mode}
+            onChange={(m) => {
+              setMode(m);
+              setHighlight(null);
+              setSessionId(null);
+            }}
+            options={[
+              { id: "anatomy", label: "Anatomy" },
+              { id: "load", label: "Training load" },
+            ]}
+          />
         </div>
 
-        {mode === "exercise" ? (
-          <ExerciseEmphasisPanel record={selectedExercise} />
-        ) : (
-          <MuscleDetailPanel
-            muscle={selectedMuscle}
-            entry={selectedEntry}
-            exerciseNames={exerciseNames}
-            hasAnyLoggedData={hasAnyLoggedData}
-            dataWindowWeeks={dataWindow.weeksOfHistory}
-            availableEquipment={availableEquipment}
-            onClose={() => setSelectedMuscle(null)}
+        <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+          <Segmented<MuscleRangeId>
+            label="Time range"
+            value={range}
+            onChange={setRange}
+            options={MUSCLE_RANGES.map((r) => ({ id: r.id, label: r.label }))}
           />
-        )}
+          <p className="text-xs text-mf-glass-text-muted" aria-live="polite">
+            {snapshot.workingSets} working set{snapshot.workingSets === 1 ? "" : "s"} in {snapshot.sessions} finished workout
+            {snapshot.sessions === 1 ? "" : "s"} · last {rangeLabel}
+          </p>
+        </div>
+
+        {pendingSets > 0 || inProgressWorkouts > 0 || snapshot.unmappedSets > 0 ? (
+          <ul className="flex flex-col gap-1 text-xs leading-5 text-mf-glass-text-secondary">
+            {pendingSets > 0 ? (
+              <li className="rounded-md border border-mf-glass-warning/40 px-3 py-1.5">
+                {pendingSets} set{pendingSets === 1 ? " is" : "s are"} saved on this device but not synced yet — not counted until they upload.
+              </li>
+            ) : null}
+            {inProgressWorkouts > 0 ? (
+              <li className="rounded-md border border-mf-glass-border px-3 py-1.5">
+                A workout is still in progress — its sets count once you finish it.
+              </li>
+            ) : null}
+            {snapshot.unmappedSets > 0 ? (
+              <li className="rounded-md border border-mf-glass-border px-3 py-1.5">
+                {snapshot.unmappedSets} set{snapshot.unmappedSets === 1 ? "" : "s"} from {snapshot.unmappedExercises.join(", ")} couldn&apos;t be matched to a muscle, so {snapshot.unmappedSets === 1 ? "it isn't" : "they aren't"} shown.
+              </li>
+            ) : null}
+          </ul>
+        ) : null}
+
+        {highlight || focusSession ? (
+          <div className="flex items-center justify-between gap-2 rounded-md bg-mf-glass-bg-deep px-3 py-2 text-sm">
+            <span className="min-w-0 truncate">
+              Showing: <span className="font-semibold">{highlight ? highlight.name : `${focusSession!.name} · ${focusSession!.localDate}`}</span>
+              <span className="text-mf-glass-text-muted"> (strong = primary, light = secondary)</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setHighlight(null);
+                setSessionId(null);
+              }}
+              aria-label="Clear highlight"
+              className="grid size-9 shrink-0 place-items-center rounded-md hover:bg-mf-glass-surface"
+            >
+              <X aria-hidden="true" className="size-4" />
+            </button>
+          </div>
+        ) : null}
+
+        <div className="lg:hidden">
+          <Segmented<"front" | "back">
+            label="Body view"
+            value={view}
+            onChange={setView}
+            options={[
+              { id: "front", label: "Front" },
+              { id: "back", label: "Back" },
+            ]}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+          <div className={cn(view === "back" && "hidden lg:block")}>{figure("front")}</div>
+          <div className={cn(view === "front" && "hidden lg:block")}>{figure("back")}</div>
+        </div>
+
+        {mode === "load" && !highlight && !focusSession ? (
+          <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-mf-glass-text-muted" aria-label="Legend">
+            {(["high", "moderate", "low", "indirect", "none"] as LoadLevel[]).map((level) => (
+              <li key={level} className="flex items-center gap-1.5">
+                <span aria-hidden="true" className="size-3 rounded-sm border border-mf-glass-border" style={{ background: LOAD_STYLE[level].fill, opacity: LOAD_STYLE[level].opacity }} />
+                {LOAD_STYLE[level].label}
+              </li>
+            ))}
+            <li className="basis-full">Relative to your other muscles in this period — not a recovery or growth measure.</li>
+          </ul>
+        ) : null}
+
+        {data.recentSessions.length > 0 ? (
+          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wide text-mf-glass-text-muted">
+            Muscles from a finished workout
+            <select
+              value={sessionId ?? ""}
+              onChange={(event) => {
+                setSessionId(event.target.value || null);
+                setHighlight(null);
+              }}
+              className="h-11 w-full rounded-md border border-mf-glass-border bg-mf-glass-surface px-3 text-base! font-normal normal-case tracking-normal text-mf-glass-text"
+            >
+              <option value="">None — show {mode === "load" ? "training load" : "anatomy"}</option>
+              {data.recentSessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} · {s.localDate} · {s.workingSets} sets
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        <nav aria-label="Muscles" className="flex flex-col gap-3">
+          {GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-mf-glass-text-muted">{group.label}</p>
+              <ul className="flex flex-wrap gap-1.5">
+                {group.muscles.map((m) => {
+                  const s = snapshot.muscles[m];
+                  return (
+                    <li key={m}>
+                      <button
+                        type="button"
+                        aria-pressed={selected === m}
+                        onClick={() => select(m)}
+                        className={cn(
+                          "inline-flex min-h-10 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition-colors",
+                          selected === m
+                            ? "border-mf-glass-text bg-mf-glass-text text-mf-glass-bg"
+                            : "border-mf-glass-border text-mf-glass-text-secondary hover:border-mf-glass-border-strong",
+                        )}
+                      >
+                        {MUSCLE_DISPLAY_NAME[m]}
+                        {hasAnyData ? (
+                          <span className="font-normal tabular-nums" aria-label={`${s?.directSets ?? 0} direct sets`}>
+                            {s?.directSets ?? 0}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
       </div>
-    </div>
-  );
-}
 
-type RegionCommonProps = {
-  tabIndex: number;
-  role: "button";
-  "aria-label": string;
-  "aria-pressed": boolean;
-  onClick: () => void;
-  onKeyDown: (event: React.KeyboardEvent) => void;
-  className: string;
-  stroke: string;
-  style: { strokeWidth: number; transformOrigin: string; transform: string };
-  fill: string;
-  initial: false;
-  animate: { opacity: number };
-  transition: { duration: number; ease: "easeOut" };
-};
+      {/* Desktop: persistent detail column. */}
+      <aside className="hidden min-w-0 rounded-md border border-mf-glass-border bg-mf-glass-surface p-5 lg:block" aria-label="Muscle details">
+        {detail("desk") ?? (
+          <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2 text-center">
+            <p className="text-sm font-bold uppercase tracking-wide text-mf-glass-text">Select a muscle</p>
+            <p className="max-w-xs text-sm text-mf-glass-text-muted">Tap the body or pick from the list to see your logged training, exercises and anatomy.</p>
+          </div>
+        )}
+      </aside>
 
-function renderRegionShape(region: MuscleRegion, key: string, props: RegionCommonProps) {
-  if (region.shape === "path") {
-    return <motion.path key={key} {...props} d={region.d} />;
-  }
+      {/* Mobile: compact summary that expands into a sheet. */}
+      {selected ? (
+        <div className="sticky bottom-20 z-20 rounded-md border border-mf-glass-border-strong bg-mf-glass-surface p-4 shadow-lg lg:hidden">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-base font-black text-mf-glass-text">{MUSCLE_DISPLAY_NAME[selected]}</p>
+              <p className="text-xs text-mf-glass-text-muted">
+                {selectedSummary
+                  ? `${selectedSummary.directSets} direct · ${selectedSummary.indirectSets} indirect sets · ${rangeLabel}`
+                  : hasAnyData
+                    ? `No logged sets · ${rangeLabel}`
+                    : "No finished workouts yet"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSheetOpen(true)}
+              className="inline-flex min-h-11 shrink-0 items-center rounded-md bg-mf-glass-text px-4 text-sm font-bold text-mf-glass-bg"
+            >
+              Details
+            </button>
+          </div>
+        </div>
+      ) : null}
 
-  if (region.shape === "ellipse") {
-    return (
-      <motion.ellipse
-        key={key}
-        {...props}
-        cx={region.x + region.width / 2}
-        cy={region.y + region.height / 2}
-        rx={region.width / 2}
-        ry={region.height / 2}
-      />
-    );
-  }
+      <BottomSheet open={sheetOpen && selected !== null} onOpenChange={setSheetOpen} title={selected ? MUSCLE_DISPLAY_NAME[selected] : undefined}>
+        {detail("sheet")}
+      </BottomSheet>
 
-  return (
-    <motion.rect
-      key={key}
-      {...props}
-      x={region.x}
-      y={region.y}
-      width={region.width}
-      height={region.height}
-      rx={region.rx ?? 6}
-    />
-  );
-}
-
-function MuscleMapLegend({ mode }: { mode: MapMode }) {
-  // Dynamic hues (volume=lime, change=cyan) are set via inline `style`,
-  // not a Tailwind arbitrary-value class — a runtime-interpolated
-  // `bg-[...]` class string can't be picked up by Tailwind's static
-  // build-time scan, so it would silently render with no background.
-  const dataHue = mode === "change" ? "190 80%" : "83 80%";
-
-  const heading =
-    mode === "exercise" ? "Exercise Emphasis" : mode === "anatomy" ? "Legend" : "Recent Training Exposure";
-
-  const items: Array<{ label: string; color: string; opacity?: number }> =
-    mode === "exercise"
-      ? [
-          { label: "Primary", color: HIGHLIGHT_FILL.primary, opacity: HIGHLIGHT_OPACITY.primary },
-          { label: "Secondary", color: HIGHLIGHT_FILL.secondary, opacity: HIGHLIGHT_OPACITY.secondary },
-          { label: "Supporting", color: HIGHLIGHT_FILL.supporting, opacity: HIGHLIGHT_OPACITY.supporting },
-          { label: "Not trained", color: HIGHLIGHT_FILL.inactive },
-        ]
-      : mode === "anatomy"
-        ? [{ label: "Select a muscle to explore", color: "var(--mf-glass-elevated)" }]
-        : mode === "performance"
-          ? [
-              { label: "Improving", color: "var(--mf-glass-brand)" },
-              { label: "Stable", color: "hsl(190 40% 58%)" },
-              { label: "Declining", color: "var(--mf-glass-warning)" },
-              { label: "Mixed / insufficient data", color: "var(--mf-glass-elevated)" },
-            ]
-          : [
-              { label: "Lower exposure", color: `hsl(${dataHue} 72%)` },
-              { label: "Moderate exposure", color: `hsl(${dataHue} 55%)` },
-              { label: "Higher exposure", color: `hsl(${dataHue} 32%)` },
-              { label: "No data", color: "var(--mf-glass-elevated)" },
-            ];
-
-  return (
-    <div className="rounded-2xl border border-mf-glass-border p-3 text-xs text-mf-glass-text-muted">
-      <p className="mb-2 font-medium text-mf-glass-text-secondary">{heading}</p>
-      <ul className="flex flex-wrap gap-x-4 gap-y-1.5">
-        {items.map((item) => (
-          <li key={item.label} className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color, opacity: item.opacity ?? 1 }} />
-            {item.label}
-          </li>
-        ))}
-      </ul>
-    </div>
+      {alternativesFor ? (
+        <ExerciseAlternativesSheet
+          open
+          onOpenChange={(next) => !next && setAlternativesFor(null)}
+          exercise={alternativesFor}
+          target={selected && resolveCanonicalMuscles([alternativesFor.primaryMuscle]).includes(selected) ? selected : undefined}
+          experience={experience}
+          familiarSlugs={familiarSlugs}
+          hold={hold}
+        />
+      ) : null}
+    </section>
   );
 }

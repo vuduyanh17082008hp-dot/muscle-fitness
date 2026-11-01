@@ -32,6 +32,9 @@ import { resolveUserTimeZone } from "@/lib/training/load-today-session";
 import { formatSessionDateTime } from "@/lib/training/session-time";
 import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision";
 import { loadPreviousPerformance } from "@/lib/training/load-previous-performance";
+import { loadExerciseFamiliarity } from "@/lib/training/load-exercise-familiarity";
+import { parseExperience } from "@/lib/training/exercise-substitution";
+import { EXERCISE_CATALOGUE } from "@/lib/workouts/exercise-library";
 import { ScheduleConflictNote, TrainingHoldNotice, WorkoutStartButton } from "@/components/training/workout-start-control";
 import type {
   WorkoutPlayerExercise,
@@ -327,7 +330,7 @@ export default async function WorkoutSessionPage({
       exerciseIds.length > 0
         ? await supabase
             .from("exercise_library")
-            .select("id, name, primary_muscle, equipment")
+            .select("id, slug, name, primary_muscle, equipment")
             .in("id", exerciseIds)
         : { data: [] };
 
@@ -346,30 +349,28 @@ export default async function WorkoutSessionPage({
     const allowSubstitution =
       plan?.allow_client_substitution === true;
 
-    const muscles = [
-      ...new Set(
-        (libraryRows ?? []).map((row) => row.primary_muscle),
-      ),
-    ];
-
-    const { data: replacementRows } =
-      allowSubstitution && muscles.length > 0
-        ? await supabase
-            .from("exercise_library")
-            .select("id, name, primary_muscle, equipment")
-            .eq("is_active", true)
-            .in("primary_muscle", muscles)
-            .order("name", { ascending: true })
-            .limit(300)
-        : { data: [] };
+    // Find Alternative: the recommendation catalogue is static; only its slugs that
+    // exist as PUBLIC rows here can be applied (RLS and the replace mutation still
+    // authorize every write). A failed lookup degrades to review-only alternatives.
+    const [{ data: catalogueRows }, familiarSlugs, { data: fitness }] = await Promise.all([
+      supabase
+        .from("exercise_library")
+        .select("id, slug, name, primary_muscle, equipment")
+        .is("owner_id", null)
+        .eq("is_active", true)
+        .in("slug", EXERCISE_CATALOGUE.map((item) => item.slug ?? "").filter(Boolean)),
+      loadExerciseFamiliarity(supabase, user.id).catch(() => []),
+      supabase.from("fitness_profiles").select("experience").eq("user_id", user.id).maybeSingle(),
+    ]);
 
     const replacementOptions: WorkoutReplacementOption[] = (
-      replacementRows ?? []
+      catalogueRows ?? []
     ).map((row) => ({
       id: row.id,
+      slug: row.slug,
       name: row.name,
-      primaryMuscle: row.primary_muscle,
-      equipment: row.equipment,
+      primaryMuscle: row.primary_muscle ?? "",
+      equipment: row.equipment ?? "",
     }));
 
     const previousByExercise = await loadPreviousPerformance(supabase, user.id, exerciseIds);
@@ -378,6 +379,7 @@ export default async function WorkoutSessionPage({
       exercisesWithSets.map((exercise) => ({
         id: exercise.id,
         exerciseId: exercise.exercise_id,
+        slug: libraryById.get(exercise.exercise_id)?.slug ?? null,
         name: exercise.display_name,
         primaryMuscle:
           libraryById.get(exercise.exercise_id)?.primary_muscle ?? "",
@@ -434,6 +436,11 @@ export default async function WorkoutSessionPage({
               allowSubstitution={allowSubstitution}
               initialExercises={playerExercises}
               replacementOptions={replacementOptions}
+              alternativeContext={{
+                experience: parseExperience(fitness?.experience),
+                familiarSlugs,
+                hold: hold !== null,
+              }}
             />
           </div>
         </div>
@@ -588,6 +595,15 @@ export default async function WorkoutSessionPage({
                     ? "The sets, load and volume you logged in this session."
                     : "Track your working sets, repetitions, load, RIR and total training volume."}
                 </p>
+
+                {session.session_state === "completed" ? (
+                  <Link
+                    href={`/dashboard/training-intelligence?session=${session.id}`}
+                    className="mt-4 inline-flex min-h-11 items-center rounded-md border border-mf-glass-border-strong px-4 text-sm font-bold text-mf-glass-text transition hover:bg-mf-glass-hover"
+                  >
+                    See muscles trained
+                  </Link>
+                ) : null}
               </div>
 
               {/* A planned session starts here, keeping its own (possibly adjusted) prescription — start_workout

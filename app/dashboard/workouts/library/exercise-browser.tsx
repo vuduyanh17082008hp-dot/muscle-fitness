@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Dumbbell, Search, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Search, Sparkles, Dumbbell } from "lucide-react";
 
 import { MUSCLE_DISPLAY_NAME, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
 import type { ExerciseDifficulty } from "@/lib/workouts/exercise-library";
@@ -11,6 +11,9 @@ import { searchExerciseRecords } from "@/lib/workouts/search-exercises";
 import { hasMorePages, sliceForPage } from "@/lib/workouts/pagination";
 import { PerformanceCard } from "@/components/ui/performance-card";
 import { ExerciseDetailPanel } from "@/app/dashboard/workouts/library/exercise-detail-panel";
+import { ExerciseAlternativesSheet } from "@/components/training/exercise-alternatives";
+import type { ExperienceLevel } from "@/lib/training/exercise-substitution";
+import { EXERCISE_PROFILES } from "@/lib/workouts/exercise-profiles";
 import { cn } from "@/lib/cn";
 
 const DIFFICULTIES: ExerciseDifficulty[] = ["beginner", "intermediate", "advanced"];
@@ -51,11 +54,16 @@ export function ExerciseBrowser({
   records,
   availableEquipment,
   initialMuscle,
+  experience,
+  familiarSlugs,
 }: {
   records: ExerciseRecord[];
   availableEquipment: string[];
   initialMuscle: CanonicalMuscle | null;
+  experience: ExperienceLevel | null;
+  familiarSlugs: string[];
 }) {
+  const [alternativesFor, setAlternativesFor] = useState<ExerciseRecord | null>(null);
   const [query, setQuery] = useState("");
   const [muscle, setMuscle] = useState<CanonicalMuscle | null>(initialMuscle);
   const [equipmentFilter, setEquipmentFilter] = useState<string | null>(null);
@@ -111,7 +119,7 @@ export function ExerciseBrowser({
   }
 
   return (
-    <main className="relative min-h-screen bg-mf-glass-bg px-4 py-8 text-mf-glass-text sm:px-6 lg:px-10">
+    <div className="relative min-h-screen bg-mf-glass-bg px-4 py-8 text-mf-glass-text sm:px-6 lg:px-10">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <Link
@@ -218,6 +226,7 @@ export function ExerciseBrowser({
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <select
+              aria-label="Equipment"
               value={equipmentFilter ?? ""}
               onChange={(event) => updateAndResetPage(setEquipmentFilter)(event.target.value || null)}
               className="h-10 rounded-lg border border-mf-glass-border bg-mf-glass-bg-deep px-3 text-sm text-mf-glass-text"
@@ -231,6 +240,7 @@ export function ExerciseBrowser({
             </select>
 
             <select
+              aria-label="Movement pattern"
               value={movementPattern ?? ""}
               onChange={(event) => updateAndResetPage(setMovementPattern)(event.target.value || null)}
               className="h-10 rounded-lg border border-mf-glass-border bg-mf-glass-bg-deep px-3 text-sm text-mf-glass-text"
@@ -278,7 +288,12 @@ export function ExerciseBrowser({
             <>
               <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {visible.map((record) => (
-                  <ExerciseCard key={record.id} record={record} onSelect={() => setSelectedRecord(record)} />
+                  <ExerciseCard
+                    key={record.id}
+                    record={record}
+                    onSelect={() => setSelectedRecord(record)}
+                    onFindAlternative={() => setAlternativesFor(record)}
+                  />
                 ))}
               </div>
 
@@ -299,44 +314,76 @@ export function ExerciseBrowser({
       </div>
 
       {selectedRecord ? (
-        <ExerciseDetailPanel record={selectedRecord} onClose={() => setSelectedRecord(null)} />
+        <ExerciseDetailPanel
+          record={selectedRecord}
+          onClose={() => setSelectedRecord(null)}
+          onFindAlternative={() => {
+            setAlternativesFor(selectedRecord);
+            setSelectedRecord(null);
+          }}
+        />
       ) : null}
-    </main>
+
+      {alternativesFor ? (
+        <ExerciseAlternativesSheet
+          open
+          onOpenChange={(next) => !next && setAlternativesFor(null)}
+          exercise={alternativesFor.provenance.raw}
+          experience={experience}
+          familiarSlugs={familiarSlugs}
+        />
+      ) : null}
+    </div>
   );
 }
 
-function ExerciseCard({ record, onSelect }: { record: ExerciseRecord; onSelect: () => void }) {
-  const hasAnimation = Boolean(record.animationId);
+const SETUP_LABEL = { low: "Simple setup", moderate: "Moderate setup", high: "Technical lift" } as const;
+const STABILITY_LABEL = { guided: "Guided path", supported: "Body supported", free: "Free-moving" } as const;
+
+function ExerciseCard({
+  record,
+  onSelect,
+  onFindAlternative,
+}: {
+  record: ExerciseRecord;
+  onSelect: () => void;
+  onFindAlternative: () => void;
+}) {
+  const profile = EXERCISE_PROFILES[record.slug];
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="group flex flex-col gap-3 rounded-2xl border border-mf-glass-border bg-mf-glass-surface p-4 text-left transition hover:-translate-y-0.5 hover:border-mf-glass-brand-border"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-mf-glass-border bg-white/[0.02] text-mf-glass-text-muted">
-          <Dumbbell className="size-4" aria-hidden="true" />
-        </span>
-        <span className={cn("rounded-full border px-2 py-0.5 text-xs font-bold uppercase", DIFFICULTY_TONE[record.difficulty])}>
-          {record.difficulty}
-        </span>
-      </div>
-
-      <div className="min-w-0">
-        <p className="truncate text-sm font-bold text-mf-glass-text">{record.canonicalName}</p>
-        <p className="truncate text-xs text-mf-glass-text-muted">
-          {record.primaryMuscles.map((m) => MUSCLE_DISPLAY_NAME[m]).join(", ") || "—"} · {record.equipment.join(", ")}
+    <article className="flex flex-col rounded-md border border-mf-glass-border bg-mf-glass-surface transition hover:border-mf-glass-border-strong">
+      <button type="button" onClick={onSelect} className="flex flex-1 flex-col gap-2 p-4 text-left">
+        <div className="flex items-start justify-between gap-2">
+          <p className="min-w-0 text-base font-bold text-mf-glass-text">{record.canonicalName}</p>
+          <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-xs font-bold uppercase", DIFFICULTY_TONE[record.difficulty])}>
+            {record.difficulty}
+          </span>
+        </div>
+        <p className="text-xs text-mf-glass-text-muted">
+          <span className="font-semibold text-mf-glass-text-secondary">{record.primaryMuscles.map((m) => MUSCLE_DISPLAY_NAME[m]).join(", ") || "—"}</span>
+          {" · "}
+          {record.movementPattern} · {record.equipment.join(", ")}
         </p>
-      </div>
-
-      <p className="text-xs font-semibold uppercase tracking-wide text-mf-glass-text-muted">
-        {hasAnimation ? (
-          <span className="text-mf-glass-brand">● Technique available</span>
-        ) : (
-          "Technique unavailable"
-        )}
-      </p>
-    </button>
+        {profile ? (
+          <p className="text-xs font-semibold text-mf-glass-text-muted">
+            {profile.mechanic === "compound" ? "Multi-joint" : "Single-joint"} · {STABILITY_LABEL[profile.stability]} · {SETUP_LABEL[profile.complexity]}
+          </p>
+        ) : null}
+        <p className="line-clamp-2 text-sm leading-6 text-mf-glass-text-secondary">{record.provenance.raw.description}</p>
+      </button>
+      {profile ? (
+        <div className="border-t border-mf-glass-border px-2 py-1.5">
+          <button
+            type="button"
+            onClick={onFindAlternative}
+            className="inline-flex min-h-10 items-center gap-2 rounded-md px-2 text-sm font-semibold text-mf-glass-text-secondary hover:bg-mf-glass-bg-deep"
+          >
+            <ArrowLeftRight aria-hidden="true" className="size-4" />
+            Find alternative
+          </button>
+        </div>
+      ) : null}
+    </article>
   );
 }

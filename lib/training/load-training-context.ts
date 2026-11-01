@@ -52,6 +52,25 @@ export type LastSessionForExercise = {
   sets: LoggedSetForProgression[];
 };
 
+/** One logged set from a completed session, dated in the athlete's time zone (Muscle Intelligence history). */
+export type LoggedSetRecord = {
+  sessionId: string;
+  exerciseId: string;
+  /** What the athlete saw when logging (workout_session_exercises.display_name). */
+  exerciseName: string;
+  setType: SetClassification;
+  completed: boolean;
+  completedAt: string;
+  localDate: string;
+};
+
+export type CompletedSessionRecord = {
+  id: string;
+  name: string | null;
+  completedAt: string;
+  localDate: string;
+};
+
 export type TrainingContext = {
   dataWindow: {
     startDate: string;
@@ -66,6 +85,8 @@ export type TrainingContext = {
   lastSessionByExercise: Map<string, LastSessionForExercise>;
   e1RmHistoryByExercise: Map<string, PerformanceDataPoint[]>;
   hasAnyLoggedData: boolean;
+  loggedSets: LoggedSetRecord[];
+  completedSessions: CompletedSessionRecord[];
 };
 
 function isCanonicalMuscle(value: string): value is CanonicalMuscle {
@@ -74,6 +95,7 @@ function isCanonicalMuscle(value: string): value is CanonicalMuscle {
 
 type WorkoutSessionRow = {
   id: string;
+  name: string | null;
   completed_at: string | null;
   session_state: string | null;
 };
@@ -132,6 +154,8 @@ function emptyContext(windowDays: number, endDate: string): TrainingContext {
     lastSessionByExercise: new Map(),
     e1RmHistoryByExercise: new Map(),
     hasAnyLoggedData: false,
+    loggedSets: [],
+    completedSessions: [],
   };
 }
 
@@ -166,7 +190,7 @@ export async function loadTrainingContext(
 
   const { data: sessionRows, error: sessionsError } = await supabase
     .from("workout_sessions")
-    .select("id, completed_at, session_state")
+    .select("id, name, completed_at, session_state")
     .eq("user_id", userId)
     .not("completed_at", "is", null)
     .gte("completed_at", windowStartIso)
@@ -309,6 +333,11 @@ export async function loadTrainingContext(
   // ---- Dated sets for weekly analytics / baseline ----
 
   const datedSets: DatedExerciseSetLog[] = [];
+  const loggedSets: LoggedSetRecord[] = [];
+  const toLocalDate = (iso: string) =>
+    timeZone
+      ? localDateTimeParts(new Date(iso), timeZone).localDate
+      : new Date(new Date(iso).getTime() + timeZoneOffsetMinutes * 60_000).toISOString().slice(0, 10);
 
   for (const set of sets) {
     const sessionExercise = sessionExerciseById.get(set.session_exercise_id);
@@ -339,6 +368,16 @@ export async function loadTrainingContext(
       completed: set.completed === true,
       sessionId: sessionExercise.workout_session_id,
       completedAt,
+    });
+
+    loggedSets.push({
+      sessionId: sessionExercise.workout_session_id,
+      exerciseId: sessionExercise.exercise_id,
+      exerciseName: sessionExercise.display_name,
+      setType,
+      completed: set.completed === true,
+      completedAt,
+      localDate: toLocalDate(completedAt),
     });
   }
 
@@ -477,6 +516,15 @@ export async function loadTrainingContext(
     lastSessionByExercise,
     e1RmHistoryByExercise,
     hasAnyLoggedData: datedSets.length > 0,
+    loggedSets,
+    completedSessions: sessions
+      .filter((session): session is WorkoutSessionRow & { completed_at: string } => session.completed_at !== null)
+      .map((session) => ({
+        id: session.id,
+        name: session.name,
+        completedAt: session.completed_at,
+        localDate: toLocalDate(session.completed_at),
+      })),
   };
 }
 

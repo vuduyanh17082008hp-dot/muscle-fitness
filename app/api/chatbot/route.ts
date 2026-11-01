@@ -21,7 +21,7 @@ import {
   resolveCanonicalMuscle,
   type CanonicalMuscle,
 } from "@/lib/training/muscle-taxonomy";
-import { LOCAL_EXERCISE_LIBRARY } from "@/lib/workouts/exercise-library";
+import { EXERCISE_CATALOGUE } from "@/lib/workouts/exercise-library";
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context";
 import { compareToTargets, describePortion, summarizeMeals } from "@/lib/nutrition/food-log/totals";
 import { checkSafety } from "@/lib/dante-core/safety-layer";
@@ -675,7 +675,7 @@ function getSelectedExercise(body: unknown): { name: string; primaryMuscle: Cano
     return null;
   }
 
-  const match = LOCAL_EXERCISE_LIBRARY.find(
+  const match = EXERCISE_CATALOGUE.find(
     (item) => item.name.toLowerCase() === (requestBody.selectedExercise as string).trim().toLowerCase(),
   );
 

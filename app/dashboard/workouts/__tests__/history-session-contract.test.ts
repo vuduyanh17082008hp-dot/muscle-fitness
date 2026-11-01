@@ -95,6 +95,11 @@ function fakeSupabase(
         filters.push((r) => r[col] === val);
         return q;
       },
+      is: (col: string, val: unknown) => {
+        touch(col);
+        filters.push((r) => (r[col] ?? null) === val);
+        return q;
+      },
       in: (col: string, vals: unknown[]) => {
         touch(col);
         filters.push((r) => vals.includes(r[col]));
@@ -248,7 +253,7 @@ describe("PF-01 active workout session", () => {
     ];
     data.workout_plans = [{ id: "p1", name: "PPL Plan", allow_client_substitution: true }];
     data.exercise_library = [
-      { id: "x1", name: "Bench Press", primary_muscle: "chest", equipment: "barbell", is_active: true },
+      { id: "x1", slug: "barbell-bench-press", name: "Bench Press", primary_muscle: "chest", equipment: "barbell", is_active: true },
       { id: "x2", name: "Overhead Press", primary_muscle: "shoulders", equipment: "barbell", is_active: true },
       { id: "x3", name: "Dumbbell Press", primary_muscle: "chest", equipment: "dumbbell", is_active: true },
     ];
@@ -265,7 +270,9 @@ describe("PF-01 active workout session", () => {
     expect(html).toContain("Rest timer");
     expect(html).toContain(">1/3<"); // saved progress survives a reload
     expect(html).toContain('value="100"'); // logged weight is restored into the input
-    expect(html).toContain("Dumbbell Press"); // same-muscle substitution option
+    // Adaptive Workouts 2.0: the raw same-muscle <select> became a catalogue-backed sheet.
+    expect(html).toContain("Find alternative");
+    expect(html).not.toContain("Replace exercise…");
     expect(html).not.toContain("Session exercises"); // not the read-only view
   });
 

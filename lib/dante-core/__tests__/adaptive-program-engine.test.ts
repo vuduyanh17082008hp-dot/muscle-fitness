@@ -110,6 +110,8 @@ function trainingContext(lastSessionByExercise: Map<string, LastSessionForExerci
     lastSessionByExercise,
     e1RmHistoryByExercise: new Map(),
     hasAnyLoggedData: true,
+    loggedSets: [],
+    completedSessions: [],
   };
 }
 

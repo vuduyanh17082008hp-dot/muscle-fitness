@@ -44,7 +44,7 @@ export type MuscleAtlasEntry = {
   parentRegion: CanonicalMuscle | null;
   shortDescription: string;
   basicActions: string[];
-  /** Keys into lib/training/muscle-regions.ts's MUSCLE_REGIONS (by muscle + view), not a duplicate geometry table. */
+  /** `${muscle}-${view}` for every view the anatomy atlas draws this muscle in (lib/training/anatomy/atlas-geometry.ts). */
   visualRegionIds: string[];
   sourceIds: string[];
 };
@@ -168,7 +168,7 @@ const ENTRIES: Record<CanonicalMuscle, MuscleAtlasEntry> = {
     parentRegion: null,
     shortDescription: "A large kite-shaped muscle spanning the neck, shoulders and mid-back, controlling shoulder-blade movement.",
     basicActions: ["Scapular elevation", "Scapular retraction", "Scapular depression"],
-    visualRegionIds: ["trapezius-back"],
+    visualRegionIds: ["trapezius-front", "trapezius-back"],
     sourceIds: ["kenhub_muscle_anatomy"],
   },
   biceps: {
@@ -198,7 +198,7 @@ const ENTRIES: Record<CanonicalMuscle, MuscleAtlasEntry> = {
     parentRegion: null,
     shortDescription: "The three-headed muscle on the back of the upper arm, straightening the elbow.",
     basicActions: ["Elbow extension"],
-    visualRegionIds: ["triceps-back"],
+    visualRegionIds: ["triceps-front", "triceps-back"],
     sourceIds: ["kenhub_muscle_anatomy"],
   },
   forearms: {
@@ -213,7 +213,7 @@ const ENTRIES: Record<CanonicalMuscle, MuscleAtlasEntry> = {
     parentRegion: null,
     shortDescription: "The muscle group running from the elbow to the wrist, controlling grip and wrist movement.",
     basicActions: ["Wrist flexion/extension", "Grip"],
-    visualRegionIds: ["forearms-front"],
+    visualRegionIds: ["forearms-front", "forearms-back"],
     sourceIds: ["physio_pedia"],
   },
   quadriceps: {
@@ -273,22 +273,37 @@ const ENTRIES: Record<CanonicalMuscle, MuscleAtlasEntry> = {
     parentRegion: null,
     shortDescription: "The muscle group on the back of the lower leg, pointing the foot downward.",
     basicActions: ["Ankle plantarflexion"],
-    visualRegionIds: ["calves-back"],
+    visualRegionIds: ["calves-front", "calves-back"],
     sourceIds: ["kenhub_muscle_anatomy"],
   },
   abdominals: {
     id: "abdominals",
     canonicalMuscle: "abdominals",
     displayName: MUSCLE_DISPLAY_NAME.abdominals,
-    scientificName: "Rectus Abdominis / Obliques",
+    scientificName: "Rectus Abdominis",
     commonAliases: ["abs", "core"],
     vietnameseAliases: ["bụng", "cơ bụng"],
     preferredView: "front",
     depth: "superficial",
     parentRegion: null,
-    shortDescription: "The muscle group across the front and sides of the torso, flexing and rotating the trunk.",
-    basicActions: ["Trunk flexion", "Trunk rotation", "Pelvic stabilization"],
+    shortDescription: "The long paired muscle down the front of the abdomen, flexing the trunk and bracing the pelvis.",
+    basicActions: ["Trunk flexion", "Pelvic stabilization"],
     visualRegionIds: ["abdominals-front"],
+    sourceIds: ["kenhub_muscle_anatomy"],
+  },
+  obliques: {
+    id: "obliques",
+    canonicalMuscle: "obliques",
+    displayName: MUSCLE_DISPLAY_NAME.obliques,
+    scientificName: "External / Internal Obliques",
+    commonAliases: ["side abs", "waist"],
+    vietnameseAliases: ["cơ liên sườn", "cơ chéo bụng"],
+    preferredView: "front",
+    depth: "superficial",
+    parentRegion: "abdominals",
+    shortDescription: "The layered muscles along the sides of the abdomen, rotating and side-bending the trunk and resisting rotation.",
+    basicActions: ["Trunk rotation", "Lateral flexion", "Anti-rotation bracing"],
+    visualRegionIds: ["obliques-front"],
     sourceIds: ["kenhub_muscle_anatomy"],
   },
   lower_back: {

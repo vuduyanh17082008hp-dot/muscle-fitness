@@ -56,6 +56,8 @@ const VIETNAMESE_MUSCLE_ALIASES: Record<string, CanonicalMuscle> = {
   cơ_bắp_chân: "calves",
   bụng: "abdominals",
   cơ_bụng: "abdominals",
+  cơ_liên_sườn: "obliques",
+  cơ_chéo_bụng: "obliques",
   lưng_dưới: "lower_back",
   cơ_lưng_dưới: "lower_back",
   lưng_trên: "upper_back",

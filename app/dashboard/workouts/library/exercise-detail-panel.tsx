@@ -16,9 +16,11 @@ import type { ExerciseRecord } from "@/lib/workouts/providers/types";
 // as Floating Dante / the Muscle Atlas's Ask Dante tab.
 const DanteChat = dynamic(() => import("@/components/dante-chat"), { ssr: false });
 
-export function ExerciseDetailPanel({ record, onClose }: { record: ExerciseRecord; onClose: () => void }) {
+type PanelProps = { record: ExerciseRecord; onClose: () => void; onFindAlternative: () => void };
+
+export function ExerciseDetailPanel({ record, onClose, onFindAlternative }: PanelProps) {
   const isDesktop = useIsDesktop();
-  const content = <PanelContent record={record} onClose={onClose} />;
+  const content = <PanelContent record={record} onClose={onClose} onFindAlternative={onFindAlternative} />;
 
   if (isDesktop) {
     return (
@@ -43,7 +45,7 @@ export function ExerciseDetailPanel({ record, onClose }: { record: ExerciseRecor
   );
 }
 
-function PanelContent({ record, onClose }: { record: ExerciseRecord; onClose: () => void }) {
+function PanelContent({ record, onClose, onFindAlternative }: PanelProps) {
   const [askingDante, setAskingDante] = useState(false);
   const hasAlternatives =
     record.alternatives.length > 0 || record.regressions.length > 0 || record.progressions.length > 0;
@@ -101,12 +103,23 @@ function PanelContent({ record, onClose }: { record: ExerciseRecord; onClose: ()
       ) : null}
 
       <div className="mt-auto flex flex-col gap-2 border-t border-mf-glass-border pt-4">
-        <Link
-          href={`/dashboard/workouts/plans/new?prefillExercise=${encodeURIComponent(record.canonicalName)}`}
-          className="flex h-11 w-full items-center justify-center rounded-xl bg-mf-glass-brand text-sm font-bold uppercase tracking-[0.08em] text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+        <button
+          type="button"
+          onClick={onFindAlternative}
+          className="flex h-11 w-full items-center justify-center rounded-xl border border-mf-glass-border-strong text-sm font-bold uppercase tracking-[0.08em] text-mf-glass-text transition hover:bg-mf-glass-hover"
         >
-          Add to Program
-        </Link>
+          Find Alternative
+        </button>
+
+        {/* Plans persist built-in ids only; environment-seeded entries (no fixed id) can't be prefilled yet. */}
+        {record.provenance.raw.id ? (
+          <Link
+            href={`/dashboard/workouts/plans/new?prefillExercise=${encodeURIComponent(record.canonicalName)}`}
+            className="flex h-11 w-full items-center justify-center rounded-xl bg-mf-glass-brand text-sm font-bold uppercase tracking-[0.08em] text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+          >
+            Add to Plan
+          </Link>
+        ) : null}
 
         <button
           type="button"
