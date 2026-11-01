@@ -42,6 +42,14 @@ export default function SetVisionPage() {
           note otherwise — never presented as true m/s without calibration. Nothing is
           uploaded unless you choose to save.
         </p>
+
+        <Link
+          href="/dashboard/workouts/setvision/squat"
+          className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-white underline-offset-4 hover:underline"
+          data-testid="setvision-squat-p0-link"
+        >
+          Experimental: review a bodyweight squat clip rep by rep →
+        </Link>
       </header>
 
       <VideoAnalyzerClient />
