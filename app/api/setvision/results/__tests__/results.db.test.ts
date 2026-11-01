@@ -161,7 +161,9 @@ delete from auth.users where id in (${q(owner)}, ${q(intruder)});`)
   })
 
   it("saves a custom exercise as a manual review: NULL metrics (not 0), the user's reps and notes, nothing added to the catalogue", async () => {
-    const catalogueBefore = run("select count(*) from public.workout_exercises;").out
+    // Scoped to the name: other DB suites insert catalogue rows in parallel.
+    const catalogueRows = () => run("select count(*) from public.workout_exercises where name ilike '%landmine row%';").out
+    const catalogueBefore = catalogueRows()
     const before = workoutHistory(owner)
     const review = { rejectedReps: [], manualReps: [{ startMs: 1000, endMs: 2500 }, { startMs: 3000, endMs: 4200 }], notes: "Tempo 3-1-1, 20 kg", unsure: true }
     const saved = await call(owner, "POST", "", { analysis: null, videoDurationMs: 30_000, exerciseKey: null, exerciseSource: "custom", customLabel: "  Landmine  Row ", review, videoStoragePath: `${owner}/2.mp4` })
@@ -169,7 +171,7 @@ delete from auth.users where id in (${q(owner)}, ${q(intruder)});`)
 
     const stored = run(`select exercise || '|' || coalesce(reps::text, 'NULL') || '|' || coalesce(confidence::text, 'NULL') || '|' || (per_rep->'identity')::text from setvision_analyses where id = ${q(saved.json.id)};`).out
     expect(stored).toBe('manual_review|NULL|NULL|{"key": null, "label": "Landmine Row", "source": "custom", "catalogueId": null}')
-    expect(run("select count(*) from public.workout_exercises;").out).toBe(catalogueBefore)
+    expect(catalogueRows()).toBe(catalogueBefore)
     expect(workoutHistory(owner)).toBe(before)
 
     const reloaded = await call(owner, "GET", `?id=${saved.json.id}`)
@@ -187,7 +189,7 @@ delete from auth.users where id in (${q(owner)}, ${q(intruder)});`)
 
   it("refuses a custom name that fails validation, and a custom save that smuggles in an engine analysis", async () => {
     const count = run(`select count(*) from setvision_analyses where user_id = ${q(owner)};`).out
-    expect((await call(owner, "POST", "", { analysis: null, videoDurationMs: 30_000, exerciseKey: null, exerciseSource: "custom", customLabel: " " })).status).toBe(400)
+    expect((await call(owner, "POST", "", { analysis: null, videoDurationMs: 30_000, exerciseKey: null, exerciseSource: "custom", customLabel: "\u0000" })).status).toBe(400)
     expect((await call(owner, "POST", "", { analysis, videoDurationMs, exerciseKey: null, exerciseSource: "custom", customLabel: "My squat" })).status).toBe(400)
     expect(run(`select count(*) from setvision_analyses where user_id = ${q(owner)};`).out).toBe(count)
   })
