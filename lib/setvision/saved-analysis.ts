@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { findExerciseOption, type SavedExerciseIdentity } from "@/lib/setvision/exercise-selection";
 import { SETVISION_EXERCISES } from "@/lib/setvision/types";
+import { MIN_VELOCITY_LOSS } from "@/lib/setvision/velocity";
 import type { RepRom, RepTempo, SetVisionAnalysis, SetVisionExerciseId } from "@/lib/setvision/types";
 
 /**
@@ -28,6 +29,8 @@ const nonNegative = finite.min(0);
 const unit = finite.min(0).max(1);
 const timestamp = finite.min(0).max(MAX_VIDEO_DURATION_MS);
 const text = z.string().max(600);
+/** numeric(5,2) columns hold < 1000 s. */
+const seconds = finite.min(0).max(999.99);
 const engineEnum = z.enum(SETVISION_EXERCISES as [SetVisionExerciseId, ...SetVisionExerciseId[]]);
 
 const tempoSchema = z.object({
@@ -56,8 +59,8 @@ export const analysisSchema = z.object({
   }),
   reps: z.number().int().min(0).max(MAX_REPS),
   romConsistency: unit.nullable(),
-  averageEccentricTime: nonNegative.nullable(),
-  averageConcentricTime: nonNegative.nullable(),
+  averageEccentricTime: seconds.nullable(),
+  averageConcentricTime: seconds.nullable(),
   velocity: z.object({
     calibrated: z.boolean(),
     unit: z.enum(["m/s", "torso-lengths/s"]),
@@ -65,7 +68,8 @@ export const analysisSchema = z.object({
     mean: nonNegative.nullable(),
     peak: nonNegative.nullable(),
     final: nonNegative.nullable(),
-    velocityLoss: unit.nullable(),
+    // Negative = the final rep was faster than the first (real clips do this). Bounds = the numeric(4,3) column.
+    velocityLoss: finite.min(MIN_VELOCITY_LOSS).max(1).nullable(),
   }),
   technique: z.object({
     romConsistency: unit.nullable(),

@@ -145,6 +145,8 @@ export function VideoAnalyzer() {
     if (!analysis || !video?.durationMs || !active?.key || active.source === "custom") return;
     const target = analysis;
     setSave({ analysis: target, value: "saving" });
+    const supabase = createClient();
+    let uploadedPath: string | null = null;
 
     try {
       const extension = video.file.name.split(".").pop() ?? "mp4";
@@ -156,10 +158,11 @@ export function VideoAnalyzer() {
       const uploadUrlData = await uploadUrlResponse.json();
       if (!uploadUrlResponse.ok || !uploadUrlData.ok) throw new Error(uploadUrlData.error ?? "Could not get an upload URL.");
 
-      const { error: uploadError } = await createClient()
-        .storage.from("setvision-videos")
+      const { error: uploadError } = await supabase.storage
+        .from("setvision-videos")
         .uploadToSignedUrl(uploadUrlData.path, uploadUrlData.token, video.file);
       if (uploadError) throw new Error(uploadError.message);
+      uploadedPath = uploadUrlData.path;
 
       const resultsResponse = await fetch("/api/setvision/results", {
         method: "POST",
@@ -179,6 +182,8 @@ export function VideoAnalyzer() {
       setSavedCount((n) => n + 1);
     } catch (error) {
       console.error("[SETVISION] save failed", error);
+      // Nothing was saved, so don't leave the video behind in storage (best effort).
+      if (uploadedPath) await supabase.storage.from("setvision-videos").remove([uploadedPath]).catch(() => {});
       setSave({ analysis: target, value: "error" });
     }
   }, [analysis, video, active]);

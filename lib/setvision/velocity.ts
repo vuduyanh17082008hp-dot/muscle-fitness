@@ -33,6 +33,9 @@ import type { CompletedRep, RepVelocity, VelocityResult } from "@/lib/setvision/
 // ponytail: a-priori bound, not fitted to labeled clips.
 export const MAX_PLAUSIBLE_TORSO_LENGTHS_PER_SEC = 10;
 
+/** Velocity loss is (first − final) / first: ≤ 1, negative when the final rep is faster. Lower bound = what setvision_analyses.velocity_loss numeric(4,3) holds. */
+export const MIN_VELOCITY_LOSS = -9.999;
+
 function round(value: number, decimals = 3): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
@@ -90,7 +93,9 @@ function computeVelocityLoss(perRep: RepVelocity[]): number | null {
     return null;
   }
 
-  return round((first - last) / first, 3);
+  const loss = round((first - last) / first, 3);
+  // A final rep >11x faster than the first is a tracking artefact, not a speed gain (and won't fit numeric(4,3)).
+  return loss >= MIN_VELOCITY_LOSS ? loss : null;
 }
 
 export function computeVelocity(

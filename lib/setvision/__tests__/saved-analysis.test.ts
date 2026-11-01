@@ -49,6 +49,13 @@ describe("SetVision save validation", () => {
     expect(saveRequestSchema.safeParse({ ...body(), videoDurationMs: undefined }).success).toBe(false);
   });
 
+  it("accepts a negative velocity loss (final rep faster — seen on a real side-view squat) within the column's range", () => {
+    const faster = (velocityLoss: number) => body({ ...analysis, velocity: { ...analysis.velocity, velocityLoss } });
+    expect(issues(faster(-0.25))).toEqual([]);
+    expect(issues(faster(-20))).not.toEqual([]);
+    expect(issues(faster(1.2))).not.toEqual([]);
+  });
+
   it("rejects non-finite, negative and out-of-range values", () => {
     expect(issues(body(withTempo({ ascentStartMs: Number.POSITIVE_INFINITY })))).not.toEqual([]);
     expect(issues(body(withTempo({ concentricSec: Number.NaN })))).not.toEqual([]);

@@ -165,10 +165,13 @@ synchronous. Public API: `index.ts` (`buildIntelligenceBrief`,
 
 `lib/setvision/` — MoveNet-based (reuses the same pose detector as the
 pre-existing Form Coach feature) rep counting, ROM, tempo, velocity, bar-path
-and technique-consistency analysis for Bench Press/Squat/Deadlift, driven
-from an uploaded video processed entirely client-side. Public API:
-`lib/setvision/index.ts` (`analyzeWorkoutVideo`). Product surface:
-`/dashboard/workouts/setvision`. **No real accuracy numbers exist yet** —
+and technique-consistency analysis, driven from an uploaded video processed
+entirely client-side. Public API: `lib/setvision/index.ts`
+(`analyzeWorkoutVideo`). Product surface: `/dashboard/workouts/setvision` —
+the user picks the exercise (catalogue/custom; Auto-detect is a confirm-first
+suggestion); only squat is a supported analysis, deadlift is experimental,
+everything else (bench included) is label-only
+(`lib/setvision/exercise-selection.ts`). **No real accuracy numbers exist yet** —
 see docs/setvision.md's Benchmarking section before ever quoting one.
 Persistence needs `supabase/migrations/20260916090000_setvision.sql`
 applied (not done automatically by this pass — review before running).

@@ -66,10 +66,23 @@ labeled video dataset in this project to train one on
    Sagittal knee/hip angles are then 2D projections (a front-view squat's
    thigh foreshortens and its "hip angle" collapses like a hinge), so the
    classifier **abstains** (`exercise: null`) and asks the user to choose.
-3. Side-on (or unknown) view: squat vs. deadlift by the ratio of robust
+   Below 0.15× the hips overlap → side-on. Between the two bands the view is
+   **"uncertain"** (e.g. an angled camera), and with too few frames showing
+   both hips and shoulders it is **"unknown"** — both abstain too. The 0.15
+   band is a-priori (real side-view clips measured 0.02–0.04, a rear-angled
+   squat 0.30); it is **not a validated oblique-view detector**.
+3. Verified side-on view only: squat vs. deadlift by the ratio of robust
    (p95 − p5) knee-flexion range to hip-flexion range. ≥ 0.8 → squat (knee
    and hip bend together); ≤ 0.55 → deadlift (hip-dominant hinge); between
    → abstain. Under 30° of movement on both joints → abstain.
+4. A squat pattern whose hands are at or below the knees in ≥ half of the
+   deep frames (clearly tracked wrist + same-side knee) → abstain: pose
+   alone cannot tell a squat-depth equipment pickup from a squat holding
+   weights low (or a hinge).
+
+Every Auto-detect result is only a **suggestion**: the UI shows it as
+unverified and nothing exercise-specific is displayed until the user
+confirms it or picks another exercise (see UI below).
 
 All joint angles take every point from **one body side** — the side whose
 weakest keypoint scores higher — and only when that score is ≥ 0.4
@@ -98,11 +111,16 @@ run to run):
 | 10-count squat (front, 35 s) | squat, 1 rep, ~8 s hold | deadlift, 1 rep | abstain (front view) |
 | kettlebell squat A (side) | squat, 3 reps + pickup + cut final rep | deadlift, 4 reps | squat, 3 reps |
 | kettlebell squat B (side) | squat, 4 reps (1st starts in the hole) + put-down | deadlift, 4 reps | squat, 4 reps (1st: descent not observed) |
-| barbell back squat (rear-oblique, 7 s) | squat, 2 reps | deadlift, 1 rep | squat, 2 reps |
+| barbell back squat (rear-oblique, 7 s) | squat, 2 reps | deadlift, 1 rep | squat, 2 reps → R2: abstain (view uncertain, 0.30) |
 | CDC half squat (front/oblique) | squat | deadlift | abstain (front view) |
 | goblet squat (front/oblique) | squat | deadlift | abstain (front view) |
 | deadlift demo (rear-oblique, real person) | deadlift | squat | abstain (front/rear view) |
 | deadlift (side, rendered mannequin) | deadlift | deadlift | abstain (knee/hip ratio 0.70) |
+
+Correction round 2 (same day, independent review): the rear-oblique clip
+now abstains instead of being labelled from projected angles; the two side
+kettlebell clips are still suggested as squat and no real clip produced a
+false pickup flag.
 
 **No real clip was recognised as deadlift by the corrected classifier**;
 deadlift recognition is exercised only by synthetic side-view poses. Eight
@@ -164,11 +182,19 @@ Observation rules (2026-11-01):
 
 ## Range of motion (spec §15)
 
-`romPercent = (observed angle range this rep) / (per-exercise reference
-range) * 100` — reference ranges (`exercise-config.ts`) are rough, commonly
-cited ballpark figures, **not a clinical/biomechanical measurement**.
-Deliberately left unclamped above 100%: a more mobile lifter shouldn't have
-that silently hidden by a cap.
+Each rep reports `rangeDeg`: the observed 2D change of the primary joint
+angle from the standing/lockout angle just before the descent to the
+deepest angle. It is reported **only when the camera is verified side-on**
+(a front or angled view projects the angle), and a rep whose range is not
+a possible joint range (non-finite, ≤ 0° or > 180°) gets **no entry**, never
+a made-up value. The UI shows degrees.
+
+`romPercent` (range ÷ a rough per-exercise reference, `exercise-config.ts`)
+is still computed for benchmarks and old rows, but **not shown**: the
+reference ranges are uncalibrated ballpark figures and full-depth reps on
+real side-view squats read 169–191% — the >100% values were systematic, not
+"very mobile lifters". (Before R2 the range also started at the descent
+threshold, ~155°, not the true standing angle.)
 
 ## Tempo (spec §16)
 
@@ -249,12 +275,45 @@ torso length could be estimated — documented, not a single opaque number.
 ## UI (spec §22)
 
 `/dashboard/workouts/setvision` (`components/setvision/video-analyzer.tsx`):
-upload → optional exercise override → Analyze (shows a live skeleton overlay
-via the pre-existing `components/form-coach/pose-overlay-canvas.tsx`,
-reused as-is) → results panel (Reps/ROM/Tempo/Velocity/Velocity
-Loss/Consistency, per-rep table, limitations) → optional save (uploads video
-+ persists metrics) → "Ask Dante" (calls `/api/dante/recommendation` with
-the SetVision signal and renders the resulting `DecisionCard`).
+
+1. **Exercise** (`exercise-picker.tsx`), three modes — manual is the default:
+   - *Choose exercise*: search (name + aliases, accent/case-insensitive,
+     keyboard: ArrowDown from the box, Up/Down between results) over
+     `lib/setvision/exercise-selection.ts::EXERCISE_OPTIONS` = every entry of
+     the real catalogue (`EXERCISE_CATALOGUE`, real ids, no new rows) plus a
+     few SetVision-only movements the catalogue lacks (Squat, Deadlift,
+     Incline Bench Press, Barbell Row, Biceps Curl, Lunge; no catalogue id).
+   - *Custom exercise*: "Enter your exercise name", ≤ 80 characters,
+     whitespace collapsed, any script kept, control/format characters
+     rejected, rendered as text. Never added to the catalogue; label only.
+   - *Auto-detect (Experimental)*: after analysis shows "Exercise not
+     identified" (with the reason) or an **unverified suggestion** the user
+     must confirm ("Yes, it's Squat") or correct.
+2. **Capability** — what is actually measured for the pick:
+
+   | Capability | Exercises | What runs |
+   |---|---|---|
+   | `SUPPORTED_ANALYSIS` | Squat, Barbell Back Squat | knee-angle rep machine, tempo, side-on joint range, consistency, normalized speed; Save + Ask Dante |
+   | `LIMITED_EXPERIMENTAL_ANALYSIS` | Deadlift | hip-angle machine, labelled Experimental; Save allowed, **not sent to Dante** (0 reps on the real deadlift clips tried) |
+   | `MANUAL_LABEL_ONLY` | Barbell Bench Press and every other catalogue/SetVision entry, every custom name, a confirmed "bench" suggestion | nothing: video review only, explicit "no automated analysis" card, no Analyze/metrics/Save/Dante; never routed through the squat or deadlift counter |
+
+   The old elbow-angle bench config is kept in the engine but exposed
+   nowhere: it has no real-footage evidence.
+3. **Video** → Analyze → pose frames (live overlay via
+   `components/form-coach/pose-overlay-canvas.tsx`). The analysis is
+   **derived** from the current video's frames + the current pick, so
+   switching exercise re-derives it (or removes it for a label-only pick)
+   and can never show another movement's numbers; save/Dante state is tied
+   to the analysis it was produced for. The video and its frames are kept
+   across mode switches. States: invalid video, processing, insufficient
+   evidence (0 reps), save failure (retry), saved.
+4. Results panel: identity provenance (catalogue / SetVision list / custom /
+   confirmed suggestion) shown separately from **analysis quality** (from
+   tracking visibility, rep count, torso visibility only — choosing the
+   exercise cannot raise it; uncalibrated band, never a %).
+5. **Saved analyses** (`saved-analyses.tsx`): the caller's latest saves,
+   each restorable from the DB — rep timeline included — with the video
+   from private storage (signed URL) for seeking.
 
 ## Benchmarking (spec §23) — framework only, no claimed results
 
@@ -316,6 +375,23 @@ dashboard); applying schema changes to a real project without the user's
 explicit review was treated as out of scope for an autonomous session. Run
 it before using the persistence features.
 
+**Save contract (R2).** `per_rep` = `{ rom, tempo, videoDurationMs,
+identity }`. Before R2 the route's nested zod schema listed only
+`repNumber/eccentricSec/pauseSec/concentricSec` for tempo, and zod strips
+unknown keys — so every phase timestamp was silently dropped while the save
+returned `ok`. `lib/setvision/saved-analysis.ts` is now the one schema:
+finite, ranged numbers; per rep the descent/bottom times and eccentric/hold
+durations are all present or all null; phase times in order; each duration
+within 0.011 s of its own timestamps; reps don't overlap; nothing past the
+declared video duration (+100 ms sampling slack); `reps` = timeline length.
+Inconsistent → 400, nothing stored. The exercise identity is re-resolved
+server-side from the option key (label/catalogue id never taken from the
+client); label-only/custom picks are refused. Linked workout rows and the
+video path must be the caller's own. No migration was needed (identity and
+duration ride in `per_rep`). `restoreSavedAnalysis` reads every historical
+shape (null `per_rep`, timestamp-less tempo, %-only ROM) without inventing
+values; such rows show "saved before phase times were stored".
+
 ## API boundaries (spec §27)
 
 - `setvision.analyzeWorkoutVideo()` → `analyzeFrameSequence`
@@ -327,7 +403,9 @@ it before using the persistence features.
   so the algorithmic core stays testable with plain synthetic data (see the
   41 tests in `lib/setvision/__tests__/`).
 - `app/api/setvision/upload-url` (POST) — signed Storage upload URL.
-- `app/api/setvision/results` (POST/GET) — persist / list analyses.
+- `app/api/setvision/results` (POST/GET) — persist / list analyses;
+  `GET ?id=` restores one of the caller's analyses in full (another user's
+  id is a 404).
 
 No circular dependency with Dante Core: SetVision exports plain data types
 (`SetVisionSessionSignal`-shaped data); Dante Core's `types.ts` defines that
@@ -351,7 +429,18 @@ side-view squat/deadlift/ambiguous, hip-flexed or low-score first frame,
 long bottom hold + mid-hold wobble, slow/partial reps, equipment pickup,
 clip starting/ending mid-rep, tracking loss, single-rep consistency,
 unusable video, and P0's duration rejection of the regression clip. 14 of
-them fail against the pre-correction code. The real clips stay out of the
+them fail against the pre-correction code. R2 adds (same file):
+uncertain/unknown-view abstention, squat-depth pickup (auto abstains;
+manual sets it aside only as an outlier among hands-high reps; an
+all-hands-low set is counted and flagged, never suppressed), low-score /
+NaN auxiliary keypoints, no NaN/Infinity in output, joint range in degrees
+and impossible ranges, manual choice not raising the quality score.
+`exercise-selection.test.ts` (catalogue ids, no duplicates, search/aliases,
+capability routing, custom-name validation), `saved-analysis.test.ts`
+(timeline kept, inconsistent timelines rejected, historical rows) and
+`app/api/setvision/results/__tests__/results.db.test.ts` (real local DB:
+save → DB jsonb → reload, cross-tenant 404, foreign workout/video refused,
+legacy row restore, no workout-history writes). The real clips stay out of the
 repo (third-party media); replays of their pose frames are summarised in
 the classification section.
 
@@ -372,7 +461,13 @@ the classification section.
   low-power devices.
 - **Exercise classifier is heuristic**, unvalidated against real data (see
   above) — treat its output as a reasonable guess, not ground truth, until
-  benchmarked.
+  benchmarked. Auto-detect is therefore suggestion-only.
+- **Only squat is a supported analysis.** Deadlift is experimental (no real
+  clip counted); bench press and every other exercise are label-only.
+- **Squat-depth pickup handling is a heuristic** (hands vs knees at the
+  deepest frame): it can miss a pickup filmed with the hands occluded and
+  cannot separate a genuine hands-low set from repeated pickups.
+- **View bands are a-priori**: "uncertain" is not an oblique-view detector.
 
 ## Future improvements
 
