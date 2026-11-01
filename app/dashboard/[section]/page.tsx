@@ -21,70 +21,71 @@ import { PerformanceCard } from "@/components/ui/performance-card"
 import { MotivationPreferenceToggle } from "@/components/motivation/motivation-line"
 import { loadCalendarRange } from "@/lib/daily-plan/load-calendar-range"
 import { loadRecoveryContext } from "@/lib/recovery/load-recovery-context"
-import { loadTodaySession } from "@/lib/training/load-today-session"
+import { loadTodaySessionRead } from "@/lib/training/load-today-session"
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
-import { buildChatSuggestions } from "@/lib/dante-core/build-chat-suggestions"
+import { buildDanteQuickActions, buildDanteTodayContext, type DanteQuickAction, type DanteTodayContext } from "@/lib/dante-core/today-context"
 import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision"
-import type { DanteInsight } from "@/lib/dante-core/insight"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import DanteChat from "@/components/dante-chat"
 
 /**
- * The "Ask Dante" page's starters and current-data line (spec: "Contextual Suggestions") — reuses the exact same loaders
- * the Dashboard and Recovery pages already call, and the one safety decision (loadDailyDecision → trainingHold), never a
- * second read of the same tables through a different path. A read that failed contributes nothing rather than a guess.
+ * The Dante page's Today context and quick actions — reuses the exact loaders the Dashboard and Recovery pages call and
+ * the one safety decision (loadDailyDecision → trainingHold). A read that failed is reported as unavailable, never guessed.
  */
 async function loadAiCoachContext(
   supabase: SupabaseClient,
   userId: string,
-): Promise<{ suggestions: DanteInsight[]; contextLine: string | null }> {
-  const [recoveryContext, todaySession, nutritionContext, foodLog, decision] =
+): Promise<{ todayContext: DanteTodayContext; quickActions: DanteQuickAction[] }> {
+  const now = new Date()
+  const [recoveryContext, sessionRead, nutritionContext, foodLog, decision] =
     await Promise.all([
       loadRecoveryContext(supabase, userId).catch(() => null),
-      loadTodaySession(supabase, userId).catch(() => null),
+      loadTodaySessionRead(supabase, userId, now).catch(() => ({ status: "UNAVAILABLE" as const })),
       loadNutritionContext(supabase, userId).catch(() => null),
       loadFoodLogForDate(supabase, userId).catch(() => null),
       loadDailyDecision(supabase, userId).catch(() => null),
     ])
 
-  const hold = decision?.hold ?? null
-  const proteinTargetG = nutritionContext?.targets.protein ?? null
-  const proteinLoggedG = foodLog && !foodLog.unavailable ? (foodLog.totals?.protein ?? null) : null
-  const proteinRemainingG =
-    proteinTargetG !== null && proteinLoggedG !== null ? Math.max(0, Math.round(proteinTargetG - proteinLoggedG)) : null
-  const hasCheckinToday = recoveryContext ? recoveryContext.today !== null : false
-  const recoveryScore = recoveryContext?.todayScoreResult.score ?? null
-
-  const facts: string[] = []
-  if (hold === "recovery") facts.push("training on hold — today's check-in flagged pain or illness")
-  else if (hold === "unverified") facts.push("training not cleared — today's check-in couldn't be confirmed")
-  if (recoveryContext?.checkinsUnavailable) facts.push("recovery check-in couldn't be loaded")
-  else if (recoveryContext && !hasCheckinToday) facts.push("no check-in today")
-  else if (recoveryScore !== null) facts.push(`recovery ${recoveryScore}/100 from today's check-in`)
-  if (todaySession?.name && todaySession.sessionState !== "cancelled") {
-    facts.push(
-      todaySession.sessionState === "completed"
-        ? `${todaySession.name} done`
-        : todaySession.sessionState === "in_progress" || todaySession.sessionState === "paused"
-          ? `${todaySession.name} in progress`
-          : `${todaySession.name} scheduled`,
-    )
+  const targets = nutritionContext?.targets ?? null
+  const entries = foodLog?.entries ?? []
+  const input = {
+    now,
+    localDate: recoveryContext?.current.localDate ?? foodLog?.date ?? null,
+    hold: decision?.hold ?? null,
+    training:
+      sessionRead.status === "OK"
+        ? {
+            status: "ok" as const,
+            session: sessionRead.session
+              ? { id: sessionRead.session.id, name: sessionRead.session.name, state: sessionRead.session.sessionState }
+              : null,
+          }
+        : { status: "unavailable" as const },
+    recovery: recoveryContext
+      ? {
+          checkinsUnavailable: recoveryContext.checkinsUnavailable === true,
+          status: recoveryContext.current.status,
+          score: recoveryContext.current.score,
+          recordedDate: recoveryContext.current.recordedDate,
+          todayUpdatedAt: recoveryContext.today?.updated_at ?? null,
+        }
+      : null,
+    nutrition: {
+      targets: targets && targets.calories !== null && targets.protein !== null ? { calories: targets.calories, protein: targets.protein } : null,
+      log: foodLog
+        ? {
+            unavailable: foodLog.unavailable === true,
+            entries: entries.length,
+            calories: foodLog.totals?.calories ?? 0,
+            protein: foodLog.totals?.protein ?? 0,
+            lastLoggedAt: entries.reduce<string | null>((latest, e) => (latest && latest > e.createdAt ? latest : e.createdAt), null),
+          }
+        : null,
+    },
   }
-  if (proteinRemainingG !== null) facts.push(`${proteinRemainingG} g protein left`)
 
-  return {
-    suggestions: buildChatSuggestions({
-      recoveryScore,
-      hasCheckinToday,
-      todayWorkoutName: todaySession?.name ?? null,
-      todayWorkoutSessionId: todaySession?.id ?? null,
-      proteinRemainingG,
-      proteinTargetG,
-      trainingHold: hold,
-    }),
-    contextLine: facts.length > 0 ? facts.join(" · ").replace(/^./, (c) => c.toUpperCase()) : null,
-  }
+  return { todayContext: buildDanteTodayContext(input), quickActions: buildDanteQuickActions(input) }
 }
 
 function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
@@ -320,8 +321,8 @@ export default async function DashboardSectionPage({
         // mounted on the Phase 2C chat surface — that table/migration is
         // optional adaptive-intelligence work, not required for chat UX.
         <DanteChat
-          contextualSuggestions={aiCoachContext?.suggestions}
-          contextLine={aiCoachContext?.contextLine}
+          todayContext={aiCoachContext?.todayContext}
+          quickPrompts={aiCoachContext?.quickActions}
           restoreHistory
         />
       )}

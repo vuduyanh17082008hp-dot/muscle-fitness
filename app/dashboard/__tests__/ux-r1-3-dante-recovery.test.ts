@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 import DanteChat, { type DanteChatProps } from "@/components/dante-chat";
 import { RecoveryScoreCard } from "@/components/recovery/recovery-score-card";
 import { TrainingRecoveryCard } from "@/components/recovery/training-recovery-card";
-import { buildChatSuggestions } from "@/lib/dante-core/build-chat-suggestions";
+import { buildDanteQuickActions, buildDanteTodayContext, type TodayContextInput } from "@/lib/dante-core/today-context";
 import { buildRecoveryRecommendation } from "@/lib/recovery/recommendation";
 import type { RecoveryScoreResult, TrainingLoadSummary } from "@/lib/recovery/types";
 
@@ -79,35 +79,72 @@ describe("Recovery: one verdict, in order of authority", () => {
   });
 });
 
-describe("Dante starters follow the safety hold", () => {
-  const base = { recoveryScore: 88, hasCheckinToday: true, todayWorkoutName: "Push Day", todayWorkoutSessionId: "s1", proteinRemainingG: 40, proteinTargetG: 150 };
+describe("Dante quick actions follow the safety hold", () => {
+  const base: TodayContextInput = {
+    now: new Date("2026-11-01T09:00:00Z"),
+    localDate: "2026-11-01",
+    hold: null,
+    training: { status: "ok", session: { id: "s1", name: "Push Day", state: "not_started" } },
+    recovery: { checkinsUnavailable: false, status: "CURRENT", score: 88, recordedDate: "2026-11-01", todayUpdatedAt: null },
+    nutrition: { targets: { calories: 2400, protein: 150 }, log: { unavailable: false, entries: 2, calories: 900, protein: 110, lastLoggedAt: null } },
+  };
 
   it("on hold, nothing offers to plan or push the session", () => {
-    const labels = buildChatSuggestions({ ...base, trainingHold: "recovery" }).map((s) => s.action).join(" | ");
-    expect(labels).toMatch(/flagged pain or illness/);
-    expect(labels).not.toMatch(/focus on Push Day|train hard|still train/);
+    const text = buildDanteQuickActions({ ...base, hold: "recovery" }).map((a) => `${a.label} ${a.prompt}`).join(" | ");
+    expect(text).toMatch(/flagged pain or illness/);
+    expect(text).not.toMatch(/focus on Push Day|train hard|still train/);
   });
 
-  it("without a hold the session starter is back, and no starter carries an emoji", () => {
-    const suggestions = buildChatSuggestions(base);
-    expect(suggestions[0].action).toBe("What should I focus on for Push Day today?");
-    expect(suggestions.every((s) => /^[A-Z]/.test(s.action))).toBe(true);
+  it("without a hold the session starter is back, and no label carries an emoji", () => {
+    const actions = buildDanteQuickActions(base);
+    expect(actions.map((a) => a.prompt).join(" ")).toMatch(/focus on for my Push Day session/);
+    expect(actions.every((a) => /^[A-Z]/.test(a.label))).toBe(true);
   });
 });
 
 describe("Dante chat surface", () => {
-  const html = renderToStaticMarkup(createElement(DanteChat as FC<DanteChatProps>, { contextLine: "No check-in today · 40 g protein left", restoreHistory: true }));
+  const today = buildDanteTodayContext({ ...{
+    now: new Date("2026-11-01T09:00:00Z"),
+    localDate: "2026-11-01",
+    hold: null,
+    training: { status: "ok" as const, session: null },
+    recovery: { checkinsUnavailable: false, status: "MISSING" as const, score: null, recordedDate: null, todayUpdatedAt: null },
+    nutrition: { targets: { calories: 2400, protein: 150 }, log: { unavailable: false, entries: 1, calories: 600, protein: 110, lastLoggedAt: null } },
+  } });
+  const html = renderToStaticMarkup(createElement(DanteChat as FC<DanteChatProps>, { todayContext: today, restoreHistory: true }));
 
   it("is a conversation, not a demo: no robot, terminal prompt or LIVE/ONLINE badges", () => {
     const visible = text(html);
     for (const banned of ["$>", "ONLINE", "LIVE", "INTELLIGENCE COACH", "ANALYZING BIOMETRICS"]) expect(visible).not.toContain(banned);
-    expect(read("components/dante-chat.tsx")).not.toMatch(/DanteRobot|BiometricFieldCanvas|holographic-telemetry-pod/);
+    expect(read("components/dante-chat.tsx")).not.toMatch(/DanteRobot|BiometricFieldCanvas|holographic-telemetry-pod|DanteAvatar/);
   });
 
-  it("shows the current-data line and a 16px, 44px-tall composer", () => {
-    expect(text(html)).toContain("Your data now · No check-in today · 40 g protein left");
+  it("shows a structured Today context that never treats a missing check-in as recovered, and a 16px, 44px-tall composer", () => {
+    const visible = text(html);
+    expect(visible).toContain("Today");
+    expect(visible).toMatch(/Recovery\s*No check-in today/);
+    expect(visible).toMatch(/Nutrition\s*600 kcal · 110 g protein logged/);
+    expect(html).toContain('aria-expanded="false"');
+    expect(visible).toContain("View context");
+    expect(visible).not.toMatch(/recovered|ready to train/i);
     expect(html).toMatch(/aria-label="Message to Dante"[^>]*class="[^"]*min-h-11[^"]*text-base/);
     expect(html).toContain("mf-touch-inputs");
+  });
+
+  it("has a compact, labelled header: Dante heading, history and new chat", () => {
+    expect(html).toMatch(/<h1[^>]*>Dante<\/h1>/);
+    expect(html).toContain('aria-label="Conversation history"');
+    expect(html).toContain('aria-label="New chat"');
+    expect(html).not.toMatch(/<select[^>]*aria-label="Dante conversations"/);
+  });
+
+  it("offers quick actions as a labelled group of real prompts", () => {
+    expect(html).toContain('role="group" aria-label="Quick actions"');
+  });
+
+  it("states a hold where it can't be missed", () => {
+    const held = renderToStaticMarkup(createElement(DanteChat as FC<DanteChatProps>, { todayContext: { ...today, hold: "recovery", holdNote: "Training is on hold — today's check-in flagged pain or illness." }, restoreHistory: true }));
+    expect(text(held)).toMatch(/Training is on hold/);
   });
 
   it("returns to the conversation this tab last had open, and marks where reopened history ends", () => {
