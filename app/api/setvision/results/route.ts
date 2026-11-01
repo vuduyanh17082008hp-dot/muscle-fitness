@@ -2,60 +2,54 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
-import { SETVISION_EXERCISES } from "@/lib/setvision/types";
+import {
+  resolveIdentity,
+  restoreSavedAnalysis,
+  SAVED_ANALYSIS_COLUMNS,
+  saveRequestSchema,
+  type SavedAnalysisRow,
+} from "@/lib/setvision/saved-analysis";
 import type { SetVisionAnalysis } from "@/lib/setvision/types";
 import { emitEvent } from "@/lib/events/emit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const analysisSchema = z.object({
-  exercise: z.enum(SETVISION_EXERCISES as [string, ...string[]]),
-  exerciseClassification: z.object({
-    exercise: z.enum(SETVISION_EXERCISES as [string, ...string[]]).nullable(),
-    confidence: z.number().min(0).max(1),
-    signals: z.array(z.string()),
-  }),
-  reps: z.number().int().min(0),
-  romConsistency: z.number().min(0).max(1).nullable(),
-  averageEccentricTime: z.number().min(0).nullable(),
-  averageConcentricTime: z.number().min(0).nullable(),
-  velocity: z.object({
-    calibrated: z.boolean(),
-    unit: z.enum(["m/s", "torso-lengths/s"]),
-    perRep: z.array(z.object({ repNumber: z.number(), meanSpeed: z.number() })),
-    mean: z.number().nullable(),
-    peak: z.number().nullable(),
-    final: z.number().nullable(),
-    velocityLoss: z.number().min(0).max(1).nullable(),
-  }),
-  technique: z.object({
-    romConsistency: z.number().min(0).max(1).nullable(),
-    tempoConsistency: z.number().min(0).max(1).nullable(),
-    barPathConsistency: z.number().min(0).max(1).nullable(),
-    asymmetryDeg: z.number().nullable(),
-  }),
-  confidence: z.number().min(0).max(1),
-  perRep: z.object({
-    rom: z.array(z.object({ repNumber: z.number(), romPercent: z.number() })),
-    tempo: z.array(
-      z.object({
-        repNumber: z.number(),
-        eccentricSec: z.number().nullable(),
-        pauseSec: z.number().nullable(),
-        concentricSec: z.number(),
-      }),
-    ),
-  }),
-  limitations: z.array(z.string()),
-});
+type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
-const requestSchema = z.object({
-  analysis: analysisSchema,
-  workoutSessionId: z.string().uuid().nullable().optional(),
-  sessionExerciseId: z.string().uuid().nullable().optional(),
-  videoStoragePath: z.string().max(500).nullable().optional(),
-});
+/**
+ * A linked workout row must be the caller's OWN. RLS alone would also let a
+ * coach see a client's session, and an FK only proves the id exists.
+ */
+async function linkedRowsAreOwn(
+  supabase: ServerClient,
+  userId: string,
+  workoutSessionId: string | null,
+  sessionExerciseId: string | null,
+): Promise<boolean> {
+  let sessionId = workoutSessionId;
+
+  if (sessionExerciseId) {
+    const { data } = await supabase
+      .from("workout_session_exercises")
+      .select("workout_session_id")
+      .eq("id", sessionExerciseId)
+      .maybeSingle();
+    if (!data) return false;
+    if (sessionId && data.workout_session_id !== sessionId) return false;
+    sessionId = data.workout_session_id;
+  }
+
+  if (!sessionId) return true;
+
+  const { data } = await supabase
+    .from("workout_sessions")
+    .select("id")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return Boolean(data);
+}
 
 /**
  * POST /api/setvision/results — persists a SetVision analysis (spec
@@ -63,6 +57,10 @@ const requestSchema = z.object({
  * client-computed, structured analysis and (optionally) a storage
  * path the video was separately uploaded to. See
  * /api/setvision/upload-url for the upload step.
+ *
+ * The rep timeline (phase timestamps) is validated for order, internal
+ * consistency and the video's duration, and stored intact — an analysis
+ * whose timeline can't be stored truthfully is rejected, not trimmed.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -83,7 +81,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const parsed = requestSchema.safeParse(body);
+  const parsed = saveRequestSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
@@ -92,7 +90,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const { analysis, workoutSessionId, sessionExerciseId, videoStoragePath } = parsed.data;
+  const { analysis, workoutSessionId, sessionExerciseId, videoStoragePath, videoDurationMs } = parsed.data;
+
+  if (videoStoragePath && !videoStoragePath.startsWith(`${user.id}/`)) {
+    return NextResponse.json({ ok: false, error: "Invalid video path." }, { status: 400 });
+  }
+
+  if (!(await linkedRowsAreOwn(supabase, user.id, workoutSessionId ?? null, sessionExerciseId ?? null))) {
+    return NextResponse.json({ ok: false, error: "Workout not found." }, { status: 404 });
+  }
+
+  const identity = resolveIdentity(parsed.data);
 
   const { data, error } = await supabase
     .from("setvision_analyses")
@@ -118,7 +126,7 @@ export async function POST(request: Request) {
       exercise_classification_confidence: analysis.exerciseClassification.confidence,
       confidence: analysis.confidence,
       limitations: analysis.limitations,
-      per_rep: analysis.perRep,
+      per_rep: { ...analysis.perRep, videoDurationMs, identity },
     })
     .select("id, analyzed_at")
     .single();
@@ -145,28 +153,14 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true, id: data.id, analyzedAt: data.analyzed_at });
 }
 
-type SetVisionAnalysisRow = {
-  id: string;
-  exercise: string;
-  reps: number;
-  rom_consistency: number | null;
-  tempo_consistency: number | null;
-  bar_path_consistency: number | null;
-  average_eccentric_time_sec: number | null;
-  average_concentric_time_sec: number | null;
-  velocity_calibrated: boolean;
-  velocity_unit: string;
-  velocity_mean: number | null;
-  velocity_loss: number | null;
-  confidence: number;
-  analyzed_at: string;
-  workout_session_id: string | null;
-  session_exercise_id: string | null;
-};
+const LIST_COLUMNS =
+  "id, exercise, reps, rom_consistency, tempo_consistency, bar_path_consistency, average_eccentric_time_sec, average_concentric_time_sec, velocity_calibrated, velocity_unit, velocity_mean, velocity_loss, confidence, analyzed_at, workout_session_id, session_exercise_id, per_rep->identity";
 
 /**
  * GET /api/setvision/results?sessionExerciseId=... — history for the
  * current user, optionally scoped to one logged exercise.
+ * GET /api/setvision/results?id=... — one of the caller's analyses, restored
+ * in full (per-rep timeline included). Another user's id is a 404.
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -180,13 +174,39 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+
+  if (id !== null) {
+    if (!z.string().uuid().safeParse(id).success) {
+      return NextResponse.json({ ok: false, error: "Invalid id." }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from("setvision_analyses")
+      .select(SAVED_ANALYSIS_COLUMNS)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[SETVISION RESULTS API ERROR]", error);
+      return NextResponse.json({ ok: false, error: "Could not load the analysis." }, { status: 500 });
+    }
+
+    const restored = data ? restoreSavedAnalysis(data as unknown as SavedAnalysisRow) : null;
+
+    if (!restored) {
+      return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true, result: restored });
+  }
+
   const sessionExerciseId = searchParams.get("sessionExerciseId");
 
   let query = supabase
     .from("setvision_analyses")
-    .select(
-      "id, exercise, reps, rom_consistency, tempo_consistency, bar_path_consistency, average_eccentric_time_sec, average_concentric_time_sec, velocity_calibrated, velocity_unit, velocity_mean, velocity_loss, confidence, analyzed_at, workout_session_id, session_exercise_id",
-    )
+    .select(LIST_COLUMNS)
     .eq("user_id", user.id)
     .order("analyzed_at", { ascending: false })
     .limit(50);
@@ -205,7 +225,7 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, results: (data ?? []) as SetVisionAnalysisRow[] });
+  return NextResponse.json({ ok: true, results: data ?? [] });
 }
 
 export type { SetVisionAnalysis };

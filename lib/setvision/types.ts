@@ -97,11 +97,12 @@ export type RepTempo = {
   /** Time held at the bottom (isometric hold) — kept separate from eccentric/concentric. Null when not observed. */
   pauseSec: number | null;
   concentricSec: number;
-  /** Video-relative phase boundaries (ms), so every duration above is traceable to a moment in the clip. */
+  /** Video-relative phase boundaries (ms), so every duration above is traceable to a moment in the clip. Descent/bottom are null when not observed. */
   descentStartMs: number | null;
   bottomReachedMs: number | null;
-  ascentStartMs: number;
-  repEndMs: number;
+  /** Always set by a live analysis; null only on a restored analysis saved before timestamps were persisted. */
+  ascentStartMs: number | null;
+  repEndMs: number | null;
 };
 
 export type RepVelocity = {

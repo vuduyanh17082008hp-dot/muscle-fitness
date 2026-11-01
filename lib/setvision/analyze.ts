@@ -8,6 +8,7 @@ import { averageConcentricTime, averageEccentricTime, computeAllRepTempo } from 
 import { computeVelocity } from "@/lib/setvision/velocity";
 import type {
   CompletedRep,
+  ExerciseClassification,
   SetVisionAnalysis,
   SetVisionExerciseId,
   TimedPoseFrame,
@@ -134,14 +135,14 @@ export function analyzeFrameSequence(
   options: {
     exercise?: SetVisionExerciseId | null;
     metersPerTorsoLength?: number | null;
+    /** The Auto-detect result the user confirmed for `exercise` — kept as the provenance instead of "selected manually". */
+    confirmedSuggestion?: ExerciseClassification | null;
   } = {},
 ): SetVisionAnalysis {
-  const classification = options.exercise
-    ? {
-        exercise: options.exercise,
-        confidence: null,
-        signals: [MANUAL_SELECTION_SIGNAL],
-      }
+  const classification: ExerciseClassification = options.exercise
+    ? options.confirmedSuggestion?.exercise === options.exercise
+      ? options.confirmedSuggestion
+      : { exercise: options.exercise, confidence: null, signals: [MANUAL_SELECTION_SIGNAL] }
     : classifyExercise(frames.map((f) => f.frame));
 
   const exercise = options.exercise ?? classification.exercise;

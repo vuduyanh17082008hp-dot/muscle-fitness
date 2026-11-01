@@ -183,9 +183,9 @@ describe("legacy SetVision rep phases", () => {
     // Boundaries are video-relative and ordered; threshold crossings may trail onset by a few samples.
     expect(rep.descentStartMs!).toBeGreaterThanOrEqual(2000);
     expect(rep.descentStartMs!).toBeLessThanOrEqual(2600);
-    expect(rep.bottomReachedMs!).toBeLessThan(rep.ascentStartMs);
-    expect(rep.ascentStartMs).toBeGreaterThanOrEqual(11500);
-    expect(rep.repEndMs).toBeLessThanOrEqual(12700);
+    expect(rep.bottomReachedMs!).toBeLessThan(rep.ascentStartMs!);
+    expect(rep.ascentStartMs!).toBeGreaterThanOrEqual(11500);
+    expect(rep.repEndMs!).toBeLessThanOrEqual(12700);
     // Front view: ROM % is a projection artefact, so it is withheld and explained.
     expect(result.perRep.rom).toHaveLength(0);
     expect(result.limitations.join(" ")).toMatch(/faces the lifter/);
