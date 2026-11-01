@@ -64,6 +64,7 @@ type Stage =
   | { kind: "unavailable"; failure: CameraFailure }
   | { kind: "starting" }
   | { kind: "loading_model" }
+  | { kind: "warming_up" }
   | { kind: "setup" }
   | { kind: "live" }
   | { kind: "review"; result: LiveSetResult; diagnostics: Diagnostics; cameraStopped: boolean };
@@ -155,6 +156,7 @@ export function LiveSquatCoach() {
   const metricsRef = useRef<Metrics>({ infer: [], latency: [], repDisplay: [], framesNotSeen: 0, lastPresented: null, basis: new Set() });
   const modelTimesRef = useRef<{ loadMs: number | null; firstInferMs: number | null }>({ loadMs: null, firstInferMs: null });
   const stageRef = useRef<Stage["kind"]>("off");
+  const aliveRef = useRef(true);
 
   const [selection, setSelection] = useState<SelectedExercise | null>(defaultSelection);
   const [stage, setStageState] = useState<Stage>({ kind: "off" });
@@ -191,14 +193,15 @@ export function LiveSquatCoach() {
     schedulerRef.current.done();
   }, [stopFrames]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    aliveRef.current = true; // StrictMode re-mounts after a cleanup
+    return () => {
+      aliveRef.current = false;
       stopCamera();
       landmarkerRef.current?.landmarker.close();
       landmarkerRef.current = null;
-    },
-    [stopCamera],
-  );
+    };
+  }, [stopCamera]);
 
   /* ---------------- set lifecycle ---------------- */
 
@@ -275,8 +278,7 @@ export function LiveSquatCoach() {
           const result = lm.landmarker.detectForVideo(video, Math.round(frameTs));
           const t1 = performance.now();
           if (gen !== genRef.current) return;
-          if (modelTimesRef.current.firstInferMs === null) modelTimesRef.current.firstInferMs = t1 - t0;
-          else if (kind === "live") {
+          if (kind === "live") {
             m.infer.push(t1 - t0);
             m.latency.push(t1 - frameTs);
           }
@@ -388,13 +390,27 @@ export function LiveSquatCoach() {
         const t0 = performance.now();
         try {
           const created = await createPoseLandmarker();
-          if (gen !== genRef.current) {
-            // Torn down while loading: keep the model for the next start (cheap) unless the page is gone.
-            landmarkerRef.current = created;
+          if (!aliveRef.current) {
+            created.landmarker.close(); // unmounted while loading
             return;
           }
-          landmarkerRef.current = created;
+          landmarkerRef.current = created; // kept for the next start even if this one was superseded
+          if (gen !== genRef.current) return;
           modelTimesRef.current.loadMs = performance.now() - t0;
+          // GPU warm-up: the first inference blocks the main thread for seconds. Run it now, behind the
+          // "warming up" overlay, instead of silently freezing the setup screen. Timestamp 1 ms precedes
+          // every later frame's capture time, as VIDEO mode requires.
+          setStage({ kind: "warming_up" });
+          await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));
+          if (gen !== genRef.current) return;
+          if (video.readyState < 2) await new Promise((r) => video.addEventListener("loadeddata", r, { once: true }));
+          const w0 = performance.now();
+          try {
+            created.landmarker.detectForVideo(video, 1);
+          } catch (error) {
+            console.error("[FORM COACH P1A] warm-up inference failed", error);
+          }
+          modelTimesRef.current.firstInferMs = performance.now() - w0;
         } catch (error) {
           console.error("[FORM COACH P1A] pose model failed to load", error);
           if (gen === genRef.current) {
@@ -485,7 +501,7 @@ export function LiveSquatCoach() {
   };
 
   const live = liveCapability(selection);
-  const cameraOn = stage.kind === "starting" || stage.kind === "loading_model" || stage.kind === "setup" || stage.kind === "live";
+  const cameraOn = ["starting", "loading_model", "warming_up", "setup", "live"].includes(stage.kind);
 
   return (
     <div className="space-y-6" data-testid="fc-live">
@@ -553,9 +569,13 @@ export function LiveSquatCoach() {
               aria-label="Live camera preview (not recorded)"
               data-testid="fc-preview"
             />
-            {stage.kind === "starting" || stage.kind === "loading_model" ? (
-              <p className="absolute inset-0 grid place-items-center bg-black/60 p-4 text-center text-sm font-semibold text-white" aria-live="polite">
-                {stage.kind === "starting" ? "Waiting for camera permission…" : "Loading the pose model (first time ~9 MB)…"}
+            {stage.kind === "starting" || stage.kind === "loading_model" || stage.kind === "warming_up" ? (
+              <p className="absolute inset-0 grid place-items-center bg-black/60 p-4 text-center text-sm font-semibold text-white" aria-live="polite" data-testid="fc-camera-loading">
+                {stage.kind === "starting"
+                  ? "Waiting for camera permission…"
+                  : stage.kind === "loading_model"
+                    ? "Loading the pose model (first time ~9 MB)…"
+                    : "Warming up the pose model — the page may pause for a few seconds."}
               </p>
             ) : null}
             {stage.kind === "live" && snapshot ? <LiveOverlay snapshot={snapshot} /> : null}
