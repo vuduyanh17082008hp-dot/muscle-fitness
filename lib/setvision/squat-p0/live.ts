@@ -99,7 +99,8 @@ export function assessReadiness(recent: PoseObservation[], nowMs: number): Readi
   const frames = assessFrames(window, side);
   const valid = frames.filter((f) => f.valid);
   if (!side || valid.length / n < LIVE_P1A.readinessMinValidRatio) {
-    return { state: "adjust", issue: dominantIssue(frames) ?? "low_visibility", frames: n };
+    const issue = dominantIssue(frames) ?? "low_visibility";
+    return { state: issue === "no_person" ? "cannot_verify" : "adjust", issue, frames: n };
   }
 
   const { checks } = clipQualityChecks(window, frames, side);
