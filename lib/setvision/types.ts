@@ -13,13 +13,39 @@ import type { Landmark, PoseFrame } from "@/lib/form-coach/types";
 
 export type { Landmark, PoseFrame };
 
-export type SetVisionExerciseId = "bench_press" | "squat" | "deadlift";
+/**
+ * Movement-family analysis engines. The ids are also the
+ * setvision_analyses.exercise column values, so the three original ids keep
+ * their names: "bench_press" is the horizontal-press engine and "deadlift"
+ * the hip-hinge engine. See exercise-config.ts for what each one measures.
+ */
+export type SetVisionExerciseId =
+  | "bench_press"
+  | "squat"
+  | "deadlift"
+  | "vertical_press"
+  | "vertical_pull"
+  | "horizontal_pull"
+  | "elbow_flexion"
+  | "triceps_pushdown"
+  | "overhead_triceps_extension"
+  | "lateral_raise";
 
 export const SETVISION_EXERCISES: SetVisionExerciseId[] = [
   "bench_press",
   "squat",
   "deadlift",
+  "vertical_press",
+  "vertical_pull",
+  "horizontal_pull",
+  "elbow_flexion",
+  "triceps_pushdown",
+  "overhead_triceps_extension",
+  "lateral_raise",
 ];
+
+/** setvision_analyses.exercise for a saved manual review that ran no engine. */
+export const MANUAL_REVIEW_EXERCISE = "manual_review";
 
 export type RepPhase = "top" | "descent" | "bottom" | "ascent";
 
@@ -39,6 +65,12 @@ export type ExerciseClassification = {
   confidence: number | null;
   /** Short, human-readable notes on what drove the classification — never opaque. */
   signals: string[];
+  /**
+   * Movements whose engine found valid reps in the clip, when pose alone can't
+   * pick one (an overhead press and a pulldown move the arms the same way).
+   * The user chooses; nothing is analysed until they do.
+   */
+  candidates?: SetVisionExerciseId[];
 };
 
 /* =========================================================
@@ -90,13 +122,22 @@ export type RepRom = {
   romPercent: number;
 };
 
+/**
+ * Per-rep phase timing. The timestamp names are geometric and kept from the
+ * squat-only era: "descent" = leaving the rest position toward the working
+ * end of the movement, "bottom" = the working end, "ascent" = the return.
+ * Which of those is eccentric or concentric depends on the movement
+ * (exercise-config.ts `outbound`): lowering a squat is eccentric, pulling a
+ * lat pulldown bar down is concentric.
+ */
 export type RepTempo = {
   repNumber: number;
-  /** Null when the descent was not observed (clip/tracking began at the bottom). */
+  /** Null when this phase was not observed (the clip/tracking began at the working end). */
   eccentricSec: number | null;
-  /** Time held at the bottom (isometric hold) — kept separate from eccentric/concentric. Null when not observed. */
+  /** Time held at the working end (bottom of a squat, peak of a curl) — kept separate from eccentric/concentric. Null when not observed. */
   pauseSec: number | null;
-  concentricSec: number;
+  /** Null when this phase was not observed. Restored pre-2026-11 rows always have it. */
+  concentricSec: number | null;
   /** Video-relative phase boundaries (ms), so every duration above is traceable to a moment in the clip. Descent/bottom are null when not observed. */
   descentStartMs: number | null;
   bottomReachedMs: number | null;
@@ -162,4 +203,26 @@ export type SetVisionAnalysis = {
   };
   /** Honest limitations of THIS analysis run (e.g. low visibility frames dropped, too few reps for consistency). */
   limitations: string[];
+  /**
+   * Why the engine declined to count anything (wrong body position for the
+   * chosen movement, motion not visible from this camera angle…). Null when
+   * the clip was analysed. Absent on analyses saved before 2026-11-02.
+   */
+  abstainReason?: string | null;
+  /** Body side the engine measured, for engines that measure one limb for the whole clip. */
+  measuredSide?: "left" | "right" | null;
+  /** Movements that were seen but not counted as completed reps (partial range, tracking lost). */
+  events?: MovementEvent[];
+};
+
+/**
+ * A movement the engine saw but did not count: "partial" = left the rest
+ * position and came back without reaching the working end; "uncertain" =
+ * tracking was lost, or the clip ended, part-way through; "excluded" = a
+ * full cycle whose body position did not match the chosen movement.
+ */
+export type MovementEvent = {
+  kind: "partial" | "uncertain" | "excluded";
+  startMs: number;
+  endMs: number;
 };

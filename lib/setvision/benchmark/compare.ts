@@ -62,12 +62,7 @@ function emptyConfusionMatrix(): ConfusionMatrix {
   const matrix = {} as ConfusionMatrix;
 
   for (const actual of SETVISION_EXERCISES) {
-    matrix[actual] = {
-      bench_press: 0,
-      squat: 0,
-      deadlift: 0,
-      unclassified: 0,
-    };
+    matrix[actual] = Object.fromEntries([...SETVISION_EXERCISES, "unclassified"].map((id) => [id, 0])) as ConfusionMatrix[SetVisionExerciseId];
   }
 
   return matrix;

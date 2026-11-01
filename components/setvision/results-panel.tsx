@@ -2,7 +2,7 @@ import { Activity, Gauge, Timer, TrendingDown, Waves } from "lucide-react";
 
 import { EXERCISE_CONFIGS } from "@/lib/setvision/exercise-config";
 import { ENGINE_CAPABILITY, SOURCE_TEXT, type ExerciseSource } from "@/lib/setvision/exercise-selection";
-import type { SetVisionAnalysis, SetVisionExerciseId } from "@/lib/setvision/types";
+import type { MovementEvent, SetVisionAnalysis } from "@/lib/setvision/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -80,10 +80,10 @@ function qualityBand(score: number): string {
   return "Low";
 }
 
-const ENGINE_SIGNAL: Record<SetVisionExerciseId, string> = {
-  squat: "knee angle (hip–knee–ankle)",
-  deadlift: "hip angle (shoulder–hip–knee)",
-  bench_press: "elbow angle (shoulder–elbow–wrist)",
+const EVENT_TEXT: Record<MovementEvent["kind"], string> = {
+  partial: "Partial — did not reach the working end",
+  uncertain: "Uncertain — tracking lost or clip ended mid-movement",
+  excluded: "Not counted — body position did not match this exercise",
 };
 
 function TimestampButton({ ms, onSeek, missing = "not observed" }: { ms: number | null; onSeek?: (ms: number) => void; missing?: string }) {
@@ -119,9 +119,14 @@ export function SetVisionResultsPanel({
 }) {
   const { velocity, technique, exerciseClassification: classification } = analysis;
   const identified = classification.exercise !== null;
-  const label = identity?.label ?? EXERCISE_CONFIGS[analysis.exercise].displayName;
-  const experimental = ENGINE_CAPABILITY[analysis.exercise] === "LIMITED_EXPERIMENTAL_ANALYSIS";
-  const insufficient = identified && analysis.reps === 0;
+  const config = EXERCISE_CONFIGS[analysis.exercise];
+  const label = identity?.label ?? config.displayName;
+  const experimental = ENGINE_CAPABILITY[analysis.exercise] !== "ANALYSIS_VERIFIED";
+  const abstained = identified && Boolean(analysis.abstainReason);
+  const insufficient = identified && !abstained && analysis.reps === 0;
+  const [leaveRest, workEnd, leaveWork, backAtRest] = config.phaseNames;
+  const eccentricIsOutbound = config.outbound === "eccentric";
+  const events = analysis.events ?? [];
   const tempos = analysis.perRep.tempo;
   const notEnoughReps = analysis.reps < 2 ? "Not enough reps (needs 2+)" : "Unavailable";
   const avgHold = average(tempos.map((t) => t.pauseSec));
@@ -154,18 +159,27 @@ export function SetVisionResultsPanel({
       <h3 className="mt-3 break-words text-lg font-black text-white" data-testid="sv-result-title">
         {!identified
           ? "Exercise not identified"
-          : insufficient
-            ? `${label} — not enough evidence`
-            : `${label} — ${analysis.reps} rep${analysis.reps === 1 ? "" : "s"}`}
+          : abstained
+            ? `${label} — not analysed`
+            : insufficient
+              ? `${label} — not enough evidence`
+              : `${label} — ${analysis.reps} rep${analysis.reps === 1 ? "" : "s"}`}
       </h3>
 
       <p className="mt-1 text-xs leading-5 text-zinc-500" data-testid="sv-classification">
         {!identified
           ? `${classification.signals[0] ?? "The exercise could not be identified."} Choose it in the selector above.`
-          : `${identity ? SOURCE_TEXT[identity.source] : "Exercise not recorded"} · measured with the ${ENGINE_SIGNAL[analysis.exercise]}.${
+          : `${identity ? SOURCE_TEXT[identity.source] : "Exercise not recorded"} · ${config.family} engine, measured with the ${config.signalLabel}${analysis.measuredSide ? ` on the ${analysis.measuredSide} side` : ""}.${
               identity?.source === "auto_suggestion" && classification.signals[0] ? ` Suggestion basis: ${classification.signals[0]}` : ""
             }`}
       </p>
+
+      {abstained ? (
+        <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-3 text-sm leading-6 text-zinc-200" data-testid="sv-abstained">
+          Unsupported input for this exercise: {analysis.abstainReason} No reps, tempo or range are reported. You can still
+          mark the reps yourself below.
+        </p>
+      ) : null}
 
       {insufficient ? (
         <p className="mt-4 rounded-xl border border-white/[0.07] bg-black/20 p-3 text-sm leading-6 text-zinc-300" data-testid="sv-insufficient">
@@ -174,29 +188,29 @@ export function SetVisionResultsPanel({
         </p>
       ) : null}
 
-      {identified && !insufficient ? (
+      {identified && !insufficient && !abstained ? (
         <>
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <StatTile label="Reps" value={String(analysis.reps)} sub="Observed down-and-up cycles" />
+            <StatTile label="Reps" value={String(analysis.reps)} sub={`${backAtRest} → ${workEnd.toLowerCase()} → ${backAtRest.toLowerCase()} cycles`} />
             <StatTile
               label="Avg eccentric"
               value={analysis.averageEccentricTime !== null ? `${analysis.averageEccentricTime}s` : "—"}
-              sub={analysis.averageEccentricTime === null ? "Not observed" : "Lowering phase"}
+              sub={analysis.averageEccentricTime === null ? "Not observed" : `${eccentricIsOutbound ? leaveRest : leaveWork} phase`}
             />
             <StatTile
-              label="Avg bottom hold"
+              label={`Avg hold (${workEnd.toLowerCase()})`}
               value={avgHold !== null ? `${avgHold}s` : "—"}
               sub={avgHold === null ? "Not observed" : "Not counted in eccentric/concentric"}
             />
             <StatTile
               label="Avg concentric"
               value={analysis.averageConcentricTime !== null ? `${analysis.averageConcentricTime}s` : "—"}
-              sub={analysis.averageConcentricTime === null ? "Not observed" : "Rising phase"}
+              sub={analysis.averageConcentricTime === null ? "Not observed" : `${eccentricIsOutbound ? leaveWork : leaveRest} phase`}
             />
             <StatTile
               label={velocity.calibrated ? "Mean velocity" : "Mean speed (normalized)"}
               value={velocity.mean !== null ? `${velocity.mean} ${velocity.unit}` : "—"}
-              sub={velocity.calibrated ? undefined : "2D, not calibrated — not m/s"}
+              sub={config.barProxy === null ? "Not measured for this movement" : velocity.calibrated ? undefined : "2D, not calibrated — not m/s"}
             />
           </div>
 
@@ -251,7 +265,7 @@ export function SetVisionResultsPanel({
           <p className="mt-1 text-xs leading-5 text-zinc-600">
             Video time where each phase began{onSeek ? " — select a time to jump there" : ""}. A phase is
             detected when the joint angle crosses a threshold, so it can trail the visible start of a movement by a few tenths of a second.
-            Joint range is the 2D angle change from standing to the deepest point, measured only with a side-on camera.
+            Joint range is the 2D change of the {config.signalLabel}, reported only from a {config.rangeViews.join(" or ")} view.
           </p>
           {!timelineRecorded ? (
             <p className="mt-1 text-xs leading-5 text-amber-300" data-testid="sv-legacy-timeline">
@@ -263,10 +277,10 @@ export function SetVisionResultsPanel({
               <thead>
                 <tr className="text-zinc-600">
                   <th className="py-1 pr-3 font-semibold">Rep</th>
-                  <th className="py-1 pr-3 font-semibold">Descent</th>
-                  <th className="py-1 pr-3 font-semibold">Bottom</th>
-                  <th className="py-1 pr-3 font-semibold">Ascent</th>
-                  <th className="py-1 pr-3 font-semibold">Standing</th>
+                  <th className="py-1 pr-3 font-semibold">{leaveRest}</th>
+                  <th className="py-1 pr-3 font-semibold">{workEnd}</th>
+                  <th className="py-1 pr-3 font-semibold">{leaveWork}</th>
+                  <th className="py-1 pr-3 font-semibold">{backAtRest}</th>
                   <th className="py-1 pr-3 font-semibold">Ecc / hold / con</th>
                   <th className="py-1 pr-3 font-semibold">Joint range</th>
                 </tr>
@@ -283,7 +297,7 @@ export function SetVisionResultsPanel({
                       <td className="py-1.5 pr-3"><TimestampButton ms={t.ascentStartMs} onSeek={onSeek} missing={missing} /></td>
                       <td className="py-1.5 pr-3"><TimestampButton ms={t.repEndMs} onSeek={onSeek} missing={missing} /></td>
                       <td className="whitespace-nowrap py-1.5 pr-3">
-                        {t.eccentricSec ?? "—"}s / {t.pauseSec ?? "—"}s / {t.concentricSec}s
+                        {t.eccentricSec ?? "—"}s / {t.pauseSec ?? "—"}s / {t.concentricSec ?? "—"}s
                       </td>
                       <td className="py-1.5 pr-3">{rom ? `${rom.rangeDeg}°` : "—"}</td>
                     </tr>
@@ -297,7 +311,20 @@ export function SetVisionResultsPanel({
         </>
       ) : null}
 
-      {analysis.limitations.length > 0 ? (
+      {identified && events.length > 0 ? (
+        <div className="mt-6" data-testid="sv-events">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">Seen but not counted</p>
+          <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+            {events.map((e, i) => (
+              <li key={i}>
+                <TimestampButton ms={e.startMs} onSeek={onSeek} />–<TimestampButton ms={e.endMs} onSeek={onSeek} /> · {EVENT_TEXT[e.kind]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {analysis.limitations.length > 0 && !abstained ? (
         <div className="mt-6 flex items-start gap-2 border-t border-white/[0.06] pt-4">
           <Timer className="mt-0.5 size-3.5 shrink-0 text-zinc-600" aria-hidden="true" />
           <ul className="space-y-1 text-xs leading-5 text-zinc-600">

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CATALOGUE_COVERAGE,
   CUSTOM_EXERCISE_MAX_LENGTH,
   ENGINE_CAPABILITY,
   EXERCISE_OPTIONS,
@@ -10,6 +11,7 @@ import {
   validateCustomExerciseName,
 } from "@/lib/setvision/exercise-selection";
 import { EXERCISE_CATALOGUE } from "@/lib/workouts/exercise-library";
+import { SETVISION_EXERCISES } from "@/lib/setvision/types";
 
 const labels = (query: string) => searchExerciseOptions(query).map((o) => o.label);
 
@@ -58,16 +60,53 @@ describe("SetVision exercise options", () => {
     expect(labels("zzzz-not-an-exercise")).toEqual([]);
   });
 
-  it("only routes squat and deadlift to an engine; bench and everything else are label-only", () => {
-    const routed = EXERCISE_OPTIONS.filter((o) => o.engine !== null).map((o) => `${o.label}:${o.engine}`);
-    expect(routed.sort()).toEqual(["Barbell Back Squat:squat", "Deadlift:deadlift", "Squat:squat"]);
-    expect(findExerciseOption("catalogue:barbell-bench-press")).toMatchObject({ engine: null, capability: "MANUAL_LABEL_ONLY" });
-    expect(findExerciseOption("setvision:squat")?.capability).toBe("SUPPORTED_ANALYSIS");
-    expect(findExerciseOption("setvision:deadlift")?.capability).toBe("LIMITED_EXPERIMENTAL_ANALYSIS");
-    expect(ENGINE_CAPABILITY.bench_press).toBe("MANUAL_LABEL_ONLY");
-    // An Auto-detect "bench" suggestion resolves to the label-only bench option, never an engine.
-    expect(optionForEngine("bench_press").engine).toBeNull();
+  it("covers every catalogue exercise with exactly one workflow, set by hand per movement", () => {
+    const slugs = EXERCISE_CATALOGUE.map((e) => e.slug);
+    expect(slugs.every((slug) => slug && CATALOGUE_COVERAGE[slug])).toBe(true);
+    expect(Object.keys(CATALOGUE_COVERAGE).sort()).toEqual([...slugs].sort());
+    const catalogueOptions = EXERCISE_OPTIONS.filter((o) => o.source === "catalogue");
+    expect(catalogueOptions).toHaveLength(EXERCISE_CATALOGUE.length);
+    for (const option of EXERCISE_OPTIONS) {
+      // An engine, or a stated reason there is none — never neither, never a borrowed counter.
+      expect(option.engine !== null || (option.capability === "MANUAL_REVIEW_SUPPORTED" && option.manualReason)).toBeTruthy();
+      if (option.engine) expect(option.manualReason).toBeNull();
+    }
+  });
+
+  it("marks only the free squat as verified; every other engine is experimental", () => {
+    const verified = EXERCISE_OPTIONS.filter((o) => o.capability === "ANALYSIS_VERIFIED").map((o) => o.label).sort();
+    expect(verified).toEqual(["Barbell Back Squat", "Squat"]);
+    expect(findExerciseOption("catalogue:hack-squat")).toMatchObject({ engine: "squat", capability: "ANALYSIS_EXPERIMENTAL" });
+    expect(findExerciseOption("catalogue:barbell-bench-press")).toMatchObject({ engine: "bench_press", capability: "ANALYSIS_EXPERIMENTAL" });
+    expect(findExerciseOption("catalogue:lat-pulldown")).toMatchObject({ engine: "vertical_pull", capability: "ANALYSIS_EXPERIMENTAL" });
+    expect(findExerciseOption("setvision:deadlift")?.capability).toBe("ANALYSIS_EXPERIMENTAL");
+    expect(ENGINE_CAPABILITY.squat).toBe("ANALYSIS_VERIFIED");
+  });
+
+  it("keeps movements without a model on manual review instead of borrowing another engine", () => {
+    for (const key of ["catalogue:leg-press", "catalogue:leg-extension", "catalogue:standing-calf-raise", "catalogue:cable-fly", "catalogue:plank", "catalogue:bulgarian-split-squat", "setvision:lunge", "catalogue:barbell-hip-thrust"]) {
+      expect(findExerciseOption(key)).toMatchObject({ engine: null, capability: "MANUAL_REVIEW_SUPPORTED" });
+      expect(findExerciseOption(key)!.manualReason).toMatch(/\w/);
+    }
     expect(findExerciseOption("catalogue:does-not-exist")).toBeNull();
+  });
+
+  it("resolves every engine's Auto-detect suggestion to an option that uses that engine", () => {
+    for (const engine of SETVISION_EXERCISES) expect(optionForEngine(engine).engine).toBe(engine);
+  });
+
+  it("finds the prompt's example movements by name or alias", () => {
+    for (const [query, label] of [
+      ["close-grip lat pulldown", "Lat Pulldown"],
+      ["dumbbell shoulder press", "Seated Dumbbell Overhead Press"],
+      ["hammer curl", "Biceps Curl"],
+      ["dumbbell row", "Dumbbell Row"],
+      ["rear-delt fly", "Cable Rear Delt Fly"],
+      ["chin-up", "Pull-Up"],
+      ["calf raise", "Standing Calf Raise"],
+    ]) {
+      expect(labels(query)).toContain(label);
+    }
   });
 });
 

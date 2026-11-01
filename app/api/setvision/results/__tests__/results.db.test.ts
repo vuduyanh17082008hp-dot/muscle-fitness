@@ -160,6 +160,54 @@ delete from auth.users where id in (${q(owner)}, ${q(intruder)});`)
     expect(run(`select count(*) from setvision_analyses where user_id = ${q(owner)};`).out).toBe(count)
   })
 
+  it("saves a custom exercise as a manual review: NULL metrics (not 0), the user's reps and notes, nothing added to the catalogue", async () => {
+    const catalogueBefore = run("select count(*) from public.workout_exercises;").out
+    const before = workoutHistory(owner)
+    const review = { rejectedReps: [], manualReps: [{ startMs: 1000, endMs: 2500 }, { startMs: 3000, endMs: 4200 }], notes: "Tempo 3-1-1, 20 kg", unsure: true }
+    const saved = await call(owner, "POST", "", { analysis: null, videoDurationMs: 30_000, exerciseKey: null, exerciseSource: "custom", customLabel: "  Landmine  Row ", review, videoStoragePath: `${owner}/2.mp4` })
+    expect(saved.status).toBe(200)
+
+    const stored = run(`select exercise || '|' || coalesce(reps::text, 'NULL') || '|' || coalesce(confidence::text, 'NULL') || '|' || (per_rep->'identity')::text from setvision_analyses where id = ${q(saved.json.id)};`).out
+    expect(stored).toBe('manual_review|NULL|NULL|{"key": null, "label": "Landmine Row", "source": "custom", "catalogueId": null}')
+    expect(run("select count(*) from public.workout_exercises;").out).toBe(catalogueBefore)
+    expect(workoutHistory(owner)).toBe(before)
+
+    const reloaded = await call(owner, "GET", `?id=${saved.json.id}`)
+    expect(reloaded.status).toBe(200)
+    expect(reloaded.json.result.analysis).toBeNull()
+    expect(reloaded.json.result.identity).toEqual({ key: null, label: "Landmine Row", source: "custom", catalogueId: null })
+    expect(reloaded.json.result.review).toEqual(review)
+
+    const listed = (await call(owner, "GET")).json.results.find((r: { id: string }) => r.id === saved.json.id)
+    expect(listed).toMatchObject({ exercise: "manual_review", reps: null, identity: { label: "Landmine Row" }, review: { manualReps: review.manualReps } })
+
+    // Tenant isolation holds for reviews too.
+    expect((await call(intruder, "GET", `?id=${saved.json.id}`)).status).toBe(404)
+  })
+
+  it("refuses a custom name that fails validation, and a custom save that smuggles in an engine analysis", async () => {
+    const count = run(`select count(*) from setvision_analyses where user_id = ${q(owner)};`).out
+    expect((await call(owner, "POST", "", { analysis: null, videoDurationMs: 30_000, exerciseKey: null, exerciseSource: "custom", customLabel: " " })).status).toBe(400)
+    expect((await call(owner, "POST", "", { analysis, videoDurationMs, exerciseKey: null, exerciseSource: "custom", customLabel: "My squat" })).status).toBe(400)
+    expect(run(`select count(*) from setvision_analyses where user_id = ${q(owner)};`).out).toBe(count)
+  })
+
+  it("saves a new movement-family engine (pulldown) with the user's rejected rep kept apart from the engine's count", async () => {
+    const pull = structuredClone(analysis)
+    pull.exercise = "vertical_pull"
+    pull.perRep.tempo = pull.perRep.tempo.map((t) => ({ ...t, eccentricSec: t.concentricSec, concentricSec: t.eccentricSec }))
+    const saved = await call(owner, "POST", "", {
+      analysis: pull, videoDurationMs, exerciseKey: "catalogue:lat-pulldown", exerciseSource: "catalogue",
+      review: { rejectedReps: [3], manualReps: [], notes: "", unsure: false },
+    })
+    expect(saved.status).toBe(200)
+    expect(run(`select exercise || '|' || reps from setvision_analyses where id = ${q(saved.json.id)};`).out).toBe("vertical_pull|3")
+    const reloaded = (await call(owner, "GET", `?id=${saved.json.id}`)).json.result
+    expect(reloaded.analysis.reps).toBe(3)
+    expect(reloaded.review.rejectedReps).toEqual([3])
+    expect(reloaded.identity.label).toBe("Lat Pulldown")
+  })
+
   it("restores a historical row saved before timestamps were kept, without inventing them", async () => {
     const legacy = await call(owner, "GET", `?id=${legacyId}`)
     expect(legacy.status).toBe(200)

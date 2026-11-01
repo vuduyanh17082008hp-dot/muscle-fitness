@@ -383,10 +383,10 @@ describe("correction R2 — auxiliary landmark confidence", () => {
     const deadlift = getExerciseConfig("deadlift");
     const squat = getExerciseConfig("squat");
     const base = squatDepth(0);
-    expect(deadlift.barProxy({ ...base, left_wrist: p(0.1, 0.1, 0.2), right_wrist: p(0.9, 0.9, 0.3) })).toBeNull();
-    expect(deadlift.barProxy({ ...base, left_wrist: p(0.4, 0.5), right_wrist: p(9, 9, 0.1) })).toEqual(p(0.4, 0.5));
-    expect(deadlift.barProxy({ ...base, left_wrist: p(Number.NaN, 0.5), right_wrist: p(0.6, 0.5) })).toEqual(p(0.6, 0.5));
-    expect(squat.barProxy({ ...base, left_shoulder: p(0.2, 0.2, 0.1), right_shoulder: p(0.8, 0.2, 0.1) })).toBeNull();
+    expect(deadlift.barProxy!({ ...base, left_wrist: p(0.1, 0.1, 0.2), right_wrist: p(0.9, 0.9, 0.3) })).toBeNull();
+    expect(deadlift.barProxy!({ ...base, left_wrist: p(0.4, 0.5), right_wrist: p(9, 9, 0.1) })).toEqual(p(0.4, 0.5));
+    expect(deadlift.barProxy!({ ...base, left_wrist: p(Number.NaN, 0.5), right_wrist: p(0.6, 0.5) })).toEqual(p(0.6, 0.5));
+    expect(squat.barProxy!({ ...base, left_shoulder: p(0.2, 0.2, 0.1), right_shoulder: p(0.8, 0.2, 0.1) })).toBeNull();
   });
 
   it("torso length needs one clearly tracked shoulder–hip side", () => {

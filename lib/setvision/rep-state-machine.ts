@@ -2,11 +2,18 @@ import type { ExerciseConfig } from "@/lib/setvision/exercise-config";
 import type {
   CompletedRep,
   Landmark,
+  MovementEvent,
   PoseFrame,
   RepPhase,
   RepStateMachineResult,
   TimedPoseFrame,
 } from "@/lib/setvision/types";
+
+/** What the machine needs from an engine config (exercise-config.ts). */
+export type RepMachineConfig = Pick<ExerciseConfig, "primaryAngleDeg" | "topAngleThresholdDeg" | "bottomAngleThresholdDeg" | "barProxy"> & {
+  /** Which end of the angle range is the rest position; default "high" (the original squat orientation). */
+  rest?: "high" | "low";
+};
 
 /**
  * Generalized rep state machine (spec Part B §14).
@@ -22,12 +29,24 @@ import type {
  * frame count for the transition hold, since this runs against
  * uploaded video that may be sampled at a different, non-live rate
  * than a webcam's requestAnimationFrame loop.
+ *
+ * "top" is the REST position and "bottom" the working end. For an engine
+ * whose rest is the low end of its angle (overhead press in the rack,
+ * lateral raise with the arms down) the angle is negated internally, so the
+ * same transitions and hysteresis apply; reps report raw angles.
  */
 
 const SMOOTHING_WINDOW = 3;
 const MIN_TRANSITION_HOLD_MS = 60;
 const MIN_MS_BETWEEN_REPS = 400;
 const HYSTERESIS_DEG = 5;
+/**
+ * A rep that leaves the rest position and comes back without reaching the
+ * working end is reported as a partial movement only when it travelled at
+ * least this share of the way between the two thresholds — smaller dips are
+ * treated as noise, not as attempted reps.
+ */
+const PARTIAL_MIN_FRACTION = 0.4;
 /**
  * A gap between clearly tracked frames longer than this means the
  * movement in between was not observed: any rep in progress is dropped
@@ -36,7 +55,13 @@ const HYSTERESIS_DEG = 5;
  */
 export const MAX_TRACKING_GAP_MS = 1000;
 
-export function createRepStateMachine(config: ExerciseConfig) {
+export function createRepStateMachine(config: RepMachineConfig) {
+  const sign = config.rest === "low" ? -1 : 1;
+  const topThreshold = sign * config.topAngleThresholdDeg;
+  const bottomThreshold = sign * config.bottomAngleThresholdDeg;
+  const partialDepth = topThreshold - PARTIAL_MIN_FRACTION * (topThreshold - bottomThreshold);
+  const events: MovementEvent[] = [];
+
   let phase: RepPhase = "top";
   let phaseEnteredAt = -Infinity;
   let repCount = 0;
@@ -60,7 +85,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
   let repBottomFrame: PoseFrame | null = null;
   let repDeepestFrame: PoseFrame | null = null;
   /** Highest angle seen while standing/locked out before the current rep — its true top, for the joint range. */
-  let topPeakAngle = 0;
+  let topPeakAngle = -Infinity;
   let repBarProxyTrack: Array<{ timestampMs: number; landmark: Landmark }> = [];
 
   function smooth(value: number): number {
@@ -79,6 +104,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
     repStartObserved = true;
     lastVisibleAtMs = -Infinity;
     droppedReps = 0;
+    events.length = 0;
     angleBuffer.length = 0;
     repTopAtMs = 0;
     repBottomAtMs = 0;
@@ -88,7 +114,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
     repBottomBarProxy = null;
     repBottomFrame = null;
     repDeepestFrame = null;
-    topPeakAngle = 0;
+    topPeakAngle = -Infinity;
     repBarProxyTrack = [];
   }
 
@@ -96,7 +122,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
     repTopAtMs = timestampMs;
     repMinAngle = angle;
     repMaxAngle = Math.max(angle, topPeakAngle);
-    topPeakAngle = 0;
+    topPeakAngle = -Infinity;
     repBottomBarProxy = null;
     repBottomFrame = null;
     repDeepestFrame = frame;
@@ -107,35 +133,39 @@ export function createRepStateMachine(config: ExerciseConfig) {
   function processFrame({ timestampMs, frame }: TimedPoseFrame): RepStateMachineResult {
     // primaryAngleDeg is null unless one body side's joints are all
     // clearly tracked (exercise-config.ts::sameSidePoints).
-    const rawAngle = config.primaryAngleDeg(frame);
+    const measured = config.primaryAngleDeg(frame);
 
-    if (rawAngle === null) {
+    if (measured === null) {
       return { phase, repCount, lastCompletedRep: null, visible: false };
     }
+    const rawAngle = sign * measured;
 
     if (timestampMs - lastVisibleAtMs > MAX_TRACKING_GAP_MS && lastVisibleAtMs > -Infinity) {
-      if (phase !== "top") droppedReps += 1;
+      if (phase !== "top") {
+        droppedReps += 1;
+        events.push({ kind: "uncertain", startMs: repTopAtMs, endMs: lastVisibleAtMs });
+      }
       phase = "top";
       phaseEnteredAt = timestampMs;
       hasPassedBottom = false;
       armed = false;
       angleBuffer.length = 0;
-      topPeakAngle = 0;
+      topPeakAngle = -Infinity;
     }
     lastVisibleAtMs = timestampMs;
 
     const angle = smooth(rawAngle);
-    const barProxy = config.barProxy(frame);
+    const barProxy = config.barProxy ? config.barProxy(frame) : null;
 
     if (!armed) {
       // Clip start or resumed tracking: only a clearly observed top or
       // bottom position is a trustworthy place to start counting from.
-      if (angle >= config.topAngleThresholdDeg) {
+      if (angle >= topThreshold) {
         armed = true;
         repStartObserved = true;
         phase = "top";
         phaseEnteredAt = timestampMs;
-      } else if (angle <= config.bottomAngleThresholdDeg) {
+      } else if (angle <= bottomThreshold) {
         // Already at the bottom (e.g. a deadlift set starting from the
         // floor, or a clip cut mid-rep): the ascent can still be
         // observed, but this rep's descent and hold were not.
@@ -157,13 +187,13 @@ export function createRepStateMachine(config: ExerciseConfig) {
     let nextPhase = phase;
     let completedRep: CompletedRep | null = null;
 
-    if (phase === "top" && angle < config.topAngleThresholdDeg - HYSTERESIS_DEG) {
+    if (phase === "top" && angle < topThreshold - HYSTERESIS_DEG) {
       nextPhase = "descent";
       repStartObserved = true;
       beginRep(timestampMs, angle, frame);
     } else if (
       phase === "descent" &&
-      angle <= config.bottomAngleThresholdDeg &&
+      angle <= bottomThreshold &&
       timeInPhase >= MIN_TRANSITION_HOLD_MS
     ) {
       nextPhase = "bottom";
@@ -173,14 +203,14 @@ export function createRepStateMachine(config: ExerciseConfig) {
       repBottomFrame = frame;
     } else if (
       phase === "bottom" &&
-      angle > config.bottomAngleThresholdDeg + HYSTERESIS_DEG &&
+      angle > bottomThreshold + HYSTERESIS_DEG &&
       timeInPhase >= MIN_TRANSITION_HOLD_MS
     ) {
       nextPhase = "ascent";
       repAscentStartAtMs = timestampMs;
     } else if (
       phase === "ascent" &&
-      angle <= config.bottomAngleThresholdDeg &&
+      angle <= bottomThreshold &&
       timeInPhase >= MIN_TRANSITION_HOLD_MS
     ) {
       // Sank back into the hole (a wobble during a long bottom hold):
@@ -189,7 +219,7 @@ export function createRepStateMachine(config: ExerciseConfig) {
       nextPhase = "bottom";
     } else if (
       phase === "ascent" &&
-      angle >= config.topAngleThresholdDeg &&
+      angle >= topThreshold &&
       timeInPhase >= MIN_TRANSITION_HOLD_MS
     ) {
       nextPhase = "top";
@@ -206,8 +236,9 @@ export function createRepStateMachine(config: ExerciseConfig) {
           bottomAtMs: repBottomAtMs,
           ascentStartAtMs: repAscentStartAtMs,
           ascentEndAtMs: timestampMs,
-          minAngleDeg: repMinAngle,
-          maxAngleDeg: repMaxAngle,
+          // Raw angles: for a rest-low engine the oriented min is the raw max.
+          minAngleDeg: sign === 1 ? repMinAngle : -repMaxAngle,
+          maxAngleDeg: sign === 1 ? repMaxAngle : -repMinAngle,
           bottomBarProxy: repBottomBarProxy,
           bottomFrame: repBottomFrame,
           deepestFrame: repDeepestFrame,
@@ -216,11 +247,13 @@ export function createRepStateMachine(config: ExerciseConfig) {
       }
 
       hasPassedBottom = false;
-    } else if (phase === "descent" && angle >= config.topAngleThresholdDeg) {
+    } else if (phase === "descent" && angle >= topThreshold) {
       // Aborted rep — stood back up (or locked back out) without
-      // reaching bottom. Return to top without counting anything.
+      // reaching bottom. Return to top without counting it; a real attempt
+      // (not a small dip) is reported as a partial movement.
       nextPhase = "top";
       hasPassedBottom = false;
+      if (repMinAngle <= partialDepth) events.push({ kind: "partial", startMs: repTopAtMs, endMs: timestampMs });
     }
 
     if (nextPhase !== phase) {
@@ -246,8 +279,11 @@ export function createRepStateMachine(config: ExerciseConfig) {
 
   /** In-progress reps discarded because tracking was lost mid-rep. */
   const getDroppedReps = () => droppedReps;
+  /** Partial and tracking-lost movements so far, plus the in-progress one when `endMs` (the clip end) is given. */
+  const getEvents = (endMs?: number): MovementEvent[] =>
+    endMs !== undefined && armed && phase !== "top" ? [...events, { kind: "uncertain", startMs: repTopAtMs, endMs }] : [...events];
 
-  return { processFrame, reset, getDroppedReps };
+  return { processFrame, reset, getDroppedReps, getEvents };
 }
 
 export type RepStateMachine = ReturnType<typeof createRepStateMachine>;

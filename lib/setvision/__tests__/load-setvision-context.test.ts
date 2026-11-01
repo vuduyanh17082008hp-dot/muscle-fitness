@@ -29,7 +29,7 @@ const NOW = new Date("2026-09-13T12:00:00.000Z");
 function row(overrides: Partial<SetVisionAnalysisRow> = {}): SetVisionAnalysisRow {
   return {
     id: "row-1",
-    exercise: "bench_press",
+    exercise: "squat",
     reps: 8,
     rom_consistency: 0.9,
     tempo_consistency: 0.85,
@@ -82,16 +82,31 @@ describe("loadSetVisionContext", () => {
   });
 
   it("does not compute a baseline deviation from a different exercise's history", async () => {
-    const squatHistory = Array.from({ length: 6 }, (_, i) =>
-      row({ id: `squat-${i}`, exercise: "squat", rom_consistency: 0.5 }),
+    const otherHistory = Array.from({ length: 6 }, (_, i) =>
+      row({ id: `dl-${i}`, exercise: "deadlift", rom_consistency: 0.5 }),
     );
-    const latest = row({ id: "latest", exercise: "bench_press", rom_consistency: 0.9 });
+    const latest = row({ id: "latest", exercise: "squat", rom_consistency: 0.9 });
 
-    const supabase = createFakeSupabase({ rows: [latest, ...squatHistory] });
+    const supabase = createFakeSupabase({ rows: [latest, ...otherHistory] });
     const context = await loadSetVisionContext(supabase, "user-1", { now: NOW });
 
-    // Only 0 same-exercise (bench_press) history points exist, so no baseline should be formed.
+    // Only 0 same-exercise (squat) history points exist, so no baseline should be formed.
     expect(context.romConsistencyDeviation?.baseline).toBeNull();
     expect(context.romConsistencyDeviation?.sampleCount).toBe(0);
+  });
+
+  it("never hands Dante a manual review or an experimental engine's numbers", async () => {
+    const supabase = createFakeSupabase({
+      rows: [
+        row({ id: "manual", exercise: "manual_review" as never, reps: null as never, confidence: null as never }),
+        row({ id: "curl", exercise: "elbow_flexion" }),
+        row({ id: "bench", exercise: "bench_press" }),
+        row({ id: "squat", exercise: "squat" }),
+      ],
+    });
+    const context = await loadSetVisionContext(supabase, "user-1", { now: NOW });
+
+    expect(context.latest?.id).toBe("squat");
+    expect(context.analysesLast30Days).toBe(1);
   });
 });

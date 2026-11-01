@@ -4,38 +4,37 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Loader2, Upload } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
-import { analyzeWorkoutVideo, classifyExercise } from "@/lib/setvision";
+import { analyzeWorkoutVideo } from "@/lib/setvision";
+import { suggestExercise } from "@/lib/setvision/analyze";
 import { optionForEngine, selectionFromOption, type SelectedExercise } from "@/lib/setvision/exercise-selection";
+import { EMPTY_REVIEW, type SetReview } from "@/lib/setvision/saved-analysis";
 import type { PoseFrame, SetVisionAnalysis, SetVisionExerciseId, TimedPoseFrame } from "@/lib/setvision/types";
 import { CANONICAL_MUSCLES, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
 import type { AutoregulationDecision, TraceableDecision } from "@/lib/dante-core/types";
 import { collectPoseFrames } from "@/components/setvision/collect-pose-frames";
-import { ExercisePicker, SelectedCard, type PickerMode } from "@/components/setvision/exercise-picker";
+import { ExercisePicker } from "@/components/setvision/exercise-picker";
 import { PoseOverlayCanvas } from "@/components/form-coach/pose-overlay-canvas";
 import { SetVisionResultsPanel } from "@/components/setvision/results-panel";
+import { SetReviewPanel } from "@/components/setvision/set-review";
 import { SavedAnalyses } from "@/components/setvision/saved-analyses";
 import { DecisionCard } from "@/components/dante/decision-card";
 import { ErrorState } from "@/components/dashboard/error-state";
 
-const RELEVANT_MUSCLES: Record<SetVisionExerciseId, CanonicalMuscle[]> = {
-  bench_press: ["chest", "triceps", "anterior_deltoid"],
+/** Dante only gets VERIFIED analyses, so only those engines need muscles. */
+const RELEVANT_MUSCLES: Partial<Record<SetVisionExerciseId, CanonicalMuscle[]>> = {
   squat: ["quadriceps", "glutes"],
-  deadlift: ["hamstrings", "glutes", "lower_back"],
 };
 
 type VideoState = { url: string; file: File; durationMs: number | null; width: number; height: number; invalid: string | null };
 
-/** Result of an action, remembered together with the analysis it was for — a different analysis never inherits it. */
-type For<T> = { analysis: SetVisionAnalysis; value: T };
+/** Result of an action, remembered together with the inputs it was for — different inputs never inherit it. */
+type For<K, T> = { key: K; value: T };
 
 export function VideoAnalyzer() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const [mode, setMode] = useState<PickerMode>("choose");
-  const [chosen, setChosen] = useState<SelectedExercise | null>(null);
-  const [custom, setCustom] = useState<SelectedExercise | null>(null);
-  const [customDraft, setCustomDraft] = useState("");
-  const [autoConfirmed, setAutoConfirmed] = useState<SelectedExercise | null>(null);
+  const [selection, setSelection] = useState<SelectedExercise | null>(null);
+  const [autoDetect, setAutoDetect] = useState(false);
 
   const [video, setVideo] = useState<VideoState | null>(null);
   /** Pose frames of the CURRENT video — exercise-agnostic, so a new exercise choice re-derives the analysis instead of reusing one. */
@@ -45,33 +44,50 @@ export function VideoAnalyzer() {
   const [liveFrame, setLiveFrame] = useState<PoseFrame | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const [save, setSave] = useState<For<"saving" | "saved" | "error"> | null>(null);
+  /** The user's marked reps, notes and "unsure" flag belong to the video; rejected automated reps belong to one analysis. */
+  const [review, setReview] = useState<Omit<SetReview, "rejectedReps">>(EMPTY_REVIEW);
+  const [rejected, setRejected] = useState<For<SetVisionAnalysis | null, number[]> | null>(null);
+
+  const [save, setSave] = useState<For<object, "saving" | "saved" | "error"> | null>(null);
   const [savedCount, setSavedCount] = useState(0);
 
   const [plannedLoadKg, setPlannedLoadKg] = useState(60);
   const [plannedSets, setPlannedSets] = useState(4);
-  const [dante, setDante] = useState<For<{ status: "loading" | "error" | "done"; decision?: TraceableDecision<AutoregulationDecision>; explanation?: string | null }> | null>(null);
+  const [dante, setDante] = useState<For<SetVisionAnalysis, { status: "loading" | "error" | "done"; decision?: TraceableDecision<AutoregulationDecision>; explanation?: string | null }> | null>(null);
 
-  const active = mode === "choose" ? chosen : mode === "custom" ? custom : autoConfirmed;
-  const suggestion = useMemo(() => (mode === "auto" && frames ? classifyExercise(frames.map((f) => f.frame)) : null), [mode, frames]);
+  const suggestion = useMemo(() => (autoDetect && frames ? suggestExercise(frames) : null), [autoDetect, frames]);
 
   const analysis = useMemo(
     () =>
-      frames && active?.engine
+      frames && selection?.engine
         ? analyzeWorkoutVideo(frames, {
-            exercise: active.engine,
-            confirmedSuggestion: active.source === "auto_suggestion" ? suggestion : null,
+            exercise: selection.engine,
+            confirmedSuggestion: selection.source === "auto_suggestion" ? suggestion : null,
           })
         : null,
-    [frames, active, suggestion],
+    [frames, selection, suggestion],
   );
 
-  const saveStatus = save && save.analysis === analysis ? save.value : "idle";
-  const danteState = dante && dante.analysis === analysis ? dante.value : null;
+  const fullReview: SetReview = useMemo(
+    () => ({ ...review, rejectedReps: rejected && rejected.key === analysis ? rejected.value : [] }),
+    [review, rejected, analysis],
+  );
+  const saveKey = useMemo(() => ({ selection, analysis, fullReview }), [selection, analysis, fullReview]);
+  const saveStatus = save && save.key === saveKey ? save.value : "idle";
+  const danteState = dante && dante.key === analysis ? dante.value : null;
 
-  const changeMode = useCallback((next: PickerMode) => {
-    setMode(next);
-    if (next !== "auto") setAutoConfirmed(null);
+  const chooseExercise = useCallback((next: SelectedExercise) => {
+    setSelection(next);
+    setAutoDetect(false);
+  }, []);
+
+  const chooseAutoDetect = useCallback(() => {
+    setSelection(null);
+    setAutoDetect(true);
+  }, []);
+
+  const confirmSuggestion = useCallback((engine: SetVisionExerciseId) => {
+    setSelection(selectionFromOption(optionForEngine(engine), "auto_suggestion"));
   }, []);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,8 +96,10 @@ export function VideoAnalyzer() {
     if (!file) return;
 
     setFrames(null);
-    setAutoConfirmed(null);
     setErrorMessage(null);
+    setReview(EMPTY_REVIEW);
+    // A confirmed suggestion was about the previous video.
+    setSelection((current) => (current?.source === "auto_suggestion" ? null : current));
     setVideo((previous) => {
       if (previous) URL.revokeObjectURL(previous.url);
       return {
@@ -141,10 +159,21 @@ export function VideoAnalyzer() {
     element.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, []);
 
+  const currentTimeMs = useCallback(() => (videoRef.current ? Math.round(videoRef.current.currentTime * 1000) : null), []);
+
+  const handleReviewChange = useCallback(
+    (next: SetReview) => {
+      const { rejectedReps, ...rest } = next;
+      setReview(rest);
+      setRejected({ key: analysis, value: rejectedReps });
+    },
+    [analysis],
+  );
+
   const handleSave = useCallback(async () => {
-    if (!analysis || !video?.durationMs || !active?.key || active.source === "custom") return;
-    const target = analysis;
-    setSave({ analysis: target, value: "saving" });
+    if (!selection || !video?.durationMs) return;
+    const key = saveKey;
+    setSave({ key, value: "saving" });
     const supabase = createClient();
     let uploadedPath: string | null = null;
 
@@ -168,38 +197,40 @@ export function VideoAnalyzer() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          analysis: target,
+          analysis: key.analysis,
           videoDurationMs: video.durationMs,
-          exerciseKey: active.key,
-          exerciseSource: active.source,
+          exerciseKey: selection.key,
+          exerciseSource: selection.source,
+          ...(selection.source === "custom" ? { customLabel: selection.label } : {}),
+          review: key.fullReview,
           videoStoragePath: uploadUrlData.path,
         }),
       });
       const resultsData = await resultsResponse.json();
       if (!resultsResponse.ok || !resultsData.ok) throw new Error(resultsData.error ?? "Could not save the analysis.");
 
-      setSave({ analysis: target, value: "saved" });
+      setSave({ key, value: "saved" });
       setSavedCount((n) => n + 1);
     } catch (error) {
       console.error("[SETVISION] save failed", error);
       // Nothing was saved, so don't leave the video behind in storage (best effort).
       if (uploadedPath) await supabase.storage.from("setvision-videos").remove([uploadedPath]).catch(() => {});
-      setSave({ analysis: target, value: "error" });
+      setSave({ key, value: "error" });
     }
-  }, [analysis, video, active]);
+  }, [saveKey, selection, video]);
 
   const handleAskDante = useCallback(async () => {
-    if (!analysis || !active) return;
+    if (!analysis || !selection) return;
     const target = analysis;
-    setDante({ analysis: target, value: { status: "loading" } });
+    setDante({ key: target, value: { status: "loading" } });
 
     try {
       const response = await fetch("/api/dante/recommendation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          exerciseName: active.label,
-          relevantMuscles: RELEVANT_MUSCLES[target.exercise].filter((m) => (CANONICAL_MUSCLES as string[]).includes(m)),
+          exerciseName: selection.label,
+          relevantMuscles: (RELEVANT_MUSCLES[target.exercise] ?? []).filter((m) => (CANONICAL_MUSCLES as string[]).includes(m)),
           planned: { targetSets: plannedSets, targetRepMin: 5, targetRepMax: 8, targetLoadKg: plannedLoadKg, targetRir: 2 },
           setVision: {
             velocityLoss: target.velocity.velocityLoss,
@@ -212,32 +243,26 @@ export function VideoAnalyzer() {
       });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error ?? "Could not get a recommendation.");
-      setDante({ analysis: target, value: { status: "done", decision: data.decision, explanation: data.explanation ?? null } });
+      setDante({ key: target, value: { status: "done", decision: data.decision, explanation: data.explanation ?? null } });
     } catch (error) {
       console.error("[SETVISION -> DANTE] failed", error);
-      setDante({ analysis: target, value: { status: "error" } });
+      setDante({ key: target, value: { status: "error" } });
     }
-  }, [analysis, active, plannedLoadKg, plannedSets]);
+  }, [analysis, selection, plannedLoadKg, plannedSets]);
 
-  const labelOnly = active !== null && active.engine === null;
-  const canAnalyze = Boolean(video && !video.invalid && video.durationMs && (mode === "auto" || active?.engine));
-  const measured = analysis && analysis.reps > 0;
+  const manualOnly = selection !== null && selection.engine === null;
+  const canAnalyze = Boolean(video && !video.invalid && video.durationMs && (autoDetect || selection?.engine));
+  const measured = analysis !== null && analysis.reps > 0;
+  // Review once there is something to review: an exercise without an engine, or an engine result (counted or not).
+  const reviewable = Boolean(selection && video && !video.invalid && video.durationMs && (manualOnly || analysis));
+  const candidates = suggestion?.candidates ?? [];
 
   return (
     <div className="space-y-6">
       <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
-        <ExercisePicker
-          mode={mode}
-          onModeChange={changeMode}
-          chosen={chosen}
-          onChoose={setChosen}
-          custom={custom}
-          onCustom={setCustom}
-          customDraft={customDraft}
-          onCustomDraftChange={setCustomDraft}
-        />
+        <ExercisePicker selection={selection} autoDetect={autoDetect} onSelect={chooseExercise} onAutoDetect={chooseAutoDetect} />
 
-        {mode !== "auto" && !active ? (
+        {!autoDetect && !selection ? (
           <p className="mt-3 text-sm text-zinc-500" data-testid="sv-no-exercise">
             Choose or enter the exercise first — SetVision measures only the movement you tell it.
           </p>
@@ -253,7 +278,7 @@ export function VideoAnalyzer() {
               <input type="file" accept="video/*" className="sr-only" onChange={handleFileChange} data-testid="sv-file" />
             </label>
 
-            {video && !labelOnly ? (
+            {video && (autoDetect || selection?.engine) ? (
               <button
                 type="button"
                 onClick={handleAnalyze}
@@ -320,32 +345,19 @@ export function VideoAnalyzer() {
           {errorMessage ? (
             <ErrorState className="mt-4" title="Analysis failed" description={errorMessage} onRetry={handleAnalyze} />
           ) : null}
+
+          {manualOnly && video ? (
+            <p className="mt-4 text-sm leading-6 text-zinc-400" data-testid="sv-label-only">
+              SetVision has no movement model for {selection.label}, so nothing is measured. Play and scrub the video,
+              mark the reps yourself below, and save the review if you want to keep it.
+            </p>
+          ) : null}
         </div>
       </article>
 
-      {labelOnly && active ? (
-        <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-label-only">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">No automated analysis</p>
-          <p className="mt-2 break-words text-base font-black text-white">{active.label}</p>
-          <p className="mt-1 text-sm leading-6 text-zinc-400">
-            {video
-              ? "Your video stays on this page for review — play and scrub it above. No reps, tempo, range or technique are reported, and nothing is saved."
-              : "Add a video above to review it here. No reps, tempo, range or technique are reported, and nothing is saved."}
-          </p>
-        </article>
-      ) : null}
-
-      {mode === "auto" && frames && !autoConfirmed && suggestion ? (
+      {autoDetect && frames && !selection && suggestion ? (
         <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-auto-result">
-          {suggestion.exercise === null ? (
-            <>
-              <p className="text-lg font-black text-white" data-testid="sv-auto-title">
-                Exercise not identified
-              </p>
-              <p className="mt-1 text-sm leading-6 text-zinc-400">{suggestion.signals[0]}</p>
-              <p className="mt-2 text-sm text-zinc-400">Choose or enter the exercise — your video and its pose data are kept.</p>
-            </>
-          ) : (
+          {suggestion.exercise !== null ? (
             <>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-300">Unverified suggestion</p>
               <p className="mt-1 text-lg font-black text-white" data-testid="sv-auto-title">
@@ -355,56 +367,69 @@ export function VideoAnalyzer() {
                 {suggestion.signals[0]} This is a heuristic guess, not a probability — confirm it or pick the right exercise.
               </p>
             </>
+          ) : candidates.length > 1 ? (
+            <>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-amber-300">Several exercises fit</p>
+              <p className="mt-1 text-lg font-black text-white" data-testid="sv-auto-title">
+                Could be: {candidates.map((c) => optionForEngine(c).label).join(", ")}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-zinc-400">{suggestion.signals[0]}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-black text-white" data-testid="sv-auto-title">
+                Exercise not identified
+              </p>
+              <p className="mt-1 text-sm leading-6 text-zinc-400">{suggestion.signals[0]}</p>
+              <p className="mt-2 text-sm text-zinc-400">Choose or enter the exercise — your video and its pose data are kept.</p>
+            </>
           )}
           <div className="mt-4 flex flex-wrap gap-2">
-            {suggestion.exercise !== null ? (
+            {(suggestion.exercise !== null ? [suggestion.exercise] : candidates.length > 1 ? candidates : []).map((engine) => (
               <button
+                key={engine}
                 type="button"
-                onClick={() => setAutoConfirmed(selectionFromOption(optionForEngine(suggestion.exercise!), "auto_suggestion"))}
+                onClick={() => confirmSuggestion(engine)}
                 className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-black transition hover:bg-amber-400"
               >
-                Yes, it&apos;s {optionForEngine(suggestion.exercise).label}
+                {suggestion.exercise !== null ? "Yes, it's" : "It's"} {optionForEngine(engine).label}
               </button>
-            ) : null}
-            <button type="button" onClick={() => changeMode("choose")} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/[0.06]">
-              Choose exercise
-            </button>
-            <button type="button" onClick={() => changeMode("custom")} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/[0.06]">
-              Enter a custom name
+            ))}
+            <button type="button" onClick={() => setAutoDetect(false)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/[0.06]">
+              Choose another exercise
             </button>
           </div>
         </article>
       ) : null}
 
-      {mode === "auto" && autoConfirmed ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <SelectedCard selection={autoConfirmed} onChange={() => setAutoConfirmed(null)} />
-        </div>
+      {analysis && selection ? (
+        <SetVisionResultsPanel analysis={analysis} onSeek={handleSeek} identity={{ label: selection.label, source: selection.source }} />
       ) : null}
 
-      {analysis && active ? (
-        <SetVisionResultsPanel analysis={analysis} onSeek={handleSeek} identity={{ label: active.label, source: active.source }} />
+      {reviewable && video ? (
+        <SetReviewPanel key={video.url} analysis={analysis} review={fullReview} onChange={handleReviewChange} currentTimeMs={currentTimeMs} onSeek={handleSeek} />
       ) : null}
 
-      {/* Save only a measured analysis of an exercise SetVision analyses; label-only and custom picks have nothing to save. */}
-      {measured && active?.key ? (
+      {reviewable ? (
         <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-save">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">3. Save this analysis (optional)</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">4. Save (optional)</p>
           <p className="mt-2 text-sm text-zinc-500">
-            Uploads the video to your private storage and saves the metrics and rep timeline above.
+            Uploads the video to your private storage and saves {analysis ? "what SetVision measured, plus " : ""}your review.
+            Nothing is added to your workout log.
           </p>
           <button
             type="button"
             onClick={handleSave}
             disabled={saveStatus === "saving" || saveStatus === "saved"}
             className="mt-4 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/[0.1] disabled:opacity-50"
+            data-testid="sv-save-button"
           >
             {saveStatus === "saving" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-            {saveStatus === "saved" ? "Saved" : saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Try saving again" : "Save analysis"}
+            {saveStatus === "saved" ? "Saved" : saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Try saving again" : analysis ? "Save analysis and review" : "Save review"}
           </button>
           <p className="mt-2 text-sm" aria-live="polite">
             {saveStatus === "error" ? (
-              <span className="text-rose-400" data-testid="sv-save-error">Could not save this analysis — nothing was stored. Check your connection and try again.</span>
+              <span className="text-rose-400" data-testid="sv-save-error">Could not save — nothing was stored. Check your connection and try again.</span>
             ) : saveStatus === "saved" ? (
               <span className="text-zinc-400" data-testid="sv-save-ok">Saved. Open it under “Saved analyses” below to see it reloaded from your account.</span>
             ) : null}
@@ -412,9 +437,9 @@ export function VideoAnalyzer() {
         </article>
       ) : null}
 
-      {measured && active?.capability === "SUPPORTED_ANALYSIS" ? (
+      {measured && selection?.capability === "ANALYSIS_VERIFIED" ? (
         <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-dante">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">4. Ask Dante what this means for your next set</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">5. Ask Dante what this means for your next set</p>
 
           <div className="mt-4 flex flex-wrap items-end gap-3">
             <label className="text-xs text-zinc-500">
@@ -449,9 +474,9 @@ export function VideoAnalyzer() {
 
           {danteState?.status === "error" ? <p className="mt-3 text-sm text-rose-400">Could not get a recommendation right now.</p> : null}
         </article>
-      ) : measured && active?.capability === "LIMITED_EXPERIMENTAL_ANALYSIS" ? (
+      ) : measured && selection ? (
         <p className="text-xs leading-5 text-zinc-500" data-testid="sv-dante-withheld">
-          Dante recommendations use supported analyses only — this experimental {active.label.toLowerCase()} analysis is not sent to Dante.
+          Dante recommendations use verified analyses only — this experimental {selection.label.toLowerCase()} analysis is not sent to Dante.
         </p>
       ) : null}
 

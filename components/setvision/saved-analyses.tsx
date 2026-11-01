@@ -5,17 +5,31 @@ import { History, Loader2 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { EXERCISE_CONFIGS } from "@/lib/setvision/exercise-config";
-import type { RestoredAnalysis } from "@/lib/setvision/saved-analysis";
+import { reviewedRepCount, type RestoredAnalysis, type SetReview } from "@/lib/setvision/saved-analysis";
+import { SOURCE_TEXT } from "@/lib/setvision/exercise-selection";
 import type { SetVisionExerciseId } from "@/lib/setvision/types";
 import { SetVisionResultsPanel } from "@/components/setvision/results-panel";
+import { SetReviewPanel } from "@/components/setvision/set-review";
 
 type ListItem = {
   id: string;
-  exercise: SetVisionExerciseId;
-  reps: number;
+  exercise: SetVisionExerciseId | "manual_review";
+  /** Null for a manual review (nothing was measured). */
+  reps: number | null;
   analyzed_at: string;
   identity: { label?: unknown } | null;
+  review: Partial<SetReview> | null;
 };
+
+/** "4 reps (SetVision 5, you rejected 1)" — what the user ended up with, and where it came from. */
+function countText(item: ListItem): string {
+  const review = { rejectedReps: item.review?.rejectedReps ?? [], manualReps: item.review?.manualReps ?? [], notes: "", unsure: false };
+  const total = reviewedRepCount(item.reps ?? 0, review);
+  const plural = `${total} rep${total === 1 ? "" : "s"}`;
+  if (item.reps === null) return `Manual review · ${plural} marked by you`;
+  const edited = review.rejectedReps.length > 0 || review.manualReps.length > 0;
+  return edited ? `${plural} after your review (SetVision counted ${item.reps})` : plural;
+}
 
 const VISIBLE = 5;
 
@@ -107,11 +121,16 @@ export function SavedAnalyses({ refreshKey }: { refreshKey: number }) {
         </div>
         <ul className="mt-3 divide-y divide-white/[0.06]">
           {items.slice(0, VISIBLE).map((item) => {
-            const label = typeof item.identity?.label === "string" ? item.identity.label : EXERCISE_CONFIGS[item.exercise]?.displayName ?? item.exercise;
+            const label =
+              typeof item.identity?.label === "string"
+                ? item.identity.label
+                : item.exercise === "manual_review"
+                  ? "Unlabelled review"
+                  : EXERCISE_CONFIGS[item.exercise]?.displayName ?? item.exercise;
             return (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
                 <span className="min-w-0 text-zinc-300">
-                  <span className="font-semibold text-white">{label}</span> · {item.reps} rep{item.reps === 1 ? "" : "s"} ·{" "}
+                  <span className="break-words font-semibold text-white">{label}</span> · {countText(item)} ·{" "}
                   {new Date(item.analyzed_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
                 </span>
                 <button
@@ -143,13 +162,28 @@ export function SavedAnalyses({ refreshKey }: { refreshKey: number }) {
           ) : videoNote ? (
             <p className="text-xs text-zinc-500">{videoNote}</p>
           ) : null}
-          <SetVisionResultsPanel
-            heading={`Saved analysis · ${new Date(restored.analyzedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`}
-            analysis={restored.analysis}
-            identity={restored.identity}
-            timelineRecorded={restored.timelineRecorded}
-            onSeek={videoUrl ? seek : undefined}
-          />
+          {restored.analysis ? (
+            <SetVisionResultsPanel
+              heading={`Saved analysis · ${new Date(restored.analyzedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`}
+              analysis={restored.analysis}
+              identity={restored.identity}
+              timelineRecorded={restored.timelineRecorded}
+              onSeek={videoUrl ? seek : undefined}
+            />
+          ) : (
+            <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-restored-manual">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
+                Saved review · {new Date(restored.analyzedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+              </p>
+              <p className="mt-2 break-words text-lg font-black text-white" data-testid="sv-restored-label">
+                {restored.identity?.label ?? "Unlabelled review"}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {restored.identity ? SOURCE_TEXT[restored.identity.source] : "Exercise not recorded"} · no automated analysis — every rep below was marked by you.
+              </p>
+            </article>
+          )}
+          <SetReviewPanel analysis={restored.analysis} review={restored.review} onSeek={videoUrl ? seek : undefined} />
         </div>
       ) : null}
     </section>

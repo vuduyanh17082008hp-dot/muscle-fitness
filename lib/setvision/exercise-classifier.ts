@@ -64,13 +64,13 @@ function average(values: number[]): number {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
-function percentile(values: number[], p: number): number {
+export function percentile(values: number[], p: number): number {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.round((p / 100) * (sorted.length - 1))))];
 }
 
 /** p95 − p5: a range a few mis-tracked frames cannot inflate (raw max − min could). */
-function robustRange(values: number[]): number {
+export function robustRange(values: number[]): number {
   return percentile(values, 95) - percentile(values, 5);
 }
 

@@ -1,5 +1,8 @@
 import type { CompletedRep, RepTempo } from "@/lib/setvision/types";
 
+/** Whether leaving the rest position is the eccentric or the concentric phase (exercise-config.ts `outbound`). */
+export type Outbound = "eccentric" | "concentric";
+
 /**
  * Tempo (spec Part B §16). Directly derived from the rep state
  * machine's phase-transition timestamps — no separate estimation
@@ -12,12 +15,14 @@ function round(value: number, decimals = 2): number {
   return Math.round(value * factor) / factor;
 }
 
-export function computeRepTempo(rep: CompletedRep): RepTempo {
+export function computeRepTempo(rep: CompletedRep, outbound: Outbound = "eccentric"): RepTempo {
+  const outboundSec = rep.startObserved ? round((rep.bottomAtMs - rep.topAtMs) / 1000) : null;
+  const returnSec = round((rep.ascentEndAtMs - rep.ascentStartAtMs) / 1000);
   return {
     repNumber: rep.repNumber,
-    eccentricSec: rep.startObserved ? round((rep.bottomAtMs - rep.topAtMs) / 1000) : null,
+    eccentricSec: outbound === "eccentric" ? outboundSec : returnSec,
     pauseSec: rep.startObserved ? round((rep.ascentStartAtMs - rep.bottomAtMs) / 1000) : null,
-    concentricSec: round((rep.ascentEndAtMs - rep.ascentStartAtMs) / 1000),
+    concentricSec: outbound === "eccentric" ? returnSec : outboundSec,
     descentStartMs: rep.startObserved ? rep.topAtMs : null,
     bottomReachedMs: rep.startObserved ? rep.bottomAtMs : null,
     ascentStartMs: rep.ascentStartAtMs,
@@ -25,8 +30,8 @@ export function computeRepTempo(rep: CompletedRep): RepTempo {
   };
 }
 
-export function computeAllRepTempo(reps: CompletedRep[]): RepTempo[] {
-  return reps.map(computeRepTempo);
+export function computeAllRepTempo(reps: CompletedRep[], outbound: Outbound = "eccentric"): RepTempo[] {
+  return reps.map((rep) => computeRepTempo(rep, outbound));
 }
 
 function average(maybeValues: Array<number | null>): number | null {
@@ -51,7 +56,7 @@ export function averageConcentricTime(tempos: RepTempo[]): number | null {
 export function computeTempoConsistency(tempos: RepTempo[]): number | null {
   // Only fully observed reps: a rep with an unobserved descent has no comparable total.
   const totals = tempos.flatMap((t) =>
-    t.eccentricSec === null || t.pauseSec === null ? [] : [t.eccentricSec + t.pauseSec + t.concentricSec],
+    t.eccentricSec === null || t.pauseSec === null || t.concentricSec === null ? [] : [t.eccentricSec + t.pauseSec + t.concentricSec],
   );
 
   if (totals.length < 2) {

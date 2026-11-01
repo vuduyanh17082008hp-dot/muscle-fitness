@@ -1,6 +1,100 @@
 # SetVision
 
-Computer vision for resistance training — Bench Press, Squat, Deadlift.
+Computer vision for resistance training: one pose-based rep engine per
+movement family (squat, hinge, horizontal/vertical press, vertical/horizontal
+pull, curl, triceps extension, lateral raise) plus a manual review workflow
+for every exercise, custom ones included.
+
+## Multi-exercise movement families (2026-11-02)
+
+Every engine follows ONE 2D joint angle through `rest → working end → rest`
+(`lib/setvision/exercise-config.ts`). `rest` says which end the rep starts at
+(squat/bench/pulls/curl: joint open; overhead press, pushdown, overhead
+extension, lateral raise: joint closed — the angle is negated inside the
+shared state machine). `outbound` says whether leaving the rest position is
+eccentric (squat, bench, hinge) or concentric (pulls, curl, presses from the
+rack, extensions, raises), so tempo is labelled per movement and the save
+contract validates it in the same direction.
+
+| Engine id (DB value) | Family | Signal | Rep criterion | Views | Capability | Real-pose evidence (clip → counted / visible) |
+|---|---|---|---|---|---|---|
+| `squat` | Knee-dominant | knee angle, per-frame best side | ≥160° → ≤90° → ≥160° | side (front: no range) | **VERIFIED** (free squat only) | 5 real squat clips (prior sessions) unchanged |
+| `deadlift` | Hip hinge | hip angle, per-frame | ≥165° → **≤110°** (was 70°) → ≥165° | side (other: no range) | experimental | real rear-oblique deadlift 2/2 (was 0); rendered side clip 0 (MoveNet loses the lifter 3–4 s) |
+| `bench_press` | Horizontal press | elbow, per-clip side | ≥150° → ≤90° → ≥150° | side / raised front-oblique | experimental | rendered flat bench 2/2, rendered incline 2/2; real head-on machine chest press 0 (depth motion) |
+| `vertical_press` | Vertical press | elbow, per-clip | ≤90° (rack) → ≥145° overhead → ≤90° | front/back | experimental | real CDC machine OHP 2 of 3 (1 lost to a 1.2 s tracking gap, flagged); rendered DB press 2 |
+| `vertical_pull` | Vertical pull | elbow, per-clip | ≥145° hands overhead → ≤90° → ≥145° | front/back | experimental | real pulldown compilation: 1 full + 1 cut-off (flagged); rendered pull-up 2/2 |
+| `horizontal_pull` | Horizontal pull | elbow, per-clip | ≥145° → ≤100° → ≥145° | side / front-oblique | experimental | rendered bent-over row 2 of 3 (1 flagged) |
+| `elbow_flexion` | Curl | elbow, per-clip | ≥140° → ≤70° → ≥140° | side (front: no range) | experimental | real edited EZ-bar curl clip 7 of 10 (3 flagged uncertain, 0 invented) |
+| `triceps_pushdown` | Elbow extension (elbows down) | elbow, per-clip | ≤105° → ≥150° hands down → ≤105° | side | experimental | synthetic only — `REAL_WORLD_EVALUATION_BLOCKED` |
+| `overhead_triceps_extension` | Elbow extension (overhead) | elbow, per-clip | ≤90° → ≥145° overhead → ≤90° | side | experimental | synthetic only — `REAL_WORLD_EVALUATION_BLOCKED` |
+| `lateral_raise` | Shoulder abduction | hip–shoulder–elbow, per-clip | ≤35° → ≥70° (not overhead) → ≤35° | front/back only (side refused) | experimental | synthetic only — `REAL_WORLD_EVALUATION_BLOCKED` |
+
+Per-clip engines pick ONE side for the whole clip (the most-moving of the
+well-tracked sides): per-frame side switching put ±50° jumps into real
+oblique-view presses, and a one-arm exercise must follow the working arm.
+Before counting they refuse (`abstainReason`, shown as *unsupported input*):
+a refused camera view, no clearly tracked limb, or less visible joint travel
+than one rep needs. After counting, each rep's **body position** is checked
+on the frames around it (e.g. pulls need the hands overhead with the arms
+extended; curls need the upper arm down by the body): reps that fail are
+`excluded` events, and if none passes the clip is refused — choosing
+"Lat Pulldown" does not turn a curl into pulldown reps. Seen-but-uncounted
+movements are reported as `partial` (left rest, never reached the working
+end), `uncertain` (tracking lost / clip ended mid-rep) or `excluded`.
+
+Only `squat` and `deadlift` keep a bar proxy; every other engine reports no
+speed, velocity loss or bar path (null — no bar, dumbbell, cable or machine
+part is tracked). Joint range is reported only from the engine's
+`rangeViews`.
+
+**What pose alone cannot separate** (so Auto-detect lists candidates and
+the user's choice decides): overhead press ≈ pulldown/pull-up ≈ overhead
+triceps extension ≈ an incline press (all: arms overhead at extension);
+curl ≈ pushdown ≈ a front-oblique bent-over row (arms down, elbow
+flexing); squat ≈ lunge ≈ leg press (knee flexion); lateral ≈ front raise
+from the side. Position checks catch *clearly* wrong choices (a curl as a
+pulldown, a bench press as an overhead press, an overhead press as a row),
+not every mislabel.
+
+**Catalogue coverage** (`exercise-selection.ts::CATALOGUE_COVERAGE`, a test
+fails if the catalogue gains an unlisted exercise): 66 catalogue exercises +
+7 SetVision-only movements = 73 options. Catalogue: 1 verified (Barbell Back
+Squat), 38 experimental, 27 manual review (SetVision-only: 1 verified, 5
+experimental, 1 manual — Lunge). Manual review, with the reason
+shown in the selector: cable/seated fly, reverse pec deck, rear-delt flies
+(arc across the body), leg press, leg extension, seated/lying/standing leg
+curls, split squats, step-up, calf raises (no heel/toe keypoints), hip
+thrust, glute bridge, crunches, leg/knee raises, plank (no reps), landmine
+press. Hack squat and Smith squat use the squat engine but are experimental.
+
+**Auto-detect** (`analyze.ts::suggestExercise`): the squat/deadlift/lying
+press classifier runs first, unchanged. If it abstains and the squat/hinge
+engines count no leg reps, every arm engine is tried; engines that count
+position-checked reps become candidates — one → a suggestion, several → "Could
+be: A, B, C", none → abstain. Arm suggestions carry no score (nothing to
+calibrate against). On the real/rendered clips it never produced a single
+wrong guess: every arm clip returned a candidate list containing the true
+movement, the head-on chest press and all squat clips abstained.
+
+**Manual review and persistence.** Every exercise — custom included — gets:
+play/seek, *Mark rep start/end* at the video time, *Not a rep* on automated
+reps, notes (≤ 1000 chars), "I'm not sure" flag, Save, and reload under Saved
+analyses. The review is stored in `per_rep.review` apart from the engine's
+numbers. A save with no engine stores `exercise = 'manual_review'` with
+`reps`/`confidence` NULL — migration
+`20261102090000_setvision_multi_exercise.sql` (additive: widens the exercise
+CHECK, drops NOT NULL on those two columns; RLS unchanged; **not applied to
+hosted** — review before running). A custom name is re-validated by the
+server and kept on that row only; nothing is written to the catalogue,
+workout sets or performance history. Dante's SetVision context
+(`load-setvision-context.ts`) keeps only VERIFIED-engine rows.
+
+**Real-pose regression fixtures**: `lib/setvision/__tests__/real-pose/`
+(MoveNet keypoints only, CC BY 3.0 / public-domain sources and attribution
+in its README; several are rendered animations and say so). The counts in
+`real-pose.test.ts` were checked by eye against frame sheets — behaviour
+pins, not accuracy figures. No labelled multi-exercise benchmark exists, so
+no accuracy number may be quoted for any engine.
 
 ## Problem
 
@@ -276,29 +370,18 @@ torso length could be estimated — documented, not a single opaque number.
 
 `/dashboard/workouts/setvision` (`components/setvision/video-analyzer.tsx`):
 
-1. **Exercise** (`exercise-picker.tsx`), three modes — manual is the default:
-   - *Choose exercise*: search (name + aliases, accent/case-insensitive,
-     keyboard: ArrowDown from the box, Up/Down between results) over
-     `lib/setvision/exercise-selection.ts::EXERCISE_OPTIONS` = every entry of
-     the real catalogue (`EXERCISE_CATALOGUE`, real ids, no new rows) plus a
-     few SetVision-only movements the catalogue lacks (Squat, Deadlift,
-     Incline Bench Press, Barbell Row, Biceps Curl, Lunge; no catalogue id).
-   - *Custom exercise*: "Enter your exercise name", ≤ 80 characters,
-     whitespace collapsed, any script kept, control/format characters
-     rejected, rendered as text. Never added to the catalogue; label only.
-   - *Auto-detect (Experimental)*: after analysis shows "Exercise not
-     identified" (with the reason) or an **unverified suggestion** the user
-     must confirm ("Yes, it's Squat") or correct.
-2. **Capability** — what is actually measured for the pick:
-
-   | Capability | Exercises | What runs |
-   |---|---|---|
-   | `SUPPORTED_ANALYSIS` | Squat, Barbell Back Squat | knee-angle rep machine, tempo, side-on joint range, consistency, normalized speed; Save + Ask Dante |
-   | `LIMITED_EXPERIMENTAL_ANALYSIS` | Deadlift | hip-angle machine, labelled Experimental; Save allowed, **not sent to Dante** (0 reps on the real deadlift clips tried) |
-   | `MANUAL_LABEL_ONLY` | Barbell Bench Press and every other catalogue/SetVision entry, every custom name, a confirmed "bench" suggestion | nothing: video review only, explicit "no automated analysis" card, no Analyze/metrics/Save/Dante; never routed through the squat or deadlift counter |
-
-   The old elbow-angle bench config is kept in the engine but exposed
-   nowhere: it has no real-footage evidence.
+1. **Exercise** (`exercise-picker.tsx`): ONE searchable combobox (ARIA 1.2
+   combobox + listbox; ↑/↓/Enter/Escape, focus stays in the input). Empty
+   query lists all 73 options grouped by category with capability badges;
+   typing searches names + aliases (accent/case-insensitive) and offers
+   "Use “…” as a custom exercise" (≤ 80 chars, validated, rendered as text,
+   never added to the catalogue). *Auto-detect (Experimental)* is one entry
+   in the same list. No recent-selection list: no selection history is
+   persisted.
+2. **Capability** — `ANALYSIS_VERIFIED` (squat), `ANALYSIS_EXPERIMENTAL`
+   (every other engine; not sent to Dante), `MANUAL_REVIEW_SUPPORTED`
+   (no engine, with the reason). The selected-exercise card states the
+   engine's rep criterion and supported views.
 3. **Video** → Analyze → pose frames (live overlay via
    `components/form-coach/pose-overlay-canvas.tsx`). The analysis is
    **derived** from the current video's frames + the current pick, so

@@ -168,13 +168,16 @@ pre-existing Form Coach feature) rep counting, ROM, tempo, velocity, bar-path
 and technique-consistency analysis, driven from an uploaded video processed
 entirely client-side. Public API: `lib/setvision/index.ts`
 (`analyzeWorkoutVideo`). Product surface: `/dashboard/workouts/setvision` —
-the user picks the exercise (catalogue/custom; Auto-detect is a confirm-first
-suggestion); only squat is a supported analysis, deadlift is experimental,
-everything else (bench included) is label-only
-(`lib/setvision/exercise-selection.ts`). **No real accuracy numbers exist yet** —
-see docs/setvision.md's Benchmarking section before ever quoting one.
-Persistence needs `supabase/migrations/20260916090000_setvision.sql`
-applied (not done automatically by this pass — review before running).
+one searchable exercise combobox (catalogue/custom; Auto-detect lists
+candidates and is confirm-first). Squat is the only verified engine; hinge,
+presses, pulls, curl, triceps extensions and lateral raise are experimental
+movement-family engines (`lib/setvision/exercise-config.ts`); the rest of the
+catalogue is manual review (`exercise-selection.ts::CATALOGUE_COVERAGE`).
+Every exercise can be reviewed, corrected and saved. **No real accuracy
+numbers exist yet** — see docs/setvision.md before ever quoting one.
+Persistence needs `supabase/migrations/20260916090000_setvision.sql` and
+`20261102090000_setvision_multi_exercise.sql` applied (not done
+automatically — review before running).
 
 SetVision **P0** (`lib/setvision/squat-p0/`, `/dashboard/workouts/setvision/squat`)
 is a separate MediaPipe-based spike: bodyweight squat, side view, ≤ 30 s,

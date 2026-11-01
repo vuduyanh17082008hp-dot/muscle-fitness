@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { ENGINE_CAPABILITY } from "@/lib/setvision/exercise-selection";
 import type { SetVisionExerciseId } from "@/lib/setvision/types";
 import { computeBaselineDeviation, type BaselineDeviation } from "@/lib/dante-core/personal-baseline";
 
@@ -67,7 +68,11 @@ export async function loadSetVisionContext(
     return EMPTY_CONTEXT;
   }
 
-  const rows = (data ?? []) as SetVisionAnalysisRow[];
+  // Dante only gets deterministic context from VERIFIED engines: experimental
+  // engines and manual reviews (no automated metrics) are left out.
+  const rows = ((data ?? []) as SetVisionAnalysisRow[]).filter(
+    (row) => ENGINE_CAPABILITY[row.exercise] === "ANALYSIS_VERIFIED" && typeof row.reps === "number",
+  );
 
   if (rows.length === 0) {
     return EMPTY_CONTEXT;
