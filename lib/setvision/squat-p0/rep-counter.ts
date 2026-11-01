@@ -6,9 +6,10 @@ import type { RepEvent, RepOutcome, RepReason } from "@/lib/setvision/squat-p0/t
  *
  * A cycle starts when the 2D knee angle leaves the standing band
  * (< descentTriggerDeg, confirmed) and ends when it is back in the standing
- * band (≥ standMinDeg, confirmed). Boundaries: start = last sample within
- * onsetToleranceDeg of the standing peak before the descent; end = the
- * sample where the return rise flattens (< endRiseDeg per sample).
+ * band (≥ standMinDeg, confirmed). Boundaries follow the monotonic run
+ * around each crossing: start = walk back from the descent trigger while
+ * the angle was still falling by ≥ monotonicStepDeg per sample; end = walk
+ * forward after re-entering standing while it still rises by more than that.
  *
  *   COMPLETED  — onset and end both observed, no tracking gap > bridgeGapMs
  *                inside, minimum knee angle ≤ cycleFlexionMaxDeg, duration
@@ -68,15 +69,14 @@ export function createSquatRepCounter(cfg = SQUAT_P0) {
   let state: State = "unknown";
   let cycle: Cycle | null = null;
   let lastT: number | null = null;
-  let lastStand: AngleSample | null = null;
-  let standMax = -Infinity;
-  let gapSinceStand = 0;
+  // Recent standing samples, for walking back to the true movement onset.
+  let standHistory: AngleSample[] = [];
   let refine: { ev: RepEvent; lastDeg: number } | null = null;
 
   /** Push a just-closed rep's end forward while the knee is still extending. */
   function refineEnd(s: AngleSample) {
     if (!refine) return;
-    if (s.kneeDeg <= refine.lastDeg + cfg.endRiseDeg) {
+    if (s.kneeDeg <= refine.lastDeg + cfg.monotonicStepDeg) {
       refine = null;
       return;
     }
@@ -90,9 +90,7 @@ export function createSquatRepCounter(cfg = SQUAT_P0) {
 
   function enterStanding(s: AngleSample) {
     state = "standing";
-    lastStand = s;
-    standMax = s.kneeDeg;
-    gapSinceStand = 0;
+    standHistory = [s];
   }
   const events: RepEvent[] = [];
 
@@ -186,8 +184,7 @@ export function createSquatRepCounter(cfg = SQUAT_P0) {
         refine = null;
         state = "unknown";
         pending = null;
-        lastStand = null;
-        gapSinceStand = 0;
+        standHistory = [];
       } else if (cycle) {
         cycle.maxGapMs = Math.max(cycle.maxGapMs, gap);
         if (gap > cfg.bridgeGapMs) cycle.gap = true;
@@ -212,22 +209,29 @@ export function createSquatRepCounter(cfg = SQUAT_P0) {
       }
       case "standing": {
         refineEnd(s);
-        gapSinceStand = Math.max(gapSinceStand, gap);
-        if (s.kneeDeg >= cfg.standMinDeg) standMax = Math.max(standMax, s.kneeDeg);
-        if (s.kneeDeg >= Math.max(cfg.standMinDeg, standMax - cfg.onsetToleranceDeg)) {
-          lastStand = s;
-          gapSinceStand = 0;
-        }
+        standHistory.push(s);
+        if (standHistory.length > 60) standHistory.shift();
         const left = confirm("descend", s.kneeDeg < cfg.descentTriggerDeg, s);
         if (left) {
-          const start = lastStand ?? { t: left.since, kneeDeg: left.sinceDeg };
-          open(start.t, start.kneeDeg, true);
-          // A gap between the last standing sample and the onset is inside the cycle too.
-          cycle!.maxGapMs = gapSinceStand;
-          if (gapSinceStand > cfg.bridgeGapMs) cycle!.gap = true;
-          // Samples between onset and confirmation belong to the cycle.
-          track({ t: left.since, kneeDeg: left.sinceDeg });
-          track(s);
+          // Walk back while the knee was still flexing; stop at a gap (onset then unobservable).
+          let i = standHistory.length - 1;
+          while (
+            i > 0 &&
+            standHistory[i].t - standHistory[i - 1].t <= cfg.bridgeGapMs &&
+            standHistory[i - 1].kneeDeg >= standHistory[i].kneeDeg + cfg.monotonicStepDeg
+          ) {
+            i -= 1;
+          }
+          const run = standHistory.slice(i);
+          open(run[0].t, run[0].kneeDeg, true);
+          if (i > 0 && run[0].t - standHistory[i - 1].t > cfg.bridgeGapMs) {
+            cycle!.gap = true;
+            cycle!.maxGapMs = run[0].t - standHistory[i - 1].t;
+          }
+          run.forEach((x, k) => {
+            if (k > 0) cycle!.maxGapMs = Math.max(cycle!.maxGapMs, x.t - run[k - 1].t);
+            track(x);
+          });
           cycle!.localExtreme = cycle!.min;
           state = "descending";
         }

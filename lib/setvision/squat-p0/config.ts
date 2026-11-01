@@ -47,10 +47,13 @@ export const SQUAT_P0 = {
   descentTriggerDeg: 150,
   /** Cycle minimum must reach ≤ this to be COMPLETED; otherwise PARTIAL. Not a depth standard. */
   cycleFlexionMaxDeg: 120,
-  /** Rep start = last standing sample within this many degrees of the standing peak (reduces boundary lag vs the 155° band). */
-  onsetToleranceDeg: 3,
-  /** After returning to standing, the end moves forward while the knee still extends by more than this per sample. */
-  endRiseDeg: 1,
+  /**
+   * Boundary refinement: a rep starts where the knee began flexing monotonically (walking back from the
+   * descent trigger while each earlier sample is ≥ this many degrees higher) and ends where the return
+   * rise flattens (< this per sample). Replaced an a-priori "within 3° of the standing peak" rule that the
+   * first real clip showed anchors onsets seconds early when the lifter's knees drift while standing.
+   */
+  monotonicStepDeg: 1,
   /** Rise above the running minimum that confirms the turn into ascent (and vice versa for a reversal). */
   turnDeg: 8,
   /** A transition condition must hold over samples spanning ≥ this (2 samples at 10 Hz). */

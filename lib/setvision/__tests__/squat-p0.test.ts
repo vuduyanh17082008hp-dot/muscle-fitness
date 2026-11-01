@@ -121,6 +121,15 @@ describe("SetVision P0 squat engine — counting", () => {
     });
   });
 
+  it("anchors the start at the real onset when the knees drift a few degrees while standing", () => {
+    // Stands at 177°, sags to 171° over 2 s (postural drift), then squats at 2600 ms.
+    const keys: Key[] = [[0, 177], [400, 177], [2400, 171], [2600, 170], [3600, BOTTOM], [4600, STAND], [5200, STAND]];
+    const a = analyzeSquatObservations(observe(keys, 5200), 5200);
+    expect(a.counts).toEqual({ completed: 1, partial: 0, uncertain: 0 });
+    expect(Math.abs(a.events[0].startMs - 2600)).toBeLessThanOrEqual(2 * STEP);
+    expect(Math.abs(a.events[0].endMs - 4600)).toBeLessThanOrEqual(STEP);
+  });
+
   it("is deterministic", () => {
     const { keys, end } = repKeys(2);
     const obs = observe(keys, end);
