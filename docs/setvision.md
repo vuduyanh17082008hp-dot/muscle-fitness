@@ -523,7 +523,14 @@ capability routing, custom-name validation), `saved-analysis.test.ts`
 (timeline kept, inconsistent timelines rejected, historical rows) and
 `app/api/setvision/results/__tests__/results.db.test.ts` (real local DB:
 save → DB jsonb → reload, cross-tenant 404, foreign workout/video refused,
-legacy row restore, no workout-history writes). The real clips stay out of the
+legacy row restore, no workout-history writes). It needs a fully migrated
+stack (through `20261102090000_setvision_multi_exercise`); on the stale default
+`supabase_db_muscle-fitness-claude` it SKIPS with a reason — a skip, not a pass.
+Run it against `mf-test-db` with all four of `MF_TEST_DB_CONTAINER`,
+`MF_TEST_AUTH_CONTAINER`, `MF_TEST_API_URL`, `MF_TEST_SUPABASE_URL` set (the
+suite refuses a partial set); `node scripts/test-db-stack.mjs` prints that
+line but rebuilds mf-test-db from scratch. The default stack is shared by every
+worktree and must not be migrated from a feature branch. The real clips stay out of the
 repo (third-party media); replays of their pose frames are summarised in
 the classification section.
 
@@ -608,6 +615,26 @@ the classification section.
   Measured coverage cost: a genuine front-view leg curl and a genuine machine
   chest press are now AMBIGUOUS (confirmable), because the model also
   accepts their look-alike.
+- **Demo freeze (2026-11-03) — PENDING OWNER SIGN-OFF**: the "AI-only
+  findings are never confirmed" policy above is a product decision awaiting
+  the owner; until then AI findings render as "Possible technique
+  observation — review the footage." (never a verified assessment).
+  Pose-measured findings keep their own range-view rule. The model's
+  camera-view claim is no longer returned or shown ("camera view not
+  verified") — it called a rear view "side"; no metric used it.
+  **Cost / quota (measured, 49 real calls)**: ≈ 2,715 prompt + 273
+  completion tokens per call; 2 calls (≈ 7 s median) for most exercises,
+  3–4 (≈ 10 s) with look-alikes; a "Yes, it's X" confirmation is a second
+  request (2 more calls, a second quota unit). Every request costs ONE unit
+  of the per-user AI limit shared with Dante (default 10 / 60 s) no matter how
+  many model calls it makes; on-device refusals make no call. No call was
+  found removable without weakening a safety signal.
+  **Toe-lift residual**: `toelift.mp4` really contains a low-contrast
+  dissolve (≈ 14.0 s, wood floor → carpet). Offline-measured peaks: frame
+  change 25.1 vs the cut threshold 25, ±1 s change share 0.44 vs the dissolve
+  threshold 0.5 — so the on-device gate can miss it, and the AI pass's
+  edited-clip check catches it (NOT_ASSESSABLE is correct). Thresholds were
+  left unchanged pending recalibration on all fixtures.
 - **Partial/shallow-rep findings need a range view**: from another view
   (e.g. a front-view goblet squat) projection noise split full-depth
   descents into "partials", so they are shown only as "possibly".

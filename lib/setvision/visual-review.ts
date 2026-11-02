@@ -57,7 +57,6 @@ export type VisualReview = {
   /** Ambiguous identity, not yet confirmed by the user: findings are withheld until they confirm. */
   needsConfirmation: boolean;
   scope: ReviewScope;
-  view: "side" | "front" | "back" | "oblique" | "unclear";
   /** Why nothing (or only part) could be assessed; null when fully assessable. */
   limitation: string | null;
   filmingTip: string | null;
@@ -125,6 +124,7 @@ export function exerciseReference(key: string | null): ExerciseReference | null 
   };
 }
 
+/** Asked of the model only so it keeps judgements to what its angle shows; never returned or shown (it is often wrong). */
 const VIEWS = ["side", "front", "back", "oblique", "unclear"] as const;
 
 export const VISUAL_REVIEW_SYSTEM_PROMPT = `
@@ -369,7 +369,6 @@ export function sanitizeVisualReview(
     labelled === "CONFIRMED_MISMATCH" ? (namesSelection ? "AMBIGUOUS" : labelled) : notRuledOut ? "AMBIGUOUS" : labelled;
   // The user's confirmation resolves an ambiguity — it never overrides a confirmed mismatch.
   const exerciseCheck: ExerciseCheck = graded === "AMBIGUOUS" && ctx.userConfirmed ? "POSSIBLE_MATCH" : graded;
-  const view = VIEWS.find((v) => v === first.view) ?? "unclear";
   const assessable = raws.some((r) => r.assessable !== "yes" && r.assessable !== "partly") ? "no" : raws.some((r) => r.assessable === "partly") ? "partly" : "yes";
   const seenMovement = str(decider.seen_movement, 120);
   const evidence = str(decider.match_evidence, 200);
@@ -379,7 +378,7 @@ export function sanitizeVisualReview(
     (graded === "AMBIGUOUS" && notRuledOut
       ? "Film so the machine or weight, where it touches your body (e.g. front or back of the leg) and the direction it moves are all in view for a full rep."
       : str(first.filming_tip, 160)) || null;
-  const base = { seenMovement, exerciseCheck, needsConfirmation: false, scope, view, filmingTip, frameCount: n } as const;
+  const base = { seenMovement, exerciseCheck, needsConfirmation: false, scope, filmingTip, frameCount: n } as const;
 
   const notAssessable = (limitation: string, tip: string | null = filmingTip): VisualReview => ({
     ...base,
@@ -417,7 +416,7 @@ export function sanitizeVisualReview(
       ...base,
       needsConfirmation: true,
       status: "UNCERTAIN",
-      limitation: `The video could be ${label}${alt ? ` or ${/^an? /i.test(alt) ? alt : `${/^[aeiou]/i.test(alt) ? "an" : "a"} ${alt}`}` : " or a similar exercise"} — this recording doesn't show what tells them apart, so SetVision can't be sure. If it is ${label}, confirm to get a review; otherwise pick the right exercise.`,
+      limitation: `You selected ${label}. Similar exercises can look alike from this camera angle, and the video could also be ${alt ? (/^an? /i.test(alt) ? alt : `${/^[aeiou]/i.test(alt) ? "an" : "a"} ${alt}`) : "a similar exercise"} — this recording doesn't show what tells them apart, so SetVision can't be sure. If it is ${label}, confirm to get possible technique observations; otherwise pick the right exercise.`,
       observations: [],
     };
   }

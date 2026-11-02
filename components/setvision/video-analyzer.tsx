@@ -24,7 +24,6 @@ const localRefusal = (reason: string): VisualReview => ({
   exerciseCheck: "AMBIGUOUS",
   needsConfirmation: false,
   scope: "full",
-  view: "unclear",
   limitation: reason,
   filmingTip: "Film one continuous take with only you in view, whole body in frame, steady camera.",
   observations: [],
@@ -538,7 +537,7 @@ export function VideoAnalyzer() {
             visualState.review.limitation?.replace(/([^.!?])$/, "$1."),
             visualState.review.frameCount === 0
               ? "Checked on your device — nothing was sent to the AI."
-              : `AI looked at ${visualState.review.frameCount} stills (${visualState.review.view === "unclear" ? "camera angle unclear" : `${visualState.review.view} view`}) — qualitative only, no reps or measurements.`,
+              : `AI looked at ${visualState.review.frameCount} stills (camera view not verified) — qualitative only, no reps or measurements.`,
             ...(visualState.checks ?? []),
           ]
             .filter(Boolean)

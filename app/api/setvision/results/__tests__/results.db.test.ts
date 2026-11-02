@@ -50,6 +50,14 @@ function run(sql: string): { ok: boolean; out: string; err: string } {
 const dbReady = (() => {
   const r = run("select count(*) from information_schema.tables where table_schema = 'public' and table_name = 'setvision_analyses';")
   if (!(r.ok && r.out === "1")) return false
+  // The stack must also have 20261102090000_setvision_multi_exercise (manual reviews store NULL reps). The default
+  // supabase_db_muscle-fitness-claude stack predates it, so manual/pulldown saves 500 there: skip with a reason, not a
+  // false failure — run with MF_TEST_DB_CONTAINER / MF_TEST_API_URL pointing at a fully migrated stack (mf-test-db).
+  const m = run("select is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'setvision_analyses' and column_name = 'reps';")
+  if (!(m.ok && m.out === "YES")) {
+    console.warn(`[setvision results.db] SKIPPED: ${CONTAINER} lacks migration 20261102090000 (reps NOT NULL) — use a fully migrated stack.`)
+    return false
+  }
   // The PostgREST endpoint must be the same stack as the container.
   const probe = spawnSync("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", `${API_URL}/rest/v1/`], { encoding: "utf8" })
   return probe.status === 0 && probe.stdout !== "000"

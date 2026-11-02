@@ -109,7 +109,7 @@ export function ReviewSummary({
 
       {uncertain.map((o, i) => (
         <p key={i} className="mt-3 text-sm leading-6 text-zinc-400" data-testid={`${testId}-uncertain`}>
-          Possibly: {o.what} Not clear enough in the video to call it an issue.
+          <span className="font-semibold text-zinc-300">Possible technique observation — review the footage.</span> {o.what}
           <Times atMs={o.atMs} onSeek={onSeek} />
         </p>
       ))}

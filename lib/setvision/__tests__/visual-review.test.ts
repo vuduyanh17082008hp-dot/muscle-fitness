@@ -45,6 +45,11 @@ describe("sanitizeVisualReview — rules applied to the model's untrusted answer
     expect(r.observations[0]).toMatchObject({ kind: "uncertain", atMs: [1500, 2500] });
   });
 
+  it("never returns the model's camera-view claim (S3: a rear view was reported as 'side')", () => {
+    const r = sanitizeVisualReview([reply({ view: "side" }), reply({ view: "side" })], T, "Leg Press", ctx)!;
+    expect("view" in r).toBe(false);
+  });
+
   it("an issue that names no reference check — or any issue when the app has no reference — is only 'possibly'", () => {
     const offList = sanitizeVisualReview(reply({ observations: [{ ...kneesIn, check: "Breathing rhythm" }] }), T, "Leg Press", ctx)!;
     expect(offList.observations[0].kind).toBe("uncertain");
@@ -137,7 +142,7 @@ describe("exercise identity is graded, and a weak 'different' never rejects the 
   it("ambiguous look-alike -> asks the user (findings withheld), not 'wrong exercise'", () => {
     const r = sanitizeVisualReview(lookAlike, T, "Seated Leg Curl", legCurl)!;
     expect(r).toMatchObject({ status: "UNCERTAIN", exerciseCheck: "AMBIGUOUS", needsConfirmation: true, observations: [] });
-    expect(r.limitation).toMatch(/could be Seated Leg Curl or a leg extension.*confirm/);
+    expect(r.limitation).toMatch(/^You selected Seated Leg Curl. Similar exercises can look alike from this camera angle, and the video could also be a leg extension.*confirm/);
   });
 
   it("after the user confirms, an ambiguous identity becomes a possible match and the review proceeds", () => {
@@ -186,7 +191,7 @@ describe("contrast passes settle look-alikes (real S3 false acceptance: leg curl
   it("the model accepts BOTH labels -> AMBIGUOUS either way (no confirmed identity, no findings, a filming tip)", () => {
     const ext = sanitizeVisualReview([saysExtension, saysExtension], T, "Leg Extension", { ...EXT, contrasts: [saysCurl] })!;
     expect(ext).toMatchObject({ status: "UNCERTAIN", exerciseCheck: "AMBIGUOUS", needsConfirmation: true, observations: [] });
-    expect(ext.limitation).toMatch(/could be Leg Extension or a seated leg curl — this recording doesn't show what tells them apart/);
+    expect(ext.limitation).toMatch(/You selected Leg Extension..*could also be a seated leg curl — this recording doesn't show what tells them apart/);
     expect(ext.filmingTip).toMatch(/where it touches your body/);
     const curl = sanitizeVisualReview([saysCurl, saysCurl], T, "Seated Leg Curl", { ...CURL, contrasts: [saysExtension] })!;
     expect(curl).toMatchObject({ exerciseCheck: "AMBIGUOUS", needsConfirmation: true, observations: [] });
