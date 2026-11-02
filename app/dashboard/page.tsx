@@ -332,6 +332,7 @@ export default async function DashboardPage() {
               ["Calendar", "/dashboard/calendar"],
               ["Workout history", "/dashboard/workouts/history"],
               ["Muscle intelligence", "/dashboard/training-intelligence"],
+              ["Form Coach", "/dashboard/workouts/form-coach"],
             ].map(([label, href]) => (
               <Link
                 key={href}
