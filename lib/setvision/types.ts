@@ -53,6 +53,30 @@ export type RepPhase = "top" | "descent" | "bottom" | "ascent";
 export type TimedPoseFrame = {
   timestampMs: number;
   frame: PoseFrame;
+  /**
+   * Everyone the MultiPose person check found in this frame (lib/setvision/person-check.ts).
+   * `null` = the check failed for this frame; absent = the check was not run (old fixtures only —
+   * the upload collector always sets it).
+   */
+  people?: DetectedPerson[] | null;
+  /**
+   * Whole-picture change vs the previous sample (scene-cut check, lib/setvision/person-check.ts):
+   * mean |Δ| of a 64×36 grey thumbnail (0–255), this sample's mean brightness, and `span` = share of
+   * thumbnail pixels that changed by > 30 levels since the sample ~1 s earlier. Absent on old fixtures.
+   */
+  scene?: { diff: number | null; luma: number; span?: number | null };
+};
+
+/** One MultiPose detection, reduced to what the person check needs. */
+export type DetectedPerson = {
+  /** Bounding-box tracker id; null when tracking gave none. */
+  id: number | null;
+  score: number;
+  /** Keypoints with score ≥ 0.3. */
+  visible: number;
+  /** Centre of the confident keypoints, in video pixels. */
+  cx: number;
+  cy: number;
 };
 
 /* =========================================================

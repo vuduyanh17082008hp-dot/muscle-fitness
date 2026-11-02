@@ -9,6 +9,7 @@ import {
   CATEGORY_ORDER,
   customSelection,
   EXERCISE_OPTIONS,
+  referenceFor,
   searchExerciseOptions,
   selectionFromOption,
   SOURCE_TEXT,
@@ -66,14 +67,15 @@ export function ExercisePicker({
   const [open, setOpen] = useState(!selection && !autoDetect);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const [group, setGroup] = useState<(typeof CATEGORY_ORDER)[number] | null>(null);
 
   const custom = validateCustomExerciseName(query);
   const groups = useMemo(() => {
     const options = query.trim() ? searchExerciseOptions(query, SEARCH_LIMIT) : EXERCISE_OPTIONS;
     return query.trim()
       ? [{ heading: options.length ? "Matching exercises" : null, options }]
-      : CATEGORY_ORDER.map((heading) => ({ heading, options: options.filter((o) => o.category === heading) }));
-  }, [query]);
+      : (group ? [group] : CATEGORY_ORDER).map((heading) => ({ heading, options: options.filter((o) => o.category === heading) }));
+  }, [query, group]);
 
   const items: Item[] = useMemo(
     () => [
@@ -171,6 +173,25 @@ export function ExercisePicker({
           data-testid="sv-exercise-search"
         />
       </div>
+      <div className="mt-2 flex max-w-xl flex-wrap gap-1.5" role="group" aria-label="Filter by muscle group" data-testid="sv-group-filters">
+        {[null, ...CATEGORY_ORDER].map((g) => (
+          <button
+            key={g ?? "all"}
+            type="button"
+            aria-pressed={group === g}
+            onClick={() => {
+              setGroup(g);
+              setActive(0);
+            }}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-bold",
+              group === g ? "border-amber-400/60 bg-amber-400/10 text-amber-200" : "border-white/10 text-zinc-400 hover:text-white",
+            )}
+          >
+            {g ?? "All"}
+          </button>
+        ))}
+      </div>
       <p id={`${ids}-status`} className="sr-only" aria-live="polite">
         {query.trim() ? `${items.length - 1} result${items.length === 2 ? "" : "s"}` : `${EXERCISE_OPTIONS.length} exercises by category`}
       </p>
@@ -180,7 +201,7 @@ export function ExercisePicker({
         id={`${ids}-list`}
         role="listbox"
         aria-label="Exercises"
-        className="mt-2 max-h-80 max-w-xl space-y-1 overflow-y-auto overscroll-contain rounded-2xl border border-white/[0.06] bg-black/20 p-2"
+        className="mt-2 max-h-64 max-w-xl space-y-1 overflow-y-auto overscroll-contain rounded-2xl border border-white/[0.06] bg-black/20 p-2"
         data-testid="sv-exercise-results"
       >
         {items.map((item) => {
@@ -253,6 +274,7 @@ export function SelectedCard({
   detail?: ReactNode;
 }) {
   const config = selection.engine ? getExerciseConfig(selection.engine) : null;
+  const reference = referenceFor(selection.key);
   return (
     <div className="max-w-2xl rounded-2xl border border-white/10 bg-black/20 p-4" data-testid="sv-selected-exercise">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -277,7 +299,7 @@ export function SelectedCard({
         <>
           <p className="mt-2 text-xs leading-5 text-zinc-400" data-testid="sv-capability-detail">
             {CAPABILITY_TEXT[selection.capability].detail}
-            {selection.manualReason ? ` ${selection.manualReason}` : ""}
+            {selection.manualReason ? ` Why no rep tracking: ${selection.manualReason}` : ""}
           </p>
           {config ? (
             <p className="mt-1 text-xs leading-5 text-zinc-500" data-testid="sv-engine-criterion">
@@ -285,6 +307,13 @@ export function SelectedCard({
             </p>
           ) : null}
         </>
+      )}
+      {reference ? (
+        <a href={reference.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-xs font-semibold text-zinc-200 underline underline-offset-2 hover:text-white" data-testid="sv-reference-link">
+          How to do it: {reference.source} ↗
+        </a>
+      ) : (
+        <p className="mt-2 text-xs text-zinc-500" data-testid="sv-reference-none">No verified technique reference for this exact exercise yet.</p>
       )}
     </div>
   );

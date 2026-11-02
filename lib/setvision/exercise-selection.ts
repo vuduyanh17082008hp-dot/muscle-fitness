@@ -96,6 +96,21 @@ const NO_ENGINE = {
   landmine: "An angled one-arm press fits neither the overhead nor the horizontal press position, and no engine has been checked for it.",
 } as const;
 
+/**
+ * Instructional pages checked by hand for the EXACT catalogue variation (exercise + equipment).
+ * Written steps and a photo — not videos. A slug without an entry shows no link; nothing is
+ * ever generated or guessed. Verified 2026-11-02 (title, equipment = Barbell).
+ */
+export const REFERENCE_PAGES: Record<string, { url: string; source: string }> = {
+  "barbell-back-squat": { url: "https://www.acefitness.org/resources/everyone/exercise-library/11/back-squat/", source: "ACE Exercise Library — Back Squat (barbell)" },
+  "romanian-deadlift": { url: "https://www.acefitness.org/resources/everyone/exercise-library/317/romanian-deadlift/", source: "ACE Exercise Library — Romanian Deadlift (barbell)" },
+};
+
+/** The verified reference for a picked option, by its `catalogue:<slug>` key; null for everything else. */
+export function referenceFor(key: string | null) {
+  return key?.startsWith("catalogue:") ? (REFERENCE_PAGES[key.slice("catalogue:".length)] ?? null) : null;
+}
+
 type CatalogueEntry = {
   category: ExerciseCategory;
   engine?: SetVisionExerciseId;
@@ -323,16 +338,16 @@ export function customSelection(label: string): SelectedExercise {
 
 export const CAPABILITY_TEXT: Record<AnalysisCapability, { badge: string; detail: string }> = {
   ANALYSIS_VERIFIED: {
-    badge: "Automated analysis",
-    detail: "Rep count, phase timing, joint range and consistency from pose tracking. Rep counts were checked against several real squat clips (bodyweight, goblet and kettlebell; side and front views) — not independently validated. Works best filmed side-on with the whole body in frame.",
+    badge: "Tracked analysis",
+    detail: "Counts reps and times each phase from body tracking, checked against real squat clips (not independently validated). Film side-on with your whole body in frame. An AI visual review is also available.",
   },
   ANALYSIS_EXPERIMENTAL: {
-    badge: "Experimental analysis",
-    detail: "An experimental movement-family counter, checked only on synthetic poses and a handful of real or rendered clips. Treat every number as unverified, and correct the reps below if they are wrong.",
+    badge: "Tracked · experimental",
+    detail: "An experimental rep counter for this movement pattern — treat the numbers as unverified and correct the reps if they are wrong. An AI visual review is also available.",
   },
   MANUAL_REVIEW_SUPPORTED: {
-    badge: "Manual review",
-    detail: "SetVision won't count reps or measure tempo, range or technique for this exercise. You can still review the video, mark reps yourself, add notes and save the review.",
+    badge: "AI visual review",
+    detail: "AI looks at stills from your video and gives qualitative form feedback with timestamps. It does not count reps or measure angles, speed or range.",
   },
 };
 

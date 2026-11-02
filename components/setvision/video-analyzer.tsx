@@ -5,13 +5,33 @@ import { Loader2, Upload } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { analyzeWorkoutVideo } from "@/lib/setvision";
-import { suggestExercise } from "@/lib/setvision/analyze";
+import { subjectGate, suggestExercise } from "@/lib/setvision/analyze";
 import { optionForEngine, selectionFromOption, type SelectedExercise } from "@/lib/setvision/exercise-selection";
 import { EMPTY_REVIEW, type SetReview } from "@/lib/setvision/saved-analysis";
 import type { PoseFrame, SetVisionAnalysis, SetVisionExerciseId, TimedPoseFrame } from "@/lib/setvision/types";
 import { CANONICAL_MUSCLES, type CanonicalMuscle } from "@/lib/training/muscle-taxonomy";
 import type { AutoregulationDecision, TraceableDecision } from "@/lib/dante-core/types";
-import { collectPoseFrames } from "@/components/setvision/collect-pose-frames";
+import { collectPoseFrames, sampleStills, scanSubject } from "@/components/setvision/collect-pose-frames";
+import { ReviewSummary } from "@/components/setvision/review-summary";
+import { trackedFormObservations } from "@/lib/setvision/form-observations";
+import type { VisualReview } from "@/lib/setvision/visual-review";
+import { credible } from "@/lib/setvision/person-check";
+
+/** The AI path needs the person check to have found exactly one person in at least this share of the scan. */
+// ponytail: a-priori; a machine that hides most of the body may need a lower floor once real machine clips are checked.
+const MIN_SUBJECT_SHARE = 0.3;
+
+/** A Not-assessable result decided on-device, before any frame leaves the browser. */
+const localRefusal = (reason: string): VisualReview => ({
+  status: "NOT_ASSESSABLE",
+  seenMovement: "",
+  exerciseMatch: "unclear",
+  view: "unclear",
+  limitation: reason,
+  filmingTip: "Film one continuous take with only you in view, whole body in frame, steady camera.",
+  observations: [],
+  frameCount: 0,
+});
 import { ExercisePicker } from "@/components/setvision/exercise-picker";
 import { PoseOverlayCanvas } from "@/components/form-coach/pose-overlay-canvas";
 import { SetVisionResultsPanel } from "@/components/setvision/results-panel";
@@ -54,6 +74,9 @@ export function VideoAnalyzer() {
   const [plannedLoadKg, setPlannedLoadKg] = useState(60);
   const [plannedSets, setPlannedSets] = useState(4);
   const [dante, setDante] = useState<For<SetVisionAnalysis, { status: "loading" | "error" | "done"; decision?: TraceableDecision<AutoregulationDecision>; explanation?: string | null }> | null>(null);
+
+  /** AI visual review of the current video, for the exercise it was requested for. */
+  const [visual, setVisual] = useState<For<string, { status: "loading" | "error" | "done"; phase?: string; review?: VisualReview; checks?: string[]; error?: string }> | null>(null);
 
   const suggestion = useMemo(() => (autoDetect && frames ? suggestExercise(frames) : null), [autoDetect, frames]);
 
@@ -151,6 +174,53 @@ export function VideoAnalyzer() {
       setProcessing(false);
     }
   }, [video]);
+
+  const visualKey = video && selection ? `${video.url}|${selection.key ?? selection.label}` : null;
+  const visualState = visual && visual.key === visualKey ? visual.value : null;
+
+  const handleVisualReview = useCallback(async () => {
+    const element = videoRef.current;
+    if (!element || !selection || !visualKey) return;
+    const key = visualKey;
+    setVisual({ key, value: { status: "loading", phase: "Checking that only you are in the video…" } });
+    try {
+      // Same subject gate as the tracked path, on-device, BEFORE anything is sent to OpenAI.
+      // Reuses this video's tracked frames when they exist; otherwise a 5 Hz MultiPose + scene-cut scan.
+      const subject = frames ?? (await scanSubject(element));
+      const gate = subjectGate(subject);
+      const onePerson = subject.filter((f) => (f.people ?? []).filter(credible).length === 1).length;
+      const refusal =
+        "reason" in gate
+          ? gate.reason
+          : subject.length > 0 && onePerson / subject.length < MIN_SUBJECT_SHARE
+            ? `The person check found you in only ${Math.round((onePerson / subject.length) * 100)}% of the video, so it can't confirm whose technique the AI would be reviewing. Film with your whole body in view and good light.`
+            : null;
+      if (refusal) {
+        setVisual({ key, value: { status: "done", review: localRefusal(refusal) } });
+        return;
+      }
+
+      setVisual({ key, value: { status: "loading", phase: "AI is reviewing stills from your video…" } });
+      const stills = await sampleStills(element);
+      const response = await fetch("/api/setvision/visual-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exerciseLabel: selection.label, frames: stills }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) {
+        // The server's messages are written for users; anything else stays in the console.
+        setVisual({ key, value: { status: "error", error: typeof data.error === "string" ? data.error : "AI visual review failed. Try again in a moment." } });
+        return;
+      }
+      setVisual({ key, value: { status: "done", review: data.review, checks: "limitations" in gate ? gate.limitations : [] } });
+    } catch (error) {
+      console.error("[SETVISION] visual review failed", error);
+      setVisual({ key, value: { status: "error", error: "We couldn't review this video. Try a clearer clip with your whole body in view, or try again." } });
+    }
+  }, [selection, visualKey, frames]);
+
+  const formSummary = useMemo(() => (analysis ? trackedFormObservations(analysis) : null), [analysis]);
 
   const handleSeek = useCallback((ms: number) => {
     const element = videoRef.current;
@@ -251,7 +321,7 @@ export function VideoAnalyzer() {
   }, [analysis, selection, plannedLoadKg, plannedSets]);
 
   const manualOnly = selection !== null && selection.engine === null;
-  const canAnalyze = Boolean(video && !video.invalid && video.durationMs && (autoDetect || selection?.engine));
+  const canAnalyze = Boolean(video && !video.invalid && video.durationMs && (autoDetect || selection));
   const measured = analysis !== null && analysis.reps > 0;
   // Review once there is something to review: an exercise without an engine, or an engine result (counted or not).
   const reviewable = Boolean(selection && video && !video.invalid && video.durationMs && (manualOnly || analysis));
@@ -278,16 +348,26 @@ export function VideoAnalyzer() {
               <input type="file" accept="video/*" className="sr-only" onChange={handleFileChange} data-testid="sv-file" />
             </label>
 
-            {video && (autoDetect || selection?.engine) ? (
+            {video && (autoDetect || selection) ? (
               <button
                 type="button"
-                onClick={handleAnalyze}
-                disabled={!canAnalyze || processing}
+                onClick={manualOnly ? handleVisualReview : handleAnalyze}
+                disabled={!canAnalyze || processing || visualState?.status === "loading"}
                 className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/[0.1] disabled:opacity-50"
                 data-testid="sv-analyze"
               >
-                {processing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-                {processing ? "Analyzing…" : frames ? "Analyze again" : "Analyze"}
+                {processing || (manualOnly && visualState?.status === "loading") ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+                {manualOnly
+                  ? visualState?.status === "loading"
+                    ? "Reviewing…"
+                    : visualState?.status === "done"
+                      ? "Review again"
+                      : "Analyze with AI visual review"
+                  : processing
+                    ? "Analyzing…"
+                    : frames
+                      ? "Analyze again"
+                      : "Analyze"}
               </button>
             ) : null}
           </div>
@@ -348,9 +428,14 @@ export function VideoAnalyzer() {
 
           {manualOnly && video ? (
             <p className="mt-4 text-sm leading-6 text-zinc-400" data-testid="sv-label-only">
-              SetVision has no movement model for {selection.label}, so nothing is measured. Play and scrub the video,
-              mark the reps yourself below, and save the review if you want to keep it.
+              {selection.label} has no rep tracker, so AI reviews 6–12 stills from your video for visible form — no reps,
+              angles or speed. The stills are sent to OpenAI for this review only and aren&apos;t stored. Best results: only
+              you in view, whole body visible, steady camera.
             </p>
+          ) : null}
+
+          {visualState?.status === "error" ? (
+            <ErrorState className="mt-4" title="AI visual review failed" description={visualState.error ?? "Try again in a moment."} onRetry={handleVisualReview} />
           ) : null}
         </div>
       </article>
@@ -402,6 +487,64 @@ export function VideoAnalyzer() {
         </article>
       ) : null}
 
+      {analysis && selection && formSummary ? (
+        <ReviewSummary
+          title="3. Your result"
+          label={selection.label}
+          capability={selection.capability}
+          reps={analysis.reps > 0 && !analysis.abstainReason ? { count: analysis.reps, verified: selection.capability === "ANALYSIS_VERIFIED" } : null}
+          status={formSummary.status}
+          observations={formSummary.observations}
+          note={formSummary.note}
+          exerciseKey={selection.key}
+          onSeek={handleSeek}
+          testId="sv-summary"
+        />
+      ) : null}
+
+      {analysis && selection && !visualState ? (
+        <button
+          type="button"
+          onClick={handleVisualReview}
+          disabled={processing}
+          className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/[0.1] disabled:opacity-50"
+          data-testid="sv-visual-also"
+        >
+          Also get an AI visual review
+        </button>
+      ) : null}
+
+      {visualState?.status === "loading" ? (
+        <p className="text-sm text-zinc-400" role="status" data-testid="sv-visual-loading">
+          <Loader2 className="mr-2 inline size-4 animate-spin" aria-hidden="true" />
+          {visualState.phase}
+        </p>
+      ) : null}
+
+      {visualState?.status === "done" && visualState.review && selection ? (
+        <ReviewSummary
+          title={manualOnly ? "3. Your result" : "AI visual review"}
+          label={selection.label}
+          capability="MANUAL_REVIEW_SUPPORTED"
+          reps={null}
+          status={visualState.review.status}
+          observations={visualState.review.observations}
+          note={[
+            visualState.review.limitation?.replace(/([^.!?])$/, "$1."),
+            visualState.review.frameCount === 0
+              ? "Checked on your device — nothing was sent to the AI."
+              : `AI looked at ${visualState.review.frameCount} stills (${visualState.review.view === "unclear" ? "camera angle unclear" : `${visualState.review.view} view`}) — qualitative only, no reps or measurements.`,
+            ...(visualState.checks ?? []),
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          filmingTip={visualState.review.filmingTip}
+          exerciseKey={selection.key}
+          onSeek={handleSeek}
+          testId="sv-visual"
+        />
+      ) : null}
+
       {analysis && selection ? (
         <SetVisionResultsPanel analysis={analysis} onSeek={handleSeek} identity={{ label: selection.label, source: selection.source }} />
       ) : null}
@@ -412,7 +555,7 @@ export function VideoAnalyzer() {
 
       {reviewable ? (
         <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-save">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">4. Save (optional)</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">5. Save (optional)</p>
           <p className="mt-2 text-sm text-zinc-500">
             Uploads the video to your private storage and saves {analysis ? "what SetVision measured, plus " : ""}your review.
             Nothing is added to your workout log.
@@ -439,7 +582,7 @@ export function VideoAnalyzer() {
 
       {measured && selection?.capability === "ANALYSIS_VERIFIED" ? (
         <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-dante">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">5. Ask Dante what this means for your next set</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">6. Ask Dante what this means for your next set</p>
 
           <div className="mt-4 flex flex-wrap items-end gap-3">
             <label className="text-xs text-zinc-500">

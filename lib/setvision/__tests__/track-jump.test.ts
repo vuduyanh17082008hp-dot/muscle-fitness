@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { analyzeFrameSequence, findTrackJumps, SINGLE_PERSON_LIMITATION } from "@/lib/setvision/analyze";
+import { analyzeFrameSequence, findTrackJumps } from "@/lib/setvision/analyze";
 import type { TimedPoseFrame } from "@/lib/setvision/types";
 
 const body = (t: number, x: number): TimedPoseFrame => ({
@@ -28,6 +28,6 @@ describe("wrong-person guard (track jumps)", () => {
     expect(result.reps).toBe(0);
     expect(result.confidence).toBe(0);
     expect(result.abstainReason).toMatch(/0\.1 s.*Re-record with only you in view/);
-    expect(result.limitations).toContain(SINGLE_PERSON_LIMITATION);
+    expect(result.limitations).toEqual([result.abstainReason]);
   });
 });

@@ -66,6 +66,12 @@ function ConsistencyBar({
   );
 }
 
+/** The engines track a body landmark, never the bar — name the landmark. */
+const PATH_LABEL: Partial<Record<SetVisionAnalysis["exercise"], string>> = {
+  squat: "Shoulder-path consistency (not the bar)",
+  deadlift: "Hand-path consistency (not the bar)",
+};
+
 const seconds = (ms: number | null) => (ms === null ? null : `${(ms / 1000).toFixed(1)} s`);
 
 function average(values: Array<number | null>): number | null {
@@ -189,8 +195,14 @@ export function SetVisionResultsPanel({
       ) : null}
 
       {identified && !insufficient && !abstained ? (
-        <>
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <details className="group mt-5" data-testid="sv-advanced">
+          <summary className="cursor-pointer select-none text-xs font-bold uppercase tracking-[0.12em] text-zinc-400 hover:text-white">
+            Advanced metrics
+          </summary>
+          <p className="mt-2 text-xs leading-5 text-zinc-500">
+            Measured from 2D body landmarks. Speeds are in torso-lengths per second (not m/s) and only compare reps within this clip.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <StatTile label="Reps" value={String(analysis.reps)} sub={`${backAtRest} → ${workEnd.toLowerCase()} → ${backAtRest.toLowerCase()} cycles`} />
             <StatTile
               label="Avg eccentric"
@@ -230,7 +242,7 @@ export function SetVisionResultsPanel({
             </p>
           </div>
           <p className="ml-auto max-w-[55%] text-right text-xs leading-4 text-zinc-500">
-            First rep {velocity.peak ?? "—"} {velocity.unit} → final rep {velocity.final ?? "—"}{" "}
+            (first − final) ÷ first: first rep {velocity.perRep[0]?.meanSpeed ?? "—"} → final rep {velocity.final ?? "—"}{" "}
             {velocity.unit}
           </p>
         </div>
@@ -243,12 +255,14 @@ export function SetVisionResultsPanel({
             Technique consistency
           </p>
         </div>
-        <ConsistencyBar label="ROM consistency" value={technique.romConsistency} unavailableText={notEnoughReps} />
+        <ConsistencyBar label="Range consistency" value={technique.romConsistency} unavailableText={analysis.reps >= 2 && analysis.perRep.rom.length === 0 ? "Not measured from this camera angle" : notEnoughReps} />
         <ConsistencyBar label="Tempo consistency" value={technique.tempoConsistency} unavailableText={notEnoughReps} />
-        <ConsistencyBar label="Bar-path consistency" value={technique.barPathConsistency} unavailableText={notEnoughReps} />
+        {PATH_LABEL[analysis.exercise] ? (
+          <ConsistencyBar label={PATH_LABEL[analysis.exercise]!} value={technique.barPathConsistency} unavailableText={notEnoughReps} />
+        ) : null}
         {technique.asymmetryDeg !== null ? (
           <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-zinc-400">Left/right knee asymmetry</span>
+            <span className="font-semibold text-zinc-400">Left/right knee-angle difference at the bottom (2D, front view)</span>
             <span className="font-bold text-white">{technique.asymmetryDeg}°</span>
           </div>
         ) : null}
@@ -308,7 +322,7 @@ export function SetVisionResultsPanel({
           </div>
         </div>
       ) : null}
-        </>
+        </details>
       ) : null}
 
       {identified && events.length > 0 ? (

@@ -8,6 +8,7 @@ import {
 } from "@/lib/setvision/exercise-classifier";
 import { confidentPoint, getExerciseConfig, sideAngle, type ExerciseConfig, type Side } from "@/lib/setvision/exercise-config";
 import { averageTorsoLength, estimateTorsoLength } from "@/lib/setvision/normalization";
+import { checkPersonAttribution, findSceneCuts } from "@/lib/setvision/person-check";
 import { createRepStateMachine } from "@/lib/setvision/rep-state-machine";
 import { computeAllRepRom } from "@/lib/setvision/rom";
 import { computeTechniqueConsistency } from "@/lib/setvision/technique-consistency";
@@ -272,9 +273,32 @@ export function findTrackJumps(frames: TimedPoseFrame[]): number[] {
   return jumps;
 }
 
-/** Always shown: what the person check can and cannot do. */
-export const SINGLE_PERSON_LIMITATION =
-  "SetVision follows one person and cannot count how many people are in frame. If anyone else was visible, re-record with only you in view.";
+/** Frames that never went through the MultiPose person check (old recorded fixtures only). */
+export const PERSON_CHECK_NOT_RUN =
+  "No multi-person check ran on these frames, so another person in view could not be ruled out.";
+
+/**
+ * ONE subject gate for every SetVision path (tracked analysis and AI visual review):
+ * a cut in the video, a tracker jump, or a MultiPose result that can't attribute the clip to one
+ * person refuses it. `limitations` are what still applies when it passes.
+ */
+export function subjectGate(frames: TimedPoseFrame[]): { reason: string } | { limitations: string[] } {
+  const cuts = findSceneCuts(frames);
+  if (cuts.length > 0) {
+    return {
+      reason: `The picture changes to a different shot or view around ${cuts.slice(0, 3).map(secondsLabel).join(", ")} (an edited clip, a fade, or a big camera move), so whoever is in view afterwards can't be confirmed as the same athlete. Upload one continuous recording from a steady camera.`,
+    };
+  }
+  const jumps = findTrackJumps(frames);
+  if (jumps.length > 0) {
+    return {
+      reason: `The tracked body jumped across the frame at ${jumps.slice(0, 3).map(secondsLabel).join(", ")} — the tracker likely switched to another person or lost you behind something, so reps and form could belong to the wrong person. Re-record with only you in view and nothing passing in front of the camera.`,
+    };
+  }
+  const personCheck = checkPersonAttribution(frames);
+  if ("reason" in personCheck) return { reason: personCheck.reason };
+  return { limitations: personCheck.verdict === "not_run" ? [PERSON_CHECK_NOT_RUN] : personCheck.limitations };
+}
 
 export function analyzeFrameSequence(
   frames: TimedPoseFrame[],
@@ -299,10 +323,9 @@ export function analyzeFrameSequence(
     ]);
   }
 
-  const jumps = findTrackJumps(frames);
-  if (jumps.length > 0) {
-    const reason = `The tracked body jumped across the frame at ${jumps.slice(0, 3).map(secondsLabel).join(", ")} — the tracker likely switched to another person or lost you behind something, so reps and form could belong to the wrong person. Re-record with only you in view and nothing passing in front of the camera.`;
-    return emptyAnalysis(exercise, classification, [reason, SINGLE_PERSON_LIMITATION], reason);
+  const gate = subjectGate(frames);
+  if ("reason" in gate) {
+    return emptyAnalysis(exercise, classification, [gate.reason], gate.reason);
   }
 
   const config = getExerciseConfig(exercise);
@@ -419,7 +442,7 @@ export function analyzeFrameSequence(
   if (side) {
     limitations.push(`Measured on the ${side} ${config.joints[1]} for the whole clip.`);
   }
-  limitations.push(SINGLE_PERSON_LIMITATION);
+  limitations.push(...gate.limitations);
 
   const torsoLength = averageTorsoLength(frames.map((f) => f.frame));
 
@@ -440,6 +463,8 @@ export function analyzeFrameSequence(
     rom: repRoms,
     tempo: repTempos,
   });
+  // A side view hides the far knee and an oblique one skews both sides differently: left/right is only compared head-on.
+  if (view !== "frontal") technique.asymmetryDeg = null;
 
   const confidence = deriveOverallConfidence({
     visibilityRatio,

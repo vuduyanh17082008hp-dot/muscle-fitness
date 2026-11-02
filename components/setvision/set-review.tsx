@@ -69,7 +69,7 @@ export function SetReviewPanel({
 
   return (
     <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-review">
-      <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">{editable ? "3. Review the set" : "Your review"}</p>
+      <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">{editable ? "4. Check the reps yourself (optional)" : "Your review"}</p>
       <p className="mt-2 text-lg font-black text-white" data-testid="sv-review-total">
         {total} rep{total === 1 ? "" : "s"} after your review
       </p>

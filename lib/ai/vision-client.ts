@@ -160,16 +160,17 @@ export async function identifyFoodsInImage(imageDataUrl: string): Promise<Vision
   return parsed === null ? null : { items: parseItems(parsed) };
 }
 
-type VisionContent = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+export type VisionContent = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail?: "low" | "high" | "auto" } };
 
 /** One structured-output vision call. Returns the parsed JSON (still untrusted) or null on any failure. */
-async function visionJson(
+export async function visionJson(
   system: string,
   responseFormat: unknown,
   maxTokens: number,
   content: VisionContent[],
   timeoutMs = VISION_TIMEOUT_MS,
   model = getVisionModel(),
+  sampling: { temperature?: number; seed?: number } = {},
 ): Promise<unknown | null> {
   if (!isVisionConfigured()) {
     return null;
@@ -190,7 +191,8 @@ async function visionJson(
       },
       body: JSON.stringify({
         model,
-        temperature: 0.2,
+        temperature: sampling.temperature ?? 0.2,
+        ...(sampling.seed !== undefined ? { seed: sampling.seed } : {}),
         max_tokens: maxTokens,
         response_format: responseFormat,
         messages: [

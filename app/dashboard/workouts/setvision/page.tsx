@@ -36,13 +36,12 @@ export default function SetVisionPage() {
         </h1>
 
         <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
-          Choose the exercise, then upload one set. Pose estimation runs locally in your
-          browser. Squats get rep count, phase timing, joint range and consistency;
-          presses, pulls, curls, triceps extensions, lateral raises and hinges have
-          experimental rep counting; exercises without a movement model can still be
-          reviewed by hand. Every count can be corrected before you save, and your
-          corrections are kept apart from what SetVision measured. Nothing is uploaded
-          unless you choose to save.
+          Pick any exercise, upload one set, analyze. Squats get tracked rep counting;
+          presses, pulls, curls, extensions, raises and hinges get experimental tracking;
+          every exercise can get an AI visual review — qualitative feedback with replay
+          times, never invented reps or angles. Tracking runs in your browser; AI review
+          sends a few stills to OpenAI and doesn&apos;t store them. Nothing is saved unless
+          you choose to.
         </p>
 
         <Link
