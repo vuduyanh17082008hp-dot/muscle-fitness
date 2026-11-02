@@ -2,9 +2,9 @@ import type { PhraseState } from "./phrases";
 import type { UserQueryFrame } from "./types";
 
 /**
- * Gemma → Dante boundary reply for a train/rest/readiness decision. Deterministic and general (built from the frame's
- * recognised states, never from a specific prompt): Gemma names what the user said correctly, says the decision is Dante's,
- * and offers the part that IS hers (food). No handoff is performed — the user simply asks Dante.
+ * Fallback reply when a train/rest/readiness decision reaches the nutrition engine directly. The /api/chatbot router sends
+ * such turns to Dante's main pipeline first (nutritionTurnForMainPipeline), so this only answers a direct engine call:
+ * it names what the user said, says the decision comes from training/recovery data, and offers the food side.
  */
 
 const ACK: Record<"vi" | "en", Partial<Record<PhraseState, string>>> = {
@@ -29,8 +29,8 @@ const ACK: Record<"vi" | "en", Partial<Record<PhraseState, string>>> = {
 };
 
 const BODY = {
-  vi: "Nhưng nên đi tập hay nghỉ hôm nay là quyết định về huấn luyện và hồi phục — đó là việc của Dante, người đọc điểm recovery, giấc ngủ và lịch tập hiện tại của bạn. Mình chỉ lo phần dinh dưỡng nên không tự quyết chuyện này. Bạn hỏi Dante nhé.",
-  en: "But whether to train or rest today is a training and recovery decision — that's Dante's call, since Dante reads your current recovery score, sleep and schedule. I only handle nutrition, so I won't decide it for you. Ask Dante.",
+  vi: "Nhưng nên đi tập hay nghỉ hôm nay là quyết định về huấn luyện và hồi phục — mình sẽ trả lời dựa trên điểm recovery, giấc ngủ và lịch tập hiện tại của bạn nếu bạn hỏi riêng câu đó.",
+  en: "But whether to train or rest today is a training and recovery decision — ask it on its own and I'll answer it from your current recovery score, sleep and schedule, not from food.",
 } as const;
 
 const OFFER = {
@@ -45,22 +45,14 @@ export function buildDanteDeferralReply(frame: Pick<UserQueryFrame, "language" |
   return [...ack, BODY[lang], OFFER[lang]].join(" ");
 }
 
-/** Dante → Gemma: meal construction is the nutrition coach's. Dante keeps the training/recovery side of the question. */
-export function buildGemmaDeferralReply(language: "vi" | "en", request?: string): string {
-  // HANDOFF preserves the obligation: the user's request is quoted so it can be taken to Gemma as-is.
-  const asked = request?.trim().replace(/\s+/g, " ").slice(0, 160);
-  const carry = asked ? (language === "vi" ? ` Bạn có thể gửi nguyên câu này cho Gemma: “${asked}”.` : ` You can send her exactly this: “${asked}”.`) : "";
-  return language === "vi"
-    ? `Chọn và xây bữa ăn là việc của Gemma, huấn luyện viên dinh dưỡng — bạn hỏi Gemma để có gợi ý bữa ăn và macro chính xác theo mục tiêu của bạn.${carry} Mình lo phần tập luyện và hồi phục: nếu cần biết buổi tập hôm nay đòi hỏi bao nhiêu năng lượng hay protein, hỏi mình.`
-    : `Choosing and building meals is Gemma's job, the nutrition coach — ask Gemma for meal ideas and macros matched to your targets.${carry} I handle training and recovery: if you want to know what today's session demands in energy or protein, ask me.`;
-}
-
 const MEAL_BUILD_INTENTS = new Set(["MEAL_IDEA", "MEAL_ADJUSTMENT", "CRAVING"]);
 const FOOD_FACT_INTENTS = new Set(["FOOD_FACT", "FOOD_MACRO_LOOKUP", "MACRO_CALCULATION", "FOLLOWUP_QUANTITY"]);
 
 /**
- * Dante-side: should this turn go to Gemma instead of Dante's model? Meal construction always; a food-fact lookup only when it has no
- * training/recovery angle (Dante may still READ food facts to reason about a session: "is 200g cod enough after training?").
+ * Dante's domain router: should this turn run Dante's nutrition capability (the meal engine, lib/nutrition/coach) instead of the
+ * general model? Meal construction always; a food-fact lookup only when it has no training/recovery angle (the general model may
+ * still READ food facts to reason about a session: "is 200g cod enough after training?"). (Name kept: "Gemma" is the engine's
+ * internal codename, never a user-facing assistant.)
  */
 export function dantePassesToGemma(frame: UserQueryFrame): boolean {
   if (frame.deferToGemma && MEAL_BUILD_INTENTS.has(frame.intent)) return true;

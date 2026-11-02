@@ -198,7 +198,7 @@ function NutritionPreview() {
         ))}
       </ul>
       <div className={cn(card, "px-4 py-3")}>
-        <p className="text-xs font-medium text-mf-pub-text-muted">Nutrition Coach · draft</p>
+        <p className="text-xs font-medium text-mf-pub-text-muted">Dante · meal draft</p>
         <p className="mt-1 text-sm leading-6 text-mf-pub-text">
           Grilled salmon, rice, greens — <span className="tabular-nums">610 kcal · 41 g protein</span>
         </p>
@@ -470,12 +470,12 @@ export function FeatureChapters() {
       <Chapter
         id="ch-fuel"
         index={4}
-        label="Nutrition · Nutrition Coach"
+        label="Nutrition · Dante"
         title="Seven ways in. One set of numbers."
         body={
           <>
             However food arrives, the server recalculates calories and macros from the portion you confirm, and
-            estimates stay labelled as estimates. The Nutrition Coach reads your actual log and drafts meals — nothing
+            estimates stay labelled as estimates. Dante reads your actual log and drafts meals — nothing
             is logged until you confirm it.
           </>
         }

@@ -209,9 +209,10 @@ describe("ICH-1 through the real Dante route", () => {
       expect(literatureCalls()).toBe(0);
     });
 
-    it("a nutrition concept asked of Dante is answered with Gemma's authority stated", async () => {
+    it("a nutrition concept asked of Dante is answered by Dante, never referred to another assistant", async () => {
       await post("carbs at night make me fat?");
-      expect(lastPrompt()).toMatch(/AUTHORITY: this topic is nutrition, which Gemma owns/);
+      expect(lastPrompt()).toMatch(/AUTHORITY: this topic is nutrition\. .*Never refer the user to another coach or assistant/);
+      expect(lastPrompt()).not.toMatch(/Gemma owns|ask Gemma/);
     });
   });
 

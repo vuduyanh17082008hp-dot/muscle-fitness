@@ -376,7 +376,7 @@ export function retractedDisclosureTypes(message: string): string[] {
   });
 }
 
-const COACH_NAME: Record<CoachId, string> = { DANTE: "Dante", GEMMA: "Gemma (nutrition coach)" };
+const COACH_NAME: Record<CoachId, string> = { DANTE: "Dante", GEMMA: "Dante (nutrition chat)" };
 const ALLERGEN_ITEM = Object.fromEntries(Object.entries(ALLERGEN_DIRECTIVE).map(([item, suffix]) => [`AVOID_ALLERGEN_${suffix}`, item]));
 
 /**

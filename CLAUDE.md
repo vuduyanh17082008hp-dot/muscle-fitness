@@ -70,6 +70,16 @@ The chat component is `components/dante-chat.tsx` (`DanteChat`). The route
 renaming it is a deliberate follow-up (needs a redirect for existing links),
 not done yet.
 
+**One AI coach.** There is no second user-facing assistant. "Gemma" is only the
+internal codename of Dante's nutrition engine (`lib/nutrition/coach/`, `coachMode:
+"nutrition"`, `GEMMA` ids in `lib/intelligence/`); never put it (or "Nutrition Coach")
+in user-facing copy or model prompts, and never write "ask Gemma / ask Dante" referrals.
+`/api/chatbot` is the domain router: on the Dante chat, meal/food-lookup turns and
+follow-ups on live nutrition state (`body.nutrition`, see `danteTurnContinuesNutrition`)
+run the nutrition engine and come back as `done.nutrition` + a `log_meal_draft`
+`pendingConfirmation` card; on the Nutrition page chat (also Dante),
+`nutritionTurnForMainPipeline` sends training/recovery turns to the main pipeline.
+
 Dante must only receive **structured, deterministic context**, never raw
 database dumps. `lib/athlete-state/build-athlete-state.ts::buildAthleteState()`
 is that structured-context layer today — it aggregates training, nutrition,

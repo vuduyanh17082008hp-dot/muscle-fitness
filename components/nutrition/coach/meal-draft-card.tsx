@@ -25,6 +25,7 @@ const CONFIDENCE_TONE: Record<Confidence, string> = {
 const QUICK_EDITS: Array<{ label: string; op: DraftOp }> = [
   { label: "More protein", op: { type: "more_protein" } },
   { label: "Lower calories", op: { type: "lower_calories" } },
+  { label: "Lower fat", op: { type: "lower_fat" } },
   { label: "Cheaper", op: { type: "cheaper" } },
   { label: "Faster", op: { type: "faster" } },
   { label: "More filling", op: { type: "more_filling" } },

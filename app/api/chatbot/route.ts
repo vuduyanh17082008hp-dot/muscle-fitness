@@ -61,14 +61,18 @@ import {
   updateNof1Experiment,
 } from "@/lib/dante-core/nof1-engine";
 import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
-import { getCoachMode, handleNutritionCoachChat } from "@/lib/nutrition/coach/chat";
+import { danteNutritionState, danteTurnContinuesNutrition, getCoachMode, handleNutritionCoachChat, isVietnameseMealDiscovery, nutritionTurnForMainPipeline } from "@/lib/nutrition/coach/chat";
 import { resolveCasualControlFlow } from "@/lib/dante-core/casual-intent";
 import { decideDanteLanguage, buildDanteLanguageInstruction, type DanteLanguageDecision } from "@/lib/dante-language";
 import { answerShoulderSide } from "@/lib/dante-core/coherence/corrections";
 import { authoritativeLaterality } from "@/lib/dante-core/coherence/gates";
 import { guardCanonicalTargetClaim, readCanonicalCalories } from "@/lib/nutrition/targets";
 import { buildDanteQueryContext, type DanteCurrentRecovery } from "@/lib/intelligence/query-understanding/dante-context";
-import { buildGemmaDeferralReply, dantePassesToGemma, parseUserQuery } from "@/lib/intelligence/query-understanding";
+import { dantePassesToGemma, parseUserQuery } from "@/lib/intelligence/query-understanding";
+import type { StructuredBlock } from "@/lib/nutrition/coach/followup";
+import type { PendingLog } from "@/lib/nutrition/coach/log-action";
+import type { ActiveMealDraft } from "@/lib/nutrition/coach/types";
+import { MEAL_TYPE_LABEL } from "@/lib/nutrition/food-log/types";
 import { candidateCompleteness } from "@/lib/intelligence/performance-core/candidates";
 import { buildEpistemicPolicyInstruction } from "@/lib/dante-core/epistemics/policy";
 import {
@@ -4376,7 +4380,9 @@ async function handleChatbotPost(
        draw from the same per-user quota.
     ----------------------------------------------------- */
 
-    if (getCoachMode(body) === "nutrition") {
+    // ONE AI COACH: the Nutrition page chat is Dante. A training / recovery question asked there runs the main pipeline
+    // below (streamed, persisted like any Dante turn) instead of the nutrition engine's old "ask Dante" referral.
+    if (getCoachMode(body) === "nutrition" && !nutritionTurnForMainPipeline(body)) {
       return await handleNutritionCoachChat({ supabase, userId: user.id, body, budget });
     }
 
@@ -5547,6 +5553,57 @@ async function handleChatbotPost(
     // A train/rest decision must be ANSWERED, grounded on today's verified state. The watch-level fatigue one-liner is not an answer
     // ("a few low reports, not enough baseline"), so it never replaces the decision; the risk bias still reaches the prompt.
     const turnFrame = parseUserQuery(userMessage, { surface: "DANTE" });
+
+    /* -----------------------------------------------------
+       ONE AI COACH — nutrition domain capability. Meal discovery, meal edits, food lookups and meal logging run the
+       canonical nutrition engine (lib/nutrition/coach): its own safety screen, deterministic macros and server-held
+       state. Dante never improvises a meal and never refers the user to another assistant. A meal log comes back as
+       Dante's ordinary pendingConfirmation card (same /api/dante/tools/confirm CAS write), never a silent write.
+    ----------------------------------------------------- */
+    const carriedNutrition = danteNutritionState(body);
+    const runNutritionCapability = async (): Promise<Response> => {
+      const priorTurns = (isRecord(body) && Array.isArray((body as { messages?: unknown }).messages) ? ((body as { messages: unknown[] }).messages) : [])
+        .flatMap((entry) => (isRecord(entry) && typeof entry.content === "string" && entry.role === "user" ? [entry.content.slice(0, 800)] : []));
+      const recentMessages = priorTurns.slice(-6).map((text) => ({ role: "user" as const, text }));
+      const nutritionBody = {
+        message: userMessage.slice(0, 800),
+        coachMode: "nutrition" as const,
+        activeDraft: carriedNutrition?.activeDraft ?? null,
+        conversation: { ...(carriedNutrition?.conversation ?? {}), recentMessages, priorUserTurns: priorTurns.map((text) => text.slice(0, 400)).slice(-20) },
+      };
+      const answered = await handleNutritionCoachChat({ supabase, userId: user.id, body: nutritionBody, budget });
+      const json = (await answered.json().catch(() => null)) as {
+        ok?: boolean; reply?: string; error?: string; structuredBlocks?: StructuredBlock[]; followUpHints?: string[];
+        mealDraft?: ActiveMealDraft | null; conversation?: Record<string, unknown> & { pendingLog?: PendingLog | null }; foodLogChanged?: boolean;
+      } | null;
+      const ok = Boolean(json?.ok && typeof json.reply === "string");
+      const pendingLog = json?.conversation?.pendingLog;
+      const pendingConfirmation = ok && pendingLog?.stage === "READY_FOR_CONFIRMATION" && pendingLog.actionId
+        ? { actionId: pendingLog.actionId, toolName: "log_meal_draft", summary: `Log “${pendingLog.mealName}”${pendingLog.mealType ? ` as ${MEAL_TYPE_LABEL[pendingLog.mealType].toLowerCase()}` : ""}` }
+        : null;
+      const reply = ok ? json!.reply! : (json?.error ?? "I couldn't work on that meal right now. Nothing was changed or logged — please try again.");
+      return createChatStreamResponse(async (emit) => {
+        emit({ type: "delta", text: reply });
+        emit({
+          type: "done",
+          model: "dante-nutrition",
+          insight: null,
+          sources: [],
+          actions: [],
+          pendingConfirmation,
+          toolTraceSummary: [`nutrition:status=${answered.status};ok=${ok};log=${pendingLog?.stage ?? "none"};changed=${Boolean(json?.foodLogChanged)}`],
+          nutrition: ok
+            ? { blocks: json!.structuredBlocks ?? [], hints: json!.followUpHints ?? [], state: { activeDraft: json!.mealDraft ?? null, conversation: json!.conversation ?? null }, foodLogChanged: Boolean(json!.foodLogChanged) }
+            : null,
+        });
+      });
+    };
+    // A follow-up on the meal list / draft / pending log still in this chat stays with it ("the second one", "log that",
+    // "yes" to a proposed change) — unless the turn is clearly training, recovery or a safety signal (no stale-domain carryover).
+    if (danteTurnContinuesNutrition(carriedNutrition, turnFrame, now) || (isVietnameseMealDiscovery(userMessage) && !turnFrame.safetySignal)) {
+      return await runNutritionCapability();
+    }
+
     const asksReadinessDecision = turnFrame.intent === "READINESS_RECOMMENDATION";
     // SAFETY DEFINES BOUNDARIES, NOT DEFAULT PROSE: an irritation note answers a symptom REPORT. When the same message
     // asks for something ("best exercise for shoulder pain", "what can I train today"), the note would replace the answer,
@@ -5803,14 +5860,15 @@ async function handleChatbotPost(
       });
     }
 
-    // Reverse boundary: building a meal / meal adjustment / craving makeover / a pure food-macro lookup is Gemma's, never Dante's. Deterministic, no model call,
-    // so Dante cannot improvise a meal plan with invented numbers. Nutrition FACTS for a performance question stay Dante's to read.
+    // Domain router (one AI coach): building a meal / meal adjustment / craving makeover / a pure food-macro lookup runs Dante's
+    // nutrition capability (the deterministic meal engine), never the general model — so no meal plan with invented numbers.
+    // Nutrition FACTS for a performance question stay with the general pipeline.
     // A supplement priority / purchase decision is shared knowledge, not a food fact: diet context in it ("I eat salmon
-    // 4 times a week") is need state for the decision, never a reason to hand the turn over.
-    // H0 cluster D — domain ownership, not keywords. The whole turn goes to Gemma only when it is meal construction or a pure
-    // food lookup AND nothing Dante owns rides on it: an action or log-status ask (tools are Dante's), a supplement product
-    // (whey/EAA are supplements), a disclosure statement with no request ("I eat 600 kcal a day"), or an active safety
-    // disclosure from this chat (Gemma cannot see this conversation, so the safety part must be handled where it was said).
+    // 4 times a week") is need state for the decision, never a reason to route the turn away.
+    // H0 cluster D — domain ownership, not keywords. The whole turn goes to the nutrition capability only when it is meal
+    // construction or a pure food lookup AND nothing the general pipeline owns rides on it: an action or log-status ask, a
+    // supplement product (whey/EAA are supplements), a disclosure statement with no request ("I eat 600 kcal a day"), or an
+    // active safety disclosure from this chat (the safety part is handled where it was said).
     const ownedByDante = isAgentToolIntent(userMessage)
       || LOG_STATUS_ASK.test(foldText(userMessage))
       || isSupplementTurn(intelligenceBrief.knowledge)
@@ -5819,25 +5877,7 @@ async function handleChatbotPost(
       // H1-WEIGHT: a bodyweight stated in this chat is the input of a target question; Gemma would answer from the profile.
       || (activeFacts(intelligenceBrief.context).some((fact) => fact.key === "BODYWEIGHT") && /\b(?:protein|calories?|calo|kcal|macros?|targets?|muc tieu)\b/.test(foldText(userMessage)));
     if (dantePassesToGemma(turnFrame) && !ownedByDante) {
-      const language = sessionLanguageDecision.language === "vi" ? "vi" : "en";
-      return await emitConvergedSingleShot({
-        // HANDOFF keeps the obligation: the user's own request travels with the handoff, quoted.
-        draft: buildGemmaDeferralReply(language, userMessage),
-        branch: "CASUAL",
-        requestTimestamp: now.toISOString(),
-        language,
-        responseIntent: "SOCIAL_RESPONSE",
-        done: {
-          model: "dante-defer-to-gemma",
-          insight: null,
-          sources: [],
-          actions: [],
-          pendingConfirmation: null,
-          toolTraceSummary: [],
-          safetyTriggered: false,
-          safetyCategory: null,
-        },
-      });
+      return await runNutritionCapability();
     }
 
     // Intent classification is deliberately after the safety/social/casual exits;

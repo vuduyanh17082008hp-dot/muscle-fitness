@@ -67,7 +67,7 @@ import { recordFollowUpEvent } from "./followup-telemetry"
 import { buildCravingDraft, detectCravingKey } from "./craving"
 import { applyDraftOp, oneMealBudget, type DraftOp } from "./draft"
 import { ALLERGEN_GUARD, asksForMealSuggestion, coordinationDiagnostics, coordinationNote, EMPTY_COORDINATION, GEMMA_CLEARANCE, loadGemmaCoordination, type GemmaCoordination } from "@/lib/intelligence/gemma-consumer"
-import { dayLevelCalorieProposal, excludedFoodsIn, foodsNamedIn, isUnsafeCoachReply, MORE_OPTIONS, parseCoachMessage, requestedOptionCount, resolveFoods, SAFETY_REPLY } from "./intent"
+import { dayLevelCalorieProposal, excludedFoodsIn, foodsNamedIn, isSafetyMessage, isUnsafeCoachReply, MORE_OPTIONS, parseCoachMessage, requestedOptionCount, resolveFoods, SAFETY_REPLY } from "./intent"
 import { compositionKey } from "./optimizer"
 import { buildDanteDeferralReply } from "@/lib/intelligence/query-understanding"
 import { activeFacts, buildContextWorkingSet, buildIntelligenceBrief, enforceIntegrity, restrictedSubstanceReply, withStoredAllergies } from "@/lib/intelligence/performance-core"
@@ -118,6 +118,63 @@ export const nutritionChatBodySchema = z.object({
 
 export function getCoachMode(body: unknown): "dante" | "nutrition" {
   return typeof body === "object" && body !== null && (body as { coachMode?: unknown }).coachMode === "nutrition" ? "nutrition" : "dante"
+}
+
+/* =========================================================
+   ONE AI COACH — Dante's domain router (MF Dante unified).
+   The nutrition engine below is one of Dante's capabilities, not a second assistant: the same chat turn is routed to it
+   or to Dante's main pipeline by what it asks, never answered with "ask the other coach".
+========================================================= */
+
+const MAIN_PIPELINE_DOMAINS = new Set(["TRAINING", "RECOVERY", "PERFORMANCE"])
+
+/**
+ * A turn sent from the Nutrition page that is really a training / recovery question runs Dante's main pipeline (the
+ * same tests the engine used to answer with a referral). A safety screen hit stays here: the engine owns that copy.
+ */
+export function nutritionTurnForMainPipeline(body: unknown): boolean {
+  const parsed = nutritionChatBodySchema.safeParse(body)
+  if (!parsed.success) return false
+  const { message } = parsed.data
+  const recent = parsed.data.conversation?.recentMessages ?? []
+  if (isSafetyMessage(message) || screenSafety(message, { recent })) return false
+  // Exactly the engine's own tested boundaries (a supplement or food-for-recovery ask stays with the nutrition capability).
+  if (parseCoachMessage(message, { hasDraft: false }).kind === "redirect_training") return true
+  return buildGemmaFrame(message, recent).frame.deferToDante
+}
+
+/** The nutrition state the general Dante chat echoes between turns (from its last nutrition reply). Re-validated server-side every turn. */
+const danteNutritionStateSchema = z.object({ activeDraft: draftInputSchema.nullish(), conversation: conversationInputSchema.nullish() })
+export type DanteNutritionState = z.infer<typeof danteNutritionStateSchema>
+
+export function danteNutritionState(body: unknown): DanteNutritionState | null {
+  const raw = typeof body === "object" && body !== null ? (body as { nutrition?: unknown }).nutrition : undefined
+  const parsed = raw ? danteNutritionStateSchema.safeParse(raw) : null
+  return parsed?.success ? parsed.data : null
+}
+
+/** A meal list, draft, pending proposal or pending log is still in play, so a short follow-up ("the second one", "log that") is about it. */
+export function nutritionStateIsLive(state: DanteNutritionState | null, now: Date = new Date()): boolean {
+  if (!state) return false
+  const conv = state.conversation
+  const alive = (iso: string | undefined) => Boolean(iso) && Date.parse(iso!) > now.getTime()
+  return Boolean(state.activeDraft && state.activeDraft.status !== "LOGGED") || isFollowUpLive(conv?.followUp ?? null, now) || isLive(conv?.pendingLog ?? null, now)
+    // An option list on screen (engine- or coach-written) or a pending clarification is still what "the second one" refers to.
+    || alive(conv?.presented?.expiresAt) || alive(conv?.pending?.expiresAt)
+}
+
+/**
+ * "gợi ý cho mình 3 món trưa nhiều đạm": a Vietnamese meal-discovery request (request verb + a count of dishes). Dante's query
+ * frame doesn't read it as meal construction (live: the general model answered in English with invented portions), so the
+ * router uses the engine's own detector. Vietnamese only: the English frame already routes English meal requests.
+ */
+export function isVietnameseMealDiscovery(message: string): boolean {
+  return requestedOptionCount(message) !== null && DISCOVERY_VERB_VI.test(message) && /(?<![\p{L}])(?:món|bữa|ăn)(?![\p{L}])/iu.test(message)
+}
+
+/** On the general Dante chat: a turn that continues live nutrition state stays with the nutrition capability unless it is clearly another domain. */
+export function danteTurnContinuesNutrition(state: DanteNutritionState | null, frame: { primaryDomain: string; safetySignal: boolean }, now: Date = new Date()): boolean {
+  return nutritionStateIsLive(state, now) && !MAIN_PIPELINE_DOMAINS.has(frame.primaryDomain) && !frame.safetySignal
 }
 
 type ActionType = "NONE" | "ASK_BEFORE_BUILD" | "CREATE_MEAL_DRAFT" | "UPDATE_MEAL_DRAFT" | "PROPOSE_LOG"
@@ -462,11 +519,11 @@ async function converse(message: string, ctx: CoachContext, draft: ActiveMealDra
 - The deterministic meal engine just built activeMealDraft for THIS request; it is the answer. Its ingredients and numbers are final: present them, keeping the user's requested cuisine/texture through seasoning, herbs, cooking method and serving from NUTRITION KNOWLEDGE. Any added seasoning or sauce is optional and NOT counted in the draft's numbers — say so. Never state a number that is not in CONTEXT.`
     : ""
 
-  const prompt = `You are the Muscle Fitness Nutrition Coach, a nutrition specialist inside the Nutrition page. Dante is the separate cross-domain assistant.
+  const prompt = `You are Dante, the Muscle Fitness coach, answering a nutrition turn with your nutrition tools. You are the only assistant in the app: never refer the user to another coach or assistant.
 Rules:
-- Nutrition only. For training, workouts, recovery or injury questions, tell the user to ask Dante. You cannot change workouts or recovery.
+- This turn is about food. Training, workout, recovery or injury questions are routed to your training side, never answered from here: do not give workout advice in this reply. You cannot change workouts or recovery from here.
 - Use ONLY the numbers in CONTEXT. Never calculate, estimate or invent calories, macros or totals yourself. Strategy without numbers is fine.
-- Never say a meal was logged: logging needs the user to confirm in the Active Meal Draft panel.
+- Never say a meal was logged: logging needs the user to tap Confirm on a log proposal.
 - Never suggest compensating for food with exercise, skipping meals, restricting, or "earning" food. Never diagnose.
 - Supplements: general evidence education only. If the user mentions a medical condition, pregnancy or any medication, never give a dose, timing, stack or cycle; say that is a question for their doctor or pharmacist.
 - The user's CURRENT message decides the topic. activeMealDraft is background context only: talk about it only if the user clearly refers to it, and never repeat it as the answer to a new topic.
@@ -649,6 +706,9 @@ function withSessionDislikes(ctx: CoachContext, signals: PreferenceSignal[]): Co
 const LOG_OPTION = /\b(?:log|add|track|save|record)\s+(?:the\s+)?(?:option|number|no\.?|#|choice)\s*#?\s*([1-8])\b|(?<![\p{L}])(?:ghi|lưu|thêm)\s+(?:món|lựa chọn)\s+(?:số\s+)?([1-8])(?![\p{N}])|\b(?:log|add|track|save|record)\s+the\s+(first|second|third|fourth|fifth|sixth|seventh|eighth)\s+(?:one|option|meal)\b/iu
 /** A request verb for meals ("give me", "suggest", "show me"…); "what meals are high in protein?" is a question, not one. */
 const DISCOVERY_VERB = /\b(?:give|suggest|show|build|make|recommend|list|find|get|need|want|any)\b/i
+/** Vietnamese request verbs ("cho mình 3 món…", "gợi ý vài món…"): JS \b is ASCII-only, so letter lookarounds. */
+const DISCOVERY_VERB_VI = /(?<![\p{L}])(?:cho (?:mình|tôi|tao|em|anh|chị)|gợi ý|đề xuất|tư vấn|giới thiệu|muốn ăn|nên ăn)(?![\p{L}])/iu
+const PROTEIN_PRIORITY_VI = /(?:nhiều|giàu|cao|thêm) (?:đạm|protein)/iu
 const ORDINAL_INDEX: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8 }
 /** "the second one" / "the 3rd meal" / "option 2" / "#2": a reference to one option of the list on screen. */
 const OPTION_REF = /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|[1-8](?:st|nd|rd|th))\s+(?:one|option|meal|bowl|plate|choice)\b|\b(?:option|number|no\.|#|choice)\s*#?\s*([1-8])\b/i
@@ -1122,9 +1182,12 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   // An explicit multi-meal request ("give me some meals with tuna", "suggest 3 high protein meals") is a NEW discovery: it
   // goes straight to the engine, so a list or draft still on screen can't route it to a follow-up / model answer instead.
   const discoveryCount = requestedOptionCount(message)
-  if (discoveryCount !== null && DISCOVERY_VERB.test(message) && dayLevelCalorieProposal(message) === null) {
+  if (discoveryCount !== null && (DISCOVERY_VERB.test(message) || DISCOVERY_VERB_VI.test(message)) && dayLevelCalorieProposal(message) === null) {
     const parsed = parseCoachMessage(message, { hasDraft: false })
-    if (parsed.kind === "build") return discover({ foodIds: parsed.foodIds, unresolvedFoods: parsed.unresolvedFoods, overrides: parsed.overrides, proteinPriority: parsed.proteinPriority, count: discoveryCount, more: false })
+    if (parsed.kind === "build") return discover({ foodIds: parsed.foodIds, unresolvedFoods: parsed.unresolvedFoods, overrides: parsed.overrides, proteinPriority: parsed.proteinPriority || PROTEIN_PRIORITY_VI.test(message), count: discoveryCount, more: false })
+    // "cho mình 3 món tối nhiều đạm": the English parser can't read it as a build, but the count + request verb already say it is one
+    // (live: it fell to the open model, which listed number-free dishes). Same engine, no foods named.
+    if (parsed.kind === "chat" && DISCOVERY_VERB_VI.test(message)) return discover({ foodIds: foodsNamedIn(message), unresolvedFoods: [], overrides: {}, proteinPriority: PROTEIN_PRIORITY_VI.test(message), count: discoveryCount, more: false })
   }
 
   // 1b. N1.5.6 follow-up continuity: proposal answer -> explicit new topic -> clarification answer -> short follow-up.
@@ -1133,6 +1196,11 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   const followState = conversationOwnsFocus || !state.followUp ? null : { ...state.followUp, presentedOptions: priorSnapshot?.owner === "ENGINE" ? state.followUp.presentedOptions : null }
   const execInput = { ctx: planningCtx, activeDraft: draft, state: followState, now }
   const legacyHandles = draftReference.bound && parseCoachMessage(message, { hasDraft: true }).kind !== "chat"
+  // "make the fifth one lower in fat" with three options on screen: ask, never fall back to another meal (the option-aimed
+  // modifier is resolved by the fast path below, so this guard must come first).
+  if (pinned && !pinned.meal) {
+    return respond("GENERAL_NUTRITION_QUESTION", "followup_clarify", `There's no option ${pinned.index} in the list I just showed (1–${shownMeals.length}). Which one did you mean?`, { clarified: true })
+  }
   const resolvedTurn = resolveTurn({ message, state: followState, activeDraft: draft ? mealFromDraft(draft) : null, topicType: state.currentTopic?.type ?? null, now, legacyHandles })
   // While the conversation owns the focus there is no engine meal to follow up on ("what goes in it?" is about the option the
   // user picked): engine follow-up intents step aside; an explicit new topic still applies.

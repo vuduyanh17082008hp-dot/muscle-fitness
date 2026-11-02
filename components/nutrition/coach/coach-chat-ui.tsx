@@ -1,37 +1,25 @@
 "use client"
 
 /**
- * Presentation-only pieces of the Nutrition Coach chat. No data fetching, no routing:
+ * Presentation-only pieces of Dante's chat on the Nutrition page (Dante's nutrition capability). No data fetching, no routing:
  * the container (nutrition-coach-panel.tsx) owns all state and calls.
  */
 
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, Send, Sparkles } from "lucide-react"
 
+import { DanteAvatar } from "@/components/dante/dante-avatar"
 import type { StructuredBlock } from "@/lib/nutrition/coach/followup"
 
 // globals.css sets unlayered `font: inherit` on controls, `border-color` on *, and an outline on :focus-visible,
 // all of which beat Tailwind utilities: control font comes from the wrapper; outline/border overrides need `!`.
 const focusRing = "focus-visible:outline-none! focus-visible:ring-2 focus-visible:ring-mf-glass-brand focus-visible:ring-offset-2 focus-visible:ring-offset-mf-glass-bg"
 
-/** Small rounded coach: lime leaf-sprout on a dark face. Decorative; the name is always next to it. */
+/** Dante's mark at chat size. Decorative; the name "Dante" is always next to it. */
 export function NutritionCoachAvatar({ size = 32, glow = false }: { size?: number; glow?: boolean }) {
   return (
-    <span
-      aria-hidden="true"
-      className={`relative inline-flex shrink-0 items-center justify-center rounded-full border border-mf-glass-brand-border bg-mf-glass-bg-deep ${glow ? "shadow-[0_0_14px_rgba(216,255,32,0.22)]" : ""}`}
-      style={{ width: size, height: size }}
-    >
-      <svg viewBox="0 0 32 32" width={size * 0.8} height={size * 0.8} fill="none">
-        <path d="M16 8c0-3 2-4.5 5-4.5 0 3-2 4.5-5 4.5Z" fill="#d8ff20" />
-        <path d="M16 8v2" stroke="#d8ff20" strokeWidth="1.4" strokeLinecap="round" />
-        <rect x="6.5" y="10" width="19" height="15" rx="7.5" fill="#1e2314" stroke="#d8ff20" strokeOpacity=".45" />
-        <circle cx="12.3" cy="17" r="1.5" fill="#f3f5e8" />
-        <circle cx="19.7" cy="17" r="1.5" fill="#f3f5e8" />
-        <path d="M13.2 20.8c1.6 1.3 3.9 1.3 5.6 0" stroke="#d8ff20" strokeWidth="1.3" strokeLinecap="round" />
-        <circle cx="9.6" cy="20.2" r="1.1" fill="#c47a3d" fillOpacity=".55" />
-        <circle cx="22.4" cy="20.2" r="1.1" fill="#c47a3d" fillOpacity=".55" />
-      </svg>
+    <span aria-hidden="true" className={`inline-flex shrink-0 items-center justify-center ${glow ? "drop-shadow-[0_0_8px_rgba(216,241,90,0.35)]" : ""}`} style={{ width: size, height: size }}>
+      <DanteAvatar className="size-full" />
     </span>
   )
 }
@@ -41,8 +29,8 @@ export function NutritionCoachHeader({ busy }: { busy: boolean }) {
     <header className="flex items-center gap-3">
       <NutritionCoachAvatar size={36} glow />
       <div className="min-w-0 flex-1">
-        <h2 className="text-base font-black leading-tight text-mf-glass-text">Nutrition Coach</h2>
-        <p className="truncate text-xs text-mf-glass-text-muted">Meals, cravings &amp; macros</p>
+        <h2 className="text-base font-black leading-tight text-mf-glass-text">Dante</h2>
+        <p className="truncate text-xs text-mf-glass-text-muted">Nutrition · meals, macros &amp; logging — training questions too</p>
       </div>
       <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-mf-glass-text-muted">
         <span className={`size-1.5 rounded-full bg-mf-glass-brand ${busy ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true" />
@@ -52,6 +40,9 @@ export function NutritionCoachHeader({ busy }: { busy: boolean }) {
   )
 }
 
+/** "308 kcal left" / "7g protein over" — never a negative "left". */
+const left = (value: number, unit: string) => (Math.round(value) < 0 ? `${Math.abs(Math.round(value))}${unit} over` : `${Math.round(value)}${unit} left`)
+
 /** Compact "Today" line that expands into calories, protein and goal. Secondary by design. */
 export function NutritionContextStrip({ context }: { context: { caloriesRemaining: number; proteinRemaining: number; caloriesTarget: number; proteinTarget: number; goal: string | null } | null }) {
   if (!context) return null
@@ -60,7 +51,7 @@ export function NutritionContextStrip({ context }: { context: { caloriesRemainin
       <summary className={`flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-1.5 [&::-webkit-details-marker]:hidden ${focusRing}`}>
         <span className="font-semibold text-mf-glass-text-secondary">Today</span>
         <span className="min-w-0 flex-1 truncate">
-          {Math.round(context.caloriesRemaining)} kcal left · {Math.round(context.proteinRemaining)}g protein left
+          {left(context.caloriesRemaining, " kcal")} · {left(context.proteinRemaining, "g protein")}
         </span>
         <ChevronDown className="size-3.5 transition group-open:rotate-180" aria-hidden="true" />
       </summary>
@@ -112,7 +103,7 @@ export function NutritionBlocks({ blocks, disabled, onPick }: { blocks: Structur
             return (
               <dl key={index} className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-xl border border-mf-glass-border bg-white/[0.03] px-3 py-2 text-xs" aria-label={`Ingredients of ${block.mealName}`}>
                 {block.items.map((item) => (
-                  <div key={item.name} className="contents"><dt className="min-w-0 truncate text-mf-glass-text-secondary">{item.name}</dt><dd className="font-semibold text-mf-glass-text">{item.grams} g</dd></div>
+                  <div key={item.name} className="contents"><dt className="min-w-0 truncate text-mf-glass-text-secondary">{item.name}</dt><dd className="font-semibold text-mf-glass-text">{item.grams} g{item.basis ? <span className="ml-1 font-normal text-mf-glass-text-muted">{item.basis}</span> : null}</dd></div>
                 ))}
               </dl>
             )
@@ -141,10 +132,10 @@ export function NutritionBlocks({ blocks, disabled, onPick }: { blocks: Structur
           case "MEAL_COMPARISON":
             return (
               <table key={index} className="w-full rounded-xl border border-mf-glass-border bg-white/[0.03] text-xs">
-                <thead className="sr-only"><tr><th>Meal</th><th>Calories</th><th>Protein</th></tr></thead>
+                <thead className="sr-only"><tr><th>Meal</th><th>Calories</th><th>Protein</th><th>Fat</th></tr></thead>
                 <tbody>
                   {block.rows.map((row) => (
-                    <tr key={row.id} className="border-t border-mf-glass-border first:border-t-0"><td className="truncate px-3 py-1.5 font-semibold text-mf-glass-text">{row.label}</td><td className="px-2 text-mf-glass-text-secondary">{kcal(row.calories)}</td><td className="px-2 text-mf-glass-text-secondary">{Math.round(row.protein)}g</td></tr>
+                    <tr key={row.id} className="border-t border-mf-glass-border first:border-t-0"><td className="truncate px-3 py-1.5 font-semibold text-mf-glass-text">{row.label}</td><td className="px-2 text-mf-glass-text-secondary">{kcal(row.calories)}</td><td className="px-2 text-mf-glass-text-secondary">{Math.round(row.protein)}g P</td><td className="px-2 text-mf-glass-text-secondary">{Math.round(row.fat)}g F</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -180,7 +171,7 @@ export function NutritionMessage({ role, text, blocks, disabled = false, onPick 
     <li className="dante-message-in flex items-start gap-2.5">
       <NutritionCoachAvatar size={28} />
       <div className="min-w-0 max-w-[92%] sm:max-w-[min(80%,40rem)]">
-        <p className="mb-0.5 text-xs font-bold text-mf-glass-text-muted">Nutrition Coach</p>
+        <p className="mb-0.5 text-xs font-bold text-mf-glass-text-muted">Dante</p>
         <div className="break-words text-sm leading-6 text-mf-glass-text-secondary"><MessageBody text={text} /></div>
         {blocks?.length && onPick ? <NutritionBlocks blocks={blocks} disabled={disabled} onPick={onPick} /> : null}
       </div>
@@ -193,7 +184,7 @@ export function NutritionTypingState({ label }: { label: string }) {
     <li className="dante-message-in flex items-start gap-2.5" aria-live="polite">
       <NutritionCoachAvatar size={28} glow />
       <div>
-        <p className="mb-0.5 text-xs font-bold text-mf-glass-text-muted">Nutrition Coach</p>
+        <p className="mb-0.5 text-xs font-bold text-mf-glass-text-muted">Dante</p>
         <p className="flex items-center gap-2 text-sm text-mf-glass-text-muted">
           <span className="inline-flex gap-1" aria-hidden="true">
             {[0, 150, 300].map((delay) => <span key={delay} className="size-1.5 rounded-full bg-mf-glass-brand motion-safe:animate-bounce" style={{ animationDelay: `${delay}ms` }} />)}
@@ -210,7 +201,7 @@ export function NutritionWelcome() {
     <div className="flex flex-col items-center gap-2 py-4 text-center">
       <NutritionCoachAvatar size={44} glow />
       <p className="text-base font-bold text-mf-glass-text">Hey — what are we solving today?</p>
-      <p className="max-w-xs text-sm text-mf-glass-text-muted">I can help with meals, cravings, macros or food choices.</p>
+      <p className="max-w-xs text-sm text-mf-glass-text-muted">Meals, macros, food logging — or ask about training and recovery.</p>
     </div>
   )
 }
@@ -279,7 +270,7 @@ export function NutritionComposer({ value, onChange, onSend, busy }: { value: st
         if (canSend) onSend()
       }}
     >
-      <label htmlFor="coach-chat-input" className="sr-only">Message the Nutrition Coach</label>
+      <label htmlFor="coach-chat-input" className="sr-only">Message Dante</label>
       <textarea
         id="coach-chat-input"
         ref={ref}

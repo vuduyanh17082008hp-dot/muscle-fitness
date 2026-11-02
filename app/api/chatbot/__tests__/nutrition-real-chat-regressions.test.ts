@@ -125,17 +125,19 @@ async function engineThenModelList() {
 describe("RC-01/03 'option 2' picks the displayed option and needs no confirmation", () => {
   it("resolves to Protein Shake (never the engine's unrelated bowl), CONTINUE/PENDING_CHOICE, no confirmation", async () => {
     const { s, engine } = await engineThenModelList()
-    expect(engine.mealDraft.name).toMatch(/Tofu/) // the stale engine draft really is in play
+    // The stale engine draft really is in play (Tofu before tofu was capped at a realistic 300 g; the engine now picks Chicken).
+    expect(engine.mealDraft.name).toMatch(/Tofu|Chicken/)
+    const stale = new RegExp(`${engine.mealDraft.name}|Tofu|Tuna`, "i")
     // The planner (wrongly) asks for confirmation: a pick is not a mutation.
     script({ planner: continuing((p) => { p.need.needActionConfirmation = true; p.strategy.requiresConfirmation = true }), response: "Protein Shake it is — quick and no cooking." })
     const pick = await s.say("option 2")
     expect(pick.route).toBe("orchestrated")
     expect(pick.route).not.toMatch(/followup_/)
     expect(pick.orchestration).toMatchObject({ responseMode: "CONTINUE", continuationTarget: "PENDING_CHOICE", confirmationRequired: false })
-    expect(pick.reply).not.toMatch(/Tofu/i)
+    expect(pick.reply).not.toMatch(stale)
     const context = responseContext()
     expect(context).toMatchObject({ chosenOption: { text: "Protein Shake" }, activeItem: "Protein Shake" })
-    expect(JSON.stringify(context)).not.toMatch(/Tofu|Tuna/i)
+    expect(JSON.stringify(context)).not.toMatch(stale)
     expect(pick.conversation.followUp?.presentedOptions ?? null).toBeNull() // the engine's old choice does not survive
   })
 

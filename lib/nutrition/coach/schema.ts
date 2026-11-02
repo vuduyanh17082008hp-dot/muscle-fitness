@@ -85,6 +85,7 @@ export const opSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("more_protein") }),
   z.object({ type: z.literal("more_carbs") }),
   z.object({ type: z.literal("lower_calories") }),
+  z.object({ type: z.literal("lower_fat") }),
   z.object({ type: z.literal("cheaper") }),
   z.object({ type: z.literal("faster") }),
   z.object({ type: z.literal("more_filling") }),

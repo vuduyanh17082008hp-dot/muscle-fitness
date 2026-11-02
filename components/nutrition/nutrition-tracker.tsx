@@ -72,7 +72,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
   const isToday = selectedDate === athleteToday
 
   // Every confirmed add/edit/delete (and reload) lands in `entries`; tell the page's other readers of today's log — the
-  // Nutrition Coach strip re-fetches its server-computed remaining macros — instead of letting them show the old totals.
+  // Dante nutrition strip re-fetches its server-computed remaining macros — instead of letting them show the old totals.
   const entriesMounted = useRef(false)
   useEffect(() => {
     if (!entriesMounted.current) {

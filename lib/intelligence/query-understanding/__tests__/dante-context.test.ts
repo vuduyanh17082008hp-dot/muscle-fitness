@@ -21,7 +21,8 @@ describe("Dante query context (shared layer, Dante side)", () => {
     expect(q.block).toContain("user_stated_intake: 800 kcal");
     expect(q.block).toContain("self-reported, not verified");
     expect(q.block).toMatch(/do NOT write a meal plan/);
-    expect(q.block).toMatch(/Gemma/);
+    expect(q.block).toMatch(/meal builder/);
+    expect(q.block).not.toMatch(/Gemma/);
     expect(q.block).not.toMatch(/\b(breakfast|dinner)\b.*\bgrams?\b/i);
   });
 
@@ -43,11 +44,12 @@ describe("Dante query context (shared layer, Dante side)", () => {
     expect(q.retrieval.thinking).not.toBe("DEEP");
   });
 
-  it("'build my dinner' on Dante → boundary says Gemma, and no food lookup is made", async () => {
+  it("'build my dinner' on Dante → routed to the meal builder (nutrition capability), and no food lookup is made", async () => {
     const calls = vi.fn();
     const q = await buildDanteQueryContext("build my dinner with chicken breast", [], { resolveFood: (r) => { calls(r); return resolveFoodEntity(r, deps()); } });
     expect(q.frame.deferToGemma).toBe(true);
-    expect(q.block).toMatch(/Gemma/);
+    expect(q.block).toMatch(/meal builder/);
+    expect(q.block).not.toMatch(/Gemma/);
     expect(calls).not.toHaveBeenCalled();
   });
 

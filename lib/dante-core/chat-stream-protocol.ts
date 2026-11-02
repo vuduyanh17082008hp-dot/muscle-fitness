@@ -1,4 +1,6 @@
 import type { DanteInsight } from "@/lib/dante-core/insight";
+import type { StructuredBlock } from "@/lib/nutrition/coach/followup";
+import type { ActiveMealDraft } from "@/lib/nutrition/coach/types";
 
 /**
  * The wire format for /api/chatbot's streaming response — a plain
@@ -63,6 +65,21 @@ export type ChatStreamDoneEvent = {
   toolTraceSummary: string[];
   safetyTriggered?: boolean;
   safetyCategory?: string | null;
+  /** Present when Dante's nutrition capability answered the turn: the structured results and the state the client echoes next turn. */
+  nutrition?: DanteNutritionTurn | null;
+};
+
+/**
+ * Dante's nutrition capability (lib/nutrition/coach) speaking through the chat: option lists, comparisons, ingredient
+ * tables and change proposals are built from engine data, never parsed out of prose. `state` is echoed back as
+ * `nutrition` on the next request; the server re-validates all of it. A meal log never rides here — it is a
+ * `pendingConfirmation` card like every other Dante write.
+ */
+export type DanteNutritionTurn = {
+  blocks: StructuredBlock[];
+  hints: string[];
+  state: { activeDraft: ActiveMealDraft | null; conversation: Record<string, unknown> | null };
+  foodLogChanged: boolean;
 };
 
 export type ChatStreamErrorEvent = {

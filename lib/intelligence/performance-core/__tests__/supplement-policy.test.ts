@@ -239,13 +239,15 @@ describe("shared evidence, two lenses, clear authority", () => {
     const gemma = brief("should I take omega-3?", { coach: "GEMMA" }).promptBlock;
     expect(dante.indexOf("muscle hypertrophic benefit")).toBeLessThan(dante.indexOf("effective for raising omega-3 levels"));
     expect(gemma.indexOf("effective for raising omega-3 levels")).toBeLessThan(gemma.indexOf("muscle hypertrophic benefit"));
-    expect(dante).toMatch(/YOUR LENS \(Dante\): expected training and performance value/);
-    expect(gemma).toMatch(/YOUR LENS \(Gemma\): dietary adequacy and food-first alternatives/);
+    expect(dante).toMatch(/YOUR LENS \(training side\): expected training and performance value/);
+    expect(gemma).toMatch(/YOUR LENS \(nutrition side\): dietary adequacy and food-first alternatives/);
+    // One AI coach: neither lens names a second assistant.
+    expect(`${dante}\n${gemma}`).not.toMatch(/Gemma/);
   });
 
   it("a nutrition topic on Dante, or a training topic on Gemma, is marked as the other coach's", () => {
     expect(brief("how much protein do I need?").otherCoachOwns).toBe(true);
-    expect(brief("how much protein do I need?").promptBlock).toMatch(/AUTHORITY: this topic is nutrition, which Gemma owns/);
+    expect(brief("how much protein do I need?").promptBlock).toMatch(/AUTHORITY: this topic is nutrition\. .*Never refer the user to another coach or assistant/);
     expect(brief("how much protein do I need?", { coach: "GEMMA" }).otherCoachOwns).toBe(false);
     expect(brief("how much volume do I actually need?", { coach: "GEMMA" }).otherCoachOwns).toBe(true);
     expect(brief("how much volume do I actually need?").otherCoachOwns).toBe(false);

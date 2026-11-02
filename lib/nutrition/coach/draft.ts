@@ -159,6 +159,7 @@ export type DraftOp =
   | { type: "more_protein" }
   | { type: "more_carbs" }
   | { type: "lower_calories" }
+  | { type: "lower_fat" }
   | { type: "cheaper" }
   | { type: "faster" }
   | { type: "more_filling" }
@@ -379,6 +380,27 @@ export function applyDraftOp(ctx: CoachContext, draft: ActiveMealDraft, op: Draf
     case "lower_calories": {
       const scaled = scaleItems(items, { mode: "AUTO", targetCalories: draft.nutrition.calories * 0.85, targetProtein: draft.constraints.proteinTarget ?? draft.nutrition.protein })
       return ok("Lower calories", scaled, undefined, { scalingMode: "AUTO" })
+    }
+
+    case "lower_fat": {
+      // The fattiest ingredient goes leaner: a same-role swap at matching protein (protein) or matching calories (other roles);
+      // with no leaner option it is cut by a quarter. Numbers are recomputed by assembleDraft like every other op.
+      const fatOf = (i: DraftItem) => (requireIngredient(i.ingredientId).fatPer100g * i.grams) / 100
+      const fattiest = [...items].sort((a, b) => fatOf(b) - fatOf(a))[0]
+      if (!fattiest || fatOf(fattiest) < 1.5) return keep("This meal is already very low in fat — there's nothing meaningful to cut.")
+      const from = requireIngredient(fattiest.ingredientId)
+      const fatDensity = (i: typeof from) => (i.role === "protein" ? i.fatPer100g / Math.max(1, i.proteinPer100g) : i.fatPer100g / Math.max(1, i.caloriesPer100g))
+      const leaner = pool
+        .filter((i) => i.role === from.role && i.id !== from.id && !items.some((x) => x.ingredientId === i.id) && fatDensity(i) < fatDensity(from) * 0.6)
+        .sort((a, b) => fatDensity(a) - fatDensity(b))[0]
+      const fatText = (next: DraftItem[]) => `fat ${Math.round(totalsFor(items).fat)} g → ${Math.round(totalsFor(next).fat)} g`
+      if (leaner) {
+        const grams = from.role === "protein" ? (fattiest.grams * from.proteinPer100g) / Math.max(1, leaner.proteinPer100g) : (fattiest.grams * from.caloriesPer100g) / Math.max(1, leaner.caloriesPer100g)
+        const swapped = swapItems(items, from.id, leaner.id).map((i) => (i.ingredientId === leaner.id ? { ...i, grams: roundGrams(leaner, grams) } : i))
+        return ok(`Lower fat: ${from.shortName} → ${leaner.shortName}`, swapped, `Swapped ${from.shortName} for ${leaner.shortName} — ${fatText(swapped)}.`)
+      }
+      const trimmed = items.map((i) => (i.ingredientId === from.id ? { ...i, grams: roundGrams(from, i.grams * 0.75) } : i))
+      return ok(`Lower fat: less ${from.shortName}`, trimmed, `Cut ${from.shortName} by about a quarter — ${fatText(trimmed)}.`)
     }
 
     case "cheaper": {

@@ -30,7 +30,7 @@ const TYPES: Record<string, string> = {
   "audio/x-wav": "wav",
 };
 /** Gym vocabulary the model should spell as lifters do (keywords is a gpt-transcribe parameter). */
-const KEYWORDS = ["RDL", "Romanian deadlift", "Bulgarian split squat", "RPE", "RIR", "PR", "deload", "superset", "hypertrophy", "lat pulldown", "leg press", "calf raise", "kcal", "macros", "protein", "Dante", "Gemma"];
+const KEYWORDS = ["RDL", "Romanian deadlift", "Bulgarian split squat", "RPE", "RIR", "PR", "deload", "superset", "hypertrophy", "lat pulldown", "leg press", "calf raise", "kcal", "macros", "protein", "Dante"];
 
 // ponytail: per-process window (one Node instance locally); move to the check_dante_rate_limit RPC with a bucket key
 // if this runs on more than one instance.

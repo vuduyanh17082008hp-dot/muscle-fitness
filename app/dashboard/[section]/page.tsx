@@ -241,7 +241,7 @@ export default async function DashboardSectionPage({
     sectionKey === "ai-coach"
       ? loadAiCoachContext(supabase, user.id)
       : Promise.resolve(null),
-    // Same canonical targets the Dashboard, Dante and Gemma use — never a
+    // Same canonical targets the Dashboard and Dante (incl. its nutrition engine) use — never a
     // fitness_profiles column read of its own.
     sectionKey === "today"
       ? loadNutritionContext(supabase, user.id).catch(() => null)

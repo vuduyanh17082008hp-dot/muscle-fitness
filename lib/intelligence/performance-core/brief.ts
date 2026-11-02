@@ -248,13 +248,13 @@ function renderPolicy(brief: Omit<IntelligenceBrief, "promptBlock">): string[] {
       lines.push(`STILL UNKNOWN AND WOULD CHANGE THE ANSWER: ${ASK[ask]}. Give the conditional answer first, then ask this as your ONE short question.${conditions.length ? ` State the rest as conditions, not questions: ${conditions.map((dependency) => ASK[dependency]).join("; ")}.` : ""}`);
     }
     lines.push(coach === "DANTE"
-      ? "YOUR LENS (Dante): expected training and performance value. Whether the diet already covers a nutrient is Gemma's call — name the dependency, do not build a meal plan."
-      : "YOUR LENS (Gemma): dietary adequacy and food-first alternatives. Whether to train, how hard, and performance programming are Dante's.");
+      ? "YOUR LENS (training side): expected training and performance value. Whether the diet already covers a nutrient depends on the food log — name the dependency, do not write a meal plan in prose (meals come from your meal builder)."
+      : "YOUR LENS (nutrition side): dietary adequacy and food-first alternatives. Whether to train, how hard, and performance programming come from your training side, not from this answer.");
   }
   if (brief.otherCoachOwns) {
     lines.push(coach === "DANTE"
-      ? "AUTHORITY: this topic is nutrition, which Gemma owns — refer to her by name (Gemma, the nutrition coach), never as 'a nutrition coach' or 'a professional'. Answer the concept from the canonical claims; personal targets, meal building and food logging go to Gemma, and any personal number comes only from the canonical nutrition targets you were given."
-      : "AUTHORITY: this topic is training or recovery, which Dante owns. You may explain the nutrition side; the training decision is Dante's.");
+      ? "AUTHORITY: this topic is nutrition. Answer the concept from the canonical claims. Never refer the user to another coach or assistant — you are the only one. Personal targets, meal building and food logging run through your own nutrition tools (the user can ask you for meals or to log food here); never invent a meal or a number in prose, and any personal number comes only from the canonical nutrition targets you were given."
+      : "AUTHORITY: this topic is training or recovery. Explain the nutrition side only; the training decision comes from the training and recovery data, not from this answer.");
   }
   return lines;
 }

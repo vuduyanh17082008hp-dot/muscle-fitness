@@ -114,7 +114,7 @@ export async function buildDanteQueryContext(
   if (frame.ambiguity.present) body.push(`unresolved: ${frame.ambiguity.fields.join(", ")} — ask only if the answer changes; otherwise state the assumption.`);
   body.push(...stateLines, ...readinessLines, ...lines);
   if (frame.deferToGemma || frame.crossCoachRelevance === "MATERIAL" || frame.crossCoachRelevance === "CRITICAL") {
-    body.push("boundary: do NOT write a meal plan or prescribe a nutrition plan. If a material nutrition adjustment is needed, say the nutrition coach (Gemma) is the right place to build it. Nutrition facts above are for reasoning about training only.");
+    body.push("boundary: do NOT write a meal plan or prescribe a nutrition plan. If a material nutrition adjustment is needed, offer to build it with your meal builder (the user can ask you for meals in this chat). Nutrition facts above are for reasoning about training only.");
   }
   if (retrieval.thinking === "DEEP") body.push("depth: consider competing explanations and say what evidence is missing; do not present one cause as certain.");
   return { frame, retrieval, block: body.join("\n") };

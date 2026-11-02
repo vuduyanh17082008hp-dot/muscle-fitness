@@ -34,7 +34,7 @@ import {
   isDanteRateLimitedMessage,
 } from "@/lib/dante-chat-http-error";
 import type { DanteInsight } from "@/lib/dante-core/insight";
-import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT } from "@/lib/coach-context-event";
+import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT, FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event";
 import {
   parseChatStreamChunk,
   resolveAbortedContent,
@@ -43,7 +43,9 @@ import {
   type ChatStreamEvent,
   type ChatStreamPendingConfirmation,
   type ChatStreamSource,
+  type DanteNutritionTurn,
 } from "@/lib/dante-core/chat-stream-protocol";
+import { NutritionBlocks, NutritionQuickActions } from "@/components/nutrition/coach/coach-chat-ui";
 import type { StoredDanteMessage } from "@/lib/dante-core/conversation-store";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { DanteVoiceInput } from "@/components/dante-voice-input";
@@ -75,6 +77,8 @@ type ChatMessage = {
   historyStatus?: "pending" | "interrupted" | "error";
   /** The server said this turn did NOT reach conversation history. */
   notSaved?: boolean;
+  /** Dante's nutrition capability answered: engine-built option lists / comparisons / ingredient tables / change proposals. */
+  nutrition?: DanteNutritionTurn | null;
 };
 
 type ConfirmationResolution = "confirmed" | "cancelled" | "superseded" | "failed" | "expired" | "unknown" | null;
@@ -573,6 +577,10 @@ export default function DanteChat({
   const [isRestoring, setIsRestoring] = useState(restoreHistory);
   // Once the user has sent something, a late restore must never replace that conversation.
   const sendStartedRef = useRef(false);
+  // The nutrition state this conversation echoes to the server (meal list, draft, pending log). Server re-validates it every turn.
+  const nutritionRef = useRef<DanteNutritionTurn["state"] | null>(null);
+  // Engine option buttons and suggested replies act only on the newest reply: an older list is no longer the one on screen.
+  const lastAssistantId = [...messages].reverse().find((message) => message.role === "assistant")?.id;
 
   const [activity, setActivity] = useState<DanteActivity>("idle");
   const visualState = useDantePresence(activity);
@@ -700,6 +708,7 @@ export default function DanteChat({
     // Only the automatic mount restore yields to a send already in progress; a picked conversation always opens.
     if (isMountRestore && sendStartedRef.current) return true;
     const stored = data.messages ?? [];
+    nutritionRef.current = null;
     setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }, ...stored.map(fromStoredMessage)]);
     setRestored(stored.length > 0 ? { count: stored.length, asOf: stored[stored.length - 1].createdAt } : null);
     setThreadId(id);
@@ -710,6 +719,7 @@ export default function DanteChat({
 
   function startNewConversation() {
     abortControllerRef.current?.abort();
+    nutritionRef.current = null;
     setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }]);
     setRestored(null);
     setThreadId(null);
@@ -918,6 +928,7 @@ export default function DanteChat({
                 },
               ].slice(-20),
               ...contextPayload,
+              ...(nutritionRef.current ? { nutrition: nutritionRef.current } : {}),
               threadId: activeThreadId,
               clientMessageId: turnId,
             }),
@@ -980,6 +991,14 @@ export default function DanteChat({
 
         if (doneEvent) {
           const finalEvent = doneEvent;
+          if (finalEvent.nutrition) {
+            const turn = finalEvent.nutrition;
+            const previous = nutritionRef.current;
+            // No draft in the reply = the draft is unchanged, unless the server ended it (topic reset / logged).
+            const ended = turn.foodLogChanged || turn.state.conversation?.deactivateDraft === true;
+            nutritionRef.current = { activeDraft: turn.state.activeDraft ?? (ended ? null : previous?.activeDraft ?? null), conversation: turn.state.conversation };
+            if (turn.foodLogChanged) window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT));
+          }
 
           updateStreamingMessage(assistantId, (message) => {
             // QA-08: a finished reply with no text and nothing to confirm would render as a silent blank — say so instead
@@ -994,6 +1013,7 @@ export default function DanteChat({
               // the server's own completed `done` event — never
               // rendered speculatively while text is still streaming.
               pendingConfirmation: finalEvent.pendingConfirmation,
+              nutrition: finalEvent.nutrition ?? null,
               confirmationResolution: null,
               isComplete: true,
               ...(empty ? { historyStatus: "error" as const } : {}),
@@ -1109,6 +1129,14 @@ export default function DanteChat({
 
       // A confirmed write changed athlete data: re-render the server-built Today context (chat state is kept).
       if (resolution === "confirmed" && todayContext) router.refresh();
+      // A resolved meal log ends the chat's pending log; a confirmed one also ends the draft and refreshes food-log views.
+      if ((resolution === "confirmed" || resolution === "cancelled") && nutritionRef.current?.conversation && (nutritionRef.current.conversation as { pendingLog?: { actionId?: string } | null }).pendingLog?.actionId === actionId) {
+        nutritionRef.current = { activeDraft: resolution === "confirmed" ? null : nutritionRef.current.activeDraft, conversation: { ...nutritionRef.current.conversation, pendingLog: null } };
+      }
+      if (resolution === "confirmed") {
+        window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT));
+        window.dispatchEvent(new Event(COACH_CONTEXT_CHANGED_EVENT));
+      }
     } catch (error) {
       console.error("[DANTE CONFIRM ACTION ERROR]", error);
 
@@ -1379,6 +1407,14 @@ export default function DanteChat({
                           <RotateCcw aria-hidden="true" className="size-4" />
                           Retry
                         </button>
+                      ) : null}
+
+                      {message.nutrition?.blocks.length ? (
+                        <NutritionBlocks blocks={message.nutrition.blocks} disabled={isLoading || message.id !== lastAssistantId} onPick={(text) => void sendMessage(text)} />
+                      ) : null}
+
+                      {message.nutrition?.hints.length && message.id === lastAssistantId && !isLoading ? (
+                        <NutritionQuickActions actions={message.nutrition.hints.map((hint) => ({ label: hint.charAt(0).toUpperCase() + hint.slice(1), message: hint }))} disabled={isLoading} onPick={(text) => void sendMessage(text)} />
                       ) : null}
 
                       {message.insight ? <DanteInsightPanel insight={message.insight} /> : null}

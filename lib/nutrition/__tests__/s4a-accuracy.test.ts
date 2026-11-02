@@ -23,6 +23,13 @@ describe("S4-A accuracy fixes (live defects 2026-11-03)", () => {
     expect(photoMatchRank("Cooked white rice", "boiled", plain)).toBeLessThan(photoMatchRank("Cooked white rice", "boiled", glutinous))
   })
 
+  it("'Cooked rice' defaults to plain rice, not rice noodles (a different food form)", () => {
+    const noodles = usda("Rice noodles, cooked")
+    const plain = usda("Rice, white, medium-grain, cooked, unenriched")
+    expect(photoMatchRank("Cooked rice", "boiled", plain)).toBeLessThan(photoMatchRank("Cooked rice", "boiled", noodles))
+    expect(photoMatchRank("Rice noodles", "boiled", noodles)).toBe(0)
+  })
+
   it("'with realistic portions' is a request qualifier, not an unknown food", () => {
     const intent = parseCoachMessage("Give me 3 high-protein lunch ideas with realistic portions", { hasDraft: false })
     expect(intent.kind).toBe("build")

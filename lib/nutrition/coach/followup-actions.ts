@@ -69,6 +69,9 @@ export type ExecInput = {
 const r = (n: number) => Math.round(n)
 const short = (id: string) => getIngredient(id)?.shortName ?? id
 const macroText = (m: MacroTotals) => `about ${r(m.calories)} kcal, ${r(m.protein)}g protein, ${r(m.carbs)}g carbs and ${r(m.fat)}g fat`
+/** The state an ingredient's grams (and per-100 g numbers) refer to — the answer to "raw or cooked?". */
+const BASIS_TEXT = { RAW: "raw", COOKED: "cooked", AS_SERVED: "as eaten" } as const
+const basisOf = (id: string) => BASIS_TEXT[getIngredient(id)?.measurementBasis ?? "AS_SERVED"]
 const itemText = (items: DraftItem[]) => items.map((item) => `${short(item.ingredientId)} ${r(item.grams)} g`).join(", ")
 const OPEN_CONSTRAINTS: MealConstraints = { calorieCeiling: null, calorieCeilingStrict: false, calorieCeilingSource: "context", proteinTarget: null, proteinTargetSource: "context", maxPriceSgd: null, maxCookMinutes: null, availableIds: null }
 
@@ -177,7 +180,7 @@ function readOnly(turn: Extract<TurnResolution, { kind: "follow_up" }>, meal: Me
   const { intent, args } = turn
   const macros = totalsFor(meal.items)
   const patch: StatePatch = { referent, lastResolved: { intent, args }, candidateReferents: [] }
-  const items = meal.items.map((item) => ({ name: getIngredient(item.ingredientId)?.name ?? item.ingredientId, grams: r(item.grams) }))
+  const items = meal.items.map((item) => ({ name: getIngredient(item.ingredientId)?.name ?? item.ingredientId, grams: r(item.grams), basis: basisOf(item.ingredientId) }))
   const estimated = meal.items.some((item) => getIngredient(item.ingredientId)?.source !== "VERIFIED")
 
   switch (intent) {
@@ -185,7 +188,7 @@ function readOnly(turn: Extract<TurnResolution, { kind: "follow_up" }>, meal: Me
       const total = meal.items.reduce((sum, item) => sum + item.grams, 0)
       return base({
         route: "followup_ingredients",
-        reply: `${meal.name} — ${itemText(meal.items)} (${r(total)} g total).${estimated ? " A few portions are curated estimates, so real products can vary." : ""}`,
+        reply: `${meal.name} — ${meal.items.map((item) => `${short(item.ingredientId)} ${r(item.grams)} g ${basisOf(item.ingredientId)}`).join(", ")} (${r(total)} g total). Each weight is the state the numbers are for (raw, cooked or as eaten), so weigh it that way.${estimated ? " A few portions are curated estimates, so real products can vary." : ""}`,
         blocks: [{ type: "INGREDIENT_LIST", mealName: meal.name, items }],
         hints: HINTS_AFTER_MEAL,
         patch,
@@ -464,10 +467,12 @@ function compare(input: ExecInput): FollowUpExec {
     return meal ? [{ id: meal.id, label: meal.name, ...totalsFor(meal.items) }] : []
   })
   if (rows.length < 2) return base({ route: "followup_compare", reply: rows[0] ? `I only have ${rows[0].label} on the table right now — want me to build another option to compare?` : "There's nothing to compare yet. Want me to build a couple of options?", hints: [] })
-  const best = [...rows].sort((a, b) => b.protein - a.protein)[0]
+  // Every axis the user may have asked about ("lowest in fat", "lightest", "most protein") is answered from the same rows —
+  // the reply used to name only the protein leader, whatever the question (live: "which is lowest in fat?").
+  const leader = (score: (row: (typeof rows)[number]) => number) => [...rows].sort((a, b) => score(a) - score(b))[0].label
   return base({
     route: "followup_compare",
-    reply: `${rows.map((row, i) => `${i + 1}. ${row.label}: ${r(row.calories)} kcal, ${r(row.protein)}g protein`).join(" · ")}. ${best.label} has the most protein.`,
+    reply: `${rows.map((row, i) => `${i + 1}. ${row.label}: ${r(row.calories)} kcal, ${r(row.protein)}g protein, ${r(row.fat)}g fat`).join(" · ")}. Most protein: ${leader((row) => -row.protein)}. Fewest calories: ${leader((row) => row.calories)}. Lowest fat: ${leader((row) => row.fat)}.`,
     blocks: [{ type: "MEAL_COMPARISON", rows: rows.map((row) => ({ id: row.id, label: row.label, calories: row.calories, protein: row.protein, carbs: row.carbs, fat: row.fat })) }],
     hints: ["first one", "second one"],
     patch: {},

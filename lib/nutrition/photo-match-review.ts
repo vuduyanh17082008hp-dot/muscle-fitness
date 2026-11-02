@@ -77,7 +77,8 @@ export function reviewFoodMatch(
 
 // ponytail: a short list of record words that make a USDA entry an unusual variant of the food ("glutinous" rice at 97 vs
 // 130 kcal, "chicken spread"). Only a tie-break among same-food matches; swap for a real variant model if one is ever needed.
-const VARIANT = /\b(glutinous|spread|powder|powdered|dehydrated|dried|instant|mix|canned|babyfood|flavou?red|sweetened|imitation|navajo|bouillon|concentrate|frozen|meatless)\b/
+// Also a different FORM of the food ("Rice noodles" for "Cooked rice", live 2026-11-03): only when the user's name lacks the word.
+const VARIANT = /\b(glutinous|spread|powder|powdered|dehydrated|dried|instant|mix|canned|babyfood|flavou?red|sweetened|imitation|navajo|bouillon|concentrate|frozen|meatless|noodles?|flour|cakes?|crackers?|bran|pudding|cereal|syrup|vinegar|wine|milk)\b/
 
 /**
  * Default-order rank of a database record for a photographed food (lower = shown first). A different food is last; then a

@@ -16,7 +16,7 @@ export const SAFETY_REPLY =
   "One meal doesn't require compensation. We can adjust the rest of the day around your overall target — no skipping meals, no punishing workouts. If food or eating feels stressful or out of control, talking to a doctor or a registered dietitian is a good next step."
 
 export const TRAINING_REDIRECT =
-  "That's a training or recovery question, so it's one for Dante — I only work on nutrition and I can't change your workouts or recovery. Ask Dante, and bring me back anything about meals, macros or cravings — including what to eat around that session."
+  "That's a training or recovery question — ask it on its own and I'll answer it from your training and recovery data. On the food side I can help with meals, macros or cravings — including what to eat around that session."
 
 const DISORDERED = /\b(starv\w*|purg\w*|laxative\w*|make myself (throw|vomit|sick)|throw (it )?up|vomit\w*|fast(ing)? for \d+\s*(days?|hours?)|skip (all|every) meals?|not eat (at all|for (days|a week)))\b/i
 const COMPENSATION = /\b(burn (it |this |that |these )?off|work (it |this |that )?off|make up for (it|what|that|eating)|earn (it|this|my|the|food|dinner|lunch|breakfast)|punish\w*|compensat\w*|cheat meal.*(run|exercise))\b/i
@@ -207,6 +207,7 @@ export function parseCoachMessage(message: string, options: { hasDraft: boolean 
     }
     if (/\bmore carbs?\b|\badd (?:more )?carbs?\b/.test(lower)) return { kind: "op", op: { type: "more_carbs" } }
     if (/\bmore protein\b|\bhigher protein\b|\bgive me more protein\b/.test(lower)) return { kind: "op", op: { type: "more_protein" } }
+    if (/\blower (?:in )?fat\b|\bless fat\b|\blow(?:er)?[- ]fat\b|\bleaner\b/.test(lower)) return { kind: "op", op: { type: "lower_fat" } }
     if (/\blower (?:the )?cal|\bfewer cal|\bless calor|\blighter\b/.test(lower)) return { kind: "op", op: { type: "lower_calories" } }
     if (/\bcheaper|\bless expensive|\bcheap(er)? option\b|\bbudget\b/.test(lower)) return { kind: "op", op: { type: "cheaper" } }
     if (/\bfaster|\bquicker|\bless time\b/.test(lower)) return { kind: "op", op: { type: "faster" } }
@@ -231,7 +232,8 @@ export function parseCoachMessage(message: string, options: { hasDraft: boolean 
   const named = foodsMatch ? resolveFoods(splitFoods(foodsMatch[1])) : { ids: [], unresolved: [] }
   const ids = named.ids.filter((id) => !excluded.includes(id))
   const unresolved = named.unresolved
-  const asksForMeal = (/\b(build|make me|make a|suggest|plan|what should i eat|what should i have|help me hit|help me (?:decide|choose|pick|figure out|plan|find)|use my remaining|what meal|give me|i need a|i want a|put together|create)\b/.test(lower) && FOODISH.test(text)) || /\bwhat (?:to|should i) (?:eat|have)\b/.test(lower)
+  // "recommend a high-protein dinner" is a meal request too (live, Dante unified: it fell to the open model, which wrote number-free options).
+  const asksForMeal = (/\b(build|make me|make a|suggest|recommend|plan|what should i eat|what should i have|help me hit|help me (?:decide|choose|pick|figure out|plan|find)|use my remaining|what meal|give me|i need a|i want a|put together|create)\b/.test(lower) && FOODISH.test(text)) || /\bwhat (?:to|should i) (?:eat|have)\b/.test(lower)
   const namesFoodsForMeal = ids.length > 0 && /\b(dinner|lunch|breakfast|snacks?|meals?|calories?|kcal|protein)\b/.test(lower)
 
   if (asksForMeal || namesFoodsForMeal || /\bbuild\b/.test(lower) || /^(high[- ]protein|meal under)/.test(lower)) {

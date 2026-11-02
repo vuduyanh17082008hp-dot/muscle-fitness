@@ -18,7 +18,7 @@ function PanelFooter() {
   return (
     <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
       <Link href="/dashboard/ai-coach" className="text-xs font-bold text-mf-glass-dante hover:underline">
-        Open full coach chat →
+        Open full Dante chat →
       </Link>
     </div>
   );

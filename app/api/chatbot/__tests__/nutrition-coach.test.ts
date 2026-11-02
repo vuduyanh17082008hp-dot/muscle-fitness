@@ -186,28 +186,26 @@ describe("auth, shared rate limit, isolation", () => {
 })
 
 describe("scope and safety", () => {
-  it("redirects training/recovery questions to Dante without loading data or calling the model", async () => {
+  // ONE AI COACH: the Nutrition page chat is Dante. A training / recovery question asked there runs Dante's main pipeline
+  // (streamed like any Dante turn) — never the nutrition engine, and never an "ask Dante" referral.
+  const streamedText = async (response: Response) => parseChatStreamChunk("", `${await response.text()}\n`).events.flatMap((event) => (event.type === "delta" ? [event.text] : [])).join("")
+
+  it("runs a training/recovery question asked on the Nutrition page through Dante's main pipeline", async () => {
     const response = await post({ message: "Change my squat program and tell me how to treat my sore knee", coachMode: "nutrition" })
-    const json = await response.json()
-    expect(json.route).toBe("redirect_training")
-    expect(json.reply).toMatch(/Dante/)
-    expect(loadNutritionContext).not.toHaveBeenCalled()
-    expect(callOpenAiWithFallback).not.toHaveBeenCalled()
+    expect(response.headers.get("Content-Type")).toMatch(/ndjson/)
+    expect(handleNutritionCoachChat).not.toHaveBeenCalled()
+    expect(await streamedText(response)).not.toMatch(/ask Dante|one for Dante|I only work on nutrition/i)
   })
 
   it.each([
-    ["tôi muốn đi tập nhưng buồn ngủ quá, nên đi ko bạn", /Buồn ngủ là một tín hiệu thật/],
-    ["I'm really sleepy but want to train. Should I go?", /Feeling sleepy is a real readiness signal/],
-  ])("defers a train/rest decision to Dante without a data load or model call: %s", async (message, ack) => {
+    ["tôi muốn đi tập nhưng buồn ngủ quá, nên đi ko bạn"],
+    ["I'm really sleepy but want to train. Should I go?"],
+  ])("a train/rest decision on the Nutrition page is answered by Dante's main pipeline, not referred: %s", async (message) => {
+    // This harness's provider mock is shaped for the nutrition engine, so the main pipeline's own reply isn't asserted here
+    // (live-verified); the routing is: the engine never runs and no referral text is produced.
     const response = await post({ message, coachMode: "nutrition" })
-    const json = await response.json()
-    expect(json.route).toBe("defer_to_dante")
-    expect(json.reply).toMatch(ack)
-    expect(json.reply).toMatch(/Dante/)
-    // sleepy is not bored is not sad, and no generic gym-motivation fallback
-    expect(json.reply).not.toMatch(/chán|bored|buồn bã|great way|mood|motivat|động lực/i)
-    expect(loadNutritionContext).not.toHaveBeenCalled()
-    expect(callOpenAiWithFallback).not.toHaveBeenCalled()
+    expect(handleNutritionCoachChat).not.toHaveBeenCalled()
+    expect(await response.text()).not.toMatch(/ask Dante|hỏi Dante|Dante's call|việc của Dante|"coachMode":"nutrition"/i)
   })
 
   it("answers compensation/restriction talk with the safe message, never an exercise prescription", async () => {

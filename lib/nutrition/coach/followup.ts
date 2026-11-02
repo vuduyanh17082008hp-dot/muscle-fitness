@@ -32,7 +32,7 @@ export const FOLLOW_UP_INTENTS = [
 ] as const
 export type NutritionFollowUpIntent = (typeof FOLLOW_UP_INTENTS)[number]
 
-export const MODIFIERS = ["cheaper", "more_protein", "lower_calories", "more_filling", "faster", "tastier"] as const
+export const MODIFIERS = ["cheaper", "more_protein", "lower_calories", "lower_fat", "more_filling", "faster", "tastier"] as const
 export type Modifier = (typeof MODIFIERS)[number]
 
 export type ResponseMode = "READ_ONLY" | "EXPLAIN" | "PROPOSE_MODIFICATION" | "CLARIFY" | "NEW_TOPIC"
@@ -144,7 +144,7 @@ export type FollowUpResolution = {
 }
 
 export type StructuredBlock =
-  | { type: "INGREDIENT_LIST"; mealName: string; items: Array<{ name: string; grams: number }> }
+  | { type: "INGREDIENT_LIST"; mealName: string; items: Array<{ name: string; grams: number; basis?: string }> }
   | { type: "MACRO_SUMMARY"; mealName: string; macros: MacroTotals; confidence: string; mealId?: string; calculationId?: string }
   | { type: "OPTION_LIST"; options: Array<{ id: string; label: string; calories: number; protein: number }> }
   | { type: "MEAL_COMPARISON"; rows: Array<{ id: string; label: string; calories: number; protein: number; carbs: number; fat: number }> }
@@ -327,7 +327,14 @@ const MODIFY: Array<[RegExp, Modifier]> = [
   [/^(?:something |a |an )?(?:more filling|fill(?:ing)?er|more satisfying|bulkier)(?: version| option)?$/, "more_filling"],
   [/^(?:something |a |an )?(?:faster|quicker)(?: version| option)?$/, "faster"],
   [/^(?:something |a |an )?(?:tastier|more flavou?rful|more flavou?r)(?: version| option)?$/, "tastier"],
+  [/^(?:something |a |an )?(?:less fat|lower[- ]fat|low[- ]fat|leaner|lower in fat)(?: version| option| one)?$/, "lower_fat"],
 ]
+
+/**
+ * "make the second one lower in fat" / "can you make option 2 cheaper": a modifier aimed at one option of the list on screen.
+ * The option index resolves against presentedOptions (resolveTarget), never against the model's reordered meal list.
+ */
+const OPTION_MODIFY = /^(?:(?:can|could) you )?(?:make|change|turn) (?:the )?(?:(first|second|third|fourth|fifth|sixth|seventh|eighth|1st|2nd|3rd|4th|5th|6th|7th|8th)(?: one| option| meal)?|(?:option|number|#) ?([1-8])) (?:a bit |slightly )?(.+)$/
 
 const SUBST_INSTEAD = /^(?:(?:can|could|may) (?:i|we) )?(?:use|try|swap in|put|do|have) ([a-z][a-z ]{1,28}?) instead(?: of (?:the )?([a-z][a-z ]{1,28}))?$/
 const SUBST_REPLACE = /^(?:(?:can|could) (?:i|we) )?(?:replace|substitute|swap)(?: the)? ([a-z][a-z ]{1,28}?)(?: (?:with|for|by) ([a-z][a-z ]{1,28}))?$/
@@ -371,6 +378,13 @@ export function classifyFollowUp(t: string): Fast | null {
   if (num) return fast("SELECT_PREVIOUS_OPTION", { optionIndex: Number(num[1] ?? num[2]) })
   if (DEMONSTRATIVE.test(t)) return fast("SELECT_PREVIOUS_OPTION", { demonstrative: true })
   for (const [pattern, modifier] of MODIFY) if (pattern.test(t)) return fast("MODIFY_PREVIOUS_RESULT", { modifier })
+  const aimed = t.match(OPTION_MODIFY)
+  if (aimed) {
+    const tail = aimed[3].replace(/^in /, "").trim()
+    const modifier = MODIFY.find(([pattern]) => pattern.test(tail) || pattern.test(tail.replace(/^lower in /, "lower ")))?.[1]
+    const optionIndex = aimed[1] ? ORDINALS[aimed[1]] : Number(aimed[2])
+    if (modifier && optionIndex) return fast("MODIFY_PREVIOUS_RESULT", { modifier, optionIndex })
+  }
   const dietary = t.match(DIETARY)
   if (dietary) return fast("APPLY_DIETARY_CONSTRAINT", { dietary: dietary[1] })
   const instead = t.match(SUBST_INSTEAD)
@@ -552,7 +566,9 @@ export function resolveTurn(input: TurnInput): TurnResolution {
   }
 
   const meals = knownMeals(live, input.activeDraft)
-  const fastHit = input.legacyHandles ? null : classifyFollowUp(t)
+  // The legacy draft editor only ever edits the ACTIVE draft: a modifier aimed at another option on screen stays here.
+  const classified = classifyFollowUp(t)
+  const fastHit = input.legacyHandles && !classified?.args.optionIndex ? null : classified
 
   // A correction is its own thing even when it begins with "actually".
   if (!(fastHit?.intent === "REVERT_TO_ORIGINAL" || fastHit?.intent === "CORRECT_PREVIOUS_RESOLUTION")) {
