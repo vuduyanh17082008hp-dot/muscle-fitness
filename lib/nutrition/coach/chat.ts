@@ -14,6 +14,7 @@ import {
   detectDraftEditOffer,
   hasUngroundedMacros,
   isAffirmation,
+  LOG_REQUEST,
   QUICK_ACTIONS,
   resolveDraftReference,
   sensoryTargetsFor,
@@ -32,7 +33,7 @@ import type { MealSummary } from "@/lib/nutrition/food-log/totals"
 import { MEAL_TYPES, type MealType } from "@/lib/nutrition/food-log/types"
 import type { KnowledgeNeedDecision, NutritionKnowledgeContext } from "@/lib/nutrition/knowledge/types"
 
-import { classifyTargetUtterance, guardCanonicalTargetClaim, targetTruthReply } from "@/lib/nutrition/targets"
+import { classifyTargetUtterance, guardCanonicalTargetClaim, isTargetQuestion, targetQuestionReply, targetTruthReply } from "@/lib/nutrition/targets"
 import { loadCoachContext } from "./context"
 import { buildContextBudget, commitEmitted, composeReply, durableConstraints, fallbackDiagnostics, legacySnapshot, listMatchesEngine, orchestrateTurn, OTHER_REF, parseOptions, pendingFromPlan, planDiagnostics, recordOrchestrationEvent, safetyReply, screenSafety, supplementEducationReply, validateSnapshot, type ModelCall, type OrchestrationDiagnostics, type PendingClarification, type PresentedOptionSnapshot } from "./orchestration"
 import { isLoggedIntakeQuestion } from "./orchestration/needs"
@@ -648,6 +649,10 @@ const LOG_OPTION = /\b(?:log|add|track|save|record)\s+(?:the\s+)?(?:option|numbe
 /** A request verb for meals ("give me", "suggest", "show me"…); "what meals are high in protein?" is a question, not one. */
 const DISCOVERY_VERB = /\b(?:give|suggest|show|build|make|recommend|list|find|get|need|want|any)\b/i
 const ORDINAL_INDEX: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8 }
+/** "the second one" / "the 3rd meal" / "option 2" / "#2": a reference to one option of the list on screen. */
+const OPTION_REF = /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|[1-8](?:st|nd|rd|th))\s+(?:one|option|meal|bowl|plate|choice)\b|\b(?:option|number|no\.|#|choice)\s*#?\s*([1-8])\b/i
+/** Legacy draft edits: they act on the ACTIVE draft, so they must not run when the user named a different option. */
+const ACTIVE_DRAFT_EDITS = new Set(["op", "swap", "swap_missing_target", "remove", "portion", "remove_missing"])
 
 /** A request about "the/this/that <thing>" (recipe, ingredients, steps...) names an existing referent rather than asking for a new meal. */
 const DEFINITE_REFERENCE_REQUEST = /(?<![\p{L}\p{N}])(?:the|this|that|its)\s+(?:recipe|ingredients?|steps?|method|instructions?|portion|macros?)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])how (?:do i|to|can i) (?:make|prepare|cook) (?:it|this|that)(?![\p{L}\p{N}])/iu
@@ -962,6 +967,11 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   if (targetUtterance.kind !== "NONE") {
     return respond("GENERAL_NUTRITION_QUESTION", "target_truth", targetTruthReply(targetUtterance, canonicalTarget))
   }
+  // "What is my daily calorie target?" is answered from the snapshot, never by the model: with both the target and the remaining
+  // budget in its context, the model voiced the remaining 1600 kcal as the "daily target" (live, 2026-11-02).
+  if (isTargetQuestion(message)) {
+    return respond("GENERAL_NUTRITION_QUESTION", "target_truth", targetQuestionReply(ctx.snapshot, /[ăâđêôơưàáạảãèéẹẻẽìíịỉĩòóọỏõùúụủũỳýỵỷỹ]/i.test(message) ? "vi" : "en"))
+  }
   const planningCtx = withSessionDislikes(ctx, priorSignals)
 
   draft = activeDraft ? rehydrateDraft(activeDraft, ctx) : null
@@ -981,6 +991,11 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   // A list the coach wrote itself (conversation owns the focus) is not this list: the engine's would be stale there.
   const liveOptions = !conversationOwnsFocus && liveFollowUp?.presentedOptions && Date.parse(liveFollowUp.presentedOptions.expiresAt) > now.getTime() ? liveFollowUp.presentedOptions : null
   const shownMeals = liveOptions ? liveOptions.options.map((option) => liveFollowUp!.meals.find((meal) => meal.id === option.id)).filter((meal): meal is MealResultState => Boolean(meal)) : []
+  // "make the second one lower in calories": an ordinal counts over the list ON SCREEN, decided here — never by the model, which
+  // saw the meals re-ordered (last referent first, older lists mixed in) and picked option 1 for "second" (live, 2026-11-02).
+  const optionRef = shownMeals.length ? message.match(OPTION_REF) : null
+  const pinnedIndex = optionRef ? Number(optionRef[2]) || ORDINAL_INDEX[(optionRef[1] ?? "").toLowerCase()] || Number.parseInt(optionRef[1] ?? "", 10) || 0 : 0
+  const pinned = pinnedIndex ? { index: pinnedIndex, meal: shownMeals[pinnedIndex - 1] ?? null } : null
 
   /**
    * Meal discovery — one path for "build me a meal", "give me 5 meals with lean beef" and "more options":
@@ -1000,7 +1015,9 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
     // "lots of protein" / "protein-heavy" is a modifier: raise the protein target unless the user gave an explicit number.
     const overrides = input.proteinPriority && input.overrides.proteinTarget === undefined ? { ...input.overrides, proteinTarget: Math.round(Math.min(60, Math.max(40, ctx.snapshot.proteinRemaining))) } : input.overrides
     const count = input.count ?? (input.more ? 5 : null)
-    const avoidKeys = input.more ? new Set(shownMeals.map((meal) => compositionKey(meal.items))) : undefined
+    // "More" avoids every meal this discovery has shown — all its lists, not only the last one (live: "another five" re-showed list 1).
+    const priorShown = input.more ? [...(liveFollowUp?.shownKeys ?? []), ...shownMeals.map((meal) => compositionKey(meal.items))] : []
+    const avoidKeys = input.more ? new Set(priorShown) : undefined
     // A singular request keeps the original single-meal ranking (recommendation + 2 alternatives); discovery asks for N distinct.
     const discovery = count !== null || input.more ? { alternatives: Math.max(4, (count ?? 3) - 1), avoidKeys } : {}
     // A multi-meal request never anchors on a stale food selection: it uses only the foods named now (or carried by "more").
@@ -1048,7 +1065,10 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
       topic: mealTopic(result.draft),
       toolCalls,
       constraints,
-      followUp: { upsertMeals: presented?.meals ?? [mealFromDraft(result.draft)], referent: draftReferent(result.draft), newReferent: true, candidateReferents: [], presentedOptions: presented?.choice ?? null, pendingProposal: null, lastResolved: null },
+      followUp: {
+        upsertMeals: presented?.meals ?? [mealFromDraft(result.draft)], referent: draftReferent(result.draft), newReferent: true, candidateReferents: [], presentedOptions: presented?.choice ?? null, pendingProposal: null, lastResolved: null,
+        shownKeys: [...new Set([...(presented?.meals ?? [mealFromDraft(result.draft)]).map((meal) => compositionKey(meal.items)), ...priorShown])],
+      },
       blocks: presented ? [presented.block] : [],
       hints: ["ingredients?", "more options", "log option 1"],
     })
@@ -1068,13 +1088,21 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
     }
     candidate = draftForMeal(meal, ctx, null, { fresh: true })
   }
+  // "Log it" right after talking about another option ("make the second one lighter"): "it" is that option — the conversation's
+  // last referent — not the draft left open earlier (live: option 3 was logged). Never while a log is already waiting.
+  const referentMeal = !logOption && !conversationOwnsFocus && liveFollowUp?.referent?.type === "MEAL_RESULT" && liveFollowUp.referent.id !== draft?.id && LOG_REQUEST.test(message) && !isLive(state.pendingLog, now)
+    ? liveFollowUp.meals.find((meal) => meal.id === (liveFollowUp.referent as { id: string }).id)
+    : undefined
+  const unappliedChange = Boolean(referentMeal && liveFollowUp?.pendingProposal?.sourceMealResultId === referentMeal.id)
+  if (referentMeal) candidate = draftForMeal(referentMeal, ctx, null, { fresh: true })
 
   // P0 chat-driven meal log: a live pending log (or a new "log this") is resolved before any follow-up / model path, so a
   // typed "lunch" or "confirm" can never fall through to a re-voiced recommendation. Writes only via the pending-action CAS.
   const competingProposal = !conversationOwnsFocus && Boolean(state.followUp?.pendingProposal) && isFollowUpLive(state.followUp ?? null, now)
   const logTurn = await handleLogTurn({ supabase, userId, message, now, budget: turnBudget, ctx, draft, pending: state.pendingLog, competingProposal, candidate })
   if (logTurn) {
-    return respond("LOG_MEAL", "log_action", logTurn.reply, {
+    const note = unappliedChange && logTurn.pendingLog?.stage !== "VERIFIED" ? "The change I proposed for it wasn't applied, so this is the meal as shown. " : ""
+    return respond("LOG_MEAL", "log_action", `${note}${logTurn.reply}`, {
       pendingLog: logTurn.pendingLog,
       logAction: { stage: logTurn.trace.at(-1) ?? null, trace: logTurn.trace, foodLogId: logTurn.foodLogId ?? null },
       foodLogChanged: logTurn.foodLogChanged,
@@ -1264,7 +1292,8 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   // "give me the recipe" / "how do I make it" refers to the option the coach just showed, not a request for a NEW engine meal:
   // when the conversation owns the focus, a definite-reference build request goes to orchestration (which holds the pick and
   // the active constraints) instead of the engine builder (which would invent an unrelated meal).
-  const intent: typeof parsedIntent = (asksFoodInformation && parsedIntent.kind === "build") || (conversationOwnsFocus && parsedIntent.kind === "build" && parsedIntent.foodIds.length === 0 && parsedIntent.unresolvedFoods.length === 0 && DEFINITE_REFERENCE_REQUEST.test(message)) ? { kind: "chat" } : parsedIntent
+  const editsOtherOption = Boolean(pinned) && pinned!.meal?.id !== draft?.id && ACTIVE_DRAFT_EDITS.has(parsedIntent.kind)
+  const intent: typeof parsedIntent = editsOtherOption || (asksFoodInformation && parsedIntent.kind === "build") || (conversationOwnsFocus && parsedIntent.kind === "build" && parsedIntent.foodIds.length === 0 && parsedIntent.unresolvedFoods.length === 0 && DEFINITE_REFERENCE_REQUEST.test(message)) ? { kind: "chat" } : parsedIntent
 
   // Only an edit needs a draft: "was that meal suitable for my goal?" asks about a meal (often a logged one) and goes on.
   if (intent.kind === "chat" && reference.explicit && !draft && parseCoachMessage(message, { hasDraft: true }).kind !== "chat") {
@@ -1341,25 +1370,30 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
       const meals = knownMeals(live, draft ? mealFromDraft(draft) : null)
       const ordered = lastRef ? [...meals.filter((m) => m.id === lastRef.id), ...meals.filter((m) => m.id !== lastRef.id)] : meals
       const lastMealName = newTopic ? undefined : ordered[0]?.name
+      if (pinned && !pinned.meal) {
+        return respond("GENERAL_NUTRITION_QUESTION", "followup_clarify", `There's no option ${pinned.index} in the list I just showed (1–${shownMeals.length}). Which one did you mean?`, { clarified: true })
+      }
       if (!newTopic && ordered.length > 0 && message.trim().split(/\s+/).length <= 14) {
         const model = await resolveFollowUpWithModel(message, ordered, recent, turnBudget)
         if (model?.isNewTopic && model.confidence !== "LOW") {
           newTopicFlag = true
           meta.viaModel = true
         } else if (model?.isFollowUp && model.intent && model.intent !== "CONTINUE_CURRENT_TOPIC") {
-          const chosen = model.candidate !== null ? ordered[model.candidate] : undefined
+          // The model labels the intent; WHICH meal "the second one" is comes from the list on screen.
+          const chosen = pinned?.meal ?? (model.candidate !== null ? ordered[model.candidate] : undefined)
           const args: FollowUpArgs = {
             ...(model.modifier ? { modifier: model.modifier } : {}),
             ...(model.foodText ? { foodText: model.foodText } : {}),
             ...(model.toText ? { toText: model.toText } : {}),
             ...(model.factor ? { factor: model.factor } : {}),
           }
-          const target = chosen && model.confidence !== "LOW"
-            ? ({ kind: "meal", meal: chosen, referent: referentFor(chosen, draft?.id), confidence: model.confidence, via: "explicit" } as const)
+          const confidence = pinned?.meal ? "HIGH" : model.confidence
+          const target = chosen && confidence !== "LOW"
+            ? ({ kind: "meal", meal: chosen, referent: referentFor(chosen, draft?.id), confidence, via: pinned?.meal ? "option" : "explicit" } as const)
             : ({ kind: "clarify", candidates: chosen ? [chosen] : ordered.slice(0, 3), reason: "ambiguous" } as const)
           const resolved: Extract<TurnResolution, { kind: "follow_up" }> = {
             kind: "follow_up",
-            resolution: { isFollowUp: true, referent: target.kind === "meal" ? target.referent : null, intent: model.intent, responseMode: target.kind === "clarify" ? "CLARIFY" : MODE_BY_INTENT[model.intent], confidence: target.kind === "meal" ? model.confidence : "LOW" },
+            resolution: { isFollowUp: true, referent: target.kind === "meal" ? target.referent : null, intent: model.intent, responseMode: target.kind === "clarify" ? "CLARIFY" : MODE_BY_INTENT[model.intent], confidence: target.kind === "meal" ? confidence : "LOW" },
             intent: model.intent,
             args,
             target,

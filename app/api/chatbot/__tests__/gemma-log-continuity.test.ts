@@ -532,3 +532,74 @@ describe("consolidated — 'log option N' resolves against the list on screen", 
     expect(createPendingAction).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * MF-F1 — live repros on :3242 (2026-11-02): "another five options" re-showed list 1; "make the second one lower in calories"
+ * proposed for option 1; "log it for dinner" then logged option 3 (the draft left open); "what is my daily calorie target?"
+ * was answered with the remaining 1600 kcal.
+ */
+describe("MF-F1 — discovery memory, on-screen ordinals, 'log it', target questions", () => {
+  /** The follow-up classifier's answer: deliberately the WRONG candidate (0), as the live model returned. */
+  const misresolve = () =>
+    vi.mocked(callOpenAiWithFallback).mockImplementation(async (prompt: string) => ({
+      reply: prompt.includes(PLANNER_MARKER)
+        ? JSON.stringify(basePlan())
+        : prompt.startsWith("Classify ONE short message")
+          ? JSON.stringify({ isFollowUp: true, candidate: 0, intent: "MODIFY_PREVIOUS_RESULT", modifier: "lower_calories", foodText: null, toText: null, factor: null, confidence: "HIGH", isNewTopic: false, topicHint: null })
+          : REVOICE,
+      model: "test",
+    }))
+
+  it("'another five options' after 'lots of choices' never re-shows a meal from ANY earlier list", async () => {
+    const s = session()
+    const a = shownDrafts(await s.say("Give me high-protein meals besides tuna."))
+    const b = shownDrafts(await s.say("Give me lots of choices."))
+    const c = shownDrafts(await s.say("Give me another five options."))
+    expect(c.length).toBeGreaterThan(0)
+    const earlierKeys = [...a, ...b].map(keyOf)
+    const earlierNames = new Set([...a, ...b].map((draft) => draft.name))
+    for (const draft of c) {
+      expect(earlierKeys).not.toContain(keyOf(draft))
+      expect(earlierNames.has(draft.name)).toBe(false) // a vegetable swap is named apart, never shown as the same meal again
+      expect(ingredientIds(draft)).not.toContain("tuna")
+    }
+  })
+
+  it("'make the second one lower in calories' targets option 2 on screen, whatever the model picked; 'log it' then logs option 2", async () => {
+    misresolve()
+    const s = session()
+    const list = shownDrafts(await s.say("Give me high-protein meals besides tuna."))
+    await s.say("Option 3.")
+    const proposal = await s.say("Make the second one lower in calories.")
+    expect(proposal.reply).toContain(list[1].name)
+    expect(proposal.reply).not.toContain(list[0].name)
+    expect(proposal.conversation.followUp.referent).toMatchObject({ name: list[1].name })
+    const ask = await s.say("Log it for dinner.")
+    expect(ask.conversation.pendingLog).toMatchObject({ stage: "READY_FOR_CONFIRMATION", mealType: "dinner", mealName: list[1].name })
+    expect(ask.reply).toMatch(/^The change I proposed for it wasn't applied/)
+    expect(logged).toHaveLength(0)
+    await s.say("confirm")
+    expect(logged).toHaveLength(1)
+    expect(logged[0].name).toBe(list[1].name)
+  })
+
+  it("an ordinal past the list asks instead of guessing", async () => {
+    misresolve()
+    const s = session()
+    await s.say("give me three high protein meals")
+    const reply = await s.say("make the fifth one lower in calories")
+    expect(reply.reply).toMatch(/no option 5 in the list I just showed \(1–3\)/)
+    expect(createPendingAction).not.toHaveBeenCalled()
+  })
+
+  it("'what is my daily calorie target?' states the full-day target, then what is left — never the remaining as the target", async () => {
+    // Fixture: target 2200 kcal / 160 g, food log 1500 kcal / 90 g → 700 kcal / 70 g left.
+    const reply = await session().say("What is my daily calorie target?")
+    expect(reply.route).toBe("target_truth")
+    expect(reply.reply).toMatch(/Your daily target is 2200 kcal and 160 g protein/)
+    expect(reply.reply).toMatch(/You've logged 1500 kcal and 90 g protein so far, so you have 700 kcal and 70 g protein left today/)
+    expect((await session().say("What is my protein target?")).route).toBe("target_truth")
+    expect((await session().say("mục tiêu calo của tôi là bao nhiêu?")).reply).toMatch(/Mục tiêu cả ngày của bạn là 2200 kcal/)
+    expect((await session().say("How many calories do I have left today?")).route).not.toBe("target_truth")
+  })
+})

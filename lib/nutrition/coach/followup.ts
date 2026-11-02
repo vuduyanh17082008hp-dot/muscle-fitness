@@ -123,6 +123,8 @@ export const followUpStateSchema = z.object({
   clarification: clarificationSchema.nullable(),
   pendingProposal: mealModificationProposalSchema.nullable(),
   lastResolved: z.object({ intent: z.enum(FOLLOW_UP_INTENTS), args: argsSchema }).nullish(),
+  /** Recipes (composition keys) every list of the current discovery has shown, so "more options" never repeats one. */
+  shownKeys: z.array(z.string().max(200)).max(48).nullish(),
 })
 export type FollowUpState = z.infer<typeof followUpStateSchema>
 
@@ -200,6 +202,8 @@ export type StatePatch = {
   clarification?: ClarificationRequest | null
   pendingProposal?: PendingProposal | null
   lastResolved?: FollowUpState["lastResolved"]
+  /** Replaces the discovery's shown cores (a discovery turn sends the full set; other turns carry it). */
+  shownKeys?: string[]
 }
 
 const referentId = (r: ConversationReferent | null | undefined) => (r && (r.type === "MEAL_DRAFT" || r.type === "MEAL_RESULT") ? r.id : null)
@@ -219,7 +223,9 @@ export function nextFollowUpState(prev: FollowUpState | null | undefined, patch:
   const meaningful = meals.length > 0 || referent || candidates.length > 0 || presentedOptions || clarification || pendingProposal
   if (!meaningful) return null
   const fresh = patch.newReferent || !base
+  const shownKeys = (patch.shownKeys ?? base?.shownKeys ?? []).slice(0, 48)
   return {
+    ...(shownKeys.length ? { shownKeys } : {}),
     context: {
       createdAt: fresh ? now.toISOString() : base!.context.createdAt,
       lastActiveAt: now.toISOString(),

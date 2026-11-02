@@ -142,6 +142,40 @@ export function classifyTargetUtterance(message: string): TargetUtterance {
   return { kind: "NONE", calories: null }
 }
 
+/**
+ * A direct question about the saved DAILY target ("what is my daily calorie target?", "my protein goal?", "how many calories
+ * should I eat a day?"). Not about what is left today, and not about one meal: those keep their own paths.
+ */
+const TARGET_QUESTION = [
+  /\b(?:what(?:'s| is| are|s)?|tell me|show me|remind me(?: of)?|give me)\s+(?:is\s+)?(?:my|the)\s+(?:daily\s+|current\s+|calculated\s+|saved\s+)?(?:calorie|calories|kcal|protein|macro|macros)(?:\s+and\s+(?:protein|calorie|calories))?\s+(?:target|goal)s?\b/i,
+  /^\s*(?:and\s+)?(?:my\s+)?(?:daily\s+)?(?:calorie|calories|kcal|protein)\s+(?:target|goal)s?\s*\??\s*$/i,
+  /\bhow (?:many|much) (?:calories|kcal|protein)\b[^?.!]*\b(?:should i|do i need to|am i supposed to)\s+(?:eat|have|get)\b[^?.!]*\b(?:a|per|each|every)\s+day\b/i,
+  /mục tiêu\s+(?:calo|calories|kcal|protein|đạm)[^?]*(?:bao nhiêu|là gì)/iu,
+]
+const NOT_DAILY = /\b(?:left|remaining|remain|for (?:this|the|my next|breakfast|lunch|dinner|a) (?:meal|snack|breakfast|lunch|dinner)|per meal|this meal)\b|còn lại/iu
+
+export function isTargetQuestion(message: string): boolean {
+  return !NOT_DAILY.test(message) && TARGET_QUESTION.some((pattern) => pattern.test(message))
+}
+
+/** The answer to a target question: the full-day target, then what is left — two different numbers, said as such. */
+export function targetQuestionReply(
+  s: { caloriesTarget: number; proteinTarget: number; caloriesConsumed: number; proteinConsumed: number; caloriesRemaining: number; proteinRemaining: number },
+  lang: "en" | "vi",
+): string {
+  const r = Math.round
+  const kcalLeft = r(s.caloriesRemaining)
+  const proteinLeft = r(s.proteinRemaining)
+  if (lang === "vi") {
+    const left = kcalLeft >= 0 ? `bạn còn ${kcalLeft} kcal và ${Math.max(0, proteinLeft)} g protein` : `bạn đã vượt mục tiêu ${-kcalLeft} kcal`
+    return `Mục tiêu cả ngày của bạn là ${r(s.caloriesTarget)} kcal và ${r(s.proteinTarget)} g protein (theo kế hoạch dinh dưỡng của bạn). Hôm nay bạn đã ghi ${r(s.caloriesConsumed)} kcal và ${r(s.proteinConsumed)} g protein, nên ${left}.`
+  }
+  const left = kcalLeft >= 0
+    ? `you have ${kcalLeft} kcal and ${Math.max(0, proteinLeft)} g protein left today`
+    : `you're ${-kcalLeft} kcal over today's target${proteinLeft > 0 ? `, with ${proteinLeft} g protein still to go` : ""}`
+  return `Your daily target is ${r(s.caloriesTarget)} kcal and ${r(s.proteinTarget)} g protein — the full-day figure from your nutrition plan. You've logged ${r(s.caloriesConsumed)} kcal and ${r(s.proteinConsumed)} g protein so far, so ${left}.`
+}
+
 export function targetTruthReply(
   utterance: TargetUtterance,
   canonical: { calories: number | null; protein: number | null },
