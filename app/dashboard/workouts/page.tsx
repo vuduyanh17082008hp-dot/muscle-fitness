@@ -594,7 +594,7 @@ export default async function WorkoutsPage() {
           badge="Beta"
           tone="neutral"
           title="SetVision"
-          description="Choose your exercise and upload a set: rep count, phase timing and consistency for squats; deadlift is experimental; other lifts can be reviewed, not measured."
+          description="Choose your exercise and upload a set: rep count, phase timing and consistency for squats; deadlifts, presses, pulls and arm lifts are experimental; any exercise can be reviewed and corrected by hand."
         />
       </div>
 
