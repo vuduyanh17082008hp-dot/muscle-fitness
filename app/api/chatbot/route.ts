@@ -132,6 +132,8 @@ import {
 } from "@/lib/dante-core/communication-adaptation";
 import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-session";
 import { loadTodayAdjustmentStatus, renderAdjustmentStatusReply, WHY_WORKOUT_CHANGED_ASK } from "@/lib/recovery/adjustment-status";
+import { isLimitationTurn } from "@/lib/recovery/limitation-review";
+import { runLimitationTurn } from "@/lib/recovery/limitation-turn";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
@@ -5020,6 +5022,57 @@ async function handleChatbotPost(
           },
         });
       }
+    }
+
+    /* -----------------------------------------------------
+       REPORTED LIMITATION × TODAY'S WORKOUT (MF-F2)
+
+       "My readiness is 94 but my foot hurts — what about today's workout?" A readiness score never clears a local
+       limitation. Deterministic: today's actual session is read, each exercise is classified from its curated setup
+       (lib/training/body-region-load.ts), alternatives come from the substitution engine filtered by region, and the
+       change is a signed recovery proposal behind a Confirm card (PROPOSE → CONFIRM → apply RPC → read back). Red
+       flags (can't bear weight, a pop, severe pain) were already escalated by the safety layer above.
+    ----------------------------------------------------- */
+    const reportedLimitations = activeFacts(intelligenceBrief.context)
+      .filter((fact) => fact.kind === "INJURY" && fact.temporal === "CURRENT")
+      .map((fact) => ({ site: fact.key.slice("INJURY:".length), quote: fact.quote }));
+    // Status asks ("why did you change my workout?", "did it save?", "yes confirm") keep their row-backed handlers below.
+    const statusAsk = [WHY_WORKOUT_CHANGED_ASK, SAVE_STATUS_ASK, CONFIRM_IN_CHAT, PENDING_EDIT].some((pattern) => pattern.test(foldText(userMessage)));
+    if (reportedLimitations.length > 0 && !safetyCheck.triggered && !statusAsk && isLimitationTurn(userMessage)) {
+      const limitationLanguage = proposalLanguage(userMessage, sessionLanguageDecision.language === "vi" ? "vi" : "en");
+      const limitationRead = await boundedDependency(budget, "limitation_review", () => runLimitationTurn({
+        supabase,
+        userId: user.id,
+        now,
+        timezone: timezone || "UTC",
+        language: limitationLanguage,
+        message: userMessage,
+        userMessages: [...getPriorUserMessagesChronological(body, userMessage), userMessage],
+        limitations: reportedLimitations,
+      }), 12_000);
+      if (limitationRead.status === "OK") {
+        const result = limitationRead.value;
+        return await emitConvergedSingleShot({
+          draft: result.draft,
+          branch: "TOOL",
+          requestTimestamp: now.toISOString(),
+          language: limitationLanguage,
+          responseIntent: "TOOL_ACTION_RESPONSE",
+          toolState: { permission: result.pendingConfirmation ? "CONFIRMATION_REQUIRED" : "READ", persisted: false },
+          done: {
+            model: "dante-limitation-review",
+            insight: null,
+            sources: [],
+            actions: [],
+            pendingConfirmation: result.pendingConfirmation,
+            toolTraceSummary: [result.trace],
+            safetyTriggered: false,
+            safetyCategory: null,
+          },
+        });
+      }
+      // A failed read falls through to the provider path, which still carries the injury context rule.
+      logToolEvent("DANTE_INTELLIGENCE", { stage: "limitation-review", errorCategory: limitationRead.status });
     }
 
     const boundaryLang = sessionLanguageDecision.language === "vi" ? "vi" : "en";

@@ -37,7 +37,8 @@ describe("why-changed answers from rows, not from the premise (hackathon repair 
   it("Apply succeeded → APPLIED with the real before/after and the stored reason", async () => {
     const status = await load([{ proposal_id: "wap_1", applied_at: NOW.toISOString() }], [{ snapshot: proposal }])
     const reply = renderAdjustmentStatusReply(status, "en")
-    expect(reply).toMatch(/you applied my suggestion/)
+    expect(reply).toMatch(/you confirmed my suggestion/)
+    expect(reply).not.toMatch(/Recovery page/)
     expect(reply).toMatch(/Barbell Bench Press 3 → 2 sets/)
     expect(reply).toMatch(/Recovery is a priority today/)
   })
@@ -48,6 +49,15 @@ describe("why-changed answers from rows, not from the premise (hackathon repair 
     expect(await load("error", [])).toBeNull()
     expect(renderAdjustmentStatusReply(null, "en")).toMatch(/couldn't check/)
     expect(renderAdjustmentStatusReply(await load([], [{ snapshot: proposal }]), "vi")).toMatch(/chưa bị thay đổi/)
+  })
+
+  it("MF-F2: a chat proposal is pending only while its Confirm card is; a cancelled one was declined, not 'suggested'", async () => {
+    const chat = { ...proposal, safetyEvaluationRef: "limitation:foot_ankle" }
+    const loadChat = (cards: unknown[]) => loadTodayAdjustmentStatus({ supabase: client({ workout_mutation_records: [], dante_tool_actions: cards }), admin: client({ recovery_workout_proposals: [{ snapshot: chat }] }), userId: "user-a", sessionId: "session-1", now: NOW })
+    expect(await loadChat([])).toEqual({ status: "NONE", hasSession: true })
+    const pending = await loadChat([{ id: "card-1" }])
+    expect(pending).toMatchObject({ status: "PENDING", via: "CHAT" })
+    expect(renderAdjustmentStatusReply(pending, "en")).toMatch(/tap Confirm on that suggestion in the chat/)
   })
 
   it.each([

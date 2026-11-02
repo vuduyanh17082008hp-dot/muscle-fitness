@@ -633,7 +633,12 @@ const RULES: SafetyRule[] = [
       /\bexcruciating\b/i,
       /\bheard? a pop\b/i,
       /\bfelt (a |it )?pop\b/i,
-      /\bcan'?t (put weight on|walk on|move) (my |the )?(leg|arm|knee|shoulder|back)\b/i,
+      // MF-F2: inability to bear weight is a prompt-assessment sign wherever it is — the foot and ankle included.
+      /\b(?:can'?t|cannot|can not|unable to) (?:put (?:any |much )?weight on|bear weight on|stand on|walk on|move) (?:my |the )?(?:leg|arm|knee|shoulder|back|foot|feet|ankle|heel|toes?|it)\b/i,
+      /\b(?:can'?t|cannot|can not|unable to) (?:bear|take|put) (?:any )?weight\b/i,
+      /\b(?:bone (?:is )?sticking out|looks? deformed)\b/i,
+      // Folded Vietnamese ("không đặt chân xuống được", "không dồn lực lên…", "không đứng lên được", "không đi lại được").
+      /\bkhong (?:the )?(?:dat chan xuong|don (?:luc|trong luong|suc) len|dung len duoc|di lai duoc|chiu (?:duoc )?(?:luc|trong luong))\b/i,
       /\bsomething (snapped|tore)\b/i,
       /chấn thương cấp/i,
       /chan thuong cap/i,

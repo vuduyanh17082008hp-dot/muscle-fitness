@@ -214,9 +214,13 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
   const isInProgress = sessionStatus === "active";
   // Cancelled, or every exercise postponed: the Daily Brief calls it a rest day, so no Start here.
   const isPostponed = sessionStatus === "postponed";
-  const exerciseCount = todaySession.exercises.length;
+  // MF-F2: exercises the user postponed today (a confirmed adjustment) are not planned work any more — unless the whole
+  // session was postponed, where the card shows what the rest day replaced.
+  const plannedExercises = isPostponed ? todaySession.exercises : todaySession.exercises.filter((ex) => !ex.isSkipped);
+  const postponedCount = isPostponed ? 0 : todaySession.exercises.length - plannedExercises.length;
+  const exerciseCount = plannedExercises.length;
   const estimatedMin = todaySession.durationMinutes ?? 0;
-  const totalSets = todaySession.exercises.reduce((acc, ex) => acc + (ex.targetSets || 0), 0);
+  const totalSets = plannedExercises.reduce((acc, ex) => acc + (ex.targetSets || 0), 0);
   // Planned vs logged: a finished (or running) session reports what was logged, never the plan's total as done.
   const setsLabel =
     (isCompleted || isInProgress || isPostponed) && typeof todaySession.completedSets === "number"
@@ -248,6 +252,7 @@ export function DailyActionHero({ todaySession, sessionStatus, plannedDay = null
 
           <p className="sr-only">
             {exerciseCount} exercises · {setsLabel}
+            {postponedCount > 0 ? ` · ${postponedCount} postponed today` : ""}
             {estimatedMin > 0 ? ` · ~${estimatedMin} min` : ""}
           </p>
         </div>

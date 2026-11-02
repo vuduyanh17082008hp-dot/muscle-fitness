@@ -71,7 +71,10 @@ export function RecoveryAdjustmentPanel({
   const reason = hold
     ? "Training is still on hold today. If you train anyway, this version only reduces what's planned — it doesn't clear the session."
     : proposal.changes.find((change) => change.action !== "KEEP")?.reasonDisplay ??
-      "Today's check-in suggests a lighter version of your planned session.";
+      // MF-F2: the applied change may have come from a limitation confirmed in chat, not from this check-in.
+      (applied
+        ? "Today's session already carries a change you confirmed."
+        : "Today's check-in suggests a lighter version of your planned session.");
 
   async function apply() {
     setBusy(true);

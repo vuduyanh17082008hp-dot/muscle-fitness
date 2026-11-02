@@ -104,6 +104,16 @@ readiness score is computed deterministically in
 never invents or adjusts it. Keep that separation when extending recovery
 logic.
 
+A limitation the user reports in chat ("readiness 94 but my foot hurts —
+today's workout?") never gets cleared by the readiness number. It goes
+through `lib/recovery/limitation-turn.ts` (MF-F2): today's real session,
+per-exercise region load from `lib/training/body-region-load.ts`
+(curated stance metadata, never "safe"), region-filtered substitution
+alternatives, and a signed recovery proposal behind a chat Confirm card
+(`apply_workout_adjustment` / `replace_session_exercise`, not
+model-selectable). Red flags (can't bear weight, a pop) are hard-blocked
+earlier by the safety layer. Nutrition is reviewed, never changed there.
+
 ## Testing
 
 Run before considering any change done:

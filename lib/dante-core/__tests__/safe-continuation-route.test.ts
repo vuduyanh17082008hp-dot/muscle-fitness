@@ -85,8 +85,15 @@ describe("safe continuation (route)", () => {
     provider.replies = ["Skip squats and anything that loads the ankle painfully today; upper-body and seated work you can do pain-free is fine, and stop any movement that brings the pain back."];
     const turn = await ask("my ankle hurts when I squat, what can I train today");
     expect(turn.model).not.toBe("dante-risk-accumulator");
-    expect(turn.prompts.length).toBeGreaterThan(0);
-    expect(turn.text).toMatch(/upper-body/);
+    // MF-F2: a reported limitation × "what can I train today" is answered deterministically (lib/recovery/limitation-turn.ts)
+    // from the athlete's real session and exercise metadata — still a bounded modification, never a shutdown.
+    expect(turn.model).toBe("dante-limitation-review");
+    // This harness has no readable session or check-in: the reply says so (fails closed) instead of inventing a workout,
+    // keeps the escalation criteria, and never shuts training down. The full flow is in lib/recovery/__tests__/limitation-review.test.ts.
+    expect(turn.text).toMatch(/couldn't read today's workout/);
+    expect(turn.text).toMatch(/can't bear weight/);
+    expect(turn.text).toMatch(/readiness doesn't measure ankle pain/);
+    expect(turn.text).not.toMatch(/stop all training|no training today/i);
   }, 60_000);
 
   it("D. yellow eyes, should I take creatine → urgent health pathway, no supplement optimisation", async () => {

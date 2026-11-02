@@ -21,6 +21,8 @@ import { completeCheckinTool } from "@/lib/dante-core/tools/write/complete-check
 import { scheduleWorkoutTool } from "@/lib/dante-core/tools/write/schedule-workout";
 import { acceptAdaptiveAdjustmentTool } from "@/lib/dante-core/tools/write/accept-adaptive-adjustment";
 import { acceptNof1ExperimentTool } from "@/lib/dante-core/tools/write/accept-nof1-experiment";
+import { applyWorkoutAdjustmentTool } from "@/lib/dante-core/tools/write/apply-workout-adjustment";
+import { replaceSessionExerciseTool } from "@/lib/dante-core/tools/write/replace-session-exercise";
 
 /**
  * ONE server-only typed tool registry (Part 2). Every capability
@@ -57,7 +59,12 @@ export const DANTE_TOOLS: AnyDanteTool[] = [
  * checks membership), but they stay resolvable by name so the shared
  * pending-action confirmation path can execute them once a user confirms.
  */
-export const SPECIALIST_COACH_TOOLS: AnyDanteTool[] = [logMealDraftTool] as AnyDanteTool[];
+export const SPECIALIST_COACH_TOOLS: AnyDanteTool[] = [
+  logMealDraftTool,
+  // MF-F2: written only by the deterministic limitation flow (lib/recovery/limitation-turn.ts), never by the model.
+  applyWorkoutAdjustmentTool,
+  replaceSessionExerciseTool,
+] as AnyDanteTool[];
 
 const TOOLS_BY_NAME = new Map<string, AnyDanteTool>([...DANTE_TOOLS, ...SPECIALIST_COACH_TOOLS].map((tool) => [tool.name, tool]));
 

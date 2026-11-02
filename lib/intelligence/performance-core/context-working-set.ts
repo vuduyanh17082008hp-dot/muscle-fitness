@@ -114,9 +114,9 @@ const SITES: Array<[string, RegExp]> = [
   ["ankle", /\b(?:ankles?|achilles|co chan)\b/],
   ["hamstring", /\bhamstrings?\b/],
   ["groin", /\bgroin\b/],
-  ["foot", /\b(?:foot|feet|plantar)\b/],
+  ["foot", /\b(?:foot|feet|plantar|heels?|toes?|arch|ban chan|got chan|ngon chan)\b/],
 ];
-const INJURY_CUE = /\b(?:diagnosed|torn|tear|tore|ruptured?|sprain\w*|strain(?:ed)?|fractur\w*|broken|broke|herniat\w*|bulging|dislocat\w*|tendin\w*|impinge\w*|injur\w*|surgery|reconstruct\w*|pain|painful|hurts?|hurting|aches?|aching|tweaked|pulled|chan thuong|dau|bi dau|rach|dut)\b/;
+const INJURY_CUE = /\b(?:diagnosed|torn|tear|tore|ruptured?|sprain\w*|strain(?:ed)?|fractur\w*|broken|broke|herniat\w*|bulging|dislocat\w*|tendin\w*|impinge\w*|injur\w*|surgery|reconstruct\w*|pain|painful|hurts?|hurting|aches?|aching|tweaked|pulled|twist(?:ed)?|rolled|chan thuong|dau|bi dau|rach|dut|bi trat|trat)\b/;
 const INJURY_END = /\b(?:healed|fully recovered|recovered fully|all good now|better now|no longer hurts?|doesn'?t hurt (?:anymore|any more)|pain is gone|cleared (?:by|to)|het dau|lanh roi|khoi roi)\b/;
 const INJURY_NEGATE = /\b(?:no|not|without|doesn'?t|don'?t have|khong)\s+(?:any\s+)?(?:\w+\s+)?(?:pain|injur\w*|hurt|dau)\b/;
 const CLINICIAN = String.raw`(?:physio\w*|doctor|dr|surgeon|clinician|physical therapist|pt|ortho\w*|gp|specialist|bac si|chuyen gia)`;
@@ -246,7 +246,9 @@ const CURRENT_INTAKE = /\b(?:now|currently|these days|lately|this week|today|sti
 const INTAKE_NOT_MINE = /\b(?:(?:i was |i'?m |was )?(?:only |just )?asking (?:hypothetically|in theory|for a friend|for someone else|about (?:my |a )?(?:friend|someone else))|(?:it|that) (?:was|is) (?:just |only )?(?:hypothetical|a hypothetical|about (?:my |a )?(?:friend|someone else)|not about me)|(?:it|that) (?:wasn'?t|was not|isn'?t|is not) (?:about )?me|i don'?t (?:actually )?eat (?:that|so) (?:little|few)|chi (?:la )?hoi (?:thoi|gia su|cho ban)|gia su thoi|hoi cho ban|khong phai (?:toi|minh) an)\b/;
 
 // "What is a fish allergy like?" asks; it does not disclose.
-const generalQuestion = (raw: string, text: string) => /\?\s*$/.test(raw.trim()) && !FIRST_PERSON.test(text);
+// MF-F2: a subjectless Vietnamese report ("bàn chân bị đau. Hôm nay tập gì?") is personal, not a general question.
+const SUBJECTLESS_VI_REPORT = /\b(?:bi dau|dang dau|bi trat)\b/;
+const generalQuestion = (raw: string, text: string) => /\?\s*$/.test(raw.trim()) && !FIRST_PERSON.test(text) && !SUBJECTLESS_VI_REPORT.test(text);
 
 function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, lastPedMention = false): Candidate[] {
   const text = fold(raw);
@@ -300,7 +302,8 @@ function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, last
     else if (INJURY_END.test(clause)) out.push({ key, kind: "INJURY", relevance: "SAFETY", op: "END", label: `${anySite} injury or pain — the user says it has resolved` });
     else if (INJURY_NEGATE.test(clause) && !restriction) out.push({ key, kind: "INJURY", relevance: "SAFETY", op: "NEGATE", label: `no ${anySite} pain` });
     // Verbless disclosures are the user's too: "Rotator cuff tear, …", "Torn cuff, no painful overhead work".
-    else if (FIRST_PERSON.test(clause) || /\b(?:diagnosed|torn|tear|tore|ruptured?|herniat\w*|fractur\w*|rach|dut)\b/.test(clause) || /^\s*\w+ (?:pain|hurts)/.test(clause) || restriction) {
+    // MF-F2: Vietnamese drops the subject — "bàn chân bị đau" is the user's own report.
+    else if (FIRST_PERSON.test(clause) || /\b(?:diagnosed|torn|tear|tore|ruptured?|herniat\w*|fractur\w*|rach|dut)\b/.test(clause) || /^\s*\w+ (?:pain|hurts)/.test(clause) || SUBJECTLESS_VI_REPORT.test(clause) || restriction) {
       const diagnosed = /\b(?:diagnosed|torn|tear|tore|ruptured?|fractur\w*|broken|herniat\w*|dislocat\w*|surgery|reconstruct\w*|rach|dut)\b/.test(clause);
       const base = diagnosed ? `${anySite}: diagnosed / structural injury` : `${anySite} pain or injury`;
       out.push({ key, kind: "INJURY", relevance: "SAFETY", op: "ASSERT", label: restriction ? `${base}; clinician restriction: ${clip(restriction, 70)}` : base });

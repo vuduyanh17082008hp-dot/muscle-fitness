@@ -28,10 +28,13 @@ export function todayWorkoutItem(
     };
   }
   if (!todaySession || (status !== "planned" && status !== "active")) return null;
+  // MF-F2: a postponed exercise isn't pending work; say how many were postponed instead of counting them.
+  const remaining = todaySession.exercises.filter((exercise) => !exercise.isSkipped).length;
+  const postponed = todaySession.exercises.length - remaining;
   return {
     id: "pending-session",
     title: status === "active" ? "Today's workout is in progress" : "Today's workout is pending",
-    subtitle: `${todaySession.name || "Scheduled Session"} (${todaySession.exercises.length} exercises)`,
+    subtitle: `${todaySession.name || "Scheduled Session"} (${remaining} exercises${postponed > 0 ? `, ${postponed} postponed` : ""})`,
     href: `/dashboard/workouts/session/${todaySession.id}`,
     urgency: "high",
   };

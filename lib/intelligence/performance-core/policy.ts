@@ -460,6 +460,8 @@ const INJURY_LOADS: Record<string, string> = {
   elbow: "curls, triceps extensions, pressing, pull-ups and rows",
   hip: "squats, lunges, deadlifts and hip thrusts",
   ankle: "running, jumping, lunges and calf raises",
+  // MF-F2: anything done standing or pushing through the feet — the provider path gets the same scope as the deterministic one.
+  foot: "running, jumping, standing lifts (squats, deadlifts, lunges, standing presses), leg press, hip thrusts and calf raises",
   hamstring: "deadlifts, leg curls, sprinting and good mornings",
 };
 

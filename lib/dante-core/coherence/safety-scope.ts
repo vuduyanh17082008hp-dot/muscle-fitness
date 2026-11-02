@@ -46,7 +46,8 @@ export type SafetyScope = "TRAINING" | "UNRELATED";
 
 /** A request whose answer would advise on exercise, load, intensity or a session — the only thing a stop rule constrains. */
 const TRAINING_REQUEST =
-  /\b(?:bench|squat|deadlift|ohp|overhead|press|row|curl|pull ?ups?|push ?ups?|lift(?:ing)?|workout|work ?out|training|train|exercise|sets?|reps?|rpe|kg|kgs|lbs?|weights?|load|volume|progress(?:ion)?|warm ?up|cardio|running|sprint|hiit|gym|program|routine|deload|tap|luyen|buoi tap|bai tap|lich tap|tang ta|nghi giua)\b/;
+  // MF-F2: "should I still do legs?" under an ankle stop is a training request (it was UNRELATED, so planks got suggested).
+  /\b(?:bench|squat|deadlift|ohp|overhead|press|row|curl|pull ?ups?|push ?ups?|lift(?:ing)?|workout|work ?out|training|train|exercise|sets?|reps?|rpe|kg|kgs|lbs?|weights?|load|volume|progress(?:ion)?|warm ?up|cardio|running|sprint|hiit|gym|program|routine|deload|legs|leg day|lower body|upper body|sessions?|plank|lunges?|tap|luyen|buoi tap|bai tap|lich tap|tang ta|nghi giua|tap chan)\b/;
 
 export function classifyRequestScope(request: Pick<TurnObligation, "sourceSpan" | "payload">): SafetyScope {
   const text = foldText(`${request.sourceSpan?.text ?? ""} ${request.payload.normalized ?? ""}`);

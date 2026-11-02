@@ -155,7 +155,7 @@ export const CONSTRAINT_LABEL: Record<EquipmentConstraint, string> = {
   home_gym: "Home gym",
 };
 
-function excludedBy(
+export function excludedBy(
   profile: ExerciseProfile,
   constraints: EquipmentConstraint[],
 ): string | null {
