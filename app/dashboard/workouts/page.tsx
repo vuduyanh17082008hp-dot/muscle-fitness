@@ -575,28 +575,11 @@ export default async function WorkoutsPage() {
         </div>
       </header>
 
-      {/* ===================================================
-          BETA FEATURES — quieter secondary surface; the hero
-          above carries the page's one primary/glowing CTA.
-      =================================================== */}
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PromoBanner
-          href="/dashboard/workouts/form-coach"
-          badge="Beta"
-          tone="neutral"
-          title="Form Coach"
-          description="Camera-based squat, push-up and plank feedback — live rep counting and form cues, analysed locally in your browser."
-        />
-
-        <PromoBanner
-          href="/dashboard/workouts/setvision"
-          badge="Beta"
-          tone="neutral"
-          title="SetVision"
-          description="Choose your exercise and upload a set: rep count, phase timing and consistency for squats; deadlift is experimental; other lifts can be reviewed, not measured."
-        />
-      </div>
+      {/* Form Coach / SetVision entry points hidden for the 2026-11-02
+          demo: both are unvalidated (no accuracy data), and SetVision's
+          multi-exercise save needs migration 20261102090000, which the
+          demo stack lacks. Routes stay reachable directly. Revert this
+          commit to restore the two Beta banners. */}
 
       {/* ===================================================
           YOUR CURRENT TRAINING PLAN

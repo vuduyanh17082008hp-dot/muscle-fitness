@@ -462,7 +462,7 @@ export function FeatureChapters() {
             moment you log it, runs a rest timer, and asks before you finish with sets still open.
           </>
         }
-        points={["Last-time hints on every exercise", "Workout history, session by session", "Form Coach and SetVision for camera and video checks"]}
+        points={["Last-time hints on every exercise", "Workout history, session by session", "A rest timer between sets"]}
         preview={<LogbookPreview />}
         flip
       />
