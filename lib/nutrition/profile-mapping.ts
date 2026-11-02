@@ -191,6 +191,7 @@ export type RawFitnessProfileRow = {
   weight_kg?: number | string | null
   goal?: string | null
   training_days?: number | null
+  session_duration_minutes?: number | null
   priority_muscles?: string[] | null
 } | null
 
@@ -205,6 +206,7 @@ export type RawPreferencesRow = {
   weekly_food_budget?: number | string | null
   cooking_ability?: string | null
   meal_prep_frequency?: string | null
+  calorie_adjustment_kcal?: number | string | null
 } | null
 
 export type NutritionMappingResult = {
@@ -226,6 +228,10 @@ export type NutritionMappingResult = {
     trainingMode: DbTrainingModeOverride | null
     goal: DbNutritionGoalOverride | null
   }
+  /** What "Use onboarding goal" resolves to, so the UI can say it. */
+  onboardingGoal: NutritionGoal
+  /** Stored training volume only (null = not on the profile, never a default). */
+  trainingVolume: { daysPerWeek: number | null; sessionMinutes: number | null }
 }
 
 /* =========================================================
@@ -344,6 +350,8 @@ export function mapProfileToNutritionInput(rows: {
       estimatedFields,
       missingRequiredFields,
       overrides: { activityLevel: null, trainingMode: null, goal: null },
+      onboardingGoal: mapOnboardingGoalToNutritionGoal(rows.fitnessProfile?.goal),
+      trainingVolume: { daysPerWeek: null, sessionMinutes: null },
     }
   }
 
@@ -445,6 +453,7 @@ export function mapProfileToNutritionInput(rows: {
     foodPreferences: rows.preferences?.food_preferences ?? [],
     excludedFoods: rows.preferences?.excluded_foods ?? [],
     allergies: rows.preferences?.allergies ?? [],
+    calorieAdjustmentKcal: toNumber(rows.preferences?.calorie_adjustment_kcal) ?? 0,
   }
 
   return {
@@ -455,6 +464,11 @@ export function mapProfileToNutritionInput(rows: {
       activityLevel: activityOverride,
       trainingMode: trainingModeOverride,
       goal: goalOverride,
+    },
+    onboardingGoal: mapOnboardingGoalToNutritionGoal(rows.fitnessProfile?.goal),
+    trainingVolume: {
+      daysPerWeek: trainingDays,
+      sessionMinutes: toNumber(rows.fitnessProfile?.session_duration_minutes),
     },
   }
 }

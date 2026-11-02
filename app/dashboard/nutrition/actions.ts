@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache"
 
 import { createClient } from "@/lib/supabase/server"
+import { loadCalibrationReview } from "@/lib/nutrition/calibration-data"
+import { resolveLocalToday } from "@/lib/nutrition/food-log/load-food-log-context"
+import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
+import { buildNutritionPlan } from "@/lib/nutrition/plan"
 
 export type NutritionSettingsActionResult = {
   success: boolean
@@ -152,4 +156,140 @@ export async function updateWeeklyFoodBudgetAction(
   revalidatePath("/dashboard/nutrition/shopping-list")
 
   return { success: true, message: "Weekly food budget updated." }
+}
+
+/* =========================================================
+   BODYWEIGHT LOG + CALORIE CALIBRATION
+   Never changes a target on its own: logging a weight only stores
+   the reading; a target changes only through an explicit
+   accept / reset, re-verified here against the server's own data.
+========================================================= */
+
+function revalidateNutritionSurfaces() {
+  revalidatePath("/dashboard/nutrition")
+  revalidatePath("/dashboard/nutrition/plan")
+  revalidatePath("/dashboard")
+}
+
+export async function logBodyWeightAction(
+  formData: FormData,
+): Promise<NutritionSettingsActionResult> {
+  const raw = String(formData.get("weightKg") ?? "").trim().replace(",", ".")
+  const weightKg = raw === "" ? NaN : Number(raw)
+
+  // Mirrors body_weight_entries_weight_check (20–500 kg).
+  if (!Number.isFinite(weightKg) || weightKg < 20 || weightKg > 500) {
+    return { success: false, message: "Enter your weight in kg (20–500)." }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { success: false, message: "Your session has expired. Please sign in again." }
+  }
+
+  // The server decides the date (the user's local today) — never the client.
+  const loggedOn = await resolveLocalToday(supabase, user.id)
+
+  const { error } = await supabase.from("body_weight_entries").upsert(
+    {
+      user_id: user.id,
+      logged_on: loggedOn,
+      weight_kg: Math.round(weightKg * 100) / 100,
+      source: "manual",
+    },
+    { onConflict: "user_id,logged_on" },
+  )
+
+  if (error) {
+    return { success: false, message: `Unable to save your weight: ${error.message}` }
+  }
+
+  revalidateNutritionSurfaces()
+  return { success: true, message: `Saved ${Math.round(weightKg * 10) / 10} kg for ${loggedOn}. Your calorie target is unchanged.` }
+}
+
+const CALIBRATION_DECISIONS = new Set(["accept", "keep", "reset"])
+
+export async function reviewCalorieCalibrationAction(
+  formData: FormData,
+): Promise<NutritionSettingsActionResult> {
+  const decision = String(formData.get("decision") ?? "")
+  const expectedTarget = Number(formData.get("expectedTargetCalories"))
+  const expectedDelta = Number(formData.get("expectedDeltaKcal") ?? 0)
+
+  if (!CALIBRATION_DECISIONS.has(decision) || !Number.isFinite(expectedTarget)) {
+    return { success: false, message: "That calibration request isn't valid. Refresh and try again." }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { success: false, message: "Your session has expired. Please sign in again." }
+  }
+
+  const context = await loadNutritionContext(supabase, user.id)
+  const plan = context.plan
+
+  if (!plan || !context.calibration.available || context.unavailable?.includes("preferences")) {
+    return { success: false, message: "Calibration isn't available right now. Nothing was changed." }
+  }
+
+  const stale = { success: false, message: "Your target changed since this page loaded. Refresh and review again — nothing was changed." }
+  if (plan.target.calories !== expectedTarget) return stale
+
+  const currentAdjustment = plan.calorieAdjustmentKcal
+  let nextAdjustment = currentAdjustment
+
+  if (decision === "accept") {
+    const review = await loadCalibrationReview(supabase, user.id, context)
+    if (review.result?.status !== "propose" || review.result.deltaKcal !== expectedDelta) return stale
+    nextAdjustment = currentAdjustment + review.result.deltaKcal
+  } else if (decision === "reset") {
+    nextAdjustment = 0
+  }
+
+  const patch = {
+    calorie_adjustment_kcal: nextAdjustment,
+    calorie_calibration_reviewed_at: new Date().toISOString(),
+  }
+
+  // One conditional UPDATE: applies only if nobody changed the adjustment in between.
+  const updated = await supabase
+    .from("user_preferences")
+    .update(patch)
+    .eq("user_id", user.id)
+    .eq("calorie_adjustment_kcal", currentAdjustment)
+    .select("user_id")
+
+  if (updated.error) {
+    return { success: false, message: `Unable to save: ${updated.error.message}. Nothing was changed.` }
+  }
+
+  if ((updated.data ?? []).length === 0) {
+    // No preferences row yet (a never-saved user has adjustment 0): create it.
+    if (currentAdjustment !== 0) return stale
+    const inserted = await supabase.from("user_preferences").insert({ user_id: user.id, ...patch })
+    if (inserted.error) return stale
+  }
+
+  revalidateNutritionSurfaces()
+
+  const newTarget = buildNutritionPlan({ ...plan.input, calorieAdjustmentKcal: nextAdjustment }).target.calories
+  const message =
+    decision === "keep"
+      ? `Kept your ${newTarget} kcal target. The next review uses weigh-ins from tomorrow on.`
+      : decision === "reset"
+        ? `Calibration removed — your target is back to the ${newTarget} kcal estimate.`
+        : `Target updated to ${newTarget} kcal (${expectedDelta > 0 ? "+" : ""}${expectedDelta} kcal/day). Review the next 1–2 weeks of weigh-ins before changing again.`
+
+  return { success: true, message }
 }

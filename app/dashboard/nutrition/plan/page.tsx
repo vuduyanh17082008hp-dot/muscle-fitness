@@ -26,6 +26,8 @@ import {
   engineTrainingModeToDbOverride,
 } from "@/lib/nutrition/profile-mapping"
 import { buildBudgetPlan } from "@/lib/nutrition/budget"
+import { loadCalibrationReview } from "@/lib/nutrition/calibration-data"
+import { CalorieCalibrationPanel } from "@/components/nutrition/calorie-calibration-panel"
 
 import { NutritionSettingsForm } from "../nutrition-settings-form"
 import { NUTRITION_TABS } from "../tabs"
@@ -127,12 +129,16 @@ export default async function NutritionPlanPage() {
     redirect("/login?next=/dashboard/nutrition/plan")
   }
 
+  const context = await loadNutritionContext(supabase, user.id)
   const {
     plan,
     estimatedFields,
     overrides,
     weeklyFoodBudgetSgd,
-  } = await loadNutritionContext(supabase, user.id)
+    onboardingGoal,
+    trainingVolume,
+    calibration,
+  } = context
 
   /* =======================================================
      MISSING PROFILE DATA — Today explains what's missing
@@ -145,6 +151,52 @@ export default async function NutritionPlanPage() {
   const { input, target } = plan
 
   const budgetPlan = buildBudgetPlan(plan, weeklyFoodBudgetSgd)
+  const review = await loadCalibrationReview(supabase, user.id, context)
+
+  const macroEnergy = target.protein * 4 + target.carbs * 4 + target.fat * 9
+  const goalPercent = Math.round(plan.goalAdjustmentPercent * 1000) / 10
+  const energySteps: Array<{ label: string; value: string; detail: string; origin: string }> = [
+    {
+      label: "BMR (Mifflin-St Jeor)",
+      value: `${plan.bmr} kcal`,
+      detail: `${input.sex === "unspecified" ? "sex not set (neutral constant)" : input.sex}, ${input.age} y, ${input.heightCm} cm, ${input.weightKg} kg`,
+      origin: "Estimated from your profile",
+    },
+    {
+      label: `Activity: ${ACTIVITY_LEVEL_LABELS[input.activityLevel]}`,
+      value: `× ${plan.pal}`,
+      detail: "Whole-day activity including training — nothing is added for workouts on top",
+      origin: overrides.activityLevel ? "You selected" : "Estimated from training days",
+    },
+    {
+      label: "Estimated maintenance",
+      value: `${plan.maintenanceCalories} kcal`,
+      detail: `${plan.bmr} × ${plan.pal}`,
+      origin: "Estimated",
+    },
+    {
+      label: `Goal: ${NUTRITION_GOAL_LABELS[input.goal]}`,
+      value: plan.goalAdjustmentKcal === 0 ? "± 0 kcal" : `${plan.goalAdjustmentKcal > 0 ? "+" : "−"}${Math.abs(plan.goalAdjustmentKcal)} kcal`,
+      detail: `${
+        goalPercent === 0 ? "No surplus or deficit for maintenance" : `${goalPercent > 0 ? "+" : ""}${goalPercent}% of maintenance`
+      }; target rounded to 10 kcal → ${plan.estimatedTargetCalories} kcal`,
+      origin: overrides.goal ? "You selected" : "From your onboarding goal",
+    },
+    ...(plan.calorieAdjustmentKcal !== 0
+      ? [{
+          label: "Weight-trend calibration",
+          value: `${plan.calorieAdjustmentKcal > 0 ? "+" : "−"}${Math.abs(plan.calorieAdjustmentKcal)} kcal`,
+          detail: "A change you accepted after reviewing your weight trend",
+          origin: "Calibrated from your data",
+        }]
+      : []),
+    {
+      label: `Training style: ${TRAINING_MODE_LABELS[input.trainingMode]}`,
+      value: "0 kcal",
+      detail: "Changes macro split and meal timing only",
+      origin: overrides.trainingMode ? "You selected" : "Estimated",
+    },
+  ]
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 overflow-x-clip pb-16">
@@ -212,6 +264,8 @@ export default async function NutritionPlanPage() {
               engineActivityToDbOverride(input.activityLevel)
             }
             goalOverride={overrides.goal ?? "auto"}
+            onboardingGoal={onboardingGoal}
+            trainingVolume={trainingVolume}
           />
         </div>
       </header>
@@ -225,7 +279,11 @@ export default async function NutritionPlanPage() {
         <SectionHeading
           eyebrow="Energy Model"
           title="Daily energy and macros"
-          description="This is a starting maintenance estimate, not a guaranteed number — see Calibration below."
+          description={
+            plan.calorieAdjustmentKcal !== 0
+              ? "Your estimate, adjusted by a weight-trend calibration you accepted — see Calibration below."
+              : "Your starting target is an estimate, not a guaranteed number — see Calibration below."
+          }
         />
 
         <NutritionResultGlow>
@@ -243,15 +301,34 @@ export default async function NutritionPlanPage() {
           <PerformanceCard glass title="Estimated maintenance" metric={{ value: plan.maintenanceCalories, unit: "kcal" }} />
         </div>
 
-        <p className="mt-3 text-xs leading-5 text-mf-glass-text-muted">
-          Goal adjustment applied:{" "}
-          {plan.goalAdjustmentPercent === 0
-            ? "none (maintenance)"
-            : `${plan.goalAdjustmentPercent > 0 ? "+" : ""}${Math.round(
-                plan.goalAdjustmentPercent * 100,
-              )}% starting maintenance estimate`}
-          .
-        </p>
+        <div className="mt-4 overflow-hidden rounded-[16px] border border-mf-glass-border">
+          <p className="border-b border-mf-glass-border bg-white/[0.02] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
+            Why {target.calories} kcal
+          </p>
+          <ol className="divide-y divide-white/5">
+            {energySteps.map((step) => (
+              <li key={step.label} className="grid gap-1 px-4 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-baseline sm:gap-4">
+                <div className="min-w-0">
+                  <p className="font-semibold text-mf-glass-text">{step.label}</p>
+                  <p className="text-xs leading-5 text-mf-glass-text-muted">
+                    {step.detail} · <span className="text-mf-glass-text-secondary">{step.origin}</span>
+                  </p>
+                </div>
+                <p className="font-semibold tabular-nums text-mf-glass-text sm:text-right">{step.value}</p>
+              </li>
+            ))}
+            <li className="grid gap-1 bg-white/[0.02] px-4 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-baseline sm:gap-4">
+              <div className="min-w-0">
+                <p className="font-bold text-mf-glass-text">Daily target</p>
+                <p className="text-xs leading-5 text-mf-glass-text-muted">
+                  Macros: {target.protein} g × 4 + {target.carbs} g × 4 + {target.fat} g × 9 = {macroEnergy} kcal
+                  (carbs fill what protein and fat leave; ± a few kcal is gram rounding)
+                </p>
+              </div>
+              <p className="font-black tabular-nums text-mf-glass-brand sm:text-right">{target.calories} kcal</p>
+            </li>
+          </ol>
+        </div>
 
         <div id="macros" className="mt-6 scroll-mt-24">
           <p className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">
@@ -413,10 +490,21 @@ export default async function NutritionPlanPage() {
           icon={Activity}
           tone="emerald"
           eyebrow="Calibration"
-          title="The calculator is the starting point — your trend is the truth."
+          title="Calibrate after 1–2 weeks"
         />
 
-        <ol className="space-y-3">
+        <CalorieCalibrationPanel
+          available={calibration.available}
+          readFailed={review.readFailed}
+          today={review.today}
+          todayWeightKg={review.todayWeightKg}
+          result={review.result}
+          currentTargetCalories={target.calories}
+          estimatedTargetCalories={plan.estimatedTargetCalories}
+          adjustmentKcal={plan.calorieAdjustmentKcal}
+        />
+
+        <ol className="mt-6 space-y-3">
           {plan.calibrationNotes.map((note, index) => (
             <li
               key={note}

@@ -54,7 +54,7 @@ describe("Nutrition Today holds only logging", () => {
     for (const kept of ["<NutritionSettingsForm", "<BudgetPlanner", "Gram-Based Meal Plan", "Energy Model", 'id="macros"', "Calibration", "Nutrition Data Sources", "Health Note"]) {
       expect(plan).toContain(kept);
     }
-    expect(read("app/dashboard/nutrition/actions.ts").match(/revalidatePath\("\/dashboard\/nutrition\/plan"\)/g)).toHaveLength(2);
+    expect(read("app/dashboard/nutrition/actions.ts").match(/revalidatePath\("\/dashboard\/nutrition\/plan"\)/g)).toHaveLength(3); // settings, budget, weight/calibration
     expect(read("app/dashboard/nutrition/tabs.ts")).toContain('href: "/dashboard/nutrition/plan"');
   });
 });
