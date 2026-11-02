@@ -5,7 +5,7 @@ import { Loader2, Upload } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { analyzeWorkoutVideo } from "@/lib/setvision";
-import { subjectGate, suggestExercise } from "@/lib/setvision/analyze";
+import { aiReviewScope, suggestExercise } from "@/lib/setvision/analyze";
 import { optionForEngine, selectionFromOption, type SelectedExercise } from "@/lib/setvision/exercise-selection";
 import { EMPTY_REVIEW, type SetReview } from "@/lib/setvision/saved-analysis";
 import type { PoseFrame, SetVisionAnalysis, SetVisionExerciseId, TimedPoseFrame } from "@/lib/setvision/types";
@@ -14,18 +14,16 @@ import type { AutoregulationDecision, TraceableDecision } from "@/lib/dante-core
 import { collectPoseFrames, sampleStills, scanSubject } from "@/components/setvision/collect-pose-frames";
 import { ReviewSummary } from "@/components/setvision/review-summary";
 import { trackedFormObservations } from "@/lib/setvision/form-observations";
-import type { VisualReview } from "@/lib/setvision/visual-review";
-import { credible } from "@/lib/setvision/person-check";
-
-/** The AI path needs the person check to have found exactly one person in at least this share of the scan. */
-// ponytail: a-priori; a machine that hides most of the body may need a lower floor once real machine clips are checked.
-const MIN_SUBJECT_SHARE = 0.3;
+import type { ReviewScope, VisualReview } from "@/lib/setvision/visual-review";
+import { phaseTimes } from "@/lib/setvision/phase-frames";
 
 /** A Not-assessable result decided on-device, before any frame leaves the browser. */
 const localRefusal = (reason: string): VisualReview => ({
   status: "NOT_ASSESSABLE",
   seenMovement: "",
-  exerciseMatch: "unclear",
+  exerciseCheck: "AMBIGUOUS",
+  needsConfirmation: false,
+  scope: "full",
   view: "unclear",
   limitation: reason,
   filmingTip: "Film one continuous take with only you in view, whole body in frame, steady camera.",
@@ -178,34 +176,41 @@ export function VideoAnalyzer() {
   const visualKey = video && selection ? `${video.url}|${selection.key ?? selection.label}` : null;
   const visualState = visual && visual.key === visualKey ? visual.value : null;
 
-  const handleVisualReview = useCallback(async () => {
+  /** Stills + scope of the last review of this video/exercise, so "Yes, it's X" doesn't rescan the clip. */
+  const preparedRef = useRef<{ key: string; stills: Array<{ tMs: number; image: string }>; scope: ReviewScope; checks: string[] } | null>(null);
+
+  const handleVisualReview = useCallback(async (userConfirmedExercise = false) => {
     const element = videoRef.current;
     if (!element || !selection || !visualKey) return;
     const key = visualKey;
-    setVisual({ key, value: { status: "loading", phase: "Checking that only you are in the video…" } });
+    setVisual({ key, value: { status: "loading", phase: userConfirmedExercise ? "Reviewing with the exercise you confirmed…" : "Checking that only you are in the video…" } });
     try {
-      // Same subject gate as the tracked path, on-device, BEFORE anything is sent to OpenAI.
-      // Reuses this video's tracked frames when they exist; otherwise a 5 Hz MultiPose + scene-cut scan.
-      const subject = frames ?? (await scanSubject(element));
-      const gate = subjectGate(subject);
-      const onePerson = subject.filter((f) => (f.people ?? []).filter(credible).length === 1).length;
-      const refusal =
-        "reason" in gate
-          ? gate.reason
-          : subject.length > 0 && onePerson / subject.length < MIN_SUBJECT_SHARE
-            ? `The person check found you in only ${Math.round((onePerson / subject.length) * 100)}% of the video, so it can't confirm whose technique the AI would be reviewing. Film with your whole body in view and good light.`
-            : null;
-      if (refusal) {
-        setVisual({ key, value: { status: "done", review: localRefusal(refusal) } });
-        return;
+      let prepared = preparedRef.current?.key === key ? preparedRef.current : null;
+      if (!prepared) {
+        // Same subject gate as the tracked path, on-device, BEFORE anything is sent to OpenAI.
+        // Reuses this video's tracked frames when they exist; otherwise a 5 Hz MultiPose + scene-change scan.
+        const subject = frames ?? (await scanSubject(element));
+        const decision = aiReviewScope(subject);
+        if ("refuse" in decision) {
+          setVisual({ key, value: { status: "done", review: localRefusal(decision.refuse) } });
+          return;
+        }
+        setVisual({ key, value: { status: "loading", phase: "AI is reviewing stills from your video…" } });
+        // Stills at the movement's turning points (start/end of each rep), topped up evenly — same 6–12 budget.
+        const { times } = phaseTimes(subject, element.duration * 1000);
+        prepared = { key, stills: await sampleStills(element, times), scope: decision.scope, checks: decision.limitations };
+        preparedRef.current = prepared;
       }
-
-      setVisual({ key, value: { status: "loading", phase: "AI is reviewing stills from your video…" } });
-      const stills = await sampleStills(element);
       const response = await fetch("/api/setvision/visual-review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ exerciseLabel: selection.label, frames: stills }),
+        body: JSON.stringify({
+          exerciseKey: selection.key,
+          exerciseLabel: selection.label,
+          frames: prepared.stills,
+          scope: prepared.scope,
+          userConfirmedExercise,
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) {
@@ -213,7 +218,7 @@ export function VideoAnalyzer() {
         setVisual({ key, value: { status: "error", error: typeof data.error === "string" ? data.error : "AI visual review failed. Try again in a moment." } });
         return;
       }
-      setVisual({ key, value: { status: "done", review: data.review, checks: "limitations" in gate ? gate.limitations : [] } });
+      setVisual({ key, value: { status: "done", review: data.review, checks: prepared.checks } });
     } catch (error) {
       console.error("[SETVISION] visual review failed", error);
       setVisual({ key, value: { status: "error", error: "We couldn't review this video. Try a clearer clip with your whole body in view, or try again." } });
@@ -351,7 +356,7 @@ export function VideoAnalyzer() {
             {video && (autoDetect || selection) ? (
               <button
                 type="button"
-                onClick={manualOnly ? handleVisualReview : handleAnalyze}
+                onClick={manualOnly ? () => handleVisualReview() : handleAnalyze}
                 disabled={!canAnalyze || processing || visualState?.status === "loading"}
                 className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/[0.1] disabled:opacity-50"
                 data-testid="sv-analyze"
@@ -435,7 +440,7 @@ export function VideoAnalyzer() {
           ) : null}
 
           {visualState?.status === "error" ? (
-            <ErrorState className="mt-4" title="AI visual review failed" description={visualState.error ?? "Try again in a moment."} onRetry={handleVisualReview} />
+            <ErrorState className="mt-4" title="AI visual review failed" description={visualState.error ?? "Try again in a moment."} onRetry={() => handleVisualReview()} />
           ) : null}
         </div>
       </article>
@@ -505,7 +510,7 @@ export function VideoAnalyzer() {
       {analysis && selection && !visualState ? (
         <button
           type="button"
-          onClick={handleVisualReview}
+          onClick={() => handleVisualReview()}
           disabled={processing}
           className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/[0.1] disabled:opacity-50"
           data-testid="sv-visual-also"
@@ -541,6 +546,7 @@ export function VideoAnalyzer() {
           filmingTip={visualState.review.filmingTip}
           exerciseKey={selection.key}
           onSeek={handleSeek}
+          confirmExercise={visualState.review.needsConfirmation ? () => handleVisualReview(true) : undefined}
           testId="sv-visual"
         />
       ) : null}

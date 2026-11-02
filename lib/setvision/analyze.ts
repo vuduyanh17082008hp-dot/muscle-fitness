@@ -8,7 +8,8 @@ import {
 } from "@/lib/setvision/exercise-classifier";
 import { confidentPoint, getExerciseConfig, sideAngle, type ExerciseConfig, type Side } from "@/lib/setvision/exercise-config";
 import { averageTorsoLength, estimateTorsoLength } from "@/lib/setvision/normalization";
-import { checkPersonAttribution, findSceneCuts } from "@/lib/setvision/person-check";
+import { checkPersonAttribution, classifySceneChanges, credible } from "@/lib/setvision/person-check";
+import type { ReviewScope } from "@/lib/setvision/visual-review";
 import { createRepStateMachine } from "@/lib/setvision/rep-state-machine";
 import { computeAllRepRom } from "@/lib/setvision/rom";
 import { computeTechniqueConsistency } from "@/lib/setvision/technique-consistency";
@@ -277,27 +278,68 @@ export function findTrackJumps(frames: TimedPoseFrame[]): number[] {
 export const PERSON_CHECK_NOT_RUN =
   "No multi-person check ran on these frames, so another person in view could not be ruled out.";
 
+export type SubjectGateResult =
+  /** Attribution can't be trusted (edit, dissolve, tracker jump, more than one person, identity change): refuse every path. */
+  | { verdict: "refuse"; reason: string }
+  /** One consistent person, but the camera moved/zoomed: no tracking or reps; a limited AI review is still possible. */
+  | { verdict: "camera_moved"; reason: string; limitations: string[] }
+  | { verdict: "ok"; limitations: string[] };
+
 /**
- * ONE subject gate for every SetVision path (tracked analysis and AI visual review):
- * a cut in the video, a tracker jump, or a MultiPose result that can't attribute the clip to one
- * person refuses it. `limitations` are what still applies when it passes.
+ * ONE subject gate for every SetVision path (tracked analysis and AI visual review). Identity and
+ * camera stability are judged separately: an edit (cut or dissolve), a tracker jump, or a MultiPose
+ * result that can't attribute the clip to one person refuses; camera motion alone only rules out
+ * quantitative tracking. `limitations` are what still applies when it passes.
  */
-export function subjectGate(frames: TimedPoseFrame[]): { reason: string } | { limitations: string[] } {
-  const cuts = findSceneCuts(frames);
-  if (cuts.length > 0) {
+export function subjectGate(frames: TimedPoseFrame[]): SubjectGateResult {
+  const { cuts, dissolves, cameraMoves } = classifySceneChanges(frames);
+  const edits = [...cuts, ...dissolves].sort((a, b) => a - b);
+  if (edits.length > 0) {
     return {
-      reason: `The picture changes to a different shot or view around ${cuts.slice(0, 3).map(secondsLabel).join(", ")} (an edited clip, a fade, or a big camera move), so whoever is in view afterwards can't be confirmed as the same athlete. Upload one continuous recording from a steady camera.`,
+      verdict: "refuse",
+      reason: `The video cuts or fades to a different shot around ${edits.slice(0, 3).map(secondsLabel).join(", ")} (an edited clip), so whoever is in view afterwards can't be confirmed as the same athlete. Upload one continuous recording.`,
     };
   }
   const jumps = findTrackJumps(frames);
   if (jumps.length > 0) {
     return {
+      verdict: "refuse",
       reason: `The tracked body jumped across the frame at ${jumps.slice(0, 3).map(secondsLabel).join(", ")} — the tracker likely switched to another person or lost you behind something, so reps and form could belong to the wrong person. Re-record with only you in view and nothing passing in front of the camera.`,
     };
   }
   const personCheck = checkPersonAttribution(frames);
-  if ("reason" in personCheck) return { reason: personCheck.reason };
-  return { limitations: personCheck.verdict === "not_run" ? [PERSON_CHECK_NOT_RUN] : personCheck.limitations };
+  if ("reason" in personCheck) return { verdict: "refuse", reason: personCheck.reason };
+  const limitations = personCheck.verdict === "not_run" ? [PERSON_CHECK_NOT_RUN] : personCheck.limitations;
+  if (cameraMoves.length > 0) {
+    return {
+      verdict: "camera_moved",
+      reason: `The camera moved or zoomed around ${cameraMoves.slice(0, 3).map(secondsLabel).join(", ")}, so reps, timing and range can't be tracked. Film from a steady camera (a tripod or a propped-up phone) for tracked analysis.`,
+      limitations,
+    };
+  }
+  return { verdict: "ok", limitations };
+}
+
+/** The AI review needs the person check to find exactly one person in at least this share of the clip for a full review. */
+// ponytail: a-priori; seated machine clips scanned so far stay well above it.
+export const MIN_SUBJECT_SHARE = 0.3;
+
+/**
+ * What the AI visual review may look at, decided on-device from the same subject gate, before any
+ * frame is sent: a full review; a LIMITED one (camera moved but one consistent person; or only part
+ * of a body in view and no sign of anyone else); or a refusal with the reason.
+ */
+export function aiReviewScope(frames: TimedPoseFrame[]): { scope: ReviewScope; limitations: string[] } | { refuse: string } {
+  const gate = subjectGate(frames);
+  if (gate.verdict === "refuse") return { refuse: gate.reason };
+  const onePerson = frames.filter((f) => (f.people ?? []).filter(credible).length === 1).length;
+  const share = frames.length ? onePerson / frames.length : 0;
+  if (gate.verdict === "camera_moved") {
+    return share >= MIN_SUBJECT_SHARE
+      ? { scope: "camera_moved", limitations: gate.limitations }
+      : { refuse: `${gate.reason} The person check also couldn't follow one person through the clip, so the AI review can't be attributed to you.` };
+  }
+  return { scope: share >= MIN_SUBJECT_SHARE ? "full" : "partial_body", limitations: gate.limitations };
 }
 
 export function analyzeFrameSequence(
@@ -324,7 +366,7 @@ export function analyzeFrameSequence(
   }
 
   const gate = subjectGate(frames);
-  if ("reason" in gate) {
+  if (gate.verdict !== "ok") {
     return emptyAnalysis(exercise, classification, [gate.reason], gate.reason);
   }
 

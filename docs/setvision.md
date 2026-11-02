@@ -559,6 +559,25 @@ the classification section.
   positives are not shown at all. It misidentified a real front-view
   seated leg curl as a leg extension (fails safe: not assessable). Treat a
   confirmed AI issue as a lead to check on replay, never as a measurement.
+- **S3 corrective (2026-11-03)**: exercise identity is graded
+  (CONFIRMED_MATCH / POSSIBLE_MATCH / AMBIGUOUS → user can confirm /
+  CONFIRMED_MISMATCH, which confirmation can't override); the model gets the
+  catalogue's own description, steps and checks, and must rule out mirror
+  look-alikes (leg curl ↔ leg extension, etc.); stills are taken at the
+  movement's turning points; two independent passes must agree before an
+  issue is confirmed; hedged wording is never confirmed; camera motion alone
+  (not a dissolve — blend-residual test) allows a LIMITED review, and a
+  partial-body clip (e.g. feet only) a partial-body review. Measured through
+  the UI on 17 labelled real clips × 3 runs (iteration 1 complete; iteration 2
+  stopped at 34/51 by memory pressure): the genuine front-view leg curl is
+  now CONFIRMED_MATCH 3/3 (was a false mismatch 3/3) and a chest press
+  picked as leg curl is CONFIRMED_MISMATCH 3/3 — but the same leg-curl clip
+  picked as **Leg Extension is still accepted** (CONFIRMED_MATCH 3/3 in both
+  iterations: the model claims it can rule the look-alike out). Confirmed
+  issues on correct-form demos still occur in ~1 of 3 runs on some clips
+  (leg press "locked out", preacher "elbows off pad"); no author-labelled
+  fault was confirmed with the fault's own description. Every multi-person,
+  cut and dissolve fixture was refused on-device 3/3.
 - **Partial/shallow-rep findings need a range view**: from another view
   (e.g. a front-view goblet squat) projection noise split full-depth
   descents into "partials", so they are shown only as "possibly".

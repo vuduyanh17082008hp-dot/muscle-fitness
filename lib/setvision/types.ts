@@ -62,9 +62,10 @@ export type TimedPoseFrame = {
   /**
    * Whole-picture change vs the previous sample (scene-cut check, lib/setvision/person-check.ts):
    * mean |Δ| of a 64×36 grey thumbnail (0–255), this sample's mean brightness, and `span` = share of
-   * thumbnail pixels that changed by > 30 levels since the sample ~1 s earlier. Absent on old fixtures.
+   * thumbnail pixels that changed by > 30 levels since the sample ~1 s earlier, and `blend` = how far the
+   * picture half-way through that second is from a linear mix of its ends (small = a dissolve). Absent on old fixtures.
    */
-  scene?: { diff: number | null; luma: number; span?: number | null };
+  scene?: { diff: number | null; luma: number; span?: number | null; blend?: number | null };
 };
 
 /** One MultiPose detection, reduced to what the person check needs. */

@@ -23,6 +23,7 @@ function signedIn(userId: string | null) {
 
 const modelReply = {
   people_in_view: "one", multi_person_frames: [], edited_or_composite: false, exercise_match: "matches",
+  exercise_match_confidence: "high", match_frames: [1, 2], match_evidence: "Feet on a sled platform.",
   seen_movement: "a leg press", view: "side", assessable: "yes", missing: "", filming_tip: "", observations: [],
 };
 
@@ -72,9 +73,10 @@ describe("POST /api/setvision/visual-review — rejections happen before the mod
 
   it("409 for a second concurrent review by the same user", async () => {
     let release!: () => void;
-    vi.mocked(visionJson).mockImplementationOnce(() => new Promise((r) => (release = () => r(modelReply))));
+    const gate = new Promise((r) => (release = () => r(modelReply)));
+    vi.mocked(visionJson).mockImplementation(() => gate);
     const first = POST(req(validBody));
-    await vi.waitFor(() => expect(visionJson).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(visionJson).toHaveBeenCalledTimes(2)); // two independent passes, in parallel
     expect((await POST(req(validBody))).status).toBe(409);
     release();
     expect((await first).status).toBe(200);
@@ -89,7 +91,27 @@ describe("POST /api/setvision/visual-review — rejections happen before the mod
     expect(json.personalized).toBe(true);
     const args = vi.mocked(visionJson).mock.calls[0];
     expect(args[6]).toEqual({ temperature: 0, seed: 7 });
+    expect(vi.mocked(visionJson).mock.calls[1][6]).toEqual({ temperature: 0, seed: 11 }); // second, independent pass
+    expect(checkDanteRateLimit).toHaveBeenCalledTimes(1); // one quota unit per review
     expect(JSON.stringify(json)).not.toMatch(/careful strength coach|OPENAI|sk-/);
+  });
+
+  it("resolves the exercise on the server: unknown keys and invalid custom names fail before quota or model", async () => {
+    expect((await POST(req({ ...validBody, exerciseKey: "catalogue:not-a-thing" }))).status).toBe(400);
+    expect((await POST(req({ ...validBody, exerciseKey: null, exerciseLabel: "\u0007" }))).status).toBe(400);
+    expect((await POST(req({ ...validBody, scope: "everything" }))).status).toBe(400);
+    expect(checkDanteRateLimit).not.toHaveBeenCalled();
+    expect(visionJson).not.toHaveBeenCalled();
+  });
+
+  it("a catalogue pick sends the catalogue's own reference (not the client's label), plus confirmation and scope", async () => {
+    const res = await POST(req({ ...validBody, exerciseKey: "catalogue:seated-leg-curl", exerciseLabel: "anything the client says", userConfirmedExercise: true, scope: "camera_moved" }));
+    expect(res.status).toBe(200);
+    const text = (vi.mocked(visionJson).mock.calls[0][3][0] as { text: string }).text;
+    expect(text).toMatch(/Exercise the user named: "Seated Leg Curl" — the user has CONFIRMED/);
+    expect(text).toMatch(/Secure the thigh pad/);
+    expect(text).toMatch(/camera moves/);
+    expect(text).not.toMatch(/anything the client says/);
   });
 
   it("502 with a safe message when the model fails", async () => {

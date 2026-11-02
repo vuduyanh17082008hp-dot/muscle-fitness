@@ -2,7 +2,8 @@ import type { Pose, PoseDetector } from "@tensorflow-models/pose-detection";
 
 import { loadMultiPoseDetector, loadPoseDetector } from "@/lib/ai";
 import type { DetectedPerson, PoseFrame, TimedPoseFrame } from "@/lib/setvision/types";
-import { credible } from "@/lib/setvision/person-check";
+import { blendResidual, credible } from "@/lib/setvision/person-check";
+import { evenTimes } from "@/lib/setvision/phase-frames";
 
 /**
  * Extracts pose frames from an already-loaded <video> element by
@@ -100,8 +101,8 @@ async function multiPoses(multi: PoseDetector | null, video: HTMLVideoElement, t
   }
 }
 
-/** Scene-cut sampler: 64×36 grey thumbnail per sample → change vs the previous sample, brightness, and 1 s span change. */
-function sceneMeter(): (video: HTMLVideoElement) => { diff: number | null; luma: number; span: number | null } | undefined {
+/** Scene-cut sampler: 64×36 grey thumbnail per sample → change vs the previous sample, brightness, 1 s span change, dissolve blend residual. */
+function sceneMeter(): (video: HTMLVideoElement) => NonNullable<TimedPoseFrame["scene"]> | undefined {
   const canvas = document.createElement("canvas");
   canvas.width = 64;
   canvas.height = 36;
@@ -126,11 +127,15 @@ function sceneMeter(): (video: HTMLVideoElement) => { diff: number | null; luma:
     const old = history.length && t - history[0].t >= 950 ? history[0].grey : null;
     let changed = 0;
     if (old) for (let i = 0; i < grey.length; i += 1) if (Math.abs(grey[i] - old[i]) > 30) changed += 1;
+    // Is the middle of that second a linear mix of its ends (a dissolve), or not (motion)? Mid-points 0.3–0.7 s back.
+    const mids = old ? history.filter((h) => t - h.t >= 300 && t - h.t <= 700).map((h) => h.grey) : [];
+    const blend = old && mids.length ? Math.min(...mids.map((m) => blendResidual(old, m, grey))) : null;
     history.push({ t, grey });
     const result = {
       diff: previous ? Math.round((diff / grey.length) * 10) / 10 : null,
       luma: Math.round(luma / grey.length),
       span: old ? Math.round((changed / grey.length) * 100) / 100 : null,
+      blend: blend === null ? null : Math.round(blend * 100) / 100,
     };
     previous = grey;
     return result;
@@ -175,14 +180,13 @@ function toPerson(pose: Pose): DetectedPerson {
 }
 
 /**
- * Evenly spaced JPEG stills (longest side ≤ 512 px) for the AI visual review —
- * one per second of video, 6–12 in all, from 3 % to 97 % of the clip so the
- * first and last frames aren't a black intro/outro.
- * ponytail: even spacing, so a fast set longer than ~12 s is sampled sparsely; pick frames at tracked rep bottoms if that matters.
+ * JPEG stills (longest side ≤ 512 px) for the AI visual review at the given times — normally
+ * lib/setvision/phase-frames.ts::phaseTimes (rep turning points + evenly spaced fill); without
+ * times, evenly spaced from 3 % to 97 % of the clip (6–12 stills).
  */
-export async function sampleStills(video: HTMLVideoElement): Promise<Array<{ tMs: number; image: string }>> {
+export async function sampleStills(video: HTMLVideoElement, times?: number[]): Promise<Array<{ tMs: number; image: string }>> {
   const durationMs = Number.isFinite(video.duration) ? video.duration * 1000 : 0;
-  const count = Math.min(12, Math.max(6, Math.round(durationMs / 1000)));
+  const schedule = times?.length ? times : evenTimes(durationMs);
   const scale = Math.min(1, 512 / Math.max(video.videoWidth, video.videoHeight, 1));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(video.videoWidth * scale);
@@ -191,8 +195,7 @@ export async function sampleStills(video: HTMLVideoElement): Promise<Array<{ tMs
   if (!context || durationMs <= 0 || canvas.width === 0) throw new Error("Video has no readable picture.");
 
   const stills: Array<{ tMs: number; image: string }> = [];
-  for (let i = 0; i < count; i += 1) {
-    const tMs = Math.round(durationMs * (0.03 + (0.94 * i) / (count - 1)));
+  for (const tMs of schedule) {
     await seekTo(video, tMs / 1000);
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     stills.push({ tMs, image: canvas.toDataURL("image/jpeg", 0.75) });

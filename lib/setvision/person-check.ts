@@ -69,7 +69,43 @@ const BLACK_LUMA = 16;
  */
 export const SPAN_CHANGED = 0.5;
 
-export function findSceneCuts(frames: TimedPoseFrame[]): number[] {
+/**
+ * Mid-frame M vs the best linear mix of the frames before (A) and after (B) it: mean |M − (αA + (1−α)B)|
+ * over mean |A − B|. A dissolve between two shots IS such a mix (≈ 0); camera or body motion is not.
+ * Real clips (2026-11-03, 5 Hz): dissolves 0.00–0.12 (one slow 1.2 s close-up→wide dissolve of the
+ * same person 0.46); hand-held/zoom/follow-cam motion 0.24–0.45.
+ */
+export function blendResidual(a: ArrayLike<number>, m: ArrayLike<number>, b: ArrayLike<number>): number {
+  let num = 0;
+  let den = 0;
+  let ab = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    const d = a[i] - b[i];
+    num += (m[i] - b[i]) * d;
+    den += d * d;
+    ab += Math.abs(d);
+  }
+  if (ab === 0) return 1;
+  const alpha = Math.min(1, Math.max(0, num / (den || 1)));
+  let resid = 0;
+  for (let i = 0; i < a.length; i += 1) resid += Math.abs(m[i] - (alpha * a[i] + (1 - alpha) * b[i]));
+  return resid / ab;
+}
+
+/** Below this blend residual a big 1 s change is a dissolve (an edit), above it camera/body motion. */
+// ponytail: a-priori from 11 real clips; the one miss is a slow same-person dissolve, still covered by the person check.
+export const DISSOLVE_BLEND = 0.2;
+
+export type SceneChanges = {
+  /** Hard cuts — an edited or spliced clip. */
+  cuts: number[];
+  /** Cross-fades between shots — an edit, like a cut. */
+  dissolves: number[];
+  /** Most of the picture changed within ~1 s without being a mix of two shots — the camera moved or zoomed. */
+  cameraMoves: number[];
+};
+
+export function classifySceneChanges(frames: TimedPoseFrame[]): SceneChanges {
   const cuts: number[] = [];
   frames.forEach((f, i) => {
     const d = f.scene?.diff;
@@ -82,15 +118,29 @@ export function findSceneCuts(frames: TimedPoseFrame[]): number[] {
     const med = around.length ? around[Math.floor(around.length / 2)] : 0;
     if (d >= CUT_RATIO * Math.max(med, 1)) cuts.push(f.timestampMs);
   });
-  // Gradual transitions: first sample of each run over SPAN_CHANGED (dated ~1 s back, where it began).
-  frames.forEach((f, i) => {
-    const over = (g?: TimedPoseFrame) => (g?.scene?.span ?? 0) >= SPAN_CHANGED;
-    if (over(f) && !over(frames[i - 1])) {
-      const start = Math.max(0, f.timestampMs - 1000);
-      if (!cuts.some((c) => Math.abs(c - start) <= 1500)) cuts.push(start);
-    }
-  });
-  return cuts.sort((a, b) => a - b);
+
+  // Gradual changes: each run of samples over SPAN_CHANGED, dated ~1 s back (where it began). A run is a
+  // dissolve if any of its samples is a near-perfect mix of two shots — or if the mix wasn't measured (old data).
+  const dissolves: number[] = [];
+  const cameraMoves: number[] = [];
+  const over = (g?: TimedPoseFrame) => (g?.scene?.span ?? 0) >= SPAN_CHANGED;
+  for (let i = 0; i < frames.length; i += 1) {
+    if (!over(frames[i]) || over(frames[i - 1])) continue;
+    let end = i;
+    while (over(frames[end + 1])) end += 1;
+    const run = frames.slice(i, end + 1);
+    const start = Math.max(0, frames[i].timestampMs - 1000);
+    if (cuts.some((c) => Math.abs(c - start) <= 1500)) continue;
+    const mixed = run.some((g) => g.scene?.blend == null || g.scene.blend < DISSOLVE_BLEND);
+    (mixed ? dissolves : cameraMoves).push(start);
+  }
+  return { cuts, dissolves, cameraMoves };
+}
+
+/** Every scene change of any kind, sorted (kept for callers that only need "did the picture change?"). */
+export function findSceneCuts(frames: TimedPoseFrame[]): number[] {
+  const { cuts, dissolves, cameraMoves } = classifySceneChanges(frames);
+  return [...cuts, ...dissolves, ...cameraMoves].sort((a, b) => a - b);
 }
 
 export function checkPersonAttribution(frames: TimedPoseFrame[]): PersonCheck {

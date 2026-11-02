@@ -42,6 +42,7 @@ export function ReviewSummary({
   filmingTip,
   exerciseKey,
   onSeek,
+  confirmExercise,
   testId,
 }: {
   title: string;
@@ -55,6 +56,8 @@ export function ReviewSummary({
   filmingTip?: string | null;
   exerciseKey: string | null;
   onSeek: (ms: number) => void;
+  /** Shown when the video couldn't confirm the exercise: the user can say it is this exercise (never overrides a confirmed mismatch). */
+  confirmExercise?: () => void;
   testId: string;
 }) {
   const issues = observations.filter((o) => o.kind === "issue");
@@ -112,6 +115,18 @@ export function ReviewSummary({
       ))}
 
       {note ? <p className="mt-3 text-xs leading-5 text-zinc-500" data-testid={`${testId}-note`}>{note}</p> : null}
+      {confirmExercise ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid={`${testId}-confirm`}>
+          <button
+            type="button"
+            onClick={confirmExercise}
+            className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-black transition hover:bg-amber-400"
+          >
+            Yes, it&apos;s {label}
+          </button>
+          <span className="text-xs text-zinc-500">Not {label}? Change the exercise above.</span>
+        </div>
+      ) : null}
       {filmingTip ? <p className="mt-2 text-xs leading-5 text-zinc-400">Better clip: {filmingTip}</p> : null}
       {status === "NO_SUPPORTED_ISSUE_OBSERVED" ? (
         <p className="mt-2 text-xs leading-5 text-zinc-500">Not seeing an issue isn&apos;t the same as perfect form.</p>
