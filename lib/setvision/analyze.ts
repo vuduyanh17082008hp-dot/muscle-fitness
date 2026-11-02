@@ -7,7 +7,7 @@ import {
   type CameraView,
 } from "@/lib/setvision/exercise-classifier";
 import { confidentPoint, getExerciseConfig, sideAngle, type ExerciseConfig, type Side } from "@/lib/setvision/exercise-config";
-import { averageTorsoLength } from "@/lib/setvision/normalization";
+import { averageTorsoLength, estimateTorsoLength } from "@/lib/setvision/normalization";
 import { createRepStateMachine } from "@/lib/setvision/rep-state-machine";
 import { computeAllRepRom } from "@/lib/setvision/rom";
 import { computeTechniqueConsistency } from "@/lib/setvision/technique-consistency";
@@ -238,6 +238,44 @@ function excludePickupOutliers(reps: CompletedRep[], limitations: string[]): Com
   return reps;
 }
 
+/** Hip-centre move between neighbouring samples, in the tracked body's own torso lengths, that no real lift produces. */
+const TRACK_JUMP_TORSO_LENGTHS = 1.5;
+const TRACK_JUMP_MAX_GAP_MS = 400;
+
+/**
+ * Timestamps where the single-person tracker's body teleported between two
+ * close samples — the detector switched to another person (or a bystander /
+ * occlusion pulled it away). MoveNet SinglePose reports ONE body per frame
+ * and cannot count people, so this jump is the only wrong-person evidence
+ * the uploaded-video path has.
+ */
+// ponytail: catches identity switches, not a second person the tracker never latched onto; a MultiPose person count is the upgrade.
+export function findTrackJumps(frames: TimedPoseFrame[]): number[] {
+  const jumps: number[] = [];
+  let prev: { t: number; x: number; y: number; torso: number } | null = null;
+  for (const { timestampMs, frame } of frames) {
+    const hips = [confidentPoint(frame, "left_hip"), confidentPoint(frame, "right_hip")].filter((p) => p !== null);
+    const torso = estimateTorsoLength(frame);
+    if (hips.length === 0 || !torso) continue;
+    const cur = {
+      t: timestampMs,
+      x: hips.reduce((s, p) => s + p.x, 0) / hips.length,
+      y: hips.reduce((s, p) => s + p.y, 0) / hips.length,
+      torso,
+    };
+    if (prev && cur.t - prev.t <= TRACK_JUMP_MAX_GAP_MS) {
+      const moved = Math.hypot(cur.x - prev.x, cur.y - prev.y) / Math.max(prev.torso, cur.torso);
+      if (moved > TRACK_JUMP_TORSO_LENGTHS) jumps.push(cur.t);
+    }
+    prev = cur;
+  }
+  return jumps;
+}
+
+/** Always shown: what the person check can and cannot do. */
+export const SINGLE_PERSON_LIMITATION =
+  "SetVision follows one person and cannot count how many people are in frame. If anyone else was visible, re-record with only you in view.";
+
 export function analyzeFrameSequence(
   frames: TimedPoseFrame[],
   options: {
@@ -259,6 +297,12 @@ export function analyzeFrameSequence(
     return emptyAnalysis("squat", classification, [
       "Could not confidently classify the exercise from the video. Try again with the full lift visible, or specify the exercise manually.",
     ]);
+  }
+
+  const jumps = findTrackJumps(frames);
+  if (jumps.length > 0) {
+    const reason = `The tracked body jumped across the frame at ${jumps.slice(0, 3).map(secondsLabel).join(", ")} — the tracker likely switched to another person or lost you behind something, so reps and form could belong to the wrong person. Re-record with only you in view and nothing passing in front of the camera.`;
+    return emptyAnalysis(exercise, classification, [reason, SINGLE_PERSON_LIMITATION], reason);
   }
 
   const config = getExerciseConfig(exercise);
@@ -375,6 +419,7 @@ export function analyzeFrameSequence(
   if (side) {
     limitations.push(`Measured on the ${side} ${config.joints[1]} for the whole clip.`);
   }
+  limitations.push(SINGLE_PERSON_LIMITATION);
 
   const torsoLength = averageTorsoLength(frames.map((f) => f.frame));
 
