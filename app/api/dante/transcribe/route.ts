@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  * - The audio lives in memory for this request only — never stored, never logged; the transcript is never logged.
  */
 
-export const TRANSCRIBE_MODEL = process.env.DANTE_TRANSCRIBE_MODEL?.trim() || "gpt-transcribe";
+const TRANSCRIBE_MODEL =process.env.DANTE_TRANSCRIBE_MODEL?.trim() || "gpt-transcribe";
 const MAX_BYTES = 4 * 1024 * 1024;
 const TYPES: Record<string, string> = {
   "audio/webm": "webm",
