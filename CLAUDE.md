@@ -126,6 +126,24 @@ browser/API harnesses stay at `docs/evaluation/hackathon-repair-2026-10-18/harne
 and `docs/evaluation/h1-truth-closure-2026-10-18/harness/` (absolute paths
 inside — don't move them); their run output is git-ignored.
 
+## Local runtime
+
+Muscle Fitness canonical local development URL: http://localhost:3000
+(use `localhost`, not `127.0.0.1` — the IDE's `next dev` has no `-H`, so
+127.0.0.1 never hydrates).
+
+- Temporary ports and isolated worktrees are permitted for safe testing,
+  but final user-facing acceptance requires verification on
+  localhost:3000 at the exact integrated revision.
+- Never claim a feature is available in the main application solely
+  because it works on an isolated port.
+- Identify the actual server process, worktree, branch and database
+  before changing or restarting anything.
+- Never terminate, overwrite or replace another agent's active runtime
+  without explicit authorization.
+- If localhost:3000 verification cannot be performed safely, report
+  PARTIAL or BLOCKED rather than VERIFIED.
+
 ## Dante Core
 
 `lib/dante-core/` — deterministic readiness/autoregulation engines, a
