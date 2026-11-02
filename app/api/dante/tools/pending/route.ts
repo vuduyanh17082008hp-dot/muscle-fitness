@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { pendingDetails } from "@/lib/dante-core/tools/pending-actions";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -19,7 +20,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("dante_tool_actions")
-    .select("id, tool_name, summary, expires_at")
+    .select("id, tool_name, summary, expires_at, args")
     .eq("user_id", user.id)
     .eq("status", "pending")
     .gt("expires_at", new Date().toISOString())
@@ -28,6 +29,6 @@ export async function GET() {
   if (error) return NextResponse.json({ error: "Couldn't load pending actions." }, { status: 500 });
 
   return NextResponse.json({
-    pending: (data ?? []).map((row) => ({ actionId: row.id, toolName: row.tool_name, summary: row.summary, expiresAt: row.expires_at })),
+    pending: (data ?? []).map((row) => ({ actionId: row.id, toolName: row.tool_name, summary: row.summary, expiresAt: row.expires_at, details: pendingDetails(row.tool_name, row.args) })),
   });
 }

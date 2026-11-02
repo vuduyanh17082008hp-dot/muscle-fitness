@@ -41,21 +41,19 @@ import {
   resolveConfirmationOutcome,
   resolveStreamErrorContent,
   type ChatStreamEvent,
+  type ChatStreamPendingConfirmation,
   type ChatStreamSource,
 } from "@/lib/dante-core/chat-stream-protocol";
 import type { StoredDanteMessage } from "@/lib/dante-core/conversation-store";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { DanteVoiceInput } from "@/components/dante-voice-input";
 import type { ContextStatus, DanteTodayContext } from "@/lib/dante-core/today-context";
 
 /* =========================================================
    TYPES
 ========================================================= */
 
-type PendingConfirmation = {
-  actionId: string;
-  toolName: string;
-  summary: string;
-};
+type PendingConfirmation = ChatStreamPendingConfirmation;
 
 type ChatMessage = {
   id: string;
@@ -67,6 +65,8 @@ type ChatMessage = {
   sources?: ChatStreamSource[] | null;
   pendingConfirmation?: PendingConfirmation | null;
   confirmationResolution?: ConfirmationResolution;
+  /** MF-S1: the server's own words for the outcome (read-back result, or why it was refused). */
+  confirmationMessage?: string | null;
   isComplete?: boolean;
   wasAborted?: boolean;
   /** Client id of the turn (user message + its reply) — what a retry resends so the server never duplicates it. */
@@ -77,7 +77,7 @@ type ChatMessage = {
   notSaved?: boolean;
 };
 
-type ConfirmationResolution = "confirmed" | "cancelled" | "failed" | "expired" | "unknown" | null;
+type ConfirmationResolution = "confirmed" | "cancelled" | "superseded" | "failed" | "expired" | "unknown" | null;
 
 type ThreadSummary = { id: string; title: string; updatedAt: string };
 
@@ -335,6 +335,120 @@ function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
    arrived, and nothing is saved until CONFIRM actually succeeds.
 ========================================================= */
 
+/* MF-S1: a reviewable proposal (title, reason, current → proposed, uncertainty) with Accept / Modify / Reject.
+   Status comes only from the server: PROPOSED until an Accept is confirmed as APPLIED (read back), never optimistic. */
+function ProposalCard({
+  pendingConfirmation,
+  details,
+  resolution,
+  message,
+  isBusy,
+  onConfirm,
+  onCancel,
+  onModify,
+}: {
+  pendingConfirmation: PendingConfirmation;
+  details: NonNullable<PendingConfirmation["details"]>;
+  resolution: ConfirmationResolution | undefined;
+  message: string | null | undefined;
+  isBusy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  onModify: (value: number) => void;
+}) {
+  const vi = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(details.title);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(details.modify?.value ?? ""));
+  const status = resolution === "confirmed" ? "APPLIED" : resolution === "cancelled" ? "REJECTED" : resolution === "superseded" ? "REPLACED" : resolution === "expired" ? "EXPIRED" : resolution === "failed" ? "FAILED" : resolution === "unknown" ? "UNKNOWN" : "PROPOSED";
+  const statusLabel = vi
+    ? { PROPOSED: "Đề xuất", APPLIED: "Đã áp dụng", REJECTED: "Đã từ chối", REPLACED: "Đã thay", EXPIRED: "Hết hạn", FAILED: "Không áp dụng được", UNKNOWN: "Chưa rõ kết quả" }[status]
+    : { PROPOSED: "Proposed", APPLIED: "Applied", REJECTED: "Rejected", REPLACED: "Replaced", EXPIRED: "Expired", FAILED: "Not applied", UNKNOWN: "Result unknown" }[status];
+  const tone = status === "APPLIED" ? "text-mf-glass-success" : status === "FAILED" || status === "UNKNOWN" ? "text-mf-glass-warning" : "text-mf-glass-text-muted";
+  const outcome = message
+    ?? (status === "APPLIED" ? (vi ? "Đã lưu và đọc lại từ dữ liệu của bạn." : "Saved and read back from your data.")
+      : status === "REJECTED" ? (vi ? "Không có gì thay đổi." : "Nothing was changed.")
+      : status === "REPLACED" ? (vi ? "Một đề xuất mới hơn đã thay thế đề xuất này — không có gì thay đổi từ nó." : "A newer proposal replaced this one — nothing was changed by it.")
+      : status === "EXPIRED" ? (vi ? "Đề xuất đã hết hạn — không có gì thay đổi." : "This proposal expired — nothing was changed.")
+      : status === "FAILED" ? (vi ? "Không áp dụng được. Không có gì thay đổi." : "It couldn't be applied. Nothing was changed.")
+      : status === "UNKNOWN" ? (vi ? "Không xác nhận được kết quả — hãy kiểm tra trước khi thử lại." : "We couldn't confirm the result — check before trying again.")
+      : null);
+  const parsed = Number(value);
+  const modifyValid = details.modify !== null && Number.isFinite(parsed) && parsed >= details.modify.min && parsed <= details.modify.max;
+  const fieldId = `modify-${pendingConfirmation.actionId}`;
+
+  return (
+    <section aria-label={details.title} className="mt-3 rounded-md border border-mf-glass-border-strong bg-mf-glass-bg-deep p-3 text-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-semibold text-mf-glass-text">{details.title}</h3>
+        <span className={cn("text-xs font-bold uppercase tracking-[0.08em]", tone)} aria-live="polite">{statusLabel}</span>
+      </div>
+      <p className="mt-1 text-mf-glass-text-secondary">{details.reason}</p>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <dt className="text-mf-glass-text-muted">{vi ? "Áp dụng cho" : "Changes"}</dt>
+        <dd className="text-mf-glass-text">{details.target}</dd>
+        <dt className="text-mf-glass-text-muted">{vi ? "Hiện tại" : "Now"}</dt>
+        <dd className="text-mf-glass-text break-words">{details.current}</dd>
+        <dt className="text-mf-glass-text-muted">{vi ? "Đề xuất" : "Proposed"}</dt>
+        <dd className="font-semibold text-mf-glass-text break-words">{details.proposed}</dd>
+      </dl>
+      {details.uncertainty ? <p className="mt-2 text-xs text-mf-glass-text-muted">{details.uncertainty}</p> : null}
+
+      {status === "PROPOSED" ? (
+        editing && details.modify ? (
+          <form
+            className="mt-3 flex flex-wrap items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (modifyValid) onModify(parsed);
+            }}
+          >
+            <label htmlFor={fieldId} className="flex flex-col text-xs text-mf-glass-text-muted">
+              {details.modify.label} ({details.modify.unit})
+              <input
+                id={fieldId}
+                type="number"
+                inputMode="numeric"
+                min={details.modify.min}
+                max={details.modify.max}
+                step={details.modify.step}
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                className="mt-1 min-h-11 w-28 rounded-md border border-mf-glass-border-strong bg-mf-glass-bg px-2 text-base text-mf-glass-text"
+              />
+            </label>
+            <button type="submit" disabled={isBusy || !modifyValid} className="min-h-11 rounded-md border border-mf-glass-text bg-mf-glass-brand px-4 font-semibold text-mf-glass-brand-ink disabled:opacity-50">
+              {vi ? "Cập nhật đề xuất" : "Update proposal"}
+            </button>
+            <button type="button" disabled={isBusy} onClick={() => setEditing(false)} className="min-h-11 rounded-md border border-mf-glass-border-strong px-4 font-semibold text-mf-glass-text-secondary disabled:opacity-50">
+              {vi ? "Thôi" : "Back"}
+            </button>
+          </form>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled={isBusy} onClick={onConfirm} className="min-h-11 rounded-md border border-mf-glass-text bg-mf-glass-brand px-4 font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:opacity-50">
+              {vi ? "Chấp nhận" : "Accept"}
+            </button>
+            {details.modify ? (
+              <button type="button" disabled={isBusy} onClick={() => setEditing(true)} className="min-h-11 rounded-md border border-mf-glass-border-strong px-4 font-semibold text-mf-glass-text transition hover:bg-mf-glass-hover disabled:opacity-50">
+                {vi ? "Sửa" : "Modify"}
+              </button>
+            ) : null}
+            <button type="button" disabled={isBusy} onClick={onCancel} className="min-h-11 rounded-md border border-mf-glass-border-strong px-4 font-semibold text-mf-glass-text-secondary transition hover:bg-mf-glass-hover disabled:opacity-50">
+              {vi ? "Từ chối" : "Reject"}
+            </button>
+          </div>
+        )
+      ) : null}
+      {outcome || (status === "PROPOSED" && message) ? <p className={cn("mt-2 font-semibold", tone)} role="status">{outcome ?? message}</p> : null}
+      {status === "APPLIED" ? (
+        <Link href={details.href} className="mt-2 inline-flex min-h-11 items-center font-semibold text-mf-glass-text underline underline-offset-4">
+          {details.hrefLabel} →
+        </Link>
+      ) : null}
+    </section>
+  );
+}
+
 function PendingConfirmationPanel({
   pendingConfirmation,
   resolution,
@@ -365,10 +479,10 @@ function PendingConfirmationPanel({
     );
   }
 
-  if (resolution === "cancelled") {
+  if (resolution === "cancelled" || resolution === "superseded") {
     return (
       <p className="mt-3 text-sm font-semibold text-mf-glass-text-muted">
-        Cancelled — nothing was changed.
+        {resolution === "superseded" ? "Replaced by a newer proposal" : "Cancelled"} — nothing was changed.
       </p>
     );
   }
@@ -656,8 +770,8 @@ export default function DanteChat({
             .map((item): ChatMessage => ({
               id: `pending-${item.actionId}`,
               role: "assistant",
-              content: "This is still waiting for you — nothing is saved until you tap Confirm.",
-              pendingConfirmation: { actionId: item.actionId, toolName: item.toolName, summary: item.summary },
+              content: item.details ? "This proposal is still waiting for you — nothing changes until you tap Accept." : "This is still waiting for you — nothing is saved until you tap Confirm.",
+              pendingConfirmation: { actionId: item.actionId, toolName: item.toolName, summary: item.summary, details: item.details ?? null },
               confirmationResolution: null,
               isComplete: true,
             }));
@@ -977,14 +1091,18 @@ export default function DanteChat({
         body: JSON.stringify({ actionId, intent }),
       });
 
-      const data = (await response.json().catch(() => ({}))) as { ok?: boolean };
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; result?: { message?: unknown } };
 
       const resolution = resolveConfirmationOutcome(intent, { status: response.status, ok: data.ok });
+      // The server's own words: the read-back result on success, the exact refusal (stale, expired, held) otherwise.
+      const serverMessage = resolution === "confirmed"
+        ? (typeof data.result?.message === "string" ? data.result.message : null)
+        : resolution === "failed" && typeof data.error === "string" ? data.error : null;
 
       setMessages((previous) =>
         previous.map((message) =>
           message.id === messageId
-            ? { ...message, confirmationResolution: resolution }
+            ? { ...message, confirmationResolution: resolution, confirmationMessage: serverMessage }
             : message
         )
       );
@@ -1001,6 +1119,36 @@ export default function DanteChat({
             : message
         )
       );
+    } finally {
+      setConfirmingActionId(null);
+    }
+  }
+
+  /* MF-S1 MODIFY: the server re-runs the proposal builder with the edited value; the card is replaced by the NEW
+     proposal (still PROPOSED — Accept is a separate step). A refusal is shown on the unchanged card. */
+  async function handleModifyAction(messageId: string, actionId: string, value: number) {
+    setConfirmingActionId(actionId);
+    try {
+      const response = await fetch("/api/dante/tools/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionId, intent: "modify", value }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; status?: string; pending?: PendingConfirmation };
+      setMessages((previous) =>
+        previous.map((message) => {
+          if (message.id !== messageId) return message;
+          if (data.ok && data.pending) return { ...message, pendingConfirmation: data.pending, confirmationResolution: null, confirmationMessage: null };
+          const handled = data.status === "already_handled" || data.status === "expired" || data.status === "not_found";
+          return {
+            ...message,
+            confirmationResolution: handled ? (data.status === "expired" ? "expired" : "unknown") : message.confirmationResolution,
+            confirmationMessage: data.error ?? "That change couldn't be prepared. Nothing was changed.",
+          };
+        })
+      );
+    } catch {
+      setMessages((previous) => previous.map((message) => (message.id === messageId ? { ...message, confirmationMessage: "Couldn't reach the server. Nothing was changed." } : message)));
     } finally {
       setConfirmingActionId(null);
     }
@@ -1237,7 +1385,19 @@ export default function DanteChat({
 
                       {message.sources && message.sources.length > 0 ? <DanteSourcesPanel sources={message.sources} /> : null}
 
-                      {message.pendingConfirmation ? (
+                      {message.pendingConfirmation?.details ? (
+                        <ProposalCard
+                          key={message.pendingConfirmation.actionId}
+                          pendingConfirmation={message.pendingConfirmation}
+                          details={message.pendingConfirmation.details}
+                          resolution={message.confirmationResolution}
+                          message={message.confirmationMessage}
+                          isBusy={confirmingActionId === message.pendingConfirmation.actionId}
+                          onConfirm={() => void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "confirm")}
+                          onCancel={() => void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "cancel")}
+                          onModify={(value) => void handleModifyAction(message.id, message.pendingConfirmation!.actionId, value)}
+                        />
+                      ) : message.pendingConfirmation ? (
                         <PendingConfirmationPanel
                           pendingConfirmation={message.pendingConfirmation}
                           resolution={message.confirmationResolution}
@@ -1295,7 +1455,7 @@ export default function DanteChat({
       {/* COMPOSER */}
       <form
         onSubmit={handleSubmit}
-        className="flex shrink-0 items-end gap-2 border-t border-mf-glass-border px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:px-4"
+        className="relative flex shrink-0 items-end gap-2 border-t border-mf-glass-border px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:px-4"
       >
         <textarea
           ref={textareaRef}
@@ -1313,6 +1473,15 @@ export default function DanteChat({
         <span id={composerHintId} className="sr-only">
           Enter sends. Shift and Enter adds a new line.
         </span>
+
+        {/* MF-S1: voice → editable text in this box; sending stays a separate, explicit step. */}
+        <DanteVoiceInput
+          disabled={isLoading}
+          onTranscript={(text) => {
+            setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
+            textareaRef.current?.focus();
+          }}
+        />
 
         {isLoading ? (
           <button

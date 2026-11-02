@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ZodType, ZodTypeDef } from "zod";
 
+import type { ProposalDetails } from "@/lib/dante-core/chat-stream-protocol";
 import type { DanteTemporalContext } from "@/lib/dante-core/temporal-context";
 import type { DanteLanguageDecision } from "@/lib/dante-language";
 
@@ -83,6 +84,13 @@ export type DanteTool<TInput = unknown, TOutput = unknown> = {
   execute: (context: ToolContext, input: TInput) => Promise<ToolExecuteResult<TOutput>>;
   /** Human-facing one-line summary of what this exact call will do, shown in a pending confirmation (Part 7: "The confirmation UI must clearly show what will change"). Required for write tools. */
   summarize?: (input: TInput) => string;
+  /** MF-S1: the reviewable card for a pending call, from its stored args. */
+  describe?: (input: TInput) => ProposalDetails;
+  /**
+   * MF-S1 Modify: rebuild the proposal with one edited value against FRESH state (the same builder the proposal came
+   * from). Returns new validated args for a new pending row; never executes anything.
+   */
+  revise?: (context: ToolContext, input: TInput, value: number) => Promise<{ ok: true; args: TInput; summary: string } | { ok: false; error: string }>;
 };
 
 /** Type-erased view used by the registry map/array so tools with different input/output types can coexist. */

@@ -73,6 +73,8 @@ describe("actionResolution — authoritative proposal state", () => {
   it.each([
     [{ status: "executed", expires_at: past }, "confirmed"],
     [{ status: "cancelled", expires_at: past }, "cancelled"],
+    // MF-S1: replaced by a Modify (or a newer proposal) is not the user's rejection.
+    [{ status: "cancelled", expires_at: past, result: { supersededBy: "00000000-0000-4000-8000-000000000001" } }, "superseded"],
     [{ status: "failed", expires_at: past }, "failed"],
     [{ status: "expired", expires_at: past }, "expired"],
     [{ status: "pending", expires_at: past }, "expired"],

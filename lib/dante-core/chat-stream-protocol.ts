@@ -21,7 +21,26 @@ export type ChatStreamDeltaEvent = {
 
 export type ChatStreamSource = { type: string; title: string; url: string };
 export type ChatStreamAction = { label: string; type: string };
-export type ChatStreamPendingConfirmation = { actionId: string; toolName: string; summary: string };
+/**
+ * MF-S1: what a reviewable proposal card shows — derived on the server from the stored, validated args (never from the
+ * reply text), so a restored card and a fresh one say the same thing.
+ */
+export type ProposalDetails = {
+  title: string;
+  reason: string;
+  /** The record this changes ("Workout plan · Push Pull Legs"). */
+  target: string;
+  current: string;
+  proposed: string;
+  uncertainty: string | null;
+  /** The page where the result can be seen. */
+  href: string;
+  hrefLabel: string;
+  /** One editable number; Modify re-runs the server's proposal builder with it (never applied directly). */
+  modify: { label: string; unit: string; value: number; min: number; max: number; step: number } | null;
+};
+
+export type ChatStreamPendingConfirmation = { actionId: string; toolName: string; summary: string; details?: ProposalDetails | null };
 
 export type ChatStreamDoneEvent = {
   type: "done";

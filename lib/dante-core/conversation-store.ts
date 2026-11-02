@@ -10,6 +10,7 @@ import {
   type ChatStreamPendingConfirmation,
 } from "@/lib/dante-core/chat-stream-protocol";
 import { TURN_DEADLINE_MS } from "@/lib/dante-core/turn-budget";
+import { pendingDetails } from "@/lib/dante-core/tools/pending-actions";
 
 /**
  * Dante conversation persistence on the existing ai_threads / ai_messages tables (user-scoped client, RLS: own rows).
@@ -323,19 +324,20 @@ export function persistChatStream(
 
 /* ---------------------------------------------------------------- reads (GET /api/dante/conversations) */
 
-export type ActionResolution = "confirmed" | "cancelled" | "failed" | "expired" | "unknown" | null;
+export type ActionResolution = "confirmed" | "cancelled" | "superseded" | "failed" | "expired" | "unknown" | null;
 
 /**
  * Authoritative proposal state from dante_tool_actions — never from what the reply text said. `null` = still
  * actionable. A claimed-but-unfinished ('confirmed') or missing row proves nothing about the write: "unknown".
+ * MF-S1: a proposal cancelled because a newer one replaced it is "superseded", not a user rejection.
  */
-export function actionResolution(row: { status: string; expires_at: string } | undefined, now = Date.now()): ActionResolution {
+export function actionResolution(row: { status: string; expires_at: string; result?: unknown } | undefined, now = Date.now()): ActionResolution {
   if (!row) return "unknown";
   switch (row.status) {
     case "executed":
       return "confirmed";
     case "cancelled":
-      return "cancelled";
+      return (row.result as { supersededBy?: unknown } | null)?.supersededBy ? "superseded" : "cancelled";
     case "failed":
       return "failed";
     case "expired":
@@ -393,16 +395,29 @@ export async function loadDanteThread(supabase: SupabaseClient, userId: string, 
   const actionIds = rows
     .map((row) => (row.metadata as AssistantMetadata | null)?.pendingConfirmation?.actionId)
     .filter((id): id is string => typeof id === "string" && UUID.test(id));
-  const actions = new Map<string, { status: string; expires_at: string }>();
-  if (actionIds.length > 0) {
-    const read = await supabase.from("dante_tool_actions").select("id, status, expires_at").eq("user_id", userId).in("id", actionIds);
+  type ActionRow = { id: string; status: string; expires_at: string; result: unknown; tool_name: string; summary: string; args: unknown };
+  const actions = new Map<string, ActionRow>();
+  const supersededBy = (row: ActionRow | undefined) => {
+    const next = row?.status === "cancelled" ? (row.result as { supersededBy?: unknown } | null)?.supersededBy : null;
+    return typeof next === "string" && UUID.test(next) ? next : null;
+  };
+  // MF-S1: a Modified proposal replaced its row; follow the chain (a few hops) so the card shows the live/final one.
+  let toRead = actionIds;
+  for (let hop = 0; hop < 4 && toRead.length > 0; hop++) {
+    const read = await supabase.from("dante_tool_actions").select("id, status, expires_at, result, tool_name, summary, args").eq("user_id", userId).in("id", toRead);
     if (read.error) throw read.error;
-    for (const row of read.data ?? []) actions.set(row.id as string, row as { status: string; expires_at: string });
+    for (const row of (read.data ?? []) as ActionRow[]) actions.set(row.id, row);
+    toRead = [...actions.values()].map(supersededBy).filter((id): id is string => id !== null && !actions.has(id));
   }
 
   return rows.map((row) => {
     const meta = (row.metadata ?? {}) as AssistantMetadata;
-    const pending = meta.pendingConfirmation ?? null;
+    let pending = meta.pendingConfirmation ?? null;
+    let final = pending ? actions.get(pending.actionId) : undefined;
+    for (let hop = 0; hop < 4 && supersededBy(final) && actions.has(supersededBy(final)!); hop++) final = actions.get(supersededBy(final)!);
+    if (pending && final && final.id !== pending.actionId) {
+      pending = { actionId: final.id, toolName: final.tool_name, summary: final.summary, details: pendingDetails(final.tool_name, final.args) };
+    }
     return {
       id: row.id as string,
       clientMessageId: (row.client_message_id as string | null) ?? null,

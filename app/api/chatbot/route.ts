@@ -134,6 +134,8 @@ import { loadTodaySession, localDateTimeParts } from "@/lib/training/load-today-
 import { loadTodayAdjustmentStatus, renderAdjustmentStatusReply, WHY_WORKOUT_CHANGED_ASK } from "@/lib/recovery/adjustment-status";
 import { isLimitationTurn } from "@/lib/recovery/limitation-review";
 import { runLimitationTurn } from "@/lib/recovery/limitation-turn";
+import { detectAdaptiveChange } from "@/lib/dante-core/adaptive-change";
+import { runAdaptiveChangeTurn } from "@/lib/dante-core/adaptive-change-turn";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { buildTodayPlan } from "@/lib/daily-plan/build-today-plan";
@@ -5073,6 +5075,51 @@ async function handleChatbotPost(
       }
       // A failed read falls through to the provider path, which still carries the injury context rule.
       logToolEvent("DANTE_INTELLIGENCE", { stage: "limitation-review", errorCategory: limitationRead.status });
+    }
+
+    /* -----------------------------------------------------
+       YOUR USER CHANGED (MF-S1)
+
+       "I can only train 3 days a week now", "lower my calories by 200", "should I eat less since I'm training less?" —
+       the newest statement is read deterministically (lib/dante-core/adaptive-change.ts), canonical plan / nutrition
+       state is re-read, and at most one concrete proposal goes behind an Accept / Modify / Reject card. Nothing changes
+       until the user accepts and the tool re-validates. Advice questions ("is 3 days enough?") stay with the model.
+    ----------------------------------------------------- */
+    const adaptiveChange = !safetyCheck.triggered && !statusAsk ? detectAdaptiveChange(userMessage) : null;
+    if (adaptiveChange) {
+      const adaptiveLanguage = proposalLanguage(userMessage, sessionLanguageDecision.language === "vi" ? "vi" : "en");
+      const facts = activeFacts(intelligenceBrief.context);
+      const adaptiveRead = await boundedDependency(budget, "adaptive_change", () => runAdaptiveChangeTurn({
+        supabase,
+        userId: user.id,
+        now,
+        timezone: timezone || "UTC",
+        language: adaptiveLanguage,
+        change: adaptiveChange,
+        blockDecrease: facts.some((fact) => fact.key === "CONDITION:eating_disorder" || fact.kind === "LOW_ENERGY_INTAKE"),
+      }), 12_000);
+      if (adaptiveRead.status === "OK") {
+        const result = adaptiveRead.value;
+        return await emitConvergedSingleShot({
+          draft: result.draft,
+          branch: "TOOL",
+          requestTimestamp: now.toISOString(),
+          language: adaptiveLanguage,
+          responseIntent: "TOOL_ACTION_RESPONSE",
+          toolState: { permission: result.pendingConfirmation ? "CONFIRMATION_REQUIRED" : "READ", persisted: false },
+          done: {
+            model: "dante-adaptive-change",
+            insight: null,
+            sources: [],
+            actions: [],
+            pendingConfirmation: result.pendingConfirmation,
+            toolTraceSummary: [result.trace],
+            safetyTriggered: false,
+            safetyCategory: null,
+          },
+        });
+      }
+      logToolEvent("DANTE_INTELLIGENCE", { stage: "adaptive-change", errorCategory: adaptiveRead.status });
     }
 
     const boundaryLang = sessionLanguageDecision.language === "vi" ? "vi" : "en";
