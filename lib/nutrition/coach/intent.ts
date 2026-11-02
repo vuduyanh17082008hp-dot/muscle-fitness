@@ -107,6 +107,18 @@ const SENSORY_ADDS: Array<[RegExp, string]> = [
   [/\b(tangy|tangier|fresher|more acid)\b/i, "lime"],
 ]
 
+/** "besides tuna" / "other than tuna" / "without tuna" / "no more tuna" / "ngoài cá ngừ": foods THIS request excludes. */
+const EXCLUSION = /(?<![\p{L}])(?:besides?|other than|apart from|except(?: for)?|without|no more|instead of|anything but|minus|ngoài|trừ|không có|không dùng|không ăn)\s+(?:any\s+|the\s+)?([\p{L}][\p{L} ]{1,30}?)(?=[,.;!?]|\s+(?:and|but|or|please|for|today|this|again|anymore)(?![\p{L}])|$)/giu
+
+/**
+ * Turn-level exclusions resolved against the curated catalogue. Request-scoped only: never an allergy, never persisted.
+ * `terms` feed the engine's excludedFoods matcher (names/tags); `ids` are the resolved ingredients.
+ */
+export function excludedFoodsIn(message: string): { ids: string[]; terms: string[] } {
+  const terms = [...message.matchAll(EXCLUSION)].map((match) => match[1].trim().toLowerCase()).filter((term) => resolveFoods([term]).ids.length > 0)
+  return { ids: resolveFoods(terms).ids, terms }
+}
+
 export function parseCoachMessage(message: string, options: { hasDraft: boolean }): Intent {
   const text = message.trim()
   const lower = text.toLowerCase()
@@ -175,8 +187,12 @@ export function parseCoachMessage(message: string, options: { hasDraft: boolean 
   // Build a meal (from context, or from foods the user names)
   const proteinPriority = new RegExp(PROTEIN_PRIORITY.source, "i").test(lower)
   const foodText = lower.replace(PROTEIN_PRIORITY, " ").replace(/\s+/g, " ")
-  const foodsMatch = foodText.match(/\b(?:i have|i've got|using|use|from|with)\s*:?\s*(.+?)(?:\.|$| (?:under|below|and (?:high|under)|for (?:dinner|lunch|breakfast)))/)
-  const { ids, unresolved } = foodsMatch ? resolveFoods(splitFoods(foodsMatch[1])) : { ids: [], unresolved: [] }
+  // `\b` after the verb: "without tuna" must not read as "with: out tuna" (which selected the excluded food).
+  const foodsMatch = foodText.match(/\b(?:i have|i've got|using|use|from|with)\b\s*:?\s*(.+?)(?:\.|$| (?:under|below|and (?:high|under)|for (?:dinner|lunch|breakfast)))/)
+  const excluded = excludedFoodsIn(text).ids
+  const named = foodsMatch ? resolveFoods(splitFoods(foodsMatch[1])) : { ids: [], unresolved: [] }
+  const ids = named.ids.filter((id) => !excluded.includes(id))
+  const unresolved = named.unresolved
   const asksForMeal = (/\b(build|make me|make a|suggest|plan|what should i eat|what should i have|help me hit|help me (?:decide|choose|pick|figure out|plan|find)|use my remaining|what meal|give me|i need a|i want a|put together|create)\b/.test(lower) && FOODISH.test(text)) || /\bwhat (?:to|should i) (?:eat|have)\b/.test(lower)
   const namesFoodsForMeal = ids.length > 0 && /\b(dinner|lunch|breakfast|snack|meal|calories?|kcal|protein)\b/.test(lower)
 

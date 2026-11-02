@@ -53,10 +53,14 @@ function fromBuild(ctx: CoachContext, result: BuildResult, constraints: MealCons
   if (result.status === "INFEASIBLE_HARD") return { ok: false, code: "INFEASIBLE", message: result.reason, closest: toDraft(ctx, result.closest, constraints, mode, source) }
   const draft = toDraft(ctx, result.best, constraints, mode, source)
   const relaxed = result.relaxed.map((v) => v.message)
+  const kcalLeft = Math.round(ctx.snapshot.caloriesRemaining)
+  const proteinLeft = Math.round(ctx.snapshot.proteinRemaining)
+  // Never voice a negative "remaining": an exceeded target is said as such, not as "-27g protein left".
+  const budget = `${kcalLeft > 0 ? `your remaining ${kcalLeft} kcal` : `today's calories (already ${-kcalLeft} kcal over)`}${proteinLeft > 0 ? ` and ${proteinLeft}g protein` : " — you've already met today's protein target"}`
   const message =
     relaxed.length > 0
       ? `I couldn't satisfy every constraint simultaneously. ${relaxed.join(" ")}`
-      : `${draft.name}: about ${Math.round(draft.nutrition.calories)} kcal and ${Math.round(draft.nutrition.protein)}g protein — built from your remaining ${Math.round(ctx.snapshot.caloriesRemaining)} kcal and ${Math.round(ctx.snapshot.proteinRemaining)}g protein.`
+      : `${draft.name}: about ${Math.round(draft.nutrition.calories)} kcal and ${Math.round(draft.nutrition.protein)}g protein — built from ${budget}.`
   return { ok: true, draft, alternatives: result.alternatives.map((c) => toDraft(ctx, c, constraints, mode, source)), message, relaxed }
 }
 

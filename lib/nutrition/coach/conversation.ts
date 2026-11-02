@@ -276,7 +276,7 @@ export type Classification =
 
 const RESET = /\b(?:forget|scrap|discard|ditch|cancel|clear)\b[^.?!]*\b(?:that|this|the)\b[^.?!]*\b(?:meal|bowl|recipe|draft|dish)\b|\bstart over\b|\bnever ?mind\b|\bforget (?:it|that)\b/i
 /** A request to log the meal in view to TODAY's food log. "Add it to my meal plan" (no log verb) is not one. */
-export const LOG_REQUEST = /\blog\s+(?:this|that|it)\b(?!\s+(?:workout|session))|\blog the (?:active )?(?:meal|draft)\b|\bsave this meal\b|\badd (?:this|it|that)(?: meal)? to (?:my |today'?s )?(?:food )?(?:log|diary|tracker)\b|(?:ghi|lưu)(?: lại)?(?: vào nhật ký)? (?:món|bữa|cái) (?:này|đó|ấy)/iu
+export const LOG_REQUEST = /\blog\s+(?:this|that|it)\b(?!\s+(?:workout|session))|\blog the (?:active )?(?:meal|draft)\b|\bsave this meal\b|\badd (?:this|it|that|the (?:last |same )?meal(?: (?:we|you) (?:just )?(?:discussed|talked about|suggested|built|made))?)(?: meal)? to (?:my |today'?s )?(?:food )?(?:log|diary|tracker)\b|(?:ghi|lưu)(?: lại)?(?: vào nhật ký)? (?:món|bữa|cái) (?:này|đó|ấy)/iu
 export const isResetMessage = (message: string) => RESET.test(message.trim())
 const PREF_CRAVE = /^\s*(?:actually,?\s*)?i\s+(?:always|usually|often)\s+crav\w*\s+([a-z' -]{2,40}?)(?:\s+(?:at|in|every)\s+(?:the\s+)?(night|evening|morning|afternoon|day))?\s*[.!]*$/i
 const PREF_DISLIKE = /^\s*(?:actually,?\s*)?i\s+(?:really\s+)?(?:hate|dislike|can'?t stand|don'?t like|do not like|am not a fan of|'?m not a fan of)\s+([a-z' -]{2,40}?)\s*[.!]*$/i

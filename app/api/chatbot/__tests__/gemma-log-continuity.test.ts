@@ -323,3 +323,93 @@ describe("P0 — corrections, competing actions, safety, failures", () => {
     expect(createPendingAction).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * MF-HOTFIX-GEMMA-P0 — free-text logging, planned-vs-eaten, and the "beside tuna" exclusion. Observed live before the fix:
+ * "Log 200g chicken breast for lunch" → "I can't log that… would you like to confirm?" (no draft, nothing saved);
+ * "Add this meal to tomorrow's meal plan" → a brand-new meal; "give me high protein meals beside tuna" → 2 of 3 options with tuna.
+ */
+const ingredientIds = (draft: Json | null | undefined): string[] => (draft?.ingredients ?? []).map((item: Json) => item.ingredientId)
+
+describe("hotfix — direct food log from chat", () => {
+  it("'Log 200g chicken breast for lunch' proposes, logs once on confirm, never twice", async () => {
+    const s = session()
+    const ask = await s.say("Log 200g chicken breast for lunch.")
+    expect(ask.mealDraft?.ingredients).toEqual([expect.objectContaining({ ingredientId: "chicken_breast", grams: 200 })])
+    expect(ask.conversation.pendingLog).toMatchObject({ stage: "READY_FOR_CONFIRMATION", mealType: "lunch" })
+    expect(ask.reply).toMatch(/Nothing is saved until you confirm/)
+    expect(vi.mocked(createPendingAction).mock.calls[0][3]).toMatchObject({ mealType: "lunch", ingredients: [{ ingredientId: "chicken_breast", grams: 200 }] })
+    expect(logged).toHaveLength(0)
+
+    const done = await s.say("confirm")
+    expect(logged).toHaveLength(1)
+    expect(done.conversation.pendingLog).toMatchObject({ stage: "VERIFIED", foodLogId: logged[0].foodLogId })
+    expect(done.reply).toMatch(/^Logged/)
+    await s.say("confirm")
+    expect(logged).toHaveLength(1)
+  })
+
+  it("cancel after the proposal writes nothing and cancels the server action", async () => {
+    const s = session()
+    await s.say("log 150g chicken breast for dinner")
+    const cancelled = await s.say("cancel")
+    expect(cancelPendingAction).toHaveBeenCalledTimes(1)
+    expect(logged).toHaveLength(0)
+    expect(cancelled.reply).toMatch(/nothing was logged/i)
+  })
+
+  it.each(["Log 0g chicken breast for lunch", "Log 150g unicornium for dinner", "log 9000g chicken breast"])("'%s' saves nothing and says so", async (message) => {
+    const reply = await session().say(message)
+    expect(createPendingAction).not.toHaveBeenCalled()
+    expect(reply.reply).toMatch(/nothing was saved/i)
+    expect(reply.foodLogChanged).toBeFalsy()
+  })
+
+  it.each(["Add this meal to tomorrow's meal plan.", "log this for dinner tomorrow", "save this to my meal plan"])("planned meal '%s' is never logged as eaten", async (message) => {
+    const { s } = await suggested()
+    const reply = await s.say(message)
+    expect(createPendingAction).not.toHaveBeenCalled()
+    expect(reply.reply).toMatch(/isn't supported yet, so nothing was saved/)
+  })
+
+  it("'Add the meal we just discussed to my food log' is a log request for the meal in view", async () => {
+    const { s, name } = await suggested()
+    const ask = await s.say("Add the meal we just discussed to my food log.")
+    expect(ask.conversation.pendingLog).toMatchObject({ stage: "AWAITING_REQUIRED_INPUT", mealName: name })
+    expect(logged).toHaveLength(0)
+  })
+})
+
+describe("hotfix — 'beside tuna' is an exclusion, and discovery never edits the active draft", () => {
+  it("exact repro: with a tuna draft active, 'give me high protein meals beside tuna' returns only tuna-free options", async () => {
+    const { s } = await suggested()
+    const before = JSON.parse(JSON.stringify(s.draft))
+    expect(ingredientIds(before)).toContain("tuna")
+    const next = await s.say("give me high protein meals beside tuna")
+    expect(next.route).toBe("build")
+    const all = [next.mealDraft, ...(next.alternatives ?? [])]
+    expect(all.length).toBeGreaterThanOrEqual(2)
+    for (const option of all) expect(ingredientIds(option)).not.toContain("tuna")
+    // Every RENDERED option is one of the evaluated, tuna-free candidates; no duplicate titles.
+    const labels: string[] = next.presentedOptions.options.map((option: Json) => option.label)
+    expect(labels.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(labels).size).toBe(labels.length)
+    for (const label of labels) expect(all.some((option) => option.name === label)).toBe(true)
+    // Discovery is a NEW draft: the earlier one is not edited, and nothing is logged.
+    expect(next.draftTarget).toMatchObject({ mode: "NEW" })
+    expect(next.mealDraft.id).not.toBe(before.id)
+    expect(createPendingAction).not.toHaveBeenCalled()
+  })
+
+  it.each(["build me a high protein meal without tuna", "high protein meal other than tuna", "give me a high-protein meal, no more tuna"])("'%s' never selects tuna", async (message) => {
+    const reply = await session().say(message)
+    for (const option of [reply.mealDraft, ...(reply.alternatives ?? [])]) expect(ingredientIds(option)).not.toContain("tuna")
+  })
+
+  it("'make it cheaper' edits the draft criteria, never logs", async () => {
+    const { s } = await suggested()
+    await s.say("make it cheaper")
+    expect(createPendingAction).not.toHaveBeenCalled()
+    expect(logged).toHaveLength(0)
+  })
+})

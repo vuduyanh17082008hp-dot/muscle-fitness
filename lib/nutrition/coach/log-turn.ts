@@ -9,7 +9,10 @@ import type { MealType } from "@/lib/nutrition/food-log/types"
 import { loadCoachContext } from "./context"
 import { isResetMessage, LOG_REQUEST } from "./conversation"
 import { draftIdentity, isExplicitConfirm, isLive, isLogCancel, isLogConfirm, MEAL_TYPE_QUESTION, mealLabelFor, mealTypeIn, pickCompeting, type LogActionStage, type PendingLog } from "./log-action"
+import { assembleDraft } from "./draft"
+import { findIngredientByText } from "./ingredients"
 import { proposeDraftLog } from "./propose-log"
+import { resolveConstraints } from "./service"
 import type { ActiveMealDraft, CoachContext } from "./types"
 
 /**
@@ -28,6 +31,8 @@ export type LogTurnResult = {
   trace: LogActionStage[]
   foodLogChanged: boolean
   foodLogId?: string
+  /** A draft this turn created ("log 200g chicken breast"): the client must show it so the confirm binds to it. */
+  draft?: ActiveMealDraft
 }
 
 type Input = {
@@ -50,12 +55,54 @@ const READBACK_WAIT_MS = 2 * EARLY_READ_MS
 const AWAIT_TTL_MS = 10 * 60_000
 const VI = /[ăâđêôơưàáạảãèéẹẻẽìíịỉĩòóọỏõùúụủũỳýỵỷỹ]/i
 
+/** "Log 200g chicken breast for lunch": an eaten-food entry named by amount + food, with no draft needed. */
+const DIRECT_LOG = /^\s*(?:please\s+)?(?:log|add|track|record|ghi)\s+(\d{1,5}(?:[.,]\d+)?)\s*(?:g|grams?|gr)\s+(?:of\s+)?(.+?)(?:\s+(?:for|as|to|into|in|at|vào)\s+.*)?\s*[.!]*$/iu
+/** A request to put a meal on a FUTURE day / the meal plan. There is no per-meal plan persistence: never log it as eaten. */
+const FUTURE_PLAN = /\b(?:tomorrow|tmr|next (?:week|day)|(?:meal|weekly) plan|plan (?:it|this|that) for|schedule)\b|ngày mai|kế hoạch/iu
+const PLAN_VERB = /\b(?:log|add|save|put|schedule|plan|track|record)\b|(?<![\p{L}])(?:ghi|thêm|lưu)(?![\p{L}])/iu
+
 export async function handleLogTurn(input: Input): Promise<LogTurnResult | null> {
-  const { supabase, userId, message, now, budget, ctx, draft, competingProposal } = input
+  const { supabase, userId, message, now, budget, ctx, competingProposal } = input
+  let draft = input.draft
   const pending = isLive(input.pending, now) ? input.pending : null
-  const asksLog = LOG_REQUEST.test(message)
   const lang: "en" | "vi" = VI.test(message) ? "vi" : (pending?.lang ?? "en")
   const t = (en: string, vi: string) => (lang === "vi" ? vi : en)
+
+  // Planned ≠ eaten. Saving a meal to a future day isn't supported here: say so, save nothing, keep any pending log.
+  if (FUTURE_PLAN.test(message) && PLAN_VERB.test(message)) {
+    return {
+      reply: t(
+        "I can't save a meal to a future day or to your meal plan from chat — that isn't supported yet, so nothing was saved. If you've already eaten it, say “log this” and I'll add it to today's food log.",
+        "Mình chưa thể lưu món vào ngày khác hay kế hoạch bữa ăn từ chat — tính năng này chưa có, nên chưa lưu gì. Nếu bạn đã ăn rồi, nói “ghi món này” để mình thêm vào nhật ký ăn hôm nay.",
+      ),
+      pendingLog: pending,
+      trace: [],
+      foodLogChanged: false,
+    }
+  }
+
+  // "Log 200g chicken breast for lunch": a one-ingredient draft from the curated catalogue (server-computed macros), run
+  // through the same propose → confirm lifecycle as "log this". Unknown food / bad amount → nothing saved.
+  let createdDraft: ActiveMealDraft | undefined
+  const direct = message.match(DIRECT_LOG)
+  if (direct) {
+    const food = direct[2].trim()
+    const grams = Number(direct[1].replace(",", "."))
+    const ingredient = findIngredientByText(food)
+    const nothing = (en: string, vi: string): LogTurnResult => ({ reply: t(en, vi), pendingLog: pending, trace: [], foodLogChanged: false })
+    if (!ingredient) return nothing(`I don't have verified nutrition data for “${food}”, so I won't guess its numbers — nothing was saved. Use Add Food search to log it.`, `Mình không có dữ liệu dinh dưỡng đã kiểm chứng cho “${food}”, nên sẽ không đoán — chưa lưu gì. Hãy dùng Thêm món để ghi.`)
+    if (!Number.isFinite(grams) || grams < 1 || grams > 3000) return nothing(`${direct[1]} g isn't a portion I can log — nothing was saved. Give an amount between 1 and 3000 g.`, `${direct[1]} g không phải khẩu phần hợp lệ — chưa lưu gì. Hãy nhập từ 1 đến 3000 g.`)
+    const base = resolveConstraints(ctx)
+    // Eaten food isn't held to a meal-building budget: no ceiling, so no "constraint violation" notes on a plain log.
+    const constraints = base ? { ...base, calorieCeiling: null } : { calorieCeiling: null, calorieCeilingStrict: false, calorieCeilingSource: "context" as const, proteinTarget: 0, proteinTargetSource: "context" as const, maxPriceSgd: null, maxCookMinutes: null, availableIds: null }
+    createdDraft = assembleDraft({ ctx, family: "logged", source: "conversation", name: `${Math.round(grams)} g ${ingredient.name}`, items: [{ ingredientId: ingredient.id, grams: Math.round(grams) }], constraints })
+    draft = createdDraft
+  }
+  const asksLog = Boolean(direct) || LOG_REQUEST.test(message)
+  const withDraft = (r: LogTurnResult | null): LogTurnResult | null => (r && createdDraft ? { ...r, draft: createdDraft } : r)
+  return withDraft(await lifecycle())
+
+  async function lifecycle(): Promise<LogTurnResult | null> {
   if (!pending && !asksLog) {
     // "confirm" with nothing waiting (after a cancel, or never asked): say so — never re-voice the meal as a fresh turn.
     if (draft && !competingProposal && isExplicitConfirm(message)) {
@@ -295,4 +342,5 @@ export async function handleLogTurn(input: Input): Promise<LogTurnResult | null>
       return confirm(pending)
     }
   }
+}
 }

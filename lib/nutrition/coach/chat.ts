@@ -65,7 +65,7 @@ import { recordFollowUpEvent } from "./followup-telemetry"
 import { buildCravingDraft, detectCravingKey } from "./craving"
 import { applyDraftOp, type DraftOp } from "./draft"
 import { ALLERGEN_GUARD, asksForMealSuggestion, coordinationDiagnostics, coordinationNote, EMPTY_COORDINATION, GEMMA_CLEARANCE, loadGemmaCoordination, type GemmaCoordination } from "@/lib/intelligence/gemma-consumer"
-import { dayLevelCalorieProposal, isUnsafeCoachReply, parseCoachMessage, resolveFoods, SAFETY_REPLY } from "./intent"
+import { dayLevelCalorieProposal, excludedFoodsIn, isUnsafeCoachReply, parseCoachMessage, resolveFoods, SAFETY_REPLY } from "./intent"
 import { buildDanteDeferralReply } from "@/lib/intelligence/query-understanding"
 import { activeFacts, buildContextWorkingSet, buildIntelligenceBrief, enforceIntegrity, restrictedSubstanceReply, withStoredAllergies } from "@/lib/intelligence/performance-core"
 import { syncDisclosureSignals } from "@/lib/intelligence/dante-signal-persistence"
@@ -979,8 +979,7 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
       logAction: { stage: logTurn.trace.at(-1) ?? null, trace: logTurn.trace, foodLogId: logTurn.foodLogId ?? null },
       foodLogChanged: logTurn.foodLogChanged,
       action: logTurn.pendingLog?.stage === "READY_FOR_CONFIRMATION" || logTurn.pendingLog?.stage === "AWAITING_REQUIRED_INPUT" ? "PROPOSE_LOG" : "NONE",
-      draftTarget: draft ? "ACTIVE" : "NONE",
-      ...(draft ? { topic: mealTopic(draft) } : {}),
+      ...(logTurn.draft ? { mealDraft: logTurn.draft, draftTarget: "NEW" as const, topic: mealTopic(logTurn.draft) } : { draftTarget: draft ? ("ACTIVE" as const) : ("NONE" as const), ...(draft ? { topic: mealTopic(draft) } : {}) }),
     })
   }
 
@@ -1174,10 +1173,14 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
           `Your current target stays ${canonicalCalories} kcal and ${canonicalProtein} g protein. I won't build a day around ${proposedDay} kcal, and another person's number doesn't change it.`,
         )
       }
-      const chosen = intent.foodIds.length > 0 ? intent.foodIds : (selectedFoods ?? [])
+      // "besides tuna": a turn-level hard exclusion for every candidate (not an allergy, not persisted). It also drops the food
+      // from the selection carried over from earlier turns — the newest explicit request beats stale context.
+      const exclusion = excludedFoodsIn(message)
+      const chosen = (intent.foodIds.length > 0 ? intent.foodIds : (selectedFoods ?? [])).filter((id) => !exclusion.ids.includes(id))
+      const buildCtx = exclusion.terms.length ? { ...planningCtx, guards: { ...planningCtx.guards, excludedFoods: [...planningCtx.guards.excludedFoods, ...exclusion.terms] } } : planningCtx
       // "lots of protein" / "protein-heavy" is a modifier: raise the protein target unless the user gave an explicit number.
       const overrides = intent.proteinPriority && intent.overrides.proteinTarget === undefined ? { ...intent.overrides, proteinTarget: Math.round(Math.min(60, Math.max(40, ctx.snapshot.proteinRemaining))) } : intent.overrides
-      const result = chosen.length > 0 ? chooseMyFood(planningCtx, chosen, "BALANCED", overrides, "conversation") : buildNextMeal(planningCtx, "BALANCED", overrides, "conversation")
+      const result = chosen.length > 0 ? chooseMyFood(buildCtx, chosen, "BALANCED", overrides, "conversation") : buildNextMeal(buildCtx, "BALANCED", overrides, "conversation")
       const skipped = intent.unresolvedFoods.length > 0 ? ` I don't have verified nutrition data for ${intent.unresolvedFoods.join(", ")}, so I left ${intent.unresolvedFoods.length > 1 ? "them" : "it"} out.` : ""
       const toolCalls: ToolCallSummary[] = [{ name: "meal_optimizer", ok: result.ok }]
       if (!result.ok) return respond("NEW_MEAL_REQUEST", "build", `${result.message}${skipped}`, { mealDraft: result.closest ?? null, draftTarget: result.closest ? "NEW" : "NONE", action: result.closest ? "CREATE_MEAL_DRAFT" : "NONE", toolCalls })
