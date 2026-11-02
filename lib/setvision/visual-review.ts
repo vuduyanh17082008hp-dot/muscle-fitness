@@ -65,7 +65,7 @@ Report ONLY what is visible. Rules:
 - filming_tip: one short tip for a better clip, or "".
 - observations: at most 3. kind "issue" = a technique problem you can SEE in specific frames; "positive" = something clearly done well; "uncertain" = possible but not clear.
   - frames: the frame numbers (as labelled) where it is visible. An issue must be visible in at least two frames.
-  - confidence: "high" only when the problem is unmistakable in those frames from this camera angle; otherwise "medium" or "low".
+  - confidence: "high" only when it is unmistakable in those frames from this camera angle (for a positive too); otherwise "medium" or "low".
   - what: one plain sentence about what is visible. cue: one short practical coaching cue ("" for positive).
 - NEVER state numbers: no joint angles, degrees, percentages, distances, speeds, or rep counts.
 - NEVER diagnose injuries, pain or medical conditions, or claim injury risk.
@@ -139,7 +139,8 @@ export function visualReviewUserText(exerciseLabel: string, frameTimesMs: number
 
 /** Any number with a measurement unit, or a rep count — never shown, because the stills cannot support it. */
 const NUMERIC_CLAIM = /\d+(\.\d+)?\s*(°|deg|degree|%|percent|cm|mm|inch|in\b|m\b|m\/s|reps?\b|times\b|kg|lb)/i;
-const MEDICAL = /\b(injur|pain|hurt|diagnos|tear|strain|sprain|herniat|risk of)/i;
+// Injury-risk language counts too ("stress the joints", "joint stress"): the stills can't support it (S3 eval 2026-11-03).
+const MEDICAL = /\b(injur|pain|hurt|diagnos|tear|strain|sprain|herniat|risk of|unsafe|dangerous|damag|joint stress|stress (on |to )?(the |your )?(joints?|knees?|back|spine|shoulders?|neck))/i;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown, max: number) => (typeof v === "string" ? clip(v, max) : "");
@@ -196,7 +197,10 @@ export function sanitizeVisualReview(raw: unknown, frameTimesMs: number[], exerc
   const observations: VisualObservation[] = [];
   const rawObs = Array.isArray(raw.observations) ? raw.observations : [];
   for (const entry of rawObs) {
-    if (!isRecord(entry)) continue;
+    // AI praise is not shown at all. On a real clip its author labels "you're curving your spine" (S3 eval,
+    // 2026-11-03) the model said "maintains a neutral spine" in 6/6 runs, citing 4 frames at high confidence —
+    // no evidence bar catches confidently wrong reassurance. Positives come only from tracked measurement.
+    if (!isRecord(entry) || entry.kind === "positive") continue;
     const what = str(entry.what, 220);
     const cue = str(entry.cue, 140);
     if (!what || NUMERIC_CLAIM.test(what) || NUMERIC_CLAIM.test(cue) || MEDICAL.test(what) || MEDICAL.test(cue)) continue;
@@ -204,15 +208,14 @@ export function sanitizeVisualReview(raw: unknown, frameTimesMs: number[], exerc
       ? [...new Set(entry.frames.filter((n): n is number => Number.isInteger(n) && n >= 1 && n <= frameTimesMs.length))].sort((a, b) => a - b)
       : [];
     if (frames.length === 0) continue; // a finding we can't point to in the video is not shown
-    let kind: VisualObservation["kind"] = entry.kind === "issue" || entry.kind === "positive" ? entry.kind : "uncertain";
     // One still is not a repetition, and a hedged issue is not an observation: both become "possibly".
-    if (kind === "issue" && (frames.length < 2 || entry.confidence !== "high")) kind = "uncertain";
-    observations.push({ kind, what, cue: kind === "positive" ? null : cue || null, atMs: frames.map((n) => frameTimesMs[n - 1]) });
+    const kind = entry.kind === "issue" && frames.length >= 2 && entry.confidence === "high" ? "issue" : "uncertain";
+    observations.push({ kind, what, cue: cue || null, atMs: frames.map((n) => frameTimesMs[n - 1]) });
   }
 
-  // Most useful first, and few: up to two issues, one positive, one uncertain.
+  // Most useful first, and few: up to two issues, one uncertain.
   const pick = (kind: VisualObservation["kind"], n: number) => observations.filter((o) => o.kind === kind).slice(0, n);
-  const kept = [...pick("issue", 2), ...pick("positive", 1), ...pick("uncertain", 1)];
+  const kept = [...pick("issue", 2), ...pick("uncertain", 1)];
 
   const hasIssue = kept.some((o) => o.kind === "issue");
   const status: VisualReviewStatus = hasIssue

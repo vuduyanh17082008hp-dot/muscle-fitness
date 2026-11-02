@@ -535,18 +535,42 @@ the classification section.
 - **Velocity defaults to a normalized unit**; real m/s requires a
   calibration input the product UI doesn't yet collect (the API supports
   it).
-- **Asymmetry is squat-only.**
-- **Single-lifter assumption** (MoveNet's single-pose mode) — a second
-  person in frame (spotter, trainer) is not handled specially and could
-  degrade tracking if they're closer to the camera than the lifter.
+- **Asymmetry is squat-only, front view only** (a 2D left/right knee-angle
+  difference at the bottom; hidden in side/oblique views).
+- **Subject gate (S3, `analyze.ts::subjectGate`)** — the tracked analysis
+  and the AI visual review both refuse a clip, before any rep, form result
+  or OpenAI call, on: a hard cut or a dissolve/big camera move
+  (`person-check.ts::findSceneCuts`), a tracker jump, or a MoveNet
+  MultiPose result that can't attribute the clip to one person. Measured on
+  real clips 2026-11-02/03: refused split screen, two people side by side,
+  a background trainer, a subject swap at a cut, dissolves, occlusion;
+  passed fixed-camera single takes. **Known misses / costs:** a small
+  picture-in-picture person is not seen by MultiPose (the AI review's own
+  multi-person check caught the one example — do not rely on it); a slow
+  cross-fade is caught only by the 1 s change rule; **hand-held /
+  follow-cam footage sits at the 0.5 threshold** (browser-measured 0.50–0.51
+  on real follow-cam leg-press takes) and is usually refused, as is any
+  swinging camera. Thresholds are a-priori, from ~25 clips.
+- **AI visual review is qualitative and unvalidated.** On 6 author-labelled
+  real clips (5 narrated technique faults + 1 correct, 3 runs each, gate
+  bypassed for measurement) it confirmed **0 of the 5 faults** and raised
+  **0 confirmed false issues**; its "possibly" items varied run to run.
+  It praised a spine its author labels "curving" in 6/6 runs, so AI
+  positives are not shown at all. It misidentified a real front-view
+  seated leg curl as a leg extension (fails safe: not assessable). Treat a
+  confirmed AI issue as a lead to check on replay, never as a measurement.
+- **Partial/shallow-rep findings need a range view**: from another view
+  (e.g. a front-view goblet squat) projection noise split full-depth
+  descents into "partials", so they are shown only as "possibly".
 - **Client-side-only processing** means analysis speed depends on the
   user's device; no server-side fallback exists for very long videos or
   low-power devices.
 - **Exercise classifier is heuristic**, unvalidated against real data (see
   above) — treat its output as a reasonable guess, not ground truth, until
   benchmarked. Auto-detect is therefore suggestion-only.
-- **Only squat is a supported analysis.** Deadlift is experimental (no real
-  clip counted); bench press and every other exercise are label-only.
+- **Only squat is a verified tracked analysis.** Deadlift and the other
+  movement-family engines are experimental; every other catalogue exercise
+  and any custom name gets the qualitative AI visual review only (see below).
 - **Squat-depth pickup handling is a heuristic** (hands vs knees at the
   deepest frame): it can miss a pickup filmed with the hands occluded and
   cannot separate a genuine hands-low set from repeated pickups.

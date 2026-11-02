@@ -38,6 +38,27 @@ describe("sanitizeVisualReview — rules applied to the model's untrusted answer
     expect(r.observations[0].kind).toBe("uncertain");
   });
 
+  it("AI praise is never shown, even when confident and multi-frame (it was confidently wrong on a labelled clip)", () => {
+    const r = sanitizeVisualReview(
+      reply({ observations: [
+        { kind: "positive", frames: [1, 2, 3, 4], confidence: "high", what: "Maintains a neutral spine.", cue: "" },
+        { kind: "issue", frames: [2, 3], confidence: "medium", what: "Knees may drift inward.", cue: "Push knees out." },
+      ] }),
+      T,
+      "Leg Press",
+    )!;
+    expect(r.observations.map((o) => o.kind)).toEqual(["uncertain"]);
+    expect(r.status).toBe("UNCERTAIN");
+  });
+
+  it("drops injury-risk wording the stills can't support (real model phrasings, S3 eval)", () => {
+    const phrasings = ["The knees cave in, which can stress the joints.", "Deep knees increase joint stress.", "This is unsafe for the lower back.", "Puts stress on your knees."];
+    for (const what of phrasings) {
+      const r = sanitizeVisualReview(reply({ observations: [{ kind: "issue", frames: [1, 2], confidence: "high", what, cue: "Push knees out." }] }), T, "Leg Press")!;
+      expect(r.observations).toEqual([]);
+    }
+  });
+
   it("a split-screen / edited video → NOT_ASSESSABLE, whatever else the model says", () => {
     const r = sanitizeVisualReview(reply({ edited_or_composite: true, observations: [{ kind: "issue", frames: [1, 2], confidence: "high", what: "x", cue: "y" }] }), T, "Squat")!;
     expect(r).toMatchObject({ status: "NOT_ASSESSABLE", observations: [] });
@@ -142,6 +163,15 @@ describe("tracked form observations", () => {
     expect(f.status).toBe("OBSERVED_ISSUE");
     expect(f.observations[0].atMs).toEqual([9000]);
     expect(trackedFormObservations(base({ events: [{ kind: "partial", startMs: 1300, endMs: 1800 }] })).status).toBe("NO_SUPPORTED_ISSUE_OBSERVED");
+  });
+
+  it("front view (no measured range): partial movements are only 'possibly', never a confirmed issue", () => {
+    // Real kb-goblet clip 2026-11-03: two full-depth goblet squats filmed head-on; projection noise split each
+    // descent into a "partial" + a rep. Depth isn't measurable from that view, so no confirmed finding.
+    const f = trackedFormObservations(base({ reps: 2, perRep: { rom: [], tempo: base({}).perRep.tempo.slice(0, 2) }, events: [{ kind: "partial", startMs: 8300, endMs: 9100 }, { kind: "partial", startMs: 12300, endMs: 13300 }] }));
+    expect(f.status).toBe("UNCERTAIN");
+    expect(f.observations.map((o) => o.kind)).toEqual(["uncertain"]);
+    expect(f.observations[0].what).toMatch(/depth can't be measured/);
   });
 
   it("consistent set → NO_SUPPORTED_ISSUE_OBSERVED + one positive, never 'perfect'", () => {
