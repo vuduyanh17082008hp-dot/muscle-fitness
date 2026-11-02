@@ -131,14 +131,27 @@ export async function POST(request: Request) {
       ]),
     ];
 
-    // Two independent passes over the SAME stills (one quota unit, same 12-image bound): a form issue is
-    // confirmed only when both confirm it on the same reference check. S3 eval (2026-11-03): single-pass
-    // "confirmed" issues appeared in 1 of 3 runs on correct-form demos; agreement filters that instability.
+    // Two passes over the SAME stills (one quota unit, same 12-image bound): people / composite / identity take the
+    // more cautious answer, and agreement ranks form leads (which are never confirmed — see sanitizeVisualReview).
+    // Trade-off (S3 final): ≈ 2.7 k prompt tokens per pass; the passes run in parallel, so latency ≈ the slower one.
     const model = process.env.OPENAI_SETVISION_VISION_MODEL?.trim() || "gpt-4.1-mini";
     const pass = (seed: number) => visionJson(VISUAL_REVIEW_SYSTEM_PROMPT, VISUAL_REVIEW_RESPONSE_FORMAT, 900, content, TIMEOUT_MS, model, { temperature: 0, seed });
-    const replies = await Promise.all([pass(7), pass(11)]);
+    // Contrast passes (exercises with catalogue look-alikes only; same quota unit, in parallel): the same question
+    // about each look-alike. S3 eval (2026-11-03): one leg-curl clip "matched" whichever of Leg Curl / Leg Extension
+    // was named, 3/3 each — a match counts only if the model rejects the look-alike when IT is named. Skipped after
+    // the user confirms an ambiguity: the confirmation is then what resolves identity, and a labelled mismatch
+    // still refuses without them.
+    const labelledPasses = Promise.all([pass(7), pass(11)]);
+    const contrastPasses = Promise.all(
+      (userConfirmedExercise ? [] : (reference?.lookAlikes ?? [])).map((l) =>
+        visionJson(VISUAL_REVIEW_SYSTEM_PROMPT, VISUAL_REVIEW_RESPONSE_FORMAT, 900,
+          [{ type: "text", text: visualReviewUserText(l.name, times, null, { reference: exerciseReference(l.key), scope }) }, ...content.slice(1)],
+          TIMEOUT_MS, model, { temperature: 0, seed: 7 }),
+      ),
+    );
+    const [replies, contrasts] = await Promise.all([labelledPasses, contrastPasses]);
     // Both passes are needed to confirm anything; with one missing, nothing can be agreed, so no review.
-    const review = replies.some((r) => r === null) ? null : sanitizeVisualReview(replies, times, exerciseLabel, reviewContext);
+    const review = replies.some((r) => r === null) ? null : sanitizeVisualReview(replies, times, exerciseLabel, { ...reviewContext, contrasts });
     if (!review) return fail(502, "UNAVAILABLE", "AI visual review is temporarily unavailable. Try again in a moment.");
 
     return NextResponse.json({ ok: true, review, personalized: Boolean(lens?.experience || lens?.goal || lens?.limitations) });

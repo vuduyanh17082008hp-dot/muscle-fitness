@@ -9,12 +9,14 @@ import { normalizeSearchText } from "@/lib/setvision/exercise-selection";
  * to the model's untrusted answer:
  *
  * - No rep count, angle, percentage or distance ever reaches the user; no injury-risk talk; no AI praise.
- * - A confirmed issue needs ≥ 2 cited frames, high confidence, and (when the app has a catalogue
- *   reference for the exercise) must name one of that exercise's own checks. Otherwise it is "possibly".
+ * - AI findings are only ever "possibly" (no validated precision yet — see sanitizeVisualReview); ≥ 2 cited
+ *   frames, high confidence, one of the exercise's own checks and two-pass agreement only rank a lead first.
  * - Frame indices must be ones we sent; the timestamps shown are OURS, never the model's.
  * - Exercise identity is graded (CONFIRMED_MATCH … CONFIRMED_MISMATCH). Only a high-confidence,
  *   frame-cited mismatch refuses; an ambiguous one asks the user, and the user's confirmation never
- *   overrides a confirmed mismatch or any person/composite check.
+ *   overrides a confirmed mismatch or any person/composite check. Between look-alikes (leg curl / leg
+ *   extension, pulldown / row, …) a match is confirmed only if the model, asked the same question about
+ *   each look-alike, rejects it (contrast passes) — a model that says yes to both labels has not told them apart.
  * - More than one person, an edited/composite clip, or nobody visible → no form findings at all.
  * - "No issue seen" is never presented as "good form".
  */
@@ -78,13 +80,16 @@ export type ExerciseReference = {
   steps: string[];
   checks: string[];
   /** Catalogue exercises that look like this one from many camera angles (mirror actions on similar setups). */
-  lookAlikes: Array<{ name: string; description: string; steps: string[] }>;
+  lookAlikes: Array<{ key: string; name: string; description: string; steps: string[] }>;
 };
 
 /**
- * Opposite actions that look alike on similar equipment. S3 eval (2026-11-03): with only the named
- * exercise's reference, the model confirmed a front-view leg curl as "Leg Extension" 3/3 when told it was
- * one — a reference alone biases it toward whatever was selected, so look-alikes must be ruled out explicitly.
+ * Movements that look alike from many camera angles: mirror actions on similar equipment, and same-direction
+ * actions in another plane. S3 eval (2026-11-03): told the clip was "Leg Extension", the model described a
+ * genuine leg curl as "a seated knee extension" 3/3 and self-reported the look-alike as ruled out; told
+ * "Seated Leg Curl", it described the SAME stills as a leg curl. A label-blind pick was no better (it chose
+ * Leg Extension for the leg curl 2/3, inventing a pad "in front of the shins"). So identity between these is
+ * settled contrastively: the same question is asked about each look-alike (sanitizeVisualReview `contrasts`).
  */
 const LOOK_ALIKE_PATTERNS: Array<[string, string]> = [
   ["Knee Flexion", "Knee Extension"],
@@ -92,6 +97,9 @@ const LOOK_ALIKE_PATTERNS: Array<[string, string]> = [
   ["Horizontal Push", "Horizontal Pull"],
   ["Vertical Push", "Vertical Pull"],
   ["Horizontal Adduction", "Horizontal Abduction"],
+  ["Vertical Pull", "Horizontal Pull"], // lat pulldown vs seated row
+  ["Horizontal Push", "Vertical Push"], // chest press vs shoulder press
+  ["Squat", "Hip Hinge"],
 ];
 
 /** Catalogue reference for a `catalogue:<slug>` option key; null for SetVision-list or custom exercises. */
@@ -100,10 +108,12 @@ export function exerciseReference(key: string | null): ExerciseReference | null 
   const item = slug ? EXERCISE_CATALOGUE.find((e) => e.slug === slug) : undefined;
   if (!item) return null;
   const mirror = LOOK_ALIKE_PATTERNS.flatMap(([a, b]) => (item.movementPattern === a ? [b] : item.movementPattern === b ? [a] : []));
-  const lookAlikes = EXERCISE_CATALOGUE.filter((e) => mirror.includes(e.movementPattern))
-    .sort((a, b) => Number(b.equipment === item.equipment) - Number(a.equipment === item.equipment))
-    .slice(0, 2)
-    .map((e) => ({ name: e.name, description: e.description, steps: (e.instructions ?? []).slice(0, 3) }));
+  // One look-alike per related pattern, on the SAME equipment — a similar setup is what makes them confusable
+  // (a leg press has no machine hinge to be mistaken for; a barbell squat and a barbell RDL do).
+  const lookAlikes = mirror
+    .map((p) => EXERCISE_CATALOGUE.find((e) => e.movementPattern === p && e.equipment === item.equipment))
+    .filter((e) => e !== undefined)
+    .map((e) => ({ key: `catalogue:${e.slug}`, name: e.name, description: e.description, steps: (e.instructions ?? []).slice(0, 3) }));
   return {
     name: item.name,
     equipment: item.equipment,
@@ -129,7 +139,6 @@ Report ONLY what is visible. Rules:
 - exercise_match: compare what you see with the named exercise and its reference (equipment, start and end positions, direction of movement).
   "matches" = consistent; "likely" = mostly consistent but something can't be seen; "ambiguous" = the frames fit this exercise AND a similar one (for example machines that look alike from this angle, where you can't see which side of the limb the pad is on); "different" = the frames clearly show another movement.
   exercise_match_confidence: "high" only if the evidence is unmistakable. match_frames: the frame numbers that show the deciding evidence. match_evidence: one sentence naming what you see in them.
-- lookalike_ruled_out: when look-alike exercises are listed, true ONLY if specific frames show what tells the named exercise apart from them (for example which side of the leg the pad presses on, the direction of the movement from its start position); cite them in lookalike_frames. If you cannot see the difference from this angle, false. When none are listed, true with lookalike_frames [].
 - view: the camera angle relative to the lifter.
 - assessable: "no" when the lifter is mostly out of frame, too dark, too small, blocked, or the frames do not show the movement; "partly" when only some aspects can be judged from this angle.
 - missing: what you could not see that a coach would need (e.g. "feet cut off"), or "".
@@ -156,7 +165,7 @@ export const VISUAL_REVIEW_RESPONSE_FORMAT = {
       additionalProperties: false,
       required: [
         "people_in_view", "multi_person_frames", "edited_or_composite", "seen_movement",
-        "exercise_match", "exercise_match_confidence", "match_frames", "match_evidence", "lookalike_ruled_out", "lookalike_frames",
+        "exercise_match", "exercise_match_confidence", "match_frames", "match_evidence",
         "view", "assessable", "missing", "filming_tip", "observations",
       ],
       properties: {
@@ -168,8 +177,6 @@ export const VISUAL_REVIEW_RESPONSE_FORMAT = {
         exercise_match_confidence: { type: "string", enum: ["high", "medium", "low"] },
         match_frames: { type: "array", items: { type: "integer" } },
         match_evidence: { type: "string" },
-        lookalike_ruled_out: { type: "boolean" },
-        lookalike_frames: { type: "array", items: { type: "integer" } },
         view: { type: "string", enum: [...VIEWS] },
         assessable: { type: "string", enum: ["yes", "partly", "no"] },
         missing: { type: "string" },
@@ -249,6 +256,8 @@ export function visualReviewUserText(
 const NUMERIC_CLAIM = /\d+(\.\d+)?\s*(°|deg|degree|%|percent|cm|mm|inch|in\b|m\b|m\/s|reps?\b|times\b|kg|lb)/i;
 // Injury-risk language counts too ("stress the joints", "joint stress"): the stills can't support it (S3 eval 2026-11-03).
 const MEDICAL = /\b(injur|pain|hurt|diagnos|tear|strain|sprain|herniat|risk of|unsafe|dangerous|damag|joint stress|stress (on |to )?(the |your )?(joints?|knees?|back|spine|shoulders?|neck))/i;
+// Praise smuggled in as an observation ("…not behind the neck, which is correct", S3 final replay): never shown.
+const PRAISE = /\b(which is (correct|good|proper|fine)|(is|are|looks?) (correct|good|proper)\b|(good|proper|correct|excellent) (form|technique|posture)|well executed|no (issue|problem)s?\b)/i;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown, max: number) => (typeof v === "string" ? clip(v, max) : "");
@@ -276,18 +285,16 @@ const validFrames = (v: unknown, frameCount: number) =>
   Array.isArray(v) ? [...new Set(v.filter((n): n is number => Number.isInteger(n) && n >= 1 && n <= frameCount))] : [];
 
 /**
- * Grades ONE model answer on exercise identity. Only a high-confidence, frame-cited "different" is a confirmed
- * mismatch; a match is confirmed only at high confidence AND — when the exercise has look-alikes — only if the
- * model ruled them out with cited frames (otherwise the video can't tell them apart: AMBIGUOUS).
+ * Grades ONE labelled model answer on exercise identity. Only a high-confidence, frame-cited "different" is a
+ * confirmed mismatch; a match is confirmed only at high confidence. (Look-alikes: see `contrasts`.)
  */
-export function gradeExerciseMatch(raw: Record<string, unknown>, frameCount: number, hasLookAlikes = false): ExerciseCheck {
+export function gradeExerciseMatch(raw: Record<string, unknown>, frameCount: number): ExerciseCheck {
   const high = raw.exercise_match_confidence === "high";
-  const lookAlikesRuledOut = !hasLookAlikes || (raw.lookalike_ruled_out === true && validFrames(raw.lookalike_frames, frameCount).length >= 1);
   switch (raw.exercise_match) {
     case "matches":
-      return !lookAlikesRuledOut ? "AMBIGUOUS" : high ? "CONFIRMED_MATCH" : "POSSIBLE_MATCH";
+      return high ? "CONFIRMED_MATCH" : "POSSIBLE_MATCH";
     case "likely":
-      return lookAlikesRuledOut ? "POSSIBLE_MATCH" : "AMBIGUOUS";
+      return "POSSIBLE_MATCH";
     case "different":
       return high && validFrames(raw.match_frames, frameCount).length >= 2 && str(raw.match_evidence, 200) ? "CONFIRMED_MISMATCH" : "AMBIGUOUS";
     default:
@@ -297,7 +304,7 @@ export function gradeExerciseMatch(raw: Record<string, unknown>, frameCount: num
 
 const RANK: Record<ExerciseCheck, number> = { CONFIRMED_MATCH: 0, POSSIBLE_MATCH: 1, AMBIGUOUS: 2, CONFIRMED_MISMATCH: 3 };
 
-/** Several independent answers: the most cautious identity wins, except that one lone "mismatch" only makes it ambiguous. */
+/** Several labelled answers: the most cautious identity wins, except that one lone "mismatch" only makes it ambiguous. */
 function combineChecks(checks: ExerciseCheck[]): ExerciseCheck {
   if (checks.every((c) => c === "CONFIRMED_MISMATCH")) return "CONFIRMED_MISMATCH";
   return checks.map((c) => (c === "CONFIRMED_MISMATCH" ? "AMBIGUOUS" : c)).reduce((a, b) => (RANK[b] > RANK[a] ? b : a));
@@ -312,19 +319,23 @@ const SCOPE_TEXT: Record<ReviewScope, string | null> = {
   partial_body: "Limited review: only part of the body is in view, and SetVision couldn't confirm a whole person — the review covers only the visible body parts.",
 };
 
-type Candidate = { kind: "issue" | "uncertain"; what: string; cue: string | null; atMs: number[]; checkIndex: number; eligible: boolean };
+type Candidate = { what: string; cue: string | null; atMs: number[]; checkIndex: number; eligible: boolean };
 
 /**
  * Applies the module's rules to the model's untrusted JSON — one answer, or several independent answers to
- * the SAME stills (the route asks twice). With several, a form issue is confirmed only when EVERY answer
- * confirms an issue on the same reference check, and every person/composite/identity signal takes the most
- * cautious answer. Returns null when no reply is usable (the route reports "temporarily unavailable").
+ * the SAME stills (the route asks twice). Every person/composite/identity signal takes the most cautious answer;
+ * form findings are only ever "possibly", and agreement on one reference check only ranks a lead first.
+ * Returns null when no reply is usable (the route reports "temporarily unavailable").
  */
 export function sanitizeVisualReview(
   rawInput: unknown,
   frameTimesMs: number[],
   exerciseLabel: string,
-  ctx: { reference?: ExerciseReference | null; userConfirmed?: boolean; scope?: ReviewScope } = {},
+  /**
+   * `contrasts`: the model's answer to the SAME stills when the look-alike `reference.lookAlikes[i]` is named instead
+   * (null when that call failed) — required whenever the reference has look-alikes.
+   */
+  ctx: { reference?: ExerciseReference | null; userConfirmed?: boolean; scope?: ReviewScope; contrasts?: unknown[] } = {},
 ): VisualReview | null {
   const raws = (Array.isArray(rawInput) ? rawInput : [rawInput]).filter(isRecord);
   if (raws.length === 0) return null;
@@ -333,7 +344,11 @@ export function sanitizeVisualReview(
   const scope = ctx.scope ?? "full";
   const label = clip(exerciseLabel, 80);
   const reference = ctx.reference ?? null;
-  const hasLookAlikes = Boolean(reference?.lookAlikes.length);
+  // How the model answered when each look-alike was named; a missing/unusable answer rejects nothing.
+  const contrasts = (reference?.lookAlikes ?? []).map((l, i) => {
+    const raw = ctx.contrasts?.[i];
+    return { name: l.name, raw: isRecord(raw) ? raw : null, check: isRecord(raw) ? gradeExerciseMatch(raw, n) : ("AMBIGUOUS" as ExerciseCheck) };
+  });
 
   // People: "more than one" must point at a frame we sent (an uncited claim is "unclear", not a refusal); any answer counts.
   const multiFrames = [...new Set(raws.flatMap((r) => (r.people_in_view === "more_than_one" ? validFrames(r.multi_person_frames, n) : [])))].sort((a, b) => a - b);
@@ -341,16 +356,29 @@ export function sanitizeVisualReview(
   const people = multiFrames.length ? "more_than_one" : said.every((p) => p === "none") ? "none" : said.every((p) => p === "one") ? "one" : "unclear";
   const composite = raws.some((r) => r.edited_or_composite === true);
 
-  const graded = combineChecks(raws.map((r) => gradeExerciseMatch(r, n, hasLookAlikes)));
+  const labelled = combineChecks(raws.map((r) => gradeExerciseMatch(r, n)));
+  // The selection can only match if every look-alike was firmly rejected (cited, high-confidence "different").
+  // A contrast "match" never NAMES the exercise: it is anchored too (S3 final: a chest press, named "Leg Extension"
+  // in the contrast pass, came back "matches").
+  const notRuledOut = contrasts.find((c) => c.check !== "CONFIRMED_MISMATCH");
+  const decider = raws.find((r) => gradeExerciseMatch(r, n) === "CONFIRMED_MISMATCH") ?? raws.find((r) => r.exercise_match !== "matches") ?? first;
+  // A "different" whose own description names the selected exercise is a variation/equipment question, not another
+  // movement (S3 final: feet-only bodyweight toe lifts "look like standing calf raise, not Standing Calf Raise").
+  const namesSelection = ` ${normalizeSearchText(str(decider.seen_movement, 120))} `.includes(` ${normalizeSearchText(label)} `);
+  const graded: ExerciseCheck =
+    labelled === "CONFIRMED_MISMATCH" ? (namesSelection ? "AMBIGUOUS" : labelled) : notRuledOut ? "AMBIGUOUS" : labelled;
   // The user's confirmation resolves an ambiguity — it never overrides a confirmed mismatch.
   const exerciseCheck: ExerciseCheck = graded === "AMBIGUOUS" && ctx.userConfirmed ? "POSSIBLE_MATCH" : graded;
-  const decider = raws.find((r) => gradeExerciseMatch(r, n, hasLookAlikes) === "CONFIRMED_MISMATCH") ?? raws.find((r) => r.exercise_match !== "matches") ?? first;
   const view = VIEWS.find((v) => v === first.view) ?? "unclear";
   const assessable = raws.some((r) => r.assessable !== "yes" && r.assessable !== "partly") ? "no" : raws.some((r) => r.assessable === "partly") ? "partly" : "yes";
   const seenMovement = str(decider.seen_movement, 120);
   const evidence = str(decider.match_evidence, 200);
   const missing = raws.map((r) => str(r.missing, 160)).find(Boolean) ?? null;
-  const filmingTip = str(first.filming_tip, 160) || null;
+  // Look-alikes the video couldn't separate need the evidence that tells them apart — not necessarily a side view.
+  const filmingTip =
+    (graded === "AMBIGUOUS" && notRuledOut
+      ? "Film so the machine or weight, where it touches your body (e.g. front or back of the leg) and the direction it moves are all in view for a full rep."
+      : str(first.filming_tip, 160)) || null;
   const base = { seenMovement, exerciseCheck, needsConfirmation: false, scope, view, filmingTip, frameCount: n } as const;
 
   const notAssessable = (limitation: string, tip: string | null = filmingTip): VisualReview => ({
@@ -382,12 +410,14 @@ export function sanitizeVisualReview(
   }
   if (assessable === "no") return notAssessable(missing ?? "The frames don't show enough of the lifter or the movement to review technique.");
   if (exerciseCheck === "AMBIGUOUS") {
-    const alt = seenMovement && !new RegExp(label.replace(/[^\w ]/g, ""), "i").test(seenMovement) ? seenMovement.replace(/[.]$/, "") : reference?.lookAlikes[0]?.name.toLowerCase();
+    // Name the look-alike the model came closest to accepting.
+    const closest = contrasts.filter((c) => c.check !== "CONFIRMED_MISMATCH").sort((a, b) => RANK[a.check] - RANK[b.check])[0];
+    const alt = closest?.name.toLowerCase() ?? (seenMovement && !new RegExp(label.replace(/[^\w ]/g, ""), "i").test(seenMovement) ? seenMovement.replace(/[.]$/, "") : reference?.lookAlikes[0]?.name.toLowerCase());
     return {
       ...base,
       needsConfirmation: true,
       status: "UNCERTAIN",
-      limitation: `The video could be ${label}${alt ? ` or ${/^an? /i.test(alt) ? alt : `a ${alt}`}` : " or a similar exercise"} — from this angle SetVision can't tell them apart. If it is ${label}, confirm to get a review; otherwise pick the right exercise.`,
+      limitation: `The video could be ${label}${alt ? ` or ${/^an? /i.test(alt) ? alt : `${/^[aeiou]/i.test(alt) ? "an" : "a"} ${alt}`}` : " or a similar exercise"} — this recording doesn't show what tells them apart, so SetVision can't be sure. If it is ${label}, confirm to get a review; otherwise pick the right exercise.`,
       observations: [],
     };
   }
@@ -399,29 +429,30 @@ export function sanitizeVisualReview(
       if (!isRecord(entry) || entry.kind === "positive") continue;
       const what = str(entry.what, 220);
       const cue = str(entry.cue, 140);
-      if (!what || NUMERIC_CLAIM.test(what) || NUMERIC_CLAIM.test(cue) || MEDICAL.test(what) || MEDICAL.test(cue)) continue;
+      if (!what || NUMERIC_CLAIM.test(what) || NUMERIC_CLAIM.test(cue) || MEDICAL.test(what) || MEDICAL.test(cue) || PRAISE.test(what)) continue;
       const frames = validFrames(entry.frames, n).sort((a, b) => a - b);
       if (frames.length === 0) continue; // a finding we can't point to in the video is not shown
       const checkIndex = reference ? referenceCheckIndex(str(entry.check, 200), reference) : -1;
-      // Eligible to be confirmed: ≥ 2 frames, high confidence, unhedged wording, and one of THIS exercise's own checks.
+      // A strong lead: ≥ 2 frames, high confidence, unhedged wording, and one of THIS exercise's own checks.
       const eligible = entry.kind === "issue" && frames.length >= 2 && entry.confidence === "high" && !HEDGED.test(what) && checkIndex >= 0;
-      out.push({ kind: "uncertain", what, cue: cue || null, atMs: frames.map((k) => frameTimesMs[k - 1]), checkIndex, eligible });
+      out.push({ what, cue: cue || null, atMs: frames.map((k) => frameTimesMs[k - 1]), checkIndex, eligible });
     }
     return out;
   };
   const [mine, ...others] = raws.map(candidates);
-  // Confirmed only if every independent answer confirms an issue on the same reference check (run-to-run agreement).
+  // AI-only findings are never CONFIRMED issues — always "possibly". Measured (S3, 2026-11-03): 0 of 5 author-labelled
+  // faults confirmed, and confirmed issues on correct-form demos in later runs ("bar behind the neck" from a rear view
+  // the model called "side", frames show it in front; "arms not fully extended"; "upper arms lift off the pad").
+  // Two passes of the same model on the same stills agreeing is not independent evidence, so agreement on one of
+  // the exercise's own checks only RANKS a lead first. Upgrade path: a labelled validation set showing confirmed
+  // precision. Tracked (pose-measured) findings are a separate path and unaffected.
   const agreed = (c: Candidate) => c.eligible && others.every((o) => o.some((x) => x.eligible && x.checkIndex === c.checkIndex));
-  const observations: VisualObservation[] = mine.map((c) => ({ kind: agreed(c) ? "issue" : "uncertain", what: c.what, cue: c.cue, atMs: c.atMs }));
+  const kept: VisualObservation[] = [...mine.filter(agreed), ...mine.filter((c) => !agreed(c))]
+    .slice(0, 2)
+    .map((c) => ({ kind: "uncertain", what: c.what, cue: c.cue, atMs: c.atMs }));
 
-  // Most useful first, and few: up to two issues, one uncertain.
-  const pick = (kind: VisualObservation["kind"], k: number) => observations.filter((o) => o.kind === kind).slice(0, k);
-  const kept = [...pick("issue", 2), ...pick("uncertain", 1)];
-
-  const hasIssue = kept.some((o) => o.kind === "issue");
-  const status: VisualReviewStatus = hasIssue
-    ? "OBSERVED_ISSUE"
-    : assessable === "partly" || exerciseCheck !== "CONFIRMED_MATCH" || people === "unclear" || scope !== "full" || kept.some((o) => o.kind === "uncertain")
+  const status: VisualReviewStatus =
+    assessable === "partly" || exerciseCheck !== "CONFIRMED_MATCH" || people === "unclear" || scope !== "full" || kept.some((o) => o.kind === "uncertain")
       ? "UNCERTAIN"
       : "NO_SUPPORTED_ISSUE_OBSERVED";
 
@@ -433,7 +464,7 @@ export function sanitizeVisualReview(
           ? `You confirmed this is ${label}; the video alone couldn't show it.`
           : `It wasn't fully clear from the stills that this is ${label}.`
         : null,
-      !reference ? `SetVision has no exercise reference for ${label}, so findings are shown only as "possibly".` : null,
+      !reference ? `SetVision has no exercise reference for ${label}.` : null,
       people === "unclear" ? "It wasn't clear whether anyone else was in view." : null,
       assessable === "partly" ? (missing ?? "Only part of the technique is visible from this angle.") : null,
     ]

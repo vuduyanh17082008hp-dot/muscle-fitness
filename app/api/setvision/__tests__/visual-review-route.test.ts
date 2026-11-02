@@ -114,6 +114,22 @@ describe("POST /api/setvision/visual-review — rejections happen before the mod
     expect(text).not.toMatch(/anything the client says/);
   });
 
+  it("look-alike exercises get a contrast pass naming the look-alike (same quota unit); skipped after a user confirmation", async () => {
+    await POST(req({ ...validBody, exerciseKey: "catalogue:leg-extension", exerciseLabel: "Leg Extension" }));
+    expect(visionJson).toHaveBeenCalledTimes(3);
+    expect(checkDanteRateLimit).toHaveBeenCalledTimes(1);
+    const contrast = vi.mocked(visionJson).mock.calls[2];
+    const text = (contrast[3][0] as { text: string }).text;
+    expect(text).toMatch(/Exercise the user named: "Seated Leg Curl" \(a user-provided label, not proof\)/);
+    expect(contrast[3].filter((c) => c.type === "image_url")).toHaveLength(validBody.frames.length);
+    vi.mocked(visionJson).mockClear();
+    await POST(req({ ...validBody, exerciseKey: "catalogue:leg-extension", exerciseLabel: "Leg Extension", userConfirmedExercise: true }));
+    expect(visionJson).toHaveBeenCalledTimes(2);
+    vi.mocked(visionJson).mockClear();
+    await POST(req(validBody)); // no catalogue look-alikes -> two passes only
+    expect(visionJson).toHaveBeenCalledTimes(2);
+  });
+
   it("502 with a safe message when the model fails", async () => {
     vi.mocked(visionJson).mockResolvedValueOnce(null);
     const res = await POST(req(validBody));

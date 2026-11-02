@@ -578,6 +578,36 @@ the classification section.
   (leg press "locked out", preacher "elbows off pad"); no author-labelled
   fault was confirmed with the fault's own description. Every multi-person,
   cut and dissolve fixture was refused on-device 3/3.
+- **S3 final (2026-11-03)** — root cause of the Leg Extension false
+  acceptance: the model follows the label. On the SAME 10 stills of the CDC
+  leg curl it answered "matches / high" both when told "Seated Leg Curl"
+  ("a seated leg curl") and when told "Leg Extension" ("a seated knee
+  extension"), 3/3 each, and its self-reported "look-alike ruled out" was
+  trusted. A label-blind pick was tried and rejected: it chose Leg Extension
+  for the leg curl 2/3 (inventing a pad "in front of the shins").
+  **Fix — contrast passes**: for exercises with same-equipment look-alikes
+  (knee flexion/extension, elbow flexion/extension, horizontal push/pull,
+  vertical push/pull, vertical/horizontal pull, horizontal/vertical push,
+  squat/hinge) the route asks the same question naming each look-alike; the
+  selection is confirmed only if the model firmly (high, ≥ 2 cited frames)
+  rejects every look-alike, otherwise AMBIGUOUS → "this recording doesn't
+  show what tells them apart" + a filming tip + confirm button. A contrast
+  "match" never names the exercise (it is anchored too). A "different"
+  whose own description names the selected exercise is a variation question
+  (AMBIGUOUS), not a refusal. **AI findings are now only ever "possibly"**:
+  across S3 no AI-confirmed issue was independently validated, while
+  two-pass-agreed false issues kept appearing on correct demos (rear-view
+  "bar behind the neck" with the bar visibly in front, the model calling
+  the rear view "side"; "arms not fully extended"; "upper arms lift off the
+  pad"). Agreement now only ranks leads. **Cost**: each pass ≈ 2.7 k prompt
+  tokens (12 stills); 2 passes for most exercises, 3–4 for exercises with
+  look-alikes (skipped after the user confirms), all in parallel, one quota
+  unit; replay latency ≈ 4–8 s for two passes, ≈ 9–10 s with contrasts. The
+  second labelled pass no longer confirms anything — it still makes the
+  people / composite / identity signals take the more cautious answer.
+  Measured coverage cost: a genuine front-view leg curl and a genuine machine
+  chest press are now AMBIGUOUS (confirmable), because the model also
+  accepts their look-alike.
 - **Partial/shallow-rep findings need a range view**: from another view
   (e.g. a front-view goblet squat) projection noise split full-depth
   descents into "partials", so they are shown only as "possibly".

@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { trackedFormObservations } from "@/lib/setvision/form-observations";
 import { computeVelocity } from "@/lib/setvision/velocity";
-import { athleteLensText, exerciseReference, gradeExerciseMatch, namesReferenceCheck, sanitizeVisualReview, visualReviewUserText } from "@/lib/setvision/visual-review";
+import {
+  athleteLensText,
+  exerciseReference,
+  gradeExerciseMatch,
+  namesReferenceCheck,
+  sanitizeVisualReview,
+  visualReviewUserText,
+} from "@/lib/setvision/visual-review";
 import { subjectGate } from "@/lib/setvision/analyze";
 import { findSceneCuts } from "@/lib/setvision/person-check";
 import type { TimedPoseFrame } from "@/lib/setvision/types";
@@ -31,11 +38,11 @@ const ctx = { reference: LEG_PRESS };
 const kneesIn = { kind: "issue", check: "Letting the knees cave inward.", frames: [2, 3], confidence: "high", what: "The knees move inward as the sled comes down.", cue: "Push the knees out in line with the toes." };
 
 describe("sanitizeVisualReview — rules applied to the model's untrusted answer", () => {
-  it("a high-confidence issue naming one of THIS exercise's checks, in >= 2 frames, is OBSERVED_ISSUE with OUR timestamps", () => {
-    const r = sanitizeVisualReview(reply({ observations: [kneesIn] }), T, "Leg Press", ctx)!;
-    expect(r.status).toBe("OBSERVED_ISSUE");
+  it("even a high-confidence, multi-frame issue on one of THIS exercise's checks is only 'possibly' (no validated AI precision), with OUR timestamps", () => {
+    const r = sanitizeVisualReview([reply({ observations: [kneesIn] }), reply({ observations: [kneesIn] })], T, "Leg Press", ctx)!;
+    expect(r.status).toBe("UNCERTAIN");
     expect(r.exerciseCheck).toBe("CONFIRMED_MATCH");
-    expect(r.observations[0]).toMatchObject({ kind: "issue", atMs: [1500, 2500] });
+    expect(r.observations[0]).toMatchObject({ kind: "uncertain", atMs: [1500, 2500] });
   });
 
   it("an issue that names no reference check — or any issue when the app has no reference — is only 'possibly'", () => {
@@ -59,6 +66,13 @@ describe("sanitizeVisualReview — rules applied to the model's untrusted answer
       T, "Leg Press", ctx,
     )!;
     expect(r.observations.map((o) => o.kind)).toEqual(["uncertain"]);
+  });
+
+  it("drops praise smuggled in as an observation (real S3 final phrasing), keeps real leads", () => {
+    for (const what of ["The bar is pulled down in front of the upper chest, not behind the neck, which is correct.", "Good form throughout the set.", "The back position looks correct."]) {
+      expect(sanitizeVisualReview(reply({ observations: [{ ...kneesIn, what }] }), T, "Leg Press", ctx)!.observations).toEqual([]);
+    }
+    expect(sanitizeVisualReview(reply({ observations: [kneesIn] }), T, "Leg Press", ctx)!.observations).toHaveLength(1);
   });
 
   it("drops injury-risk wording the stills can't support (real model phrasings, S3 eval)", () => {
@@ -123,7 +137,7 @@ describe("exercise identity is graded, and a weak 'different' never rejects the 
   it("ambiguous look-alike -> asks the user (findings withheld), not 'wrong exercise'", () => {
     const r = sanitizeVisualReview(lookAlike, T, "Seated Leg Curl", legCurl)!;
     expect(r).toMatchObject({ status: "UNCERTAIN", exerciseCheck: "AMBIGUOUS", needsConfirmation: true, observations: [] });
-    expect(r.limitation).toMatch(/could be Seated Leg Curl or a seated leg extension.*confirm/);
+    expect(r.limitation).toMatch(/could be Seated Leg Curl or a leg extension.*confirm/);
   });
 
   it("after the user confirms, an ambiguous identity becomes a possible match and the review proceeds", () => {
@@ -147,19 +161,91 @@ describe("exercise identity is graded, and a weak 'different' never rejects the 
     expect(r.status).toBe("NOT_ASSESSABLE");
   });
 
-  it("look-alikes: a confident 'matches' is only AMBIGUOUS unless the model ruled the look-alike out with a cited frame", () => {
-    const ref = exerciseReference("catalogue:leg-extension")!;
-    expect(ref.lookAlikes.map((l) => l.name)).toContain("Seated Leg Curl");
-    expect(gradeExerciseMatch(reply(), 6, true)).toBe("AMBIGUOUS"); // real S3 false acceptance: confident match, nothing ruled out
-    expect(gradeExerciseMatch(reply({ lookalike_ruled_out: true, lookalike_frames: [] }), 6, true)).toBe("AMBIGUOUS"); // uncited
-    expect(gradeExerciseMatch(reply({ lookalike_ruled_out: true, lookalike_frames: [2] }), 6, true)).toBe("CONFIRMED_MATCH");
-    const r = sanitizeVisualReview(reply({ observations: [kneesIn] }), T, "Leg Extension", { reference: ref })!;
-    expect(r).toMatchObject({ exerciseCheck: "AMBIGUOUS", needsConfirmation: true, observations: [] });
+  it("look-alike pairs from the catalogue (same equipment): leg curl/extension, pulldown/row, chest/shoulder press, squat/hinge", () => {
+    const names = (key: string) => exerciseReference(key)!.lookAlikes.map((l) => l.name);
+    expect(names("catalogue:leg-extension")).toContain("Seated Leg Curl");
+    expect(names("catalogue:seated-leg-curl")).toContain("Leg Extension");
+    expect(names("catalogue:lat-pulldown")).toContain("Seated Cable Row");
+    expect(names("catalogue:machine-chest-press")).toContain("Machine Shoulder Press");
+    expect(names("catalogue:barbell-back-squat")).toContain("Romanian Deadlift");
+    expect(names("catalogue:leg-press")).toEqual([]); // no machine hinge to confuse it with
+    expect(exerciseReference("catalogue:leg-extension")!.lookAlikes[0].key).toBe("catalogue:seated-leg-curl");
+  });
+});
+
+describe("contrast passes settle look-alikes (real S3 false acceptance: leg curl accepted as Leg Extension 3/3)", () => {
+  const EXT = { reference: exerciseReference("catalogue:leg-extension") };
+  const CURL = { reference: exerciseReference("catalogue:seated-leg-curl") };
+  const legCurl = CURL;
+  // Real replay (same 10 stills, 3/3 each): told "Leg Extension" the model said matches/high ("a seated knee
+  // extension"); told "Seated Leg Curl" it ALSO said matches/high ("a seated leg curl").
+  const saysExtension = reply({ seen_movement: "a seated knee extension on a machine", observations: [kneesIn] });
+  const saysCurl = reply({ seen_movement: "a seated leg curl on a machine", match_evidence: "Pad behind the calves; knees bend." });
+  const rejects = reply({ seen_movement: "a seated leg curl", exercise_match: "different", match_frames: [1, 3], match_evidence: "The pad presses behind the calves and the knees bend from straight." });
+
+  it("the model accepts BOTH labels -> AMBIGUOUS either way (no confirmed identity, no findings, a filming tip)", () => {
+    const ext = sanitizeVisualReview([saysExtension, saysExtension], T, "Leg Extension", { ...EXT, contrasts: [saysCurl] })!;
+    expect(ext).toMatchObject({ status: "UNCERTAIN", exerciseCheck: "AMBIGUOUS", needsConfirmation: true, observations: [] });
+    expect(ext.limitation).toMatch(/could be Leg Extension or a seated leg curl — this recording doesn't show what tells them apart/);
+    expect(ext.filmingTip).toMatch(/where it touches your body/);
+    const curl = sanitizeVisualReview([saysCurl, saysCurl], T, "Seated Leg Curl", { ...CURL, contrasts: [saysExtension] })!;
+    expect(curl).toMatchObject({ exerciseCheck: "AMBIGUOUS", needsConfirmation: true, observations: [] });
   });
 
-  it("two independent passes: an issue is confirmed only when both confirm it on the same reference check", () => {
-    const agree = sanitizeVisualReview([reply({ observations: [kneesIn] }), reply({ observations: [{ ...kneesIn, what: "Knees drift in at the bottom.", frames: [3, 4] }] })], T, "Leg Press", ctx)!;
-    expect(agree.observations[0]).toMatchObject({ kind: "issue", atMs: [1500, 2500] });
+  it("a missing, weak or uncited contrast rejects nothing -> AMBIGUOUS", () => {
+    for (const contrasts of [undefined, [], [null], [reply({ exercise_match: "different", exercise_match_confidence: "medium" })], [reply({ exercise_match: "different", match_frames: [2] })], [reply({ exercise_match: "ambiguous" })]]) {
+      expect(sanitizeVisualReview([saysExtension, saysExtension], T, "Leg Extension", { ...EXT, contrasts })!.exerciseCheck).toBe("AMBIGUOUS");
+    }
+  });
+
+  it("the look-alike firmly rejected when named -> the selection's own grade stands (genuine footage is not refused)", () => {
+    const r = sanitizeVisualReview([saysExtension, saysExtension], T, "Leg Extension", { ...EXT, contrasts: [reply({ exercise_match: "different", match_evidence: "Pad on the front of the shins; knees straighten." })] })!;
+    expect(r.exerciseCheck).toBe("CONFIRMED_MATCH");
+    expect(r.observations[0].kind).toBe("uncertain"); // its check ("knees cave inward") is not a Leg Extension check
+  });
+
+  it("selection firmly rejected -> refused with the LABELLED description; a contrast 'match' never names the exercise (it is anchored too)", () => {
+    // Real S3 final: a chest press, with "Leg Extension" named in the contrast pass, came back "matches".
+    for (const userConfirmed of [false, true]) {
+      const r = sanitizeVisualReview([rejects, rejects], T, "Leg Extension", { ...EXT, userConfirmed, contrasts: [saysCurl] })!;
+      expect(r).toMatchObject({ status: "NOT_ASSESSABLE", exerciseCheck: "CONFIRMED_MISMATCH", observations: [] });
+      expect(r.limitation).toMatch(/looks like a seated leg curl, not Leg Extension \(The pad presses behind the calves/);
+      expect(r.limitation).not.toMatch(/Pad behind the calves; knees bend/); // the contrast's own evidence is not used
+    }
+  });
+
+  it("real false confirmations (both passes agreed) are shown only as 'possibly' (rear-view 'bar behind the neck', frames show it in front)", () => {
+    const PULL = { reference: exerciseReference("catalogue:lat-pulldown") };
+    const behind = { kind: "issue", check: "Avoid: Pulling the bar behind the neck.", frames: [4, 5], confidence: "high", what: "The bar is pulled behind the neck instead of in front of the chest.", cue: "Pull to the chest." };
+    expect(namesReferenceCheck(behind.check, PULL.reference!)).toBe(true);
+    const rejectRow = reply({ exercise_match: "different", match_evidence: "Vertical pull from overhead." });
+    const r = sanitizeVisualReview([reply({ view: "side", observations: [behind] }), reply({ view: "side", observations: [behind] })], T, "Lat Pulldown", { ...PULL, contrasts: [rejectRow] })!;
+    expect(r).toMatchObject({ status: "UNCERTAIN", exerciseCheck: "CONFIRMED_MATCH" });
+    expect(r.observations.map((o) => o.kind)).toEqual(["uncertain"]);
+  });
+
+  it("a 'different' that names the selected exercise is a variation question -> AMBIGUOUS (confirmable), not refused", () => {
+    const CALF = { reference: exerciseReference("catalogue:standing-calf-raise") };
+    // Real S3 final reply on feet-only bodyweight toe lifts.
+    const variation = reply({ seen_movement: "standing calf raise", exercise_match: "different", match_evidence: "Rising onto toes on a flat floor, not on a machine platform." });
+    const r = sanitizeVisualReview([variation, variation], T, "Standing Calf Raise", { ...CALF, scope: "partial_body" })!;
+    expect(r).toMatchObject({ exerciseCheck: "AMBIGUOUS", needsConfirmation: true, observations: [] });
+    // A different movement is still refused.
+    const other = reply({ seen_movement: "a seated leg press", exercise_match: "different", match_evidence: "Feet on a sled." });
+    expect(sanitizeVisualReview([other, other], T, "Standing Calf Raise", CALF)!.exerciseCheck).toBe("CONFIRMED_MISMATCH");
+  });
+
+  it("a genuine ambiguity can be confirmed by the user; people/composite checks still win", () => {
+    expect(sanitizeVisualReview([saysExtension, saysExtension], T, "Leg Extension", { ...EXT, userConfirmed: true })!.exerciseCheck).toBe("POSSIBLE_MATCH");
+    const two = { ...saysExtension, people_in_view: "more_than_one", multi_person_frames: [2] };
+    expect(sanitizeVisualReview([two, two], T, "Leg Extension", { ...EXT, userConfirmed: true })!.status).toBe("NOT_ASSESSABLE");
+  });
+
+  it("two passes agreeing on one of the exercise's checks only RANKS that lead first — at most two leads, never confirmed", () => {
+    const weak = { ...kneesIn, check: "Breathing rhythm", what: "Breath held through the rep.", frames: [1, 2] };
+    const agree = sanitizeVisualReview([reply({ observations: [weak, kneesIn] }), reply({ observations: [{ ...kneesIn, what: "Knees drift in at the bottom.", frames: [3, 4] }] })], T, "Leg Press", ctx)!;
+    expect(agree.observations.map((o) => o.what)).toEqual([kneesIn.what, weak.what]);
+    expect(agree.observations.every((o) => o.kind === "uncertain")).toBe(true);
     const oneOff = sanitizeVisualReview([reply({ observations: [kneesIn] }), reply()], T, "Leg Press", ctx)!;
     expect(oneOff.observations[0].kind).toBe("uncertain");
     expect(oneOff.status).toBe("UNCERTAIN");
@@ -172,7 +258,7 @@ describe("exercise identity is graded, and a weak 'different' never rejects the 
     expect(sanitizeVisualReview([reply(), reply({ edited_or_composite: true })], T, "Leg Press", ctx)!.status).toBe("NOT_ASSESSABLE");
     const split = sanitizeVisualReview([reply(), reply({ exercise_match: "different" })], T, "Leg Press", ctx)!;
     expect(split).toMatchObject({ exerciseCheck: "AMBIGUOUS", needsConfirmation: true });
-    expect(sanitizeVisualReview([reply({ exercise_match: "different" }), reply({ exercise_match: "different" })], T, "Leg Press", ctx)!.exerciseCheck).toBe("CONFIRMED_MISMATCH");
+    expect(sanitizeVisualReview([reply({ exercise_match: "different", seen_movement: "a hack squat" }), reply({ exercise_match: "different", seen_movement: "a hack squat" })], T, "Leg Press", ctx)!.exerciseCheck).toBe("CONFIRMED_MISMATCH");
   });
 
   it("hedged wording ('possibly', 'may', 'might') is never a confirmed issue — real S3 phrasing", () => {
