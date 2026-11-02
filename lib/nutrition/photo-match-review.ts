@@ -14,7 +14,13 @@ export type MatchFlag =
   | { kind: "degraded_search"; message: string }
 
 const COOKED_WORDS = ["cooked", "grilled", "fried", "boiled", "roasted", "steamed", "baked", "stir-fried", "braised", "stewed", "poached"]
-const STOP_WORDS = new Set(["and", "with", "the", "raw", "cooked", "plain", "fresh", "slice", "piece"])
+// How it was cooked, its colour or cut never makes two records the same FOOD: "Steamed chicken" matched
+// "Corn, white, steamed (Navajo)" at 386 kcal / 100 g because "steamed" was the shared word (live, 2026-11-03).
+const STOP_WORDS = new Set([
+  "and", "with", "the", "raw", "plain", "fresh", "slice", "slices", "sliced", "piece", "pieces", "chopped", "whole", "large", "small", "medium",
+  ...COOKED_WORDS.flatMap((word) => word.split("-")), "stir", "sauteed", "toasted", "smoked",
+  "white", "brown", "red", "green", "black", "yellow",
+])
 
 function words(text: string): string[] {
   return text
@@ -67,6 +73,27 @@ export function reviewFoodMatch(
   }
 
   return flags
+}
+
+// ponytail: a short list of record words that make a USDA entry an unusual variant of the food ("glutinous" rice at 97 vs
+// 130 kcal, "chicken spread"). Only a tie-break among same-food matches; swap for a real variant model if one is ever needed.
+const VARIANT = /\b(glutinous|spread|powder|powdered|dehydrated|dried|instant|mix|canned|babyfood|flavou?red|sweetened|imitation|navajo|bouillon|concentrate|frozen|meatless)\b/
+
+/**
+ * Default-order rank of a database record for a photographed food (lower = shown first). A different food is last; then a
+ * branded/packaged product; then, among records of the same food, a raw record for a cooked item and an unusual variant the
+ * user didn't name. Never changes which records are offered — the user can still pick any of them.
+ */
+export function photoMatchRank(detectedName: string, preparation: CookingMethod, food: NormalizedFood): number {
+  const detected = detectedName.toLowerCase()
+  const cookedItem = preparation !== "raw" && (preparation !== "unknown" || COOKED_WORDS.some((word) => detected.includes(word)))
+  const variant = `${food.name} ${food.rawDescription ?? ""}`.toLowerCase().match(VARIANT)
+  return (
+    (reviewFoodMatch(detectedName, food).some((flag) => flag.kind === "name_mismatch") ? 4 : 0) +
+    (food.brand || food.preparationState === "packaged" ? 2 : 0) +
+    (cookedItem && !isCookedState(food) ? 0.5 : 0) +
+    (variant && !detected.includes(variant[1]) ? 0.5 : 0)
+  )
 }
 
 /** How a photographed food was prepared. "unknown" means the photo doesn't show it. */

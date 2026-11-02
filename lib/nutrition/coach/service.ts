@@ -57,10 +57,14 @@ function fromBuild(ctx: CoachContext, result: BuildResult, constraints: MealCons
   const proteinLeft = Math.round(ctx.snapshot.proteinRemaining)
   // Never voice a negative "remaining": an exceeded target is said as such, not as "-27g protein left".
   const budget = `${kcalLeft > 0 ? `your remaining ${kcalLeft} kcal` : `today's calories (already ${-kcalLeft} kcal over)`}${proteinLeft > 0 ? ` and ${proteinLeft}g protein` : " — you've already met today's protein target"}`
+  // A context ceiling below what is left is ONE meal's share of the day: say so, so the remaining day is never read as this meal's size.
+  const sized = constraints.calorieCeilingSource === "context" && constraints.calorieCeiling !== null && kcalLeft > constraints.calorieCeiling + 50
   const message =
     relaxed.length > 0
       ? `I couldn't satisfy every constraint simultaneously. ${relaxed.join(" ")}`
-      : `${draft.name}: about ${Math.round(draft.nutrition.calories)} kcal and ${Math.round(draft.nutrition.protein)}g protein — built from ${budget}.`
+      : sized
+        ? `${draft.name}: about ${Math.round(draft.nutrition.calories)} kcal and ${Math.round(draft.nutrition.protein)}g protein — sized as one meal (up to ${constraints.calorieCeiling} kcal), not your whole remaining ${kcalLeft} kcal.`
+        : `${draft.name}: about ${Math.round(draft.nutrition.calories)} kcal and ${Math.round(draft.nutrition.protein)}g protein — built from ${budget}.`
   return { ok: true, draft, alternatives: result.alternatives.map((c) => toDraft(ctx, c, constraints, mode, source)), message, relaxed }
 }
 

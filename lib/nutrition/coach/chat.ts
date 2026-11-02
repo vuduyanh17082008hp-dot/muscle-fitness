@@ -46,6 +46,7 @@ import {
   isFollowUpLive,
   knownMeals,
   mealFromDraft,
+  mentionsMeal,
   PROPOSAL_TTL_MS,
   referentFor,
   resolveTurn,
@@ -64,7 +65,7 @@ import {
 } from "./followup"
 import { recordFollowUpEvent } from "./followup-telemetry"
 import { buildCravingDraft, detectCravingKey } from "./craving"
-import { applyDraftOp, type DraftOp } from "./draft"
+import { applyDraftOp, oneMealBudget, type DraftOp } from "./draft"
 import { ALLERGEN_GUARD, asksForMealSuggestion, coordinationDiagnostics, coordinationNote, EMPTY_COORDINATION, GEMMA_CLEARANCE, loadGemmaCoordination, type GemmaCoordination } from "@/lib/intelligence/gemma-consumer"
 import { dayLevelCalorieProposal, excludedFoodsIn, foodsNamedIn, isUnsafeCoachReply, MORE_OPTIONS, parseCoachMessage, requestedOptionCount, resolveFoods, SAFETY_REPLY } from "./intent"
 import { compositionKey } from "./optimizer"
@@ -188,7 +189,7 @@ export type NutritionAgentResponse = {
 function whyLines(draft: ActiveMealDraft, ctx: CoachContext): string {
   const lines: string[] = []
   const { constraints, nutrition } = draft
-  if (constraints.calorieCeiling !== null && nutrition.calories <= constraints.calorieCeiling) lines.push(`fits your ${Math.round(constraints.calorieCeiling)} kcal budget`)
+  if (constraints.calorieCeiling !== null && nutrition.calories <= constraints.calorieCeiling) lines.push(`fits a ${Math.round(constraints.calorieCeiling)} kcal budget for this meal`)
   if (constraints.proteinTarget !== null && nutrition.protein >= constraints.proteinTarget - 2) lines.push(`covers about ${Math.round(nutrition.protein)}g of protein`)
   if (ctx.guards.allergies.length + ctx.guards.excludedFoods.length > 0) lines.push("avoids your allergies and excluded foods")
   return lines.length ? ` Why: ${lines.join("; ")}.` : ""
@@ -1013,7 +1014,8 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
     const include = (input.more && input.foodIds.length === 0 ? carriedInclude : input.foodIds).filter((id) => !excludedIds.includes(id) && getIngredient(id))
     const buildCtx = exclusionTerms.length ? { ...planningCtx, guards: { ...planningCtx.guards, excludedFoods: [...planningCtx.guards.excludedFoods, ...exclusionTerms] } } : planningCtx
     // "lots of protein" / "protein-heavy" is a modifier: raise the protein target unless the user gave an explicit number.
-    const overrides = input.proteinPriority && input.overrides.proteinTarget === undefined ? { ...input.overrides, proteinTarget: Math.round(Math.min(60, Math.max(40, ctx.snapshot.proteinRemaining))) } : input.overrides
+    // Still one meal's worth: a quarter above the per-meal share, never half the day's protein in one sitting.
+    const overrides = input.proteinPriority && input.overrides.proteinTarget === undefined ? { ...input.overrides, proteinTarget: Math.min(60, Math.round(oneMealBudget(ctx.snapshot).protein * 1.25)) } : input.overrides
     const count = input.count ?? (input.more ? 5 : null)
     // "More" avoids every meal this discovery has shown — all its lists, not only the last one (live: "another five" re-showed list 1).
     const priorShown = input.more ? [...(liveFollowUp?.shownKeys ?? []), ...shownMeals.map((meal) => compositionKey(meal.items))] : []
@@ -1380,7 +1382,11 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
           meta.viaModel = true
         } else if (model?.isFollowUp && model.intent && model.intent !== "CONTINUE_CURRENT_TOPIC") {
           // The model labels the intent; WHICH meal "the second one" is comes from the list on screen.
-          const chosen = pinned?.meal ?? (model.candidate !== null ? ordered[model.candidate] : undefined)
+          // The model labels the intent; it never moves the turn off the last referent to a meal the message doesn't name
+          // (live, 2026-11-03: "what are the ingredients…, raw or cooked?" right after picking option 2 answered for option 1).
+          const modelPick = model.candidate !== null ? ordered[model.candidate] : undefined
+          const lastMeal = lastRef ? meals.find((meal) => meal.id === lastRef.id) : undefined
+          const chosen = pinned?.meal ?? (lastMeal && modelPick && modelPick.id !== lastMeal.id && !mentionsMeal(message, modelPick) ? lastMeal : modelPick)
           const args: FollowUpArgs = {
             ...(model.modifier ? { modifier: model.modifier } : {}),
             ...(model.foodText ? { foodText: model.foodText } : {}),

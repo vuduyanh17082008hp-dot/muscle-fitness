@@ -17,7 +17,7 @@ import { searchFood } from "@/lib/nutrition/food-data"
 import { getLocalFallbackById, searchLocalFallback } from "@/lib/nutrition/food-data/local-fallback"
 import type { FoodSearchStatus, NormalizedFood } from "@/lib/nutrition/food-data/types"
 import { scaleMacrosToGrams, type ScaledMacros } from "@/lib/nutrition/food-log-calculator"
-import { dropDecomposedComposites, reviewFoodMatch, type CookingMethod } from "@/lib/nutrition/photo-match-review"
+import { dropDecomposedComposites, photoMatchRank, type CookingMethod } from "@/lib/nutrition/photo-match-review"
 import { matchVietnameseDish, templateItems } from "@/lib/nutrition/vietnamese-dishes"
 
 export type PhotoEstimateItem = {
@@ -86,9 +86,7 @@ export async function estimateMealFromPhoto(imageDataUrl: string): Promise<Photo
       // yogurt); keep the local records alongside and default to a name-matching, unbranded whole food.
       const local = searchResult.usedFallback ? [] : searchLocalFallback(item.name)
       const pool = [...searchResult.foods, ...local.filter((food) => !searchResult.foods.some((hit) => hit.id === food.id))]
-      const rank = (food: NormalizedFood) =>
-        (reviewFoodMatch(item.name, food).some((flag) => flag.kind === "name_mismatch") ? 2 : 0) +
-        (food.brand || food.preparationState === "packaged" ? 1 : 0)
+      const rank = (food: NormalizedFood) => photoMatchRank(item.name, item.preparation, food)
       const ranked = pool.map((food, index) => ({ food, index })).sort((a, b) => rank(a.food) - rank(b.food) || a.index - b.index).map(({ food }) => food)
       const candidates = (dishPart ? [dishPart, ...ranked.filter((food) => food.id !== dishPart.id)] : ranked).slice(0, 6)
       const bestMatch = candidates[0] ?? null

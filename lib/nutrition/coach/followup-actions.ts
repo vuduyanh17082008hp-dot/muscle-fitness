@@ -164,7 +164,7 @@ const HINTS_AFTER_MEAL = ["macros?", "why this one?", "cheaper?"]
 function whyParts(draft: ActiveMealDraft, meal: MealResultState, ctx: CoachContext): string[] {
   const parts: string[] = []
   const { constraints, nutrition } = draft
-  if (constraints.calorieCeiling !== null && nutrition.calories <= constraints.calorieCeiling) parts.push(`it fits the ${r(constraints.calorieCeiling)} kcal you have room for`)
+  if (constraints.calorieCeiling !== null && nutrition.calories <= constraints.calorieCeiling) parts.push(`it stays within the ${r(constraints.calorieCeiling)} kcal set for this meal`)
   if (constraints.proteinTarget !== null && nutrition.protein >= constraints.proteinTarget - 2) parts.push(`it covers about ${r(nutrition.protein)}g of protein, toward the ${r(constraints.proteinTarget)}g you're aiming for`)
   if (ctx.guards.allergies.length + ctx.guards.excludedFoods.length > 0) parts.push("it avoids your allergies and excluded foods")
   if (draft.craving?.preserved.length) parts.push(`it keeps what you wanted from the craving (${draft.craving.preserved.slice(0, 2).join(", ")})`)

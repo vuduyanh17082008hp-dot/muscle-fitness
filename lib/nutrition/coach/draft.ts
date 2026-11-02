@@ -45,14 +45,31 @@ export function isStale(snapshot: ContextSnapshot, current: ContextSnapshot): bo
 
 export const STALE_MESSAGE = "Your nutrition target has changed since this meal was created."
 
-/** Constraints for "Build My Next Meal": remaining calories as the ceiling, remaining protein as the target. */
+/**
+ * ONE meal is a share of the DAY's target, capped by what is left — never the whole remaining budget. With the remaining day
+ * as the ceiling, a 1990 kcal user got a 902 kcal "lunch" (385 g tofu, 300 g cucumber) "built from your remaining 1600 kcal"
+ * (live, 2026-11-03). A user who explicitly asks for a bigger meal ("a 1000 kcal meal") still gets it via a user override.
+ */
+export const MEAL_SHARE = { calories: 0.3, protein: 0.35, minCalories: 350, maxCalories: 900 } as const
+
+export function oneMealBudget(snapshot: Pick<ContextSnapshot, "caloriesTarget" | "caloriesRemaining" | "proteinTarget" | "proteinRemaining">): { calories: number; protein: number } {
+  const calorieShare = snapshot.caloriesTarget > 0 ? Math.min(MEAL_SHARE.maxCalories, Math.max(MEAL_SHARE.minCalories, snapshot.caloriesTarget * MEAL_SHARE.calories)) : 700
+  const proteinShare = snapshot.proteinTarget > 0 ? snapshot.proteinTarget * MEAL_SHARE.protein : 40
+  return {
+    calories: Math.round(Math.min(snapshot.caloriesRemaining, calorieShare)),
+    protein: Math.round(Math.min(60, Math.max(20, Math.min(snapshot.proteinRemaining, proteinShare)))),
+  }
+}
+
+/** Constraints for "Build My Next Meal": one meal's share of the day (bounded by what is left) — see oneMealBudget. */
 export function contextConstraints(snapshot: ContextSnapshot): MealConstraints | null {
   if (snapshot.caloriesRemaining < 100) return null
+  const meal = oneMealBudget(snapshot)
   return {
-    calorieCeiling: Math.round(snapshot.caloriesRemaining),
+    calorieCeiling: meal.calories,
     calorieCeilingStrict: false,
     calorieCeilingSource: "context",
-    proteinTarget: Math.round(Math.min(60, Math.max(20, snapshot.proteinRemaining))),
+    proteinTarget: meal.protein,
     proteinTargetSource: "context",
     maxPriceSgd: null,
     maxCookMinutes: null,

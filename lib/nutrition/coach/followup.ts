@@ -438,6 +438,12 @@ export function matchMeals(nameText: string, meals: MealResultState[]): MealResu
   })
 }
 
+/** True when the message names something that tells this meal apart ("the tuna one", "the wrap"): a distinguishing name word. */
+export function mentionsMeal(message: string, meal: MealResultState): boolean {
+  const said = new Set(words(message).map(stem))
+  return words(meal.name).filter((word) => !NAME_STOP.has(word) && !NAME_GENERIC.has(word) && word.length >= 3).map(stem).some((word) => said.has(word))
+}
+
 export type TargetResolution =
   | { kind: "meal"; meal: MealResultState; referent: ConversationReferent; confidence: ResolutionConfidence; via: "explicit" | "option" | "clarification" | "last_referent" | "topic" | "candidate" }
   | { kind: "clarify"; candidates: MealResultState[]; reason: "ambiguous" | "unanchored_draft" | "no_context" | "not_found" }

@@ -56,11 +56,14 @@ export function isUnsafeCoachReply(reply: string): boolean {
   return COMPENSATION.test(reply) || /\b(starve|purge|you must earn|skip (dinner|lunch|breakfast|meals) (entirely|completely))\b/i.test(reply)
 }
 
+/** "with realistic portions", "with good macros": words about the REQUEST, never a food to look up (live: "realistic portions" was reported as a food with no data). */
+const REQUEST_QUALIFIER = /\b(?:portions?|servings?|sizes?|amounts?|quantit(?:y|ies)|macros?|calories|ingredients?|options?|choices?|variety|flavou?rs?|taste|nutrition|numbers)\b/i
+
 function splitFoods(text: string): string[] {
   return text
     .split(/,|\band\b|\bplus\b|\bwith\b|\+|&/i)
     .map((part) => part.replace(/\b(some|the|my|a|an|only|just|already|at home|in the fridge)\b/gi, "").trim())
-    .filter((part) => part.length > 1)
+    .filter((part) => part.length > 1 && !REQUEST_QUALIFIER.test(part))
 }
 
 export function resolveFoods(texts: string[]): { ids: string[]; unresolved: string[] } {
