@@ -62,7 +62,15 @@ export type ScoredCandidate = {
   family: string
   violations: Violation[]
   score: number
+  /** Set only when the template name would collide with another option in the same list (e.g. "… Bowl with Spinach"). */
+  name?: string
 }
+
+/** Options for a multi-meal discovery: how many alternatives, which foods every option must contain, and what was already shown. */
+export type DiscoveryOptions = { alternatives?: number; requireIds?: string[]; avoidKeys?: ReadonlySet<string> }
+
+/** Identity of a meal = its ingredient set (portions aside). Two options with the same set are the same recipe. */
+export const compositionKey = (items: Array<{ ingredientId: string }>) => [...new Set(items.map((item) => item.ingredientId))].sort().join("+")
 
 function scoreCandidate(items: DraftItem[], constraints: MealConstraints, guards: ProfileGuards, mode: OptimizerMode, selectedIds?: string[]): { score: number; violations: Violation[] } {
   const w = MODE_WEIGHTS[mode]
@@ -110,20 +118,67 @@ export type BuildResult =
 /** Meals aim to land just under the ceiling so there is a little breathing room. */
 const CALORIE_FILL_RATIO = 0.95
 
-function resolveBuild(candidates: ScoredCandidate[], constraints: MealConstraints): BuildResult {
+const roleOf = (c: ScoredCandidate, role: string) => c.items.map((item) => requireIngredient(item.ingredientId)).filter((p) => p.role === role).map((p) => p.id).join("+")
+
+/**
+ * Picks distinct alternatives in rank order, most novel first: a new protein, then a new carb, then a new vegetable — never
+ * the same ingredient set twice (a renamed duplicate is still a duplicate), never one with a hard-constraint violation.
+ */
+function pickAlternatives(best: ScoredCandidate, ranked: ScoredCandidate[], limit: number, avoidKeys?: ReadonlySet<string>): ScoredCandidate[] {
+  const seen = new Set([compositionKey(best.items), ...(avoidKeys ?? [])])
+  const pool = ranked.filter((c) => c !== best && !c.violations.some((v) => v.tier === "hard"))
+  const picked: ScoredCandidate[] = []
+  const used = { protein: new Set([roleOf(best, "protein")]), carb: new Set([roleOf(best, "carb")]), volume: new Set([roleOf(best, "volume")]) }
+  const novel: Array<(c: ScoredCandidate) => boolean> = [(c) => !used.protein.has(roleOf(c, "protein")), (c) => !used.carb.has(roleOf(c, "carb")), (c) => !used.volume.has(roleOf(c, "volume")), () => true]
+  for (const test of novel) {
+    for (const c of pool) {
+      if (picked.length >= limit) return picked
+      const key = compositionKey(c.items)
+      if (seen.has(key) || !test(c)) continue
+      seen.add(key)
+      picked.push(c)
+      used.protein.add(roleOf(c, "protein"))
+      used.carb.add(roleOf(c, "carb"))
+      used.volume.add(roleOf(c, "volume"))
+    }
+  }
+  return picked
+}
+
+/** Same template name for different recipes ("High-Protein Beef Rice Bowl" ×2): name the vegetable that tells them apart. */
+function nameDistinct(list: ScoredCandidate[]): ScoredCandidate[] {
+  const counts = new Map<string, number>()
+  for (const c of list) counts.set(mealName(c.items, c.family), (counts.get(mealName(c.items, c.family)) ?? 0) + 1)
+  return list.map((c) => {
+    const base = mealName(c.items, c.family)
+    if ((counts.get(base) ?? 0) < 2) return c
+    const veg = c.items.map((item) => requireIngredient(item.ingredientId)).filter((p) => p.role === "volume").map((p) => p.shortName)
+    return veg.length ? { ...c, name: `${base} with ${veg.join(" & ")}` } : c
+  })
+}
+
+function resolveBuild(candidates: ScoredCandidate[], constraints: MealConstraints, options: DiscoveryOptions = {}): BuildResult {
   if (candidates.length === 0) return { status: "NO_CANDIDATE", reason: "No allowed ingredients are left after your allergies, exclusions and available foods." }
   const ranked = rank(candidates)
-  const best = ranked[0]
+  // "More options": the best NEW meal leads; already-shown recipes are never offered again.
+  const best = (options.avoidKeys?.size ? ranked.find((c) => !options.avoidKeys!.has(compositionKey(c.items))) : undefined) ?? ranked[0]
+  if (options.avoidKeys?.has(compositionKey(best.items))) return { status: "NO_CANDIDATE", reason: "I've already shown every distinct meal the verified foods allow with these constraints." }
   const hard = best.violations.filter((v) => v.tier === "hard")
   if (hard.length > 0) {
     return { status: "INFEASIBLE_HARD", reason: `I couldn't build a meal that stays within your strict ${Math.round(constraints.calorieCeiling ?? 0)} kcal limit with the foods available.`, closest: best }
   }
-  const alternatives = ranked.slice(1).filter((c, index, all) => all.findIndex((o) => o.family === c.family && o.items[0].ingredientId === c.items[0].ingredientId) === index).slice(0, 4)
-  return { status: "OK", best, alternatives, relaxed: best.violations }
+  // Single-meal callers (no `alternatives` asked) keep the original pick: one alternative per family + lead ingredient.
+  if (options.alternatives === undefined) {
+    const alternatives = ranked.slice(1).filter((c, index, all) => all.findIndex((o) => o.family === c.family && o.items[0].ingredientId === c.items[0].ingredientId) === index).slice(0, 4)
+    return { status: "OK", best, alternatives, relaxed: best.violations }
+  }
+  const alternatives = pickAlternatives(best, ranked, options.alternatives, options.avoidKeys)
+  const [namedBest, ...namedAlternatives] = nameDistinct([best, ...alternatives])
+  return { status: "OK", best: namedBest, alternatives: namedAlternatives, relaxed: best.violations }
 }
 
 /** BUILD MY NEXT MEAL / SUGGESTED FOR YOU — generates template candidates and ranks them. */
-export function buildMeal(ctx: CoachContext, constraints: MealConstraints, mode: OptimizerMode = "BALANCED", options: { excludeFirstProteins?: string[] } = {}): BuildResult {
+export function buildMeal(ctx: CoachContext, constraints: MealConstraints, mode: OptimizerMode = "BALANCED", options: { excludeFirstProteins?: string[] } & DiscoveryOptions = {}): BuildResult {
   const pool = new Set(guardedPool(ctx.guards, constraints.availableIds).map((item) => item.id))
   const target = constraints.calorieCeiling === null ? null : constraints.calorieCeiling * CALORIE_FILL_RATIO
   const candidates: ScoredCandidate[] = []
@@ -136,6 +191,8 @@ export function buildMeal(ctx: CoachContext, constraints: MealConstraints, mode:
         for (const volume of family.volumes) {
           if (!volume.every((id) => pool.has(id))) continue
           const ids = [protein, ...carbs, ...volume]
+          // "with lean ground beef": every option must contain every requested food.
+          if (options.requireIds?.some((id) => !ids.includes(id))) continue
           const items = scaleItems(
             ids.map((id) => ({ ingredientId: id, grams: requireIngredient(id).typicalGrams })),
             { mode: "AUTO", targetCalories: target, targetProtein: constraints.proteinTarget },
@@ -147,7 +204,7 @@ export function buildMeal(ctx: CoachContext, constraints: MealConstraints, mode:
     }
   }
 
-  return resolveBuild(candidates, constraints)
+  return resolveBuild(candidates, constraints, options)
 }
 
 /** CHOOSE MY FOOD — best subset of the user's selected foods (they need not all be used). */

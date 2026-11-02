@@ -19,6 +19,9 @@ import type { ActiveMealDraft, DraftItem, MacroTotals } from "./types"
    TYPES + WIRE SCHEMAS (state is client-echoed, so everything is re-validated)
 ========================================================= */
 
+/** Most meal options one list may show / one "option N" may select (multi-meal discovery: "lots of choices" = 8). */
+export const MAX_OPTIONS = 8
+
 export const FOLLOW_UP_INTENTS = [
   "SHOW_INGREDIENTS", "SHOW_MACROS", "SHOW_PORTIONS", "EXPLAIN_RECOMMENDATION",
   "SELECT_PREVIOUS_OPTION", "COMPARE_PREVIOUS_OPTIONS",
@@ -40,7 +43,7 @@ export const referentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("MEAL_DRAFT"), id: idString, name: z.string().max(120) }),
   z.object({ type: z.literal("MEAL_RESULT"), id: idString, name: z.string().max(120) }),
   z.object({ type: z.literal("FOOD"), name: z.string().max(80) }),
-  z.object({ type: z.literal("OPTION_SET"), optionIds: z.array(idString).max(6) }),
+  z.object({ type: z.literal("OPTION_SET"), optionIds: z.array(idString).max(MAX_OPTIONS) }),
   z.object({ type: z.literal("GENERAL_TOPIC"), topic: z.string().max(80) }),
 ])
 export type ConversationReferent = z.infer<typeof referentSchema>
@@ -61,7 +64,7 @@ export const mealResultSchema = z.object({
 export type MealResultState = z.infer<typeof mealResultSchema>
 
 export const pendingChoiceSchema = z.object({
-  options: z.array(z.object({ id: idString, label: z.string().max(120) })).min(1).max(6),
+  options: z.array(z.object({ id: idString, label: z.string().max(120) })).min(1).max(MAX_OPTIONS),
   createdAt: isoString,
   expiresAt: isoString,
 })
@@ -72,7 +75,7 @@ const argsSchema = z.object({
   foodText: z.string().max(40).optional(),
   toText: z.string().max(40).optional(),
   fromText: z.string().max(40).optional(),
-  optionIndex: z.number().int().min(1).max(6).optional(),
+  optionIndex: z.number().int().min(1).max(MAX_OPTIONS).optional(),
   nameText: z.string().max(40).optional(),
   dietary: z.string().max(20).optional(),
   factor: z.number().positive().max(4).optional(),
@@ -112,7 +115,7 @@ export type MealModificationProposal = {
 
 export const followUpStateSchema = z.object({
   context: z.object({ createdAt: isoString, lastActiveAt: isoString, turnCount: z.number().int().min(0).max(100), expiresAt: isoString }),
-  meals: z.array(mealResultSchema).max(5),
+  meals: z.array(mealResultSchema).max(MAX_OPTIONS + 1),
   referent: referentSchema.nullable(),
   previousReferent: referentSchema.nullish(),
   candidateReferents: z.array(referentSchema).max(6),
@@ -205,7 +208,7 @@ const referentId = (r: ConversationReferent | null | undefined) => (r && (r.type
 export function nextFollowUpState(prev: FollowUpState | null | undefined, patch: StatePatch, now: Date): FollowUpState | null {
   if (patch.reset) return null
   const base = isFollowUpLive(prev, now) ? prev : null
-  const meals = [...(patch.upsertMeals ?? []), ...(base?.meals ?? [])].filter((meal, index, all) => all.findIndex((o) => o.id === meal.id) === index).slice(0, 4)
+  const meals = [...(patch.upsertMeals ?? []), ...(base?.meals ?? [])].filter((meal, index, all) => all.findIndex((o) => o.id === meal.id) === index).slice(0, MAX_OPTIONS + 1)
   const referent = patch.referent !== undefined ? patch.referent : (base?.referent ?? null)
   const candidates = patch.candidateReferents ?? (patch.referent !== undefined ? [] : (base?.candidateReferents ?? []))
   const presentedOptions = patch.presentedOptions !== undefined ? patch.presentedOptions : (base?.presentedOptions && alive(base.presentedOptions.expiresAt, now) ? base.presentedOptions : null)
@@ -304,9 +307,9 @@ const NOT_A_PORTION_FOOD = /\b(?:should|per|day|week|do|did|can|i|eat|need|have|
 const PORTIONS_ALL = /^(?:portions?|portion sizes?|how much of (?:each|everything)|amounts?|quantities)$/
 const SAUCE = /^(?:what|which) (?:sauce|seasoning|dressing|flavou?ring)(?: (?:is|are) (?:in|with) (?:it|this))?$/
 const WHY = /^(?:why(?: (?:this|that|it))?(?: one| meal| bowl| pick| choice)?|why (?:did you|do you|would you) (?:pick|choose|suggest|recommend|give me) (?:this|that|it)(?: one)?|(?:explain|justify) (?:this|that|it|your (?:pick|choice))|what makes (?:this|it) good)$/
-const ORDINALS: Record<string, number> = { first: 1, "1st": 1, one: 1, second: 2, "2nd": 2, two: 2, third: 3, "3rd": 3, three: 3, fourth: 4, "4th": 4, four: 4 }
-const SELECT_ORD = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with|prefer|let'?s (?:do|go with|take))\s+)?(?:the )?(first|second|third|fourth|1st|2nd|3rd|4th)(?: one| option| meal| choice)?(?: please)?$/
-const SELECT_NUM = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with)\s+)?(?:option|number|no\.?|#|choice) ?([1-4])(?: please)?$|^([1-4])$/
+const ORDINALS: Record<string, number> = { first: 1, "1st": 1, one: 1, second: 2, "2nd": 2, two: 2, third: 3, "3rd": 3, three: 3, fourth: 4, "4th": 4, four: 4, fifth: 5, "5th": 5, five: 5, sixth: 6, "6th": 6, six: 6, seventh: 7, "7th": 7, seven: 7, eighth: 8, "8th": 8, eight: 8 }
+const SELECT_ORD = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with|prefer|let'?s (?:do|go with|take))\s+)?(?:the )?(first|second|third|fourth|fifth|sixth|seventh|eighth|1st|2nd|3rd|4th|5th|6th|7th|8th)(?: one| option| meal| choice)?(?: please)?$/
+const SELECT_NUM = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with)\s+)?(?:option|number|no\.?|#|choice) ?([1-8])(?: please)?$|^([1-8])$/
 const SELECT_NAME = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with)\s+)?(?:the )?([a-z][a-z &-]{1,24}?) (?:one|option|meal|bowl|plate)$/
 const DEMONSTRATIVE = /^(?:i(?:'ll| will)? (?:take|want|pick|choose|go with) )?(?:that|this|the) one$|^(?:that|this) (?:one|meal|bowl|option)$/
 const COMPARE = /^(?:compare(?: them| these| those| both| the options| the meals)?|which (?:one )?is (?:better|healthier|higher in protein|lighter)|what(?:'s| is) the difference)$/

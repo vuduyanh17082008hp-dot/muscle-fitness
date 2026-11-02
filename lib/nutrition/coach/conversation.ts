@@ -88,7 +88,7 @@ const topicSchema = z.object({
 const presentedSnapshotSchema = z.object({
   responseId: z.string().max(40),
   owner: z.enum(["ENGINE", "CONVERSATION"]),
-  options: z.array(z.object({ index: z.number().int().min(1).max(5), entityId: z.string().max(100), label: z.string().max(200), sourceRef: z.string().max(80), provenance: z.literal("ASSISTANT_DISPLAYED_OPTION") })).min(2).max(5),
+  options: z.array(z.object({ index: z.number().int().min(1).max(8), entityId: z.string().max(100), label: z.string().max(200), sourceRef: z.string().max(80), provenance: z.literal("ASSISTANT_DISPLAYED_OPTION") })).min(2).max(8),
   createdAtServer: z.string().max(40),
   expiresAt: z.string().max(40),
 })

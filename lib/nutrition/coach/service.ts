@@ -1,7 +1,7 @@
 import { buildCravingDraft } from "./craving"
 import { COACH_INGREDIENTS, isIngredientBlocked } from "./ingredients"
 import { applyDraftOp, assembleDraft, contextConstraints, type OpOutcome } from "./draft"
-import { buildFromSelection, buildMeal, type BuildResult, type ScoredCandidate } from "./optimizer"
+import { buildFromSelection, buildMeal, type BuildResult, type DiscoveryOptions, type ScoredCandidate } from "./optimizer"
 import { rehydrateDraft, type ConstraintOverrides, type CoachRequest } from "./schema"
 import type { ActiveMealDraft, CoachContext, MealConstraints, MealDraftSource, OptimizerMode } from "./types"
 
@@ -45,7 +45,7 @@ export type DraftResponse =
   | { ok: false; code: "NO_BUDGET" | "NO_CANDIDATE" | "INFEASIBLE"; message: string; closest?: ActiveMealDraft }
 
 function toDraft(ctx: CoachContext, candidate: ScoredCandidate, constraints: MealConstraints, mode: OptimizerMode, source: MealDraftSource): ActiveMealDraft {
-  return assembleDraft({ ctx, family: candidate.family, source, items: candidate.items, constraints, mode })
+  return assembleDraft({ ctx, family: candidate.family, source, items: candidate.items, constraints, mode, ...(candidate.name ? { name: candidate.name } : {}) })
 }
 
 function fromBuild(ctx: CoachContext, result: BuildResult, constraints: MealConstraints, mode: OptimizerMode, source: MealDraftSource): DraftResponse {
@@ -70,10 +70,10 @@ const NO_BUDGET: DraftResponse = {
   message: "You have very little calorie budget left today. Tell me a calorie limit to work with, or try a Craving Makeover for a small portion.",
 }
 
-export function buildNextMeal(ctx: CoachContext, mode: OptimizerMode = "BALANCED", overrides?: ConstraintOverrides, source: MealDraftSource = "build_next_meal"): DraftResponse {
+export function buildNextMeal(ctx: CoachContext, mode: OptimizerMode = "BALANCED", overrides?: ConstraintOverrides, source: MealDraftSource = "build_next_meal", discovery: DiscoveryOptions = {}): DraftResponse {
   const constraints = resolveConstraints(ctx, overrides)
   if (!constraints) return NO_BUDGET
-  return fromBuild(ctx, buildMeal(ctx, constraints, mode), constraints, mode, source)
+  return fromBuild(ctx, buildMeal(ctx, constraints, mode, discovery), constraints, mode, source)
 }
 
 export function chooseMyFood(ctx: CoachContext, ingredientIds: string[], mode: OptimizerMode = "BALANCED", overrides?: ConstraintOverrides, source: MealDraftSource = "choose_food"): DraftResponse {

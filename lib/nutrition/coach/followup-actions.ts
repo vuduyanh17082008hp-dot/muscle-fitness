@@ -21,6 +21,7 @@ import {
   type StructuredBlock,
   type TargetResolution,
   type TurnResolution,
+  MAX_OPTIONS,
 } from "./followup"
 import { findIngredientByText, getIngredient, isIngredientBlocked } from "./ingredients"
 import { assessConfidence, totalsFor } from "./macros"
@@ -533,8 +534,8 @@ export function executeFollowUp(turn: Extract<TurnResolution, { kind: "follow_up
 }
 
 /** Builds the presented-options context + OPTION_LIST block when the engine offered alternatives alongside the recommendation. */
-export function presentOptions(main: ActiveMealDraft, alternatives: ActiveMealDraft[], now: Date): { choice: PendingChoiceContext; meals: MealResultState[]; block: StructuredBlock } | null {
-  const shown = alternatives.filter((alt, index, all) => alt.name !== main.name && all.findIndex((other) => other.name === alt.name) === index).slice(0, 2)
+export function presentOptions(main: ActiveMealDraft, alternatives: ActiveMealDraft[], now: Date, count = 3): { choice: PendingChoiceContext; meals: MealResultState[]; block: StructuredBlock } | null {
+  const shown = alternatives.filter((alt, index, all) => alt.name !== main.name && all.findIndex((other) => other.name === alt.name) === index).slice(0, Math.max(0, Math.min(MAX_OPTIONS, count) - 1))
   if (shown.length === 0) return null
   const all = [main, ...shown]
   return {

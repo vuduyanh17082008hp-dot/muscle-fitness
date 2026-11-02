@@ -1,6 +1,6 @@
 import { detectCravingKey } from "./craving"
 import type { DraftOp } from "./draft"
-import { findIngredientByText } from "./ingredients"
+import { COACH_INGREDIENTS, findIngredientByText } from "./ingredients"
 import type { ConstraintOverrides } from "./schema"
 import type { CravingKey } from "./types"
 
@@ -23,7 +23,8 @@ const COMPENSATION = /\b(burn (it |this |that |these )?off|work (it |this |that 
 const SUPPLEMENT_ASK = /\b(?:supplements?|supps?|creatine|pre-?workout|bcaas?|eaas?|multivitamins?|vitamins?|omega-?3|fish oil|magnesium|zinc|ashwagandha)\b/i
 // H0 cluster D: day names of a split ("push day", "leg day") and programming words are training, Dante's domain.
 const TRAINING = /\b(workout|exercise|training|program|routine|sets|reps|squat|deadlift|bench|injur\w*|pain|sore|soreness|recovery|rest day|cardio|stretch\w*|mobility|(?:push|pull|leg|legs|upper|lower|arm|chest|back|shoulder) day|split|hypertrophy block|1rm|progressive overload|deload)\b/i
-const FOODISH = /\b(meal|food|eat|eating|calorie|calories|kcal|protein|carb|carbs|macro|macros|recipe|snack|breakfast|lunch|dinner|ingredient|cook|cooking|hungry|craving|craving)\b/i
+// Plurals count: "give me some meals with tuna" is a meal request even without the word "protein".
+const FOODISH = /\b(meals?|foods?|eat|eating|calorie|calories|kcal|protein|carb|carbs|macro|macros|recipes?|snacks?|breakfast|lunch|dinner|ingredients?|cook|cooking|hungry|craving|dishes)\b/i
 
 export type Intent =
   | { kind: "safety"; reply: string }
@@ -119,6 +120,40 @@ export function excludedFoodsIn(message: string): { ids: string[]; terms: string
   return { ids: resolveFoods(terms).ids, terms }
 }
 
+const OPTION_NOUNS = "(?:meals?|options?|choices?|ideas?|recipes?|dishes|suggestions?)"
+const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, couple: 2, few: 3 }
+const LOTS = new RegExp(`\\b(?:lots|loads|plenty|tons|heaps|a bunch|many|a lot|a wide range|variety)\\b(?: of)?[^.?!]{0,24}?\\b(?:${OPTION_NOUNS}|choice|variety)\\b|\\blots of choice\\b|(?<![\\p{L}])nhiều (?:lựa chọn|món|gợi ý)`, "iu")
+const EXPLICIT_N = new RegExp(`\\b(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|couple|few)\\s+(?:of\\s+)?(?:[a-z-]+\\s+){0,3}?${OPTION_NOUNS}\\b|(?<![\\p{L}])(\\d{1,2})\\s+(?:món|lựa chọn|gợi ý)`, "iu")
+const PLURAL = new RegExp(`\\b(?:meals|options|choices|ideas|recipes|dishes|suggestions)\\b|(?<![\\p{L}])(?:vài|mấy|các|một số) (?:món|lựa chọn|gợi ý)`, "iu")
+/** Most options one discovery may render; "lots of choices" asks for this many. */
+export const MAX_DISCOVERY_OPTIONS = 8
+
+/**
+ * How many distinct meals a discovery request asks for: explicit N (bounded), "lots of choices" → 8, a plural request → 5.
+ * null = a singular request ("build me a meal"), which keeps the engine's usual recommendation + 2 alternatives.
+ */
+export function requestedOptionCount(message: string): number | null {
+  if (LOTS.test(message)) return MAX_DISCOVERY_OPTIONS
+  const explicit = message.match(EXPLICIT_N)
+  if (explicit) {
+    const word = (explicit[1] ?? explicit[2]).toLowerCase()
+    const n = NUMBER_WORDS[word] ?? Number(word)
+    if (Number.isFinite(n) && n >= 1) return Math.min(MAX_DISCOVERY_OPTIONS, n)
+  }
+  return PLURAL.test(message) ? 5 : null
+}
+
+/** "more options" / "give me lots of choice" / "another high protein meals" / "thêm món khác": continue the LAST discovery, never re-voice one meal. */
+export const MORE_OPTIONS = new RegExp(
+  `\\b(?:more|other|another|different|new|lots of|loads of|plenty of|many)\\b[^.?!]{0,30}?\\b(?:${OPTION_NOUNS}|ones|choice)\\b|\\b(?:show|give) me (?:some )?(?:more|others)\\b|\\banything else\\b|\\bwhat else\\b|(?<![\\p{L}])(?:thêm (?:lựa chọn|món|gợi ý)|món khác|lựa chọn khác)`,
+  "iu",
+)
+
+/** Foods a message names by their catalogue short name ("more chicken options" → chicken_breast). */
+export function foodsNamedIn(message: string): string[] {
+  return COACH_INGREDIENTS.filter((item) => new RegExp(`(?<![\\p{L}])${item.shortName.toLowerCase()}(?![\\p{L}])`, "iu").test(message)).map((item) => item.id)
+}
+
 export function parseCoachMessage(message: string, options: { hasDraft: boolean }): Intent {
   const text = message.trim()
   const lower = text.toLowerCase()
@@ -194,7 +229,7 @@ export function parseCoachMessage(message: string, options: { hasDraft: boolean 
   const ids = named.ids.filter((id) => !excluded.includes(id))
   const unresolved = named.unresolved
   const asksForMeal = (/\b(build|make me|make a|suggest|plan|what should i eat|what should i have|help me hit|help me (?:decide|choose|pick|figure out|plan|find)|use my remaining|what meal|give me|i need a|i want a|put together|create)\b/.test(lower) && FOODISH.test(text)) || /\bwhat (?:to|should i) (?:eat|have)\b/.test(lower)
-  const namesFoodsForMeal = ids.length > 0 && /\b(dinner|lunch|breakfast|snack|meal|calories?|kcal|protein)\b/.test(lower)
+  const namesFoodsForMeal = ids.length > 0 && /\b(dinner|lunch|breakfast|snacks?|meals?|calories?|kcal|protein)\b/.test(lower)
 
   if (asksForMeal || namesFoodsForMeal || /\bbuild\b/.test(lower) || /^(high[- ]protein|meal under)/.test(lower)) {
     const overrides: ConstraintOverrides = {}

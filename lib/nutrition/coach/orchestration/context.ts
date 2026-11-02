@@ -311,7 +311,7 @@ export function parseSelection(text: string, options: PresentedOption[]): Presen
  * Constraints worth carrying past the 6-message window (echoed by the client, so shape-checked): exclusions, diet, effort,
  * protein floor, taste. Request-scoped ones (meal slot, calorie cap) are re-read from the window and never carried.
  */
-const DURABLE_CONSTRAINT = /^(?:without:[\p{L} ]{2,25}|diet:[a-z-]{3,24}|low_prep|min_protein:\d{2,3}|taste:[\p{L}]{3,12})$/u
+const DURABLE_CONSTRAINT = /^(?:without:[\p{L} ]{2,25}|with:[a-z_]{2,30}|diet:[a-z-]{3,24}|low_prep|min_protein:\d{2,3}|taste:[\p{L}]{3,12})$/u
 export const durableConstraints = (constraints: readonly string[] | null | undefined): string[] => [...new Set((constraints ?? []).filter((constraint) => DURABLE_CONSTRAINT.test(constraint)))].slice(0, 8)
 
 export function resolveConversationContext(message: string, recent: RecentMessage[], extras: { currentTopicFood?: string | null; priorConstraints?: string[]; pendingQuestion?: string } = {}): ConversationContext {

@@ -36,7 +36,7 @@ import { classifyTargetUtterance, guardCanonicalTargetClaim, targetTruthReply } 
 import { loadCoachContext } from "./context"
 import { buildContextBudget, commitEmitted, composeReply, durableConstraints, fallbackDiagnostics, legacySnapshot, listMatchesEngine, orchestrateTurn, OTHER_REF, parseOptions, pendingFromPlan, planDiagnostics, recordOrchestrationEvent, safetyReply, screenSafety, supplementEducationReply, validateSnapshot, type ModelCall, type OrchestrationDiagnostics, type PendingClarification, type PresentedOptionSnapshot } from "./orchestration"
 import { isLoggedIntakeQuestion } from "./orchestration/needs"
-import { decideProposal, executeFollowUp, presentOptions, type FollowUpExec } from "./followup-actions"
+import { decideProposal, draftForMeal, executeFollowUp, presentOptions, type FollowUpExec } from "./followup-actions"
 import {
   FOLLOW_UP_INTENTS,
   MODE_BY_INTENT,
@@ -65,7 +65,8 @@ import { recordFollowUpEvent } from "./followup-telemetry"
 import { buildCravingDraft, detectCravingKey } from "./craving"
 import { applyDraftOp, type DraftOp } from "./draft"
 import { ALLERGEN_GUARD, asksForMealSuggestion, coordinationDiagnostics, coordinationNote, EMPTY_COORDINATION, GEMMA_CLEARANCE, loadGemmaCoordination, type GemmaCoordination } from "@/lib/intelligence/gemma-consumer"
-import { dayLevelCalorieProposal, excludedFoodsIn, isUnsafeCoachReply, parseCoachMessage, resolveFoods, SAFETY_REPLY } from "./intent"
+import { dayLevelCalorieProposal, excludedFoodsIn, foodsNamedIn, isUnsafeCoachReply, MORE_OPTIONS, parseCoachMessage, requestedOptionCount, resolveFoods, SAFETY_REPLY } from "./intent"
+import { compositionKey } from "./optimizer"
 import { buildDanteDeferralReply } from "@/lib/intelligence/query-understanding"
 import { activeFacts, buildContextWorkingSet, buildIntelligenceBrief, enforceIntegrity, restrictedSubstanceReply, withStoredAllergies } from "@/lib/intelligence/performance-core"
 import { syncDisclosureSignals } from "@/lib/intelligence/dante-signal-persistence"
@@ -87,7 +88,7 @@ import { buildGemmaFrame, type ResolvedFoodReference } from "./orchestration/sha
 import { COACH_INGREDIENT_IDS, getIngredient } from "./ingredients"
 import { totalsFor } from "./macros"
 import { buildNextMeal, chooseMyFood } from "./service"
-import { draftInputSchema, rehydrateDraft } from "./schema"
+import { draftInputSchema, rehydrateDraft, type ConstraintOverrides } from "./schema"
 import { isLive, type LogActionStage, type PendingLog } from "./log-action"
 import { handleLogTurn } from "./log-turn"
 import type { ActiveMealDraft, CoachContext } from "./types"
@@ -642,6 +643,12 @@ function withSessionDislikes(ctx: CoachContext, signals: PreferenceSignal[]): Co
   }
 }
 
+/** "log option 3 for lunch" / "add number 2 to my food log" / "log the second one" (EN) and "ghi món số 3" (VI). */
+const LOG_OPTION = /\b(?:log|add|track|save|record)\s+(?:the\s+)?(?:option|number|no\.?|#|choice)\s*#?\s*([1-8])\b|(?<![\p{L}])(?:ghi|lưu|thêm)\s+(?:món|lựa chọn)\s+(?:số\s+)?([1-8])(?![\p{N}])|\b(?:log|add|track|save|record)\s+the\s+(first|second|third|fourth|fifth|sixth|seventh|eighth)\s+(?:one|option|meal)\b/iu
+/** A request verb for meals ("give me", "suggest", "show me"…); "what meals are high in protein?" is a question, not one. */
+const DISCOVERY_VERB = /\b(?:give|suggest|show|build|make|recommend|list|find|get|need|want|any)\b/i
+const ORDINAL_INDEX: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8 }
+
 /** A request about "the/this/that <thing>" (recipe, ingredients, steps...) names an existing referent rather than asking for a new meal. */
 const DEFINITE_REFERENCE_REQUEST = /(?<![\p{L}\p{N}])(?:the|this|that|its)\s+(?:recipe|ingredients?|steps?|method|instructions?|portion|macros?)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])how (?:do i|to|can i) (?:make|prepare|cook) (?:it|this|that)(?![\p{L}\p{N}])/iu
 
@@ -969,10 +976,103 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   const draftReference = resolveDraftReference(message, draft, state.handoff)
   const mealTopic = (d: ActiveMealDraft): NutritionTopic => ({ type: "MEAL", food: d.name })
 
+  // The engine list the user can see right now (the only list "option 3" / "more options" may refer to).
+  const liveFollowUp = isFollowUpLive(state.followUp ?? null, now) ? state.followUp! : null
+  // A list the coach wrote itself (conversation owns the focus) is not this list: the engine's would be stale there.
+  const liveOptions = !conversationOwnsFocus && liveFollowUp?.presentedOptions && Date.parse(liveFollowUp.presentedOptions.expiresAt) > now.getTime() ? liveFollowUp.presentedOptions : null
+  const shownMeals = liveOptions ? liveOptions.options.map((option) => liveFollowUp!.meals.find((meal) => meal.id === option.id)).filter((meal): meal is MealResultState => Boolean(meal)) : []
+
+  /**
+   * Meal discovery — one path for "build me a meal", "give me 5 meals with lean beef" and "more options":
+   * criteria (include / exclude, carried as durable `with:` / `without:` constraints) → engine candidates → distinct by
+   * ingredient set → N rendered. Discovery always creates a NEW draft: the active one is never edited, saved or logged here.
+   */
+  const discover = async (input: { foodIds: string[]; unresolvedFoods: string[]; overrides: ConstraintOverrides; proteinPriority: boolean; count: number | null; more: boolean }) => {
+    // Exclusions: this turn's ("besides tuna") + the ones still in force from earlier turns, minus any food the user now asks FOR.
+    const asked = new Set(input.foodIds)
+    const carried = priorConstraints.filter((c) => c.startsWith("without:")).map((c) => c.slice("without:".length))
+    const exclusionTerms = [...new Set([...excludedFoodsIn(message).terms, ...carried])].filter((term) => !resolveFoods([term]).ids.some((id) => asked.has(id)))
+    const excludedIds = resolveFoods(exclusionTerms).ids
+    // Inclusions: what this turn names; "more options" with no food named continues the last discovery's foods.
+    const carriedInclude = priorConstraints.filter((c) => c.startsWith("with:")).map((c) => c.slice("with:".length))
+    const include = (input.more && input.foodIds.length === 0 ? carriedInclude : input.foodIds).filter((id) => !excludedIds.includes(id) && getIngredient(id))
+    const buildCtx = exclusionTerms.length ? { ...planningCtx, guards: { ...planningCtx.guards, excludedFoods: [...planningCtx.guards.excludedFoods, ...exclusionTerms] } } : planningCtx
+    // "lots of protein" / "protein-heavy" is a modifier: raise the protein target unless the user gave an explicit number.
+    const overrides = input.proteinPriority && input.overrides.proteinTarget === undefined ? { ...input.overrides, proteinTarget: Math.round(Math.min(60, Math.max(40, ctx.snapshot.proteinRemaining))) } : input.overrides
+    const count = input.count ?? (input.more ? 5 : null)
+    const avoidKeys = input.more ? new Set(shownMeals.map((meal) => compositionKey(meal.items))) : undefined
+    // A singular request keeps the original single-meal ranking (recommendation + 2 alternatives); discovery asks for N distinct.
+    const discovery = count !== null || input.more ? { alternatives: Math.max(4, (count ?? 3) - 1), avoidKeys } : {}
+    // A multi-meal request never anchors on a stale food selection: it uses only the foods named now (or carried by "more").
+    const legacySelection = count === null && !input.more ? (input.foodIds.length > 0 ? input.foodIds : (selectedFoods ?? [])).filter((id) => !excludedIds.includes(id)) : []
+    let result =
+      include.length > 0 && (count !== null || input.more)
+        ? buildNextMeal(buildCtx, "BALANCED", overrides, "conversation", { ...discovery, requireIds: include })
+        : legacySelection.length > 0
+          ? chooseMyFood(buildCtx, legacySelection, "BALANCED", overrides, "conversation")
+          : buildNextMeal(buildCtx, "BALANCED", overrides, "conversation", discovery)
+    // A named food no meal template uses (e.g. salmon): fall back to building from that food alone rather than refusing.
+    if (!result.ok && result.code === "NO_CANDIDATE" && include.length > 0 && !input.more) result = chooseMyFood(buildCtx, include, "BALANCED", overrides, "conversation")
+    const constraints = [...exclusionTerms.map((term) => `without:${term}`), ...include.map((id) => `with:${id}`)]
+    const skipped = input.unresolvedFoods.length > 0 ? ` I don't have verified nutrition data for ${input.unresolvedFoods.join(", ")}, so I left ${input.unresolvedFoods.length > 1 ? "them" : "it"} out.` : ""
+    const toolCalls: ToolCallSummary[] = [{ name: "meal_optimizer", ok: result.ok }]
+    if (!result.ok) return respond("NEW_MEAL_REQUEST", "build", `${result.message}${skipped}`, { mealDraft: result.closest ?? null, draftTarget: result.closest ? "NEW" : "NONE", action: result.closest ? "CREATE_MEAL_DRAFT" : "NONE", toolCalls, constraints })
+    const presented = presentOptions(result.draft, result.alternatives, now, count ?? 3)
+    const rendered = presented?.choice.options.length ?? 1
+    const withText = include.length ? ` with ${include.map((id) => getIngredient(id)!.shortName.toLowerCase()).join(" and ")}` : ""
+    const withoutText = exclusionTerms.length ? ` and no ${exclusionTerms.join(" or ")}` : ""
+    const intro =
+      count !== null || input.more
+        ? `Here ${rendered === 1 ? "is 1 meal" : `are ${rendered} distinct meals`}${withText}${withoutText}${input.more ? " you haven't seen yet" : ""} — each one's portions and macros are computed from its ingredients. Option 1 is open as a new draft${draft ? "; your earlier draft wasn't changed" : ""}. `
+        : ""
+    const shortfall = count !== null && rendered < count ? ` You asked for ${count}; these are all the distinct meals the verified foods allow${withText}${withoutText} right now, so I didn't pad the list.` : ""
+    const engineReply = `${result.message}${whyLines(result.draft, ctx)}`
+    // The engine owns ingredients and numbers; a named cuisine/texture only shapes how the draft is presented.
+    const buildNeed = decideMealBuildKnowledgeNeed(message)
+    const modelReply = buildNeed.needed
+      ? await converse(message, ctx, result.draft, { budget: turnBudget, intent: "NEW_MEAL_REQUEST", recent, signals: priorSignals, built: { need: buildNeed } }, engineReply)
+      : engineReply
+    // FINAL-RESPONSE VALIDATION (before anything is committed): the model may re-voice the engine's meal, but a list of its OWN options
+    // would put a second, different set of choices on screen beside the engine's. The engine owns this turn's options: such a reply is replaced.
+    const written = parseOptions(modelReply)
+    const reply = written.length >= 2 && !listMatchesEngine(written, presented?.choice.options.map((option) => option.label) ?? []) ? engineReply : modelReply
+    // AI-R1E.2: deterministic, number-free-of-invention note; the canonical remaining budget outranks any signal.
+    const note = coordinationNote(coordination, ctx.snapshot.caloriesRemaining)
+    // The count, criteria and any shortfall are engine facts: they frame whatever wording presents option 1.
+    return respond("NEW_MEAL_REQUEST", "build", `${intro}${reply}${shortfall}${skipped}${note ? ` ${note}` : ""}`, {
+      coordinationNoteApplied: Boolean(note),
+      action: "CREATE_MEAL_DRAFT",
+      draftTarget: "NEW",
+      mealDraft: result.draft,
+      alternatives: result.alternatives,
+      topic: mealTopic(result.draft),
+      toolCalls,
+      constraints,
+      followUp: { upsertMeals: presented?.meals ?? [mealFromDraft(result.draft)], referent: draftReferent(result.draft), newReferent: true, candidateReferents: [], presentedOptions: presented?.choice ?? null, pendingProposal: null, lastResolved: null },
+      blocks: presented ? [presented.block] : [],
+      hints: ["ingredients?", "more options", "log option 1"],
+    })
+  }
+
+  // "log option 3 for lunch" / "log the second one": the candidate comes from the list on screen, then the normal P0 lifecycle.
+  const logOption = conversationOwnsFocus ? null : message.match(LOG_OPTION)
+  let candidate: ActiveMealDraft | null = null
+  if (logOption) {
+    const index = Number(logOption[1] ?? logOption[2]) || ORDINAL_INDEX[(logOption[3] ?? "").toLowerCase()] || 0
+    const meal = shownMeals[index - 1]
+    if (!meal) {
+      const reply = shownMeals.length
+        ? `There's no option ${index} in the list I just showed (1–${shownMeals.length}), so nothing was saved. Which one did you mean?`
+        : "I don't have a current list of options to pick from, so nothing was saved. Ask me for some meals first, or say “log this” for the meal on screen."
+      return respond("LOG_MEAL", "log_action", reply, { pendingLog: null, draftTarget: draft ? "ACTIVE" : "NONE" })
+    }
+    candidate = draftForMeal(meal, ctx, null, { fresh: true })
+  }
+
   // P0 chat-driven meal log: a live pending log (or a new "log this") is resolved before any follow-up / model path, so a
   // typed "lunch" or "confirm" can never fall through to a re-voiced recommendation. Writes only via the pending-action CAS.
   const competingProposal = !conversationOwnsFocus && Boolean(state.followUp?.pendingProposal) && isFollowUpLive(state.followUp ?? null, now)
-  const logTurn = await handleLogTurn({ supabase, userId, message, now, budget: turnBudget, ctx, draft, pending: state.pendingLog, competingProposal })
+  const logTurn = await handleLogTurn({ supabase, userId, message, now, budget: turnBudget, ctx, draft, pending: state.pendingLog, competingProposal, candidate })
   if (logTurn) {
     return respond("LOG_MEAL", "log_action", logTurn.reply, {
       pendingLog: logTurn.pendingLog,
@@ -981,6 +1081,20 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
       action: logTurn.pendingLog?.stage === "READY_FOR_CONFIRMATION" || logTurn.pendingLog?.stage === "AWAITING_REQUIRED_INPUT" ? "PROPOSE_LOG" : "NONE",
       ...(logTurn.draft ? { mealDraft: logTurn.draft, draftTarget: "NEW" as const, topic: mealTopic(logTurn.draft) } : { draftTarget: draft ? ("ACTIVE" as const) : ("NONE" as const), ...(draft ? { topic: mealTopic(draft) } : {}) }),
     })
+  }
+
+  // "more options" / "give me lots of choice" / "another high protein meals": continue the LAST discovery with new, unseen
+  // meals — never re-voice the one meal in the draft. Only when a discovery is actually in play (a live engine list or its criteria).
+  if (MORE_OPTIONS.test(message) && (liveOptions || priorConstraints.some((c) => c.startsWith("with:")))) {
+    const excluded = excludedFoodsIn(message).ids
+    return discover({ foodIds: foodsNamedIn(message).filter((id) => !excluded.includes(id)), unresolvedFoods: [], overrides: {}, proteinPriority: true, count: requestedOptionCount(message), more: true })
+  }
+  // An explicit multi-meal request ("give me some meals with tuna", "suggest 3 high protein meals") is a NEW discovery: it
+  // goes straight to the engine, so a list or draft still on screen can't route it to a follow-up / model answer instead.
+  const discoveryCount = requestedOptionCount(message)
+  if (discoveryCount !== null && DISCOVERY_VERB.test(message) && dayLevelCalorieProposal(message) === null) {
+    const parsed = parseCoachMessage(message, { hasDraft: false })
+    if (parsed.kind === "build") return discover({ foodIds: parsed.foodIds, unresolvedFoods: parsed.unresolvedFoods, overrides: parsed.overrides, proteinPriority: parsed.proteinPriority, count: discoveryCount, more: false })
   }
 
   // 1b. N1.5.6 follow-up continuity: proposal answer -> explicit new topic -> clarification answer -> short follow-up.
@@ -1173,42 +1287,7 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
           `Your current target stays ${canonicalCalories} kcal and ${canonicalProtein} g protein. I won't build a day around ${proposedDay} kcal, and another person's number doesn't change it.`,
         )
       }
-      // "besides tuna": a turn-level hard exclusion for every candidate (not an allergy, not persisted). It also drops the food
-      // from the selection carried over from earlier turns — the newest explicit request beats stale context.
-      const exclusion = excludedFoodsIn(message)
-      const chosen = (intent.foodIds.length > 0 ? intent.foodIds : (selectedFoods ?? [])).filter((id) => !exclusion.ids.includes(id))
-      const buildCtx = exclusion.terms.length ? { ...planningCtx, guards: { ...planningCtx.guards, excludedFoods: [...planningCtx.guards.excludedFoods, ...exclusion.terms] } } : planningCtx
-      // "lots of protein" / "protein-heavy" is a modifier: raise the protein target unless the user gave an explicit number.
-      const overrides = intent.proteinPriority && intent.overrides.proteinTarget === undefined ? { ...intent.overrides, proteinTarget: Math.round(Math.min(60, Math.max(40, ctx.snapshot.proteinRemaining))) } : intent.overrides
-      const result = chosen.length > 0 ? chooseMyFood(buildCtx, chosen, "BALANCED", overrides, "conversation") : buildNextMeal(buildCtx, "BALANCED", overrides, "conversation")
-      const skipped = intent.unresolvedFoods.length > 0 ? ` I don't have verified nutrition data for ${intent.unresolvedFoods.join(", ")}, so I left ${intent.unresolvedFoods.length > 1 ? "them" : "it"} out.` : ""
-      const toolCalls: ToolCallSummary[] = [{ name: "meal_optimizer", ok: result.ok }]
-      if (!result.ok) return respond("NEW_MEAL_REQUEST", "build", `${result.message}${skipped}`, { mealDraft: result.closest ?? null, draftTarget: result.closest ? "NEW" : "NONE", action: result.closest ? "CREATE_MEAL_DRAFT" : "NONE", toolCalls })
-      const engineReply = `${result.message}${whyLines(result.draft, ctx)}`
-      // The engine owns ingredients and numbers; a named cuisine/texture only shapes how the draft is presented.
-      const buildNeed = decideMealBuildKnowledgeNeed(message)
-      const modelReply = buildNeed.needed
-        ? await converse(message, ctx, result.draft, { budget: turnBudget, intent: "NEW_MEAL_REQUEST", recent, signals: priorSignals, built: { need: buildNeed } }, engineReply)
-        : engineReply
-      const presented = presentOptions(result.draft, result.alternatives, now)
-      // FINAL-RESPONSE VALIDATION (before anything is committed): the model may re-voice the engine's meal, but a list of its OWN options
-      // would put a second, different set of choices on screen beside the engine's. The engine owns this turn's options: such a reply is replaced.
-      const written = parseOptions(modelReply)
-      const reply = written.length >= 2 && !listMatchesEngine(written, presented?.choice.options.map((option) => option.label) ?? []) ? engineReply : modelReply
-      // AI-R1E.2: deterministic, number-free-of-invention note; the canonical remaining budget outranks any signal.
-      const note = coordinationNote(coordination, ctx.snapshot.caloriesRemaining)
-      return respond("NEW_MEAL_REQUEST", "build", `${reply}${skipped}${note ? ` ${note}` : ""}`, {
-        coordinationNoteApplied: Boolean(note),
-        action: "CREATE_MEAL_DRAFT",
-        draftTarget: "NEW",
-        mealDraft: result.draft,
-        alternatives: result.alternatives,
-        topic: mealTopic(result.draft),
-        toolCalls,
-        followUp: { upsertMeals: presented?.meals ?? [mealFromDraft(result.draft)], referent: draftReferent(result.draft), newReferent: true, candidateReferents: [], presentedOptions: presented?.choice ?? null, pendingProposal: null, lastResolved: null },
-        blocks: presented ? [presented.block] : [],
-        hints: ["ingredients?", "why this one?", "cheaper?"],
-      })
+      return discover({ foodIds: intent.foodIds, unresolvedFoods: intent.unresolvedFoods, overrides: intent.overrides, proteinPriority: intent.proteinPriority, count: requestedOptionCount(message), more: false })
     }
 
     case "craving": {

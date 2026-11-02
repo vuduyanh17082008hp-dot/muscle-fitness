@@ -47,6 +47,8 @@ type Input = {
   pending: PendingLog | null | undefined
   /** A live "apply this change?" modification proposal: a bare "yes" could mean either. */
   competingProposal: boolean
+  /** "log option 3": the option picked from the list on screen (already resolved by the caller). */
+  candidate?: ActiveMealDraft | null
 }
 
 const PROPOSE_WAIT_MS = 8_000
@@ -83,8 +85,9 @@ export async function handleLogTurn(input: Input): Promise<LogTurnResult | null>
 
   // "Log 200g chicken breast for lunch": a one-ingredient draft from the curated catalogue (server-computed macros), run
   // through the same propose → confirm lifecycle as "log this". Unknown food / bad amount → nothing saved.
-  let createdDraft: ActiveMealDraft | undefined
-  const direct = message.match(DIRECT_LOG)
+  let createdDraft: ActiveMealDraft | undefined = input.candidate ?? undefined
+  if (createdDraft) draft = createdDraft
+  const direct = input.candidate ? null : message.match(DIRECT_LOG)
   if (direct) {
     const food = direct[2].trim()
     const grams = Number(direct[1].replace(",", "."))
@@ -98,7 +101,7 @@ export async function handleLogTurn(input: Input): Promise<LogTurnResult | null>
     createdDraft = assembleDraft({ ctx, family: "logged", source: "conversation", name: `${Math.round(grams)} g ${ingredient.name}`, items: [{ ingredientId: ingredient.id, grams: Math.round(grams) }], constraints })
     draft = createdDraft
   }
-  const asksLog = Boolean(direct) || LOG_REQUEST.test(message)
+  const asksLog = Boolean(direct) || Boolean(input.candidate) || LOG_REQUEST.test(message)
   const withDraft = (r: LogTurnResult | null): LogTurnResult | null => (r && createdDraft ? { ...r, draft: createdDraft } : r)
   return withDraft(await lifecycle())
 

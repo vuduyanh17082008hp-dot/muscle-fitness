@@ -413,3 +413,122 @@ describe("hotfix — 'beside tuna' is an exclusion, and discovery never edits th
     expect(logged).toHaveLength(0)
   })
 })
+
+/**
+ * MF-GEMMA-P0 consolidated — multi-meal discovery. Observed: "yo, give me some high protein meals with lean ground beef" → ONE
+ * "Beef Plate" (the named food went to the single-selection builder); "give me lots of choice" → the same plate's macros again;
+ * "give me another high protein meals" with that draft open → one unrelated meal.
+ */
+const shownDrafts = (reply: Json): Json[] => {
+  const pool: Json[] = [reply.mealDraft, ...(reply.alternatives ?? [])].filter(Boolean)
+  return (reply.presentedOptions?.options ?? []).map((option: Json) => pool.find((draft) => draft.id === option.id))
+}
+const keyOf = (draft: Json) => [...new Set(ingredientIds(draft))].sort().join("+")
+
+describe("consolidated — multi-meal discovery", () => {
+  it("'with lean ground beef' → 5 distinct beef meals; 'lots of choice' → 8 NEW beef meals; nothing re-voiced", async () => {
+    const s = session()
+    const first = await s.say("yo, give me some high protein meals with lean ground beef")
+    const a = shownDrafts(first)
+    expect(a).toHaveLength(5)
+    for (const draft of a) expect(ingredientIds(draft)).toContain("lean_beef")
+    expect(new Set(a.map(keyOf)).size).toBe(5)
+    expect(new Set(a.map((draft) => draft.name)).size).toBe(5)
+    expect(first.conversation.constraints).toContain("with:lean_beef")
+
+    const more = await s.say("give me lots of choice")
+    expect(more.route).toBe("build")
+    const b = shownDrafts(more)
+    expect(b).toHaveLength(8)
+    for (const draft of b) expect(ingredientIds(draft)).toContain("lean_beef")
+    expect(new Set(b.map(keyOf)).size).toBe(8)
+    for (const draft of b) expect(a.map(keyOf)).not.toContain(keyOf(draft)) // "more" = not already shown
+    expect(createPendingAction).not.toHaveBeenCalled()
+  })
+
+  it("'give me three meals' → exactly 3; a singular request keeps recommendation + 2", async () => {
+    expect(shownDrafts(await session().say("give me three high protein meals"))).toHaveLength(3)
+    expect(shownDrafts(await session().say("build me a high protein meal"))).toHaveLength(3)
+  })
+
+  it("a narrow request returns a truthful shortfall instead of padding", async () => {
+    const reply = await session().say("give me 8 meals with lean ground beef and rice")
+    const drafts = shownDrafts(reply)
+    expect(drafts.length).toBeLessThan(8)
+    for (const draft of drafts) expect(ingredientIds(draft)).toEqual(expect.arrayContaining(["lean_beef", "rice"]))
+    expect(reply.reply).toMatch(/You asked for 8; these are all the distinct meals/)
+  })
+
+  it("discovery while a draft is open creates a NEW list and never edits that draft", async () => {
+    const { s } = await suggested()
+    const before = JSON.parse(JSON.stringify(s.draft))
+    const next = await s.say("give me another high protein meals")
+    expect(shownDrafts(next).length).toBeGreaterThanOrEqual(5)
+    expect(next.mealDraft.id).not.toBe(before.id)
+    expect(next.reply).toMatch(/your earlier draft wasn't changed/)
+  })
+
+  it("'besides tuna' holds across 'more options' and is revised by an explicit tuna request", async () => {
+    const s = session()
+    const first = await s.say("give me high protein meals besides tuna")
+    for (const draft of shownDrafts(first)) expect(ingredientIds(draft)).not.toContain("tuna")
+    expect(first.conversation.constraints).toContain("without:tuna")
+    const more = await s.say("more options")
+    expect(shownDrafts(more).length).toBeGreaterThan(0)
+    for (const draft of shownDrafts(more)) expect(ingredientIds(draft)).not.toContain("tuna")
+    const revised = await s.say("ok give me some meals with tuna")
+    for (const draft of shownDrafts(revised)) expect(ingredientIds(draft)).toContain("tuna")
+    expect(revised.conversation.constraints).not.toContain("without:tuna")
+  })
+
+  it("Vietnamese 'thêm món khác' continues the discovery", async () => {
+    const s = session()
+    const first = await s.say("give me some high protein meals with lean ground beef")
+    const more = await s.say("thêm món khác")
+    expect(more.route).toBe("build")
+    for (const draft of shownDrafts(more)) expect(ingredientIds(draft)).toContain("lean_beef")
+    for (const draft of shownDrafts(more)) expect(shownDrafts(first).map(keyOf)).not.toContain(keyOf(draft))
+  })
+
+  it("every rendered option's numbers are its ingredients' numbers, and portions stay inside the catalogue bounds", async () => {
+    const { getIngredient } = await import("@/lib/nutrition/coach/ingredients")
+    const { totalsFor } = await import("@/lib/nutrition/coach/macros")
+    for (const draft of shownDrafts(await session().say("give me lots of high protein meal options"))) {
+      const items = draft.ingredients.map((item: Json) => ({ ingredientId: item.ingredientId, grams: item.grams }))
+      expect(draft.nutrition).toEqual(totalsFor(items))
+      for (const item of items) {
+        const ingredient = getIngredient(item.ingredientId)!
+        expect(item.grams).toBeGreaterThanOrEqual(ingredient.minGrams)
+        expect(item.grams).toBeLessThanOrEqual(ingredient.maxGrams)
+      }
+    }
+  })
+})
+
+describe("consolidated — 'log option N' resolves against the list on screen", () => {
+  it("'log option 3 for lunch' proposes exactly option 3, confirms once, never twice", async () => {
+    const s = session()
+    const list = await s.say("give me some high protein meals with lean ground beef")
+    const third = shownDrafts(list)[2]
+    const ask = await s.say("log option 3 for lunch")
+    expect(ask.conversation.pendingLog).toMatchObject({ stage: "READY_FOR_CONFIRMATION", mealType: "lunch", mealName: third.name })
+    expect(vi.mocked(createPendingAction).mock.calls[0][3]).toMatchObject({ mealType: "lunch", name: third.name, ingredients: third.ingredients.map((item: Json) => ({ ingredientId: item.ingredientId, grams: item.grams })) })
+    expect(logged).toHaveLength(0)
+    await s.say("confirm")
+    expect(logged).toHaveLength(1)
+    expect(logged[0].name).toBe(third.name)
+    await s.say("confirm")
+    expect(logged).toHaveLength(1)
+  })
+
+  it("an option that isn't on screen saves nothing and says so", async () => {
+    const s = session()
+    await s.say("give me three high protein meals")
+    const reply = await s.say("log option 7 for dinner")
+    expect(reply.reply).toMatch(/no option 7 in the list I just showed \(1–3\), so nothing was saved/)
+    expect(createPendingAction).not.toHaveBeenCalled()
+    const none = await session().say("log option 2 for dinner")
+    expect(none.reply).toMatch(/don't have a current list of options/)
+    expect(createPendingAction).not.toHaveBeenCalled()
+  })
+})
