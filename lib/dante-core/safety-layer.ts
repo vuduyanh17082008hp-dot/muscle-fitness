@@ -596,6 +596,27 @@ const MEDICAL_RED_FLAG_SYMPTOMS: SymptomConcept[] = [
   },
 ];
 
+const RED_FLAG_HEADACHE: SymptomConcept[] = [
+  {
+    id: "red_flag_headache",
+    patterns: [
+      /\bworst headache\b/i,
+      /\b(?:sudden(?:ly)?|thunderclap|explosive)\b.{0,30}\bheadache\b/i,
+      /\bheadache\b.{0,30}\b(?:came on (?:suddenly|out of nowhere)|out of nowhere|like a thunderclap)\b/i,
+      /\bheadache\b.{0,60}\b(?:stiff neck|fever|confus\w*|vomit\w*|throwing up|blurr\w* vision|double vision|(?:lost|losing|changes? in) (?:my )?vision|slurr\w*|weakness|numb\w*|(?:hit|bumped|banged|knocked) (?:my )?head|head (?:injury|knock))\b/i,
+      /\b(?:hit|bumped|banged|knocked) (?:my )?head\b.{0,60}\bheadache\b/i,
+      /\b(?:stiff neck|fever)\b.{0,40}\bheadache\b/i,
+      /dau dau (?:du doi|nhu bua bo|kinh khung|khung khiep|dot ngot)/i,
+      /dau dau.{0,40}(?:cung co|sot cao|non oi|mo mat|nhin mo|lu lan|dap dau|va dau)/i,
+    ],
+  },
+];
+
+const RED_FLAG_HEADACHE_RESPONSE: LocalizedCopy = {
+  en: "A headache that is sudden and severe, the worst you've had, or that comes with a stiff neck, fever, vomiting, confusion, vision changes, weakness or numbness — or after a knock to the head — needs medical assessment today, not training advice. Please don't train; get checked promptly, and use emergency care if it came on suddenly or is getting worse.",
+  vi: "Đau đầu đột ngột và dữ dội, đau nhất từ trước đến giờ, hoặc kèm cứng cổ, sốt, nôn, lú lẫn, thay đổi thị lực, yếu hay tê — hoặc sau khi bị va đập vào đầu — cần được khám y tế ngay trong hôm nay, không phải lời khuyên tập luyện. Đừng tập hôm nay; hãy đi khám sớm, và đến cấp cứu nếu cơn đau xuất hiện đột ngột hoặc ngày càng nặng.",
+};
+
 const RULES: SafetyRule[] = [
   {
     category: "chest_pain_cardiac",
@@ -617,6 +638,14 @@ const RULES: SafetyRule[] = [
     patterns: [],
     matcher: (message) => matchPresentSymptom(message, NEUROLOGICAL_SYMPTOMS),
     response: HARD_BLOCK_RESPONSES.neurological_symptoms,
+  },
+  {
+    // MF-S1: an ordinary headache stays with the model (proportional advice); these headache shapes are not trained through.
+    category: "neurological_symptoms",
+    responseMode: "HARD_BLOCK",
+    patterns: [],
+    matcher: (message) => matchPresentSymptom(message, RED_FLAG_HEADACHE),
+    response: RED_FLAG_HEADACHE_RESPONSE,
   },
   {
     category: "medical_red_flag",

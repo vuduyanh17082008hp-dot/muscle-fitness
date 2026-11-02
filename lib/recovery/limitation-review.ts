@@ -197,9 +197,22 @@ export function reviewLimitation(input: ReviewInput): LimitationReview {
 const TRAINING_REF = /\b(?:workouts?|sessions?|train(?:ing)?|lift(?:ing)?|gym|exercises?|leg day|legs|lower body|upper body|squats?|deadlifts?|today|tonight|my plan|routine|buoi tap|tap luyen|bai tap|lich tap|hom nay|tap)\b/
 const ASKS = /\?|\b(?:what (?:should|can|do) i|should i|can i|could i|how (?:should|do) i|is it (?:ok|okay|safe)|do i (?:still )?(?:train|go|lift)|what now|help me|nen|co nen|the nao|lam gi|tap gi|duoc khong|sao)\b/
 
+/**
+ * MF-S1: a health complaint that is NOT a musculoskeletal limitation — "I have a headache", "I feel sick", "my stomach is
+ * off". The latest statement governs the turn: an older foot report must not answer a new headache question (live repro
+ * 2026-11-02: the headache turn re-rendered the foot review and re-proposed the foot change). The older limitation stays
+ * in the working set, so the provider still trains around it.
+ */
+export const OTHER_COMPLAINT = /\b(?:headaches?|migraines?|head (?:hurts|is pounding|is killing me)|fever\w*|(?:a |the )?flu|(?:a |the |head )cold|coughs?|coughing|sore throat|runny nose|congest\w*|sick|ill|unwell|nause\w*|vomit\w*|throw(?:ing)? up|threw up|stomach|diarrh\w*|food poisoning|hangover|hungover|covid|chest (?:pain|tight\w*|hurts?)|dau dau|nhuc dau|bi sot|dang sot|sot cao|cam cum|bi cam|cam lanh|bi om|dang om|buon non|bi non|dau bung|tieu chay|dau hong)\b/
+/** A food / energy question ("what should I eat today?") — the "today" in it is not a training reference. */
+const NUTRITION_ASK = /\b(?:eat|eating|ate|food|meals?|calories|calorie|kcal|calo|protein|carbs?|macros?|diet|an gi|an uong|bua an)\b/
+const TRAINING_NOUN = /\b(?:workouts?|sessions?|train(?:ing)?|lift(?:ing)?|gym|exercises?|leg day|legs|lower body|upper body|squats?|deadlifts?|routine|buoi tap|tap luyen|bai tap|lich tap)\b/
+
 /** True for a turn the limitation flow should answer, given an active reported limitation: a training-today ask, or a choice. */
 export function isLimitationTurn(message: string): boolean {
   const folded = fold(message)
+  if (OTHER_COMPLAINT.test(folded)) return false
+  if (NUTRITION_ASK.test(folded) && !TRAINING_NOUN.test(folded)) return false
   if (CHOICE_REST.test(folded) || CHOICE_SKIP.test(folded) || CHOICE_KEEP.test(folded) || CHOICE_NUMBER.test(folded)) return true
   if (CHOICE_REPLACE.test(folded) && /\b(?:for|with|to|bang|sang)\b/.test(folded) && (TRAINING_REF.test(folded) || /\b(?:curls?|press(?:es)?|raises?|rows?|extensions?|lunges?|calf|rdl|thrusts?|bridges?|pulldowns?)\b/.test(folded))) return true
   return TRAINING_REF.test(folded) && ASKS.test(folded)

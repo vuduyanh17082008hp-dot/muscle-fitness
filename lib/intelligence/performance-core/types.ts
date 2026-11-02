@@ -58,7 +58,7 @@ export type KnowledgeClaim = {
 /** Safety contexts a topic can raise. Enforcement stays in the existing safety layers; these only select a posture. */
 export type SafetyContextTag =
   | "AGE_CONTEXT" | "MEDICATION_CONTEXT" | "MEDICAL_CONTEXT" | "PREGNANCY" | "EATING_DISORDER_RISK" | "STIMULANT_RISK"
-  | "HORMONAL_PED" | "EXTREME_DIET" | "SUPPLEMENT_INTERACTION" | "TREATMENT_CLAIM" | "INJURY_CONTEXT" | "ALLERGY_CONTEXT" | "SYMPTOM_CONTEXT";
+  | "HORMONAL_PED" | "EXTREME_DIET" | "SUPPLEMENT_INTERACTION" | "TREATMENT_CLAIM" | "INJURY_CONTEXT" | "ALLERGY_CONTEXT" | "SYMPTOM_CONTEXT" | "ILLNESS_CONTEXT";
 
 /** What a supplement's usefulness depends on. Unknown dependencies are what the coach asks about. */
 export type NeedDependency = "PROTEIN_INTAKE" | "FISH_INTAKE" | "DIET_QUALITY" | "LAB_STATUS" | "SWEAT_LOSS" | "SLEEP_AND_STIMULANT_LOAD";

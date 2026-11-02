@@ -17,7 +17,7 @@ import { fold } from "./text";
  */
 
 export type ContextFactKind =
-  | "PED_USE" | "PREGNANCY" | "INJURY" | "ALLERGY" | "MEDICATION" | "CONDITION" | "LOW_ENERGY_INTAKE" | "SYMPTOM"
+  | "PED_USE" | "PREGNANCY" | "INJURY" | "ALLERGY" | "MEDICATION" | "CONDITION" | "LOW_ENERGY_INTAKE" | "SYMPTOM" | "ILLNESS"
   | "BODYWEIGHT" | "PROTEIN_INTAKE" | "DIET_PATTERN" | "GOAL" | "SELF_REPORT";
 
 /** CURRENT = true now as stated; HISTORICAL = true in the past (ended, or stated as past). */
@@ -199,6 +199,14 @@ const SYMPTOMS: Array<[string, string, RegExp]> = [
   ["fainting", "fainting or near-fainting", /\b(?:fainted|passed out|blacked out|fainting|ngat|xiu)\b/],
   ["breathless", "unusual shortness of breath", /\b(?:can'?t breathe|short(?:ness)? of breath|kho tho)\b/],
   ["dizziness", "dizziness", /\b(?:dizzy|dizziness|lightheaded|chong mat)\b/],
+];
+
+const ILLNESSES: Array<[string, string, RegExp]> = [
+  ["headache", "a headache", /\b(?:headaches?|migraines?|my head (?:hurts|is pounding|is killing me)|dau dau|nhuc dau)\b/],
+  ["cold_flu", "a cold or flu symptoms", /\b(?:a (?:head )?cold|the flu|flu symptoms|sore throat|runny nose|blocked nose|stuffy nose|congested|cough(?:ing)?|cam cum|cam lanh|so mui|dau hong)\b/],
+  ["fever", "a fever", /\b(?:fever|feverish|high temperature|bi sot|dang sot|sot cao)\b/],
+  ["stomach", "nausea or a stomach upset", /\b(?:nause\w*|vomit\w*|throwing up|threw up|stomach (?:bug|ache|upset|flu|is off)|upset stomach|diarrh\w*|food poisoning|buon non|dau bung|tieu chay)\b/],
+  ["sick", "feeling sick", /\b(?:i'?m sick|im sick|feel(?:ing)? (?:sick|ill|unwell)|i'?m (?:ill|unwell)|bi om|dang om|bi benh)\b/],
 ];
 
 const DIETS: Array<[string, RegExp]> = [
@@ -442,6 +450,17 @@ function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, last
       out.push({ key, kind: "SYMPTOM", relevance: "SAFETY", op: "NEGATE", label: `no ${label}` });
     } else if (FIRST_PERSON.test(clause) || clause.trim().split(/\s+/).length <= 6) {
       out.push({ key, kind: "SYMPTOM", relevance: "SAFETY", op: "ASSERT", label: `reported ${label}` });
+    }
+  }
+  // MF-S1: an everyday illness the user reports about themselves (not a red flag — the safety layer stops those). It
+  // keeps the newest concern in view so a follow-up is answered for it, never for an older injury.
+  for (const [id, label, re] of ILLNESSES) {
+    if (!re.test(text)) continue;
+    const key = `ILLNESS:${id}`;
+    if (new RegExp(`(?:${re.source})[^.?!]{0,24}\\b(?:is gone|has gone|gone now|went away|passed|better now|cleared up|het roi|do roi)\\b`).test(text) || /\b(?:no|not|without|don'?t have|khong)\s+(?:a\s+)?(?:\w+\s+)?$/.test(text.split(re)[0]?.slice(-24) ?? "")) {
+      if (active.has(key)) out.push({ key, kind: "ILLNESS", relevance: "SAFETY", op: "END", label: `${label} — the user says it has resolved` });
+    } else {
+      out.push({ key, kind: "ILLNESS", relevance: "SAFETY", op: "ASSERT", label: `reports ${label}` });
     }
   }
   // The correction "I meant my chest MUSCLES are sore" names no symptom phrase at all: it still clears an active chest-pain report.
