@@ -4,6 +4,7 @@ import { detectCravingKey } from "./craving"
 import type { DraftOp } from "./draft"
 import { followUpStateSchema } from "./followup"
 import { findIngredientByText, getIngredient } from "./ingredients"
+import { pendingLogSchema } from "./log-action"
 import type { ActiveMealDraft, CravingKey } from "./types"
 
 /**
@@ -125,6 +126,8 @@ export const conversationInputSchema = z.object({
   foodReference: z.object({ canonicalName: z.string().max(160), provider: z.enum(["LOCAL_CANONICAL", "USDA_FDC"]), sourceId: z.string().max(80), basis: z.enum(["raw", "cooked", "prepared", "packaged", "unknown"]), base: z.string().max(60) }).nullish().catch(undefined),
   /** Today's food-log rows (id, meal, food name) when the last reply was written: what "it" could have meant. Identity only — numbers always come from the current rows. */
   loggedRows: z.array(z.object({ id: z.string().max(64), meal: z.string().max(20), food: z.string().max(200) })).max(60).nullish().catch(undefined),
+  /** P0 chat-driven meal log: the chat's pointer to its server pending action (lib/nutrition/coach/log-action.ts). Malformed => ignored. */
+  pendingLog: pendingLogSchema.nullish().catch(undefined),
 })
 export type ConversationInput = z.infer<typeof conversationInputSchema>
 
@@ -272,7 +275,9 @@ export type Classification =
   | { intent: "FOOD_SUBSTITUTION"; topic: NutritionTopic }
 
 const RESET = /\b(?:forget|scrap|discard|ditch|cancel|clear)\b[^.?!]*\b(?:that|this|the)\b[^.?!]*\b(?:meal|bowl|recipe|draft|dish)\b|\bstart over\b|\bnever ?mind\b|\bforget (?:it|that)\b/i
-const LOG = /\blog\s+(?:this|that|it)\b(?!\s+(?:workout|session))|\blog the (?:active )?(?:meal|draft)\b|\bsave this meal\b/i
+/** A request to log the meal in view to TODAY's food log. "Add it to my meal plan" (no log verb) is not one. */
+export const LOG_REQUEST = /\blog\s+(?:this|that|it)\b(?!\s+(?:workout|session))|\blog the (?:active )?(?:meal|draft)\b|\bsave this meal\b|\badd (?:this|it|that)(?: meal)? to (?:my |today'?s )?(?:food )?(?:log|diary|tracker)\b|(?:ghi|lưu)(?: lại)?(?: vào nhật ký)? (?:món|bữa|cái) (?:này|đó|ấy)/iu
+export const isResetMessage = (message: string) => RESET.test(message.trim())
 const PREF_CRAVE = /^\s*(?:actually,?\s*)?i\s+(?:always|usually|often)\s+crav\w*\s+([a-z' -]{2,40}?)(?:\s+(?:at|in|every)\s+(?:the\s+)?(night|evening|morning|afternoon|day))?\s*[.!]*$/i
 const PREF_DISLIKE = /^\s*(?:actually,?\s*)?i\s+(?:really\s+)?(?:hate|dislike|can'?t stand|don'?t like|do not like|am not a fan of|'?m not a fan of)\s+([a-z' -]{2,40}?)\s*[.!]*$/i
 const PREF_LIKE = /^\s*(?:actually,?\s*)?i\s+(?:really\s+)?(?:love|like|enjoy|prefer)\s+([a-z' -]{2,40}?)\s*[.!]*$/i
@@ -300,7 +305,7 @@ export function classifyConversation(message: string, input: { reference: DraftR
   const text = message.trim()
 
   if (RESET.test(text)) return { intent: "RESET_CONTEXT" }
-  if (LOG.test(text)) return { intent: "LOG_MEAL" }
+  if (LOG_REQUEST.test(text)) return { intent: "LOG_MEAL" }
 
   const crave = text.match(PREF_CRAVE)
   if (crave) return { intent: "PREFERENCE_UPDATE", signals: [{ kind: "CRAVING_PATTERN", value: crave[1].trim(), strength: "EXPLICIT", scope: "SESSION", context: crave[2]?.toLowerCase() }] }

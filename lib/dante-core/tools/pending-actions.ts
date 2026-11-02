@@ -175,6 +175,20 @@ export async function confirmPendingAction(
   return { ok: true, status: "executed", result: executionResult.data };
 }
 
+/**
+ * Read-only status of one of the caller's own actions (RLS + explicit user scope), for a caller that lost a confirm's
+ * outcome (timeout) and must find out whether the write happened before saying anything about it. Null = not found.
+ */
+export async function readPendingActionStatus(
+  supabase: SupabaseClient,
+  userId: string,
+  actionId: string,
+): Promise<{ status: PendingActionRow["status"]; result: unknown } | null> {
+  const { data, error } = await supabase.from("dante_tool_actions").select("status, result").eq("id", actionId).eq("user_id", userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? { status: data.status as PendingActionRow["status"], result: data.result } : null;
+}
+
 export type CancelOutcome = { ok: true } | { ok: false; status: "not_found" | "already_handled"; error: string };
 
 /** CANCEL: pending -> cancelled, atomically. No mutation ever runs (Part 8/H). */

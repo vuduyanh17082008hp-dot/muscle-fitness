@@ -88,6 +88,8 @@ import { COACH_INGREDIENT_IDS, getIngredient } from "./ingredients"
 import { totalsFor } from "./macros"
 import { buildNextMeal, chooseMyFood } from "./service"
 import { draftInputSchema, rehydrateDraft } from "./schema"
+import { isLive, type LogActionStage, type PendingLog } from "./log-action"
+import { handleLogTurn } from "./log-turn"
 import type { ActiveMealDraft, CoachContext } from "./types"
 
 /**
@@ -152,7 +154,13 @@ export type NutritionAgentResponse = {
     foodReference: ResolvedFoodReference | null
     /** Today's food-log rows when THIS reply was written: a later "it" may only mean one of them (a re-added food is a new row). */
     loggedRows: LoggedRow[] | null
+    /** P0: the chat's pointer to its pending meal-log action (lib/nutrition/coach/log-action.ts). null = none. */
+    pendingLog: PendingLog | null
   }
+  /** P0 diagnostics: the log-action stages this turn passed through. null = not a log turn. */
+  logAction: { stage: LogActionStage | null; trace: LogActionStage[]; foodLogId: string | null } | null
+  /** True only when the SERVER confirmed a food-log write this turn: the client re-reads totals. */
+  foodLogChanged: boolean
   /** Compact structured results the UI renders instead of re-parsing prose. */
   structuredBlocks: StructuredBlock[]
   referent: FollowUpState["referent"]
@@ -702,6 +710,17 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   // Null until the food log has loaded; every exit above it carries the previous turn's snapshot.
   let todayRows: LoggedRow[] | null = null
 
+  /**
+   * A pending log survives turns about something else. It ends with a reset, and a not-yet-proposed one ("which meal?")
+   * ends when a different meal replaces the one it was about. A proposed action is self-contained, so it survives
+   * (confirming it later asks which meal is meant).
+   */
+  const carriedPendingLog = (nextDraft: ActiveMealDraft | null, ended: boolean): PendingLog | null => {
+    const live = isLive(state.pendingLog, now) ? state.pendingLog : null
+    if (!live || ended) return null
+    return live.stage === "AWAITING_REQUIRED_INPUT" && nextDraft && nextDraft.id !== live.draftId ? null : live
+  }
+
   /** Builds the structured response. The handoff is recomputed from THIS reply, so it can never outlive one user turn. */
   const respond = (
     intent: NutritionIntent,
@@ -734,6 +753,10 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
       pending?: PendingClarification | null
       foodReference?: ResolvedFoodReference | null
       coordinationNoteApplied?: boolean
+      /** undefined = carry the live pending log forward (a topic switch keeps it); null = it ended. */
+      pendingLog?: PendingLog | null
+      logAction?: NutritionAgentResponse["logAction"]
+      foodLogChanged?: boolean
     } = {},
   ): Response => {
     // Final Repair D1: every non-safety reply on a supplement turn leaves as education, whichever path wrote it.
@@ -812,7 +835,10 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
         // A newly resolved food replaces the reference; a new meal, topic switch, reset or safety stop ends it; anything else carries it.
         foodReference: extra.foodReference ?? (mealDraft || newTopicFlag || extra.deactivate || extra.safetyBlocked || intent === "RESET_CONTEXT" ? null : (state.foodReference ?? null)),
         loggedRows: todayRows ?? state.loggedRows ?? null,
+        pendingLog: extra.pendingLog !== undefined ? extra.pendingLog : carriedPendingLog(mealDraft, Boolean(extra.deactivate) || intent === "RESET_CONTEXT"),
       },
+      logAction: extra.logAction ?? null,
+      foodLogChanged: extra.foodLogChanged === true,
       structuredBlocks: committed.blocks,
       referent: followUp?.referent ?? null,
       presentedOptions: followUp?.presentedOptions ?? null,
@@ -943,6 +969,21 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   const draftReference = resolveDraftReference(message, draft, state.handoff)
   const mealTopic = (d: ActiveMealDraft): NutritionTopic => ({ type: "MEAL", food: d.name })
 
+  // P0 chat-driven meal log: a live pending log (or a new "log this") is resolved before any follow-up / model path, so a
+  // typed "lunch" or "confirm" can never fall through to a re-voiced recommendation. Writes only via the pending-action CAS.
+  const competingProposal = !conversationOwnsFocus && Boolean(state.followUp?.pendingProposal) && isFollowUpLive(state.followUp ?? null, now)
+  const logTurn = await handleLogTurn({ supabase, userId, message, now, budget: turnBudget, ctx, draft, pending: state.pendingLog, competingProposal })
+  if (logTurn) {
+    return respond("LOG_MEAL", "log_action", logTurn.reply, {
+      pendingLog: logTurn.pendingLog,
+      logAction: { stage: logTurn.trace.at(-1) ?? null, trace: logTurn.trace, foodLogId: logTurn.foodLogId ?? null },
+      foodLogChanged: logTurn.foodLogChanged,
+      action: logTurn.pendingLog?.stage === "READY_FOR_CONFIRMATION" || logTurn.pendingLog?.stage === "AWAITING_REQUIRED_INPUT" ? "PROPOSE_LOG" : "NONE",
+      draftTarget: draft ? "ACTIVE" : "NONE",
+      ...(draft ? { topic: mealTopic(draft) } : {}),
+    })
+  }
+
   // 1b. N1.5.6 follow-up continuity: proposal answer -> explicit new topic -> clarification answer -> short follow-up.
   // The legacy deterministic draft editor keeps every message it already handled ("make this bowl under 400 calories").
   // The engine's pending choice is selectable only while it IS the displayed snapshot: a hidden candidate list is invisible to the resolver.
@@ -1045,9 +1086,8 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
         return respond("RESET_CONTEXT", "reset", draft ? `No problem — I've set “${draft.name}” aside. Nothing was logged and your food log is untouched. What would you like to work on instead?` : "No problem — starting fresh. What would you like to work on?", { deactivate: Boolean(draft) })
 
       case "LOG_MEAL":
-        return draft
-          ? respond("LOG_MEAL", "log", `Ready to log “${draft.name}”. Pick the meal type and press “Log this meal” — nothing is saved until you confirm.`, { action: "PROPOSE_LOG", draftTarget: "ACTIVE", label: "Log this meal", topic: mealTopic(draft) })
-          : respond("LOG_MEAL", "log", "There's no active meal draft to log yet. Want me to build one first?", { action: "ASK_BEFORE_BUILD" })
+        // With a draft in view the log turn above answered (meal type → confirm → write). Here there is nothing to log.
+        return respond("LOG_MEAL", "log", "There's no active meal draft to log yet. Want me to build one first?", { action: "ASK_BEFORE_BUILD" })
 
       case "PREFERENCE_UPDATE": {
         const [signal] = conv.signals

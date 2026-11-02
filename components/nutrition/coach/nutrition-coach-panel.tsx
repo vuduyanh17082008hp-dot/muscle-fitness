@@ -9,6 +9,7 @@ import type { DraftOp, SwapWarning } from "@/lib/nutrition/coach/draft"
 import { COACH_INGREDIENTS } from "@/lib/nutrition/coach/ingredients"
 import type { NutritionIntent, NutritionTopic, PreferenceSignal } from "@/lib/nutrition/coach/conversation"
 import type { FollowUpState, StructuredBlock } from "@/lib/nutrition/coach/followup"
+import { draftIdentity, type PendingLog } from "@/lib/nutrition/coach/log-action"
 import { QUICK_ACTIONS } from "@/lib/nutrition/coach/quick-actions"
 import type { ActiveMealDraft, ContextSnapshot, CravingKey, MealDraftHistoryItem } from "@/lib/nutrition/coach/types"
 import { MEAL_TYPE_LABEL, MEAL_TYPES, type MealType } from "@/lib/nutrition/food-log/types"
@@ -29,7 +30,7 @@ import {
 
 type Proposal = { draft: ActiveMealDraft; warnings: SwapWarning[]; from: string; to: string }
 type ChatMessage = { role: "user" | "coach"; text: string; blocks?: StructuredBlock[] }
-type Pending = { actionId: string; summary: string }
+type Pending = { actionId: string; summary: string; expiresAt?: string }
 
 /** What the server echoes back each turn. The one-turn draft handoff is recomputed server-side every reply. */
 type ConversationState = {
@@ -41,6 +42,8 @@ type ConversationState = {
   deactivateDraft?: boolean
   /** Ephemeral follow-up context the server echoes back (TTL-bound; the server validates and recomputes everything). */
   followUp?: FollowUpState | null
+  /** The chat's pointer to its pending meal-log action; the server re-validates it every turn. */
+  pendingLog?: PendingLog | null
 }
 
 type DraftHistoryEntry = { item: MealDraftHistoryItem; draft: ActiveMealDraft }
@@ -237,7 +240,7 @@ export function NutritionCoachPanel() {
     setBusy(true)
     setNotice(null)
     try {
-      const { json } = await postJson<{ ok: boolean; code?: string; message?: string; error?: string; pendingConfirmation?: { actionId: string; summary: string } }>("/api/nutrition/coach/log", { draft, mealType, acknowledgeSimilar })
+      const { json } = await postJson<{ ok: boolean; code?: string; message?: string; error?: string; pendingConfirmation?: { actionId: string; summary: string; expiresAt?: string } }>("/api/nutrition/coach/log", { draft, mealType, acknowledgeSimilar })
       if (json.code === "STALE_CONTEXT") {
         setDraft({ ...draft, status: "STALE_CONTEXT" })
         return setNotice(json.message ?? "Your nutrition target has changed since this meal was created.")
@@ -246,7 +249,7 @@ export function NutritionCoachPanel() {
       if (!json.ok || !json.pendingConfirmation) return setNotice(json.error ?? "I couldn't prepare that log.")
       setSimilarWarning(null)
       draftBeforeLog.current = draft
-      setPending({ actionId: json.pendingConfirmation.actionId, summary: json.pendingConfirmation.summary })
+      setPending({ actionId: json.pendingConfirmation.actionId, summary: json.pendingConfirmation.summary, expiresAt: json.pendingConfirmation.expiresAt })
       setDraft({ ...draft, status: "CONFIRMED" })
     } catch {
       setNotice("I couldn't reach the Nutrition Coach. Nothing was logged — please try again.")
@@ -293,6 +296,11 @@ export function NutritionCoachPanel() {
     try {
       const active = draft && draft.status !== "LOGGED" ? draft : null
       const recentMessages = [...chat, { role: "user" as const, text: message }].slice(-6)
+      // An action prepared with the "Log this meal" button is the same server action a typed "confirm" resolves.
+      const buttonLog: PendingLog | null =
+        pending && active && conv.pendingLog?.actionId !== pending.actionId
+          ? { stage: "READY_FOR_CONFIRMATION", draftId: active.id, mealName: active.name, fingerprint: draftIdentity(active), mealType, actionId: pending.actionId, expiresAt: pending.expiresAt ?? new Date(Date.now() + 10 * 60_000).toISOString() }
+          : null
       const { status, json } = await postJson<{
         ok?: boolean
         reply?: string
@@ -304,7 +312,8 @@ export function NutritionCoachPanel() {
         conversation?: ConversationState
         structuredBlocks?: StructuredBlock[]
         followUpHints?: string[]
-      }>("/api/chatbot", { message, coachMode: "nutrition", activeDraft: active, selectedFoods: selected, conversation: { ...conv, recentMessages, priorUserTurns: chat.filter((turn) => turn.role === "user").map((turn) => turn.text.slice(0, 400)).slice(-20) } })
+        foodLogChanged?: boolean
+      }>("/api/chatbot", { message, coachMode: "nutrition", activeDraft: active, selectedFoods: selected, conversation: { ...conv, ...(buttonLog ? { pendingLog: buttonLog } : {}), recentMessages, priorUserTurns: chat.filter((turn) => turn.role === "user").map((turn) => turn.text.slice(0, 400)).slice(-20) } })
       const reply = json.reply ?? (status === 429 ? "I'm getting a lot of requests — please try again in a moment." : (json.message ?? json.error ?? "I couldn't answer that right now."))
       setChat((previous) => [...previous, { role: "coach", text: reply, ...(json.structuredBlocks?.length ? { blocks: json.structuredBlocks } : {}) }])
       setHints(json.followUpHints ?? [])
@@ -322,6 +331,24 @@ export function NutritionCoachPanel() {
       else if (next) {
         setDraft(next)
         setPending(null)
+      }
+      // Chat-driven logging: the card shows the SAME server action the chat holds, and a server-confirmed write re-reads totals.
+      const chatLog = json.conversation ? (json.conversation.pendingLog ?? null) : undefined
+      const shown = next ?? active
+      if (json.foodLogChanged) {
+        if (shown && (!chatLog || chatLog.draftId === shown.id)) setDraft({ ...shown, status: "LOGGED" })
+        setPending(null)
+        router.refresh()
+        void refreshSuggestions()
+      } else if (chatLog?.stage === "READY_FOR_CONFIRMATION" && chatLog.actionId && shown && chatLog.draftId === shown.id && chatLog.fingerprint === draftIdentity(shown)) {
+        if (shown.status !== "CONFIRMED") draftBeforeLog.current = shown
+        setPending({ actionId: chatLog.actionId, summary: `Log “${chatLog.mealName}”${chatLog.mealType ? ` as ${MEAL_TYPE_LABEL[chatLog.mealType].toLowerCase()}` : ""}`, expiresAt: chatLog.expiresAt })
+        if (chatLog.mealType) setMealType(chatLog.mealType)
+        setDraft({ ...shown, status: "CONFIRMED" })
+      } else if (chatLog !== undefined && pending && chatLog?.actionId !== pending.actionId && !next) {
+        // The chat ended that action (cancelled, failed, expired or superseded): the card's buttons must not offer it.
+        setPending(null)
+        if (active?.status === "CONFIRMED") setDraft(draftBeforeLog.current ?? { ...active, status: "DRAFT" })
       }
       if (json.proposal && json.warnings?.length && active) {
         const [from, to] = findSwapPair(active, json.proposal)
