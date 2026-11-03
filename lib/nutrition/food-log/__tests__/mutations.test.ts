@@ -279,6 +279,49 @@ describe("createFoodLog", () => {
 
     consoleSpy.mockRestore()
   })
+
+  // Production 2026-11-03: inserts hit PGRST204 (idempotency_key column missing) → the client kept them "unknown" forever.
+  describe("notWritten: only a definitive database rejection proves nothing was saved", () => {
+    const failInsertWith = (response: { error: { message: string; code: string }; status: number }) => {
+      const { client } = createFakeSupabase()
+      const originalFrom = client.from
+      client.from = ((table: string) => {
+        if (table !== "food_logs") return originalFrom(table)
+        return {
+          ...originalFrom(table),
+          insert: () => ({ select: () => ({ single: async () => ({ data: null, ...response }) }) }),
+          // the 23505 replay lookup fails too, so nothing can be read back
+          select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: "down" } }) }) }) }),
+        }
+      }) as typeof client.from
+      return client
+    }
+    const input = { ...CHICKEN, idempotencyKey: KEY_A }
+    beforeEach(() => void vi.spyOn(console, "error").mockImplementation(() => {}))
+    afterEach(() => vi.restoreAllMocks())
+
+    it("PostgREST 400 (missing column) → notWritten", async () => {
+      const client = failInsertWith({ error: { message: "Could not find the 'idempotency_key' column", code: "PGRST204" }, status: 400 })
+      expect(await createFoodLog(client as never, USER_ID, input)).toMatchObject({ success: false, notWritten: true })
+    })
+
+    it("fetch failure (status 0) → unknown, never notWritten", async () => {
+      const client = failInsertWith({ error: { message: "TypeError: fetch failed", code: "" }, status: 0 })
+      const result = await createFoodLog(client as never, USER_ID, input)
+      expect(result.success).toBe(false)
+      expect(result).not.toHaveProperty("notWritten")
+    })
+
+    it("gateway 5xx → unknown", async () => {
+      const client = failInsertWith({ error: { message: "upstream timeout", code: "" }, status: 504 })
+      expect(await createFoodLog(client as never, USER_ID, input)).not.toHaveProperty("notWritten")
+    })
+
+    it("23505 (a row with this key exists) whose readback failed → unknown, never notWritten", async () => {
+      const client = failInsertWith({ error: { message: "duplicate key", code: "23505" }, status: 409 })
+      expect(await createFoodLog(client as never, USER_ID, input)).not.toHaveProperty("notWritten")
+    })
+  })
 })
 
 describe("updateFoodLogQuantity (edit)", () => {

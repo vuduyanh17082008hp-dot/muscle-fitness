@@ -9,6 +9,7 @@ import {
   isStalePending,
   readPendingSaves,
   recheckPendingSaves,
+  classifyDayRead,
   saveFoodLogWithReconcile,
   writePendingSaves,
   type SaveItemResult,
@@ -42,8 +43,11 @@ type NutritionTrackerProps = {
   userId: string
 }
 
-/** foodName is null for a save restored after a refresh — only its key was kept. */
-type UnconfirmedSave = { key: string; foodName: string | null; sentAt: number }
+/**
+ * foodName is null for a save restored after a refresh — only its key was kept.
+ * notFound: a successful readback, past PENDING_STALE_MS, found no row — the user may dismiss it.
+ */
+type UnconfirmedSave = { key: string; foodName: string | null; sentAt: number; notFound?: boolean }
 
 export function NutritionTracker({ initialEntries, target, initialDate, initialUnavailable = false, userId }: NutritionTrackerProps) {
   const [selectedDate, setSelectedDate] = useState(initialDate)
@@ -57,6 +61,8 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const submittingRef = useRef(false)
+  // Writes this tab may have committed (save/edit/delete); a day read started before one is stale.
+  const writeCount = useRef(0)
   const [error, setError] = useState<string | null>(null)
 
   const [recentFoods, setRecentFoods] = useState<FoodHistoryItem[]>([])
@@ -64,7 +70,10 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
   const [nextActionRefreshKey, setNextActionRefreshKey] = useState(0)
   // Saves sent today whose commit couldn't be confirmed — totals aren't verified while any remain.
   const [unconfirmed, setUnconfirmed] = useState<UnconfirmedSave[]>([])
+  // Not-found saves keep totals unverified too, until the user acknowledges them.
   const totalsUnverified = unconfirmed.length > 0 && selectedDate === initialDate
+  const stillUnknown = unconfirmed.filter((item) => !item.notFound)
+  const notFound = unconfirmed.filter((item) => item.notFound)
 
   // QA-03: "today" is the athlete's date (profile timezone) the server resolved, never the device's. A device in another
   // timezone (e.g. Vietnam vs a Singapore profile around midnight) must not hide Add food or relabel the athlete's today.
@@ -109,6 +118,21 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     }
 
     let cancelled = false
+    const startedAtWrite = writeCount.current
+
+    const apply = (read: { ok: true; entries: FoodLogEntry[] } | { ok: false }, failure: string) => {
+      const outcome = classifyDayRead(read, startedAtWrite, writeCount.current)
+      if (outcome.kind === "stale") {
+        setReloadKey((key) => key + 1) // a save/edit/delete landed mid-read: re-read instead of rolling it back
+      } else if (outcome.kind === "loaded") {
+        setEntries(outcome.entries)
+        setLogUnavailable(false)
+      } else {
+        setEntries([])
+        setLogUnavailable(true)
+        setError(failure)
+      }
+    }
 
     const load = async () => {
       setLoadingDate(true)
@@ -120,20 +144,9 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
 
         if (cancelled) return
 
-        if (response.ok && data.ok) {
-          setEntries(data.entries ?? [])
-          setLogUnavailable(false)
-        } else {
-          setEntries([])
-          setLogUnavailable(true)
-          setError(data.error ?? "Unable to load this day's food log.")
-        }
+        apply(response.ok && data.ok ? { ok: true, entries: data.entries ?? [] } : { ok: false }, data.error ?? "Unable to load this day's food log.")
       } catch {
-        if (!cancelled) {
-          setEntries([])
-          setLogUnavailable(true)
-          setError("Network error — unable to load this day's food log.")
-        }
+        if (!cancelled) apply({ ok: false }, "Network error — unable to load this day's food log.")
       } finally {
         if (!cancelled) setLoadingDate(false)
       }
@@ -165,6 +178,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     writePendingSaves(userId, [...readPendingSaves(userId).filter((p) => p.key !== idempotencyKey), { key: idempotencyKey, logDate: initialDate, sentAt }])
     const result = await saveFoodLogWithReconcile({ ...food, idempotencyKey })
 
+    if (result.status !== "failed") writeCount.current += 1 // "unknown" may have committed too
     if (result.status === "saved") {
       const entry = result.entry
       // An idempotent replay returns the row that was already saved — never show it twice.
@@ -188,9 +202,17 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
    */
   async function recheckUnconfirmed(pending: UnconfirmedSave[] = unconfirmed) {
     if (pending.length === 0) return
-    const { saved } = await recheckPendingSaves(pending)
+    const { saved, notFound: absent } = await recheckPendingSaves(pending)
     if (saved.size > 0) forgetPending(saved)
+    if (absent.size > 0) {
+      setUnconfirmed((current) => current.map((item) => (absent.has(item.key) ? { ...item, notFound: true } : item)))
+    }
     reloadLog()
+  }
+
+  /** User acknowledgement only — the server already read these keys back as absent. Never deletes or adds a food log. */
+  function dismissNotFound() {
+    forgetPending(new Set(notFound.map((item) => item.key)))
   }
 
   useEffect(() => {
@@ -295,6 +317,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
         return
       }
 
+      writeCount.current += 1
       setEntries((current) => current.map((entry) => (entry.id === id ? (data.entry as FoodLogEntry) : entry)))
       setEditingId(null)
     } catch {
@@ -317,6 +340,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
         return
       }
 
+      writeCount.current += 1
       setEntries((current) => current.filter((entry) => entry.id !== id))
       setConfirmingDeleteId(null)
       setNextActionRefreshKey((key) => key + 1)
@@ -393,24 +417,54 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
 
       {totalsUnverified && !logUnavailable && !loadingDate ? (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3">
-          <p className="flex items-start gap-2 text-sm text-amber-200">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            {unconfirmed.length === 1
-              ? `Saving ${unconfirmed[0].foodName ? `"${unconfirmed[0].foodName}"` : "a food"} couldn't be confirmed — it may already be logged.`
-              : `${unconfirmed.length} food saves couldn't be confirmed — they may already be logged.`}{" "}
-            {unconfirmed.some((item) => isStalePending(item.sentAt))
-              ? "Still unconfirmed after 5+ minutes — check today's log before adding it again. "
-              : null}
-            Totals below are unverified until the server confirms.
-          </p>
-          <button
-            type="button"
-            onClick={() => void recheckUnconfirmed()}
-            className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-amber-400/30 px-3 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
-          >
-            <RotateCw className="size-3.5" />
-            Check again
-          </button>
+          <div className="space-y-1 text-sm text-amber-200">
+            {stillUnknown.length > 0 ? (
+              <p className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  {stillUnknown.length === 1
+                    ? `Saving ${stillUnknown[0].foodName ? `"${stillUnknown[0].foodName}"` : "a food"} couldn't be confirmed — it may already be logged.`
+                    : `${stillUnknown.length} food saves couldn't be confirmed — they may already be logged.`}{" "}
+                  {stillUnknown.some((item) => isStalePending(item.sentAt))
+                    ? "Still unconfirmed after 10+ minutes — check today's log before adding it again. "
+                    : null}
+                </span>
+              </p>
+            ) : null}
+            {notFound.length > 0 ? (
+              <p className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  {notFound.length === 1
+                    ? `An earlier save${notFound[0].foodName ? ` of "${notFound[0].foodName}"` : ""} isn't in today's log`
+                    : `${notFound.length} earlier food saves aren't in today's log`}
+                  {" — the server checked and found no entry. The log below is what was saved; add the food again if it's missing."}
+                </span>
+              </p>
+            ) : null}
+            <p>Totals below are unverified until {stillUnknown.length > 0 ? "the server confirms" : "you dismiss this"}.</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            {stillUnknown.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => void recheckUnconfirmed()}
+                className="flex min-h-11 items-center gap-1.5 rounded-lg border border-amber-400/30 px-3 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
+              >
+                <RotateCw className="size-3.5" />
+                Check again
+              </button>
+            ) : null}
+            {notFound.length > 0 ? (
+              <button
+                type="button"
+                onClick={dismissNotFound}
+                className="flex min-h-11 items-center rounded-lg border border-amber-400/30 px-3 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
+              >
+                Dismiss
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
