@@ -21,6 +21,9 @@ export type AuthenticatedActor = {
   effectiveRole: ActiveAppRole
 }
 
+// user_roles is the only role authority (written by the signup trigger and
+// admin_set_user_role). profiles.role is a display mirror and must never
+// grant anything: a missing, unreadable or malformed row means "client".
 async function resolveActorRole(
   userId: string,
 ): Promise<AppRole> {
@@ -32,21 +35,7 @@ async function resolveActorRole(
     .eq("user_id", userId)
     .maybeSingle()
 
-  if (isAppRole(roleRow?.role)) {
-    return roleRow.role
-  }
-
-  const { data: profileRow } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (isAppRole(profileRow?.role)) {
-    return profileRow.role
-  }
-
-  return "client"
+  return isAppRole(roleRow?.role) ? roleRow.role : "client"
 }
 
 export async function getAuthenticatedActor(): Promise<AuthenticatedActor | null> {

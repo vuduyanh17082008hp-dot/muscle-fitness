@@ -3,6 +3,7 @@
 import {
   useMemo,
   useState,
+  useSyncExternalStore,
   type FormEvent,
 } from "react";
 
@@ -27,6 +28,11 @@ import {
 import {
   getAuthCallbackUrl,
 } from "@/lib/auth/redirect-url";
+
+import {
+  GOOGLE_UNAVAILABLE_MESSAGE,
+  useGoogleAuthEnabled,
+} from "@/lib/auth/google-availability";
 
 import {
   createClient,
@@ -397,6 +403,12 @@ export function RegisterForm() {
     pending !==
     null;
 
+  const googleEnabled =
+    useGoogleAuthEnabled();
+
+  // Until hydration the submit handler isn't attached; a native submit would send the fields as a GET query string.
+  const hydrated = useSyncExternalStore(() => () => {}, () => true, () => false);
+
   /* =======================================================
      UI
   ======================================================= */
@@ -524,7 +536,7 @@ export function RegisterForm() {
                     .checked,
                 )
             }
-            className="mt-1 size-4 accent-orange-500"
+            className="mt-1 size-4 accent-mf-brand"
           />
 
           <span className="text-xs leading-5 text-zinc-500">
@@ -532,7 +544,7 @@ export function RegisterForm() {
 
             <Link
               href="/terms"
-              className="font-semibold text-zinc-300 transition hover:text-orange-400"
+              className="font-semibold text-zinc-300 transition hover:text-mf-brand-hover"
             >
               Terms of Use
             </Link>
@@ -541,7 +553,7 @@ export function RegisterForm() {
 
             <Link
               href="/privacy"
-              className="font-semibold text-zinc-300 transition hover:text-orange-400"
+              className="font-semibold text-zinc-300 transition hover:text-mf-brand-hover"
             >
               Privacy Policy
             </Link>
@@ -557,9 +569,10 @@ export function RegisterForm() {
         <button
           type="submit"
           disabled={
-            disabled
+            disabled ||
+            !hydrated
           }
-          className="flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-orange-500 px-5 py-4 text-xs font-black uppercase tracking-[0.18em] text-black transition hover:bg-orange-400 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-mf-brand px-5 py-4 text-xs font-black uppercase tracking-[0.12em] text-mf-brand-ink transition hover:bg-mf-brand-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ===
           "email" ? (
@@ -583,7 +596,13 @@ export function RegisterForm() {
       <button
         type="button"
         disabled={
-          disabled
+          disabled ||
+          googleEnabled === false
+        }
+        aria-describedby={
+          googleEnabled === false
+            ? "google-unavailable"
+            : undefined
         }
         onClick={
           handleGoogleRegister
@@ -606,12 +625,21 @@ export function RegisterForm() {
         )}
       </button>
 
+      {googleEnabled === false ? (
+        <p
+          id="google-unavailable"
+          className="text-center text-sm text-zinc-400"
+        >
+          {GOOGLE_UNAVAILABLE_MESSAGE}
+        </p>
+      ) : null}
+
       <p className="text-center text-sm text-zinc-400">
         Already have an account?{" "}
 
         <Link
           href="/login"
-          className="font-black text-orange-400 transition hover:text-orange-300"
+          className="font-black text-mf-brand transition hover:text-mf-brand-hover"
         >
           Login
         </Link>
@@ -707,7 +735,7 @@ function TextField({
                 .value,
             )
         }
-        className="min-h-13 w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-4 text-sm text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-orange-400/60 focus:bg-white/5 focus:ring-4 focus:ring-orange-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+        className="min-h-13 w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-4 text-sm text-white outline-none transition placeholder:text-zinc-700 hover:border-white/20 focus:border-mf-brand/60 focus:bg-white/5 focus:ring-4 focus:ring-mf-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
       />
     </div>
   );
@@ -752,7 +780,7 @@ function PasswordStrength({
 
                 strength >=
                 level
-                  ? "bg-orange-400"
+                  ? "bg-mf-brand"
                   : "bg-white/10",
               ].join(
                 " ",
@@ -762,7 +790,7 @@ function PasswordStrength({
         )}
       </div>
 
-      <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-600">
+      <p className="mt-2 text-xs font-bold uppercase tracking-[0.15em] text-zinc-600">
         Password strength:{" "}
 
         <span className="text-zinc-400">
@@ -786,7 +814,7 @@ function Divider() {
     <div className="flex items-center gap-3">
       <span className="h-px flex-1 bg-white/10" />
 
-      <span className="text-[9px] font-black uppercase tracking-[0.25em] text-zinc-700">
+      <span className="text-xs font-black uppercase tracking-[0.12em] text-zinc-700">
         or
       </span>
 

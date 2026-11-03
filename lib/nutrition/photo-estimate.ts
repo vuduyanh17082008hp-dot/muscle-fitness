@@ -14,25 +14,45 @@ import "server-only"
 
 import { identifyFoodsInImage, isVisionConfigured } from "@/lib/ai/vision-client"
 import { searchFood } from "@/lib/nutrition/food-data"
-import type { NormalizedFood } from "@/lib/nutrition/food-data/types"
+import { getLocalFallbackById, searchLocalFallback } from "@/lib/nutrition/food-data/local-fallback"
+import type { FoodSearchStatus, NormalizedFood } from "@/lib/nutrition/food-data/types"
 import { scaleMacrosToGrams, type ScaledMacros } from "@/lib/nutrition/food-log-calculator"
+import { dropDecomposedComposites, photoMatchRank, type CookingMethod } from "@/lib/nutrition/photo-match-review"
+import { matchVietnameseDish, templateItems } from "@/lib/nutrition/vietnamese-dishes"
 
 export type PhotoEstimateItem = {
   detectedName: string
   estimatedGrams: number
   detectionConfidence: "high" | "medium" | "low"
   notes?: string
+  preparation: CookingMethod
+  preparationCertain: boolean
+  /** Mixed dish this item is a component of, or null. */
+  dish: string | null
 
   /** The grounding database match, or null if nothing comparable was found (spec: "user can add manually"). */
   groundedFood: NormalizedFood | null
   scaledMacros: ScaledMacros | null
+  /** Other records the same search returned (groundedFood first) — the user can switch before logging. */
+  candidates: NormalizedFood[]
+  /** External-provider outcome of the grounding search; a failure means better matches may exist. */
+  searchStatus: FoodSearchStatus
+  /** A provider failed although another answered: better matches may exist. */
+  searchPartial?: boolean
+  /** Not seen in the photo: a typical part of the named dish (lib/nutrition/vietnamese-dishes.ts), for the user to confirm. */
+  fromTemplate?: boolean
+  /** Template part that is common but not always there: starts unticked. */
+  optional?: boolean
+  /** The record already reflects how this part is prepared: no added-oil line. */
+  noAddedOil?: boolean
 }
 
 export type PhotoEstimateResult =
   | { status: "unconfigured" }
   | { status: "no_foods_detected" }
   | { status: "error"; message: string }
-  | { status: "ok"; items: PhotoEstimateItem[] }
+  /** `cookingOil` is the database record any added-oil line is priced from (never detected — the user sets the amount). */
+  | { status: "ok"; items: PhotoEstimateItem[]; cookingOil: NormalizedFood | null }
 
 export async function estimateMealFromPhoto(imageDataUrl: string): Promise<PhotoEstimateResult> {
   if (!isVisionConfigured()) {
@@ -50,20 +70,44 @@ export async function estimateMealFromPhoto(imageDataUrl: string): Promise<Photo
   }
 
   const grounded = await Promise.all(
-    detection.items.map(async (item): Promise<PhotoEstimateItem> => {
-      const searchResult = await searchFood(item.name, "any")
-      const bestMatch = searchResult.foods[0] ?? null
+    dropDecomposedComposites(detection.items).map(async (item): Promise<PhotoEstimateItem[]> => {
+      // A whole Vietnamese dish the model couldn't break down: offer the catalog's typical parts, each flagged
+      // as not seen in the photo, scaled to the model's portion guess.
+      const wholeDish = item.dish === null ? matchVietnameseDish(item.name) : null
+      if (wholeDish) return templateItems(wholeDish, item.estimatedGrams)
 
-      return {
+      // A component of a catalog dish: the dish's own record for that part goes first ("beef" in phở → lean beef).
+      const dish = matchVietnameseDish(item.dish)
+      const dishPart = dish ? searchLocalFallback(item.name).find((food) => dish.components.some((c) => c.foodId === food.id)) ?? null : null
+      const component = dishPart && dish ? dish.components.find((c) => c.foodId === dishPart.id) : undefined
+
+      const searchResult = await searchFood(item.name, "any")
+      // A provider hit can be an unrelated or branded product ("broth" → bouillon powder, "banana" → banana
+      // yogurt); keep the local records alongside and default to a name-matching, unbranded whole food.
+      const local = searchResult.usedFallback ? [] : searchLocalFallback(item.name)
+      const pool = [...searchResult.foods, ...local.filter((food) => !searchResult.foods.some((hit) => hit.id === food.id))]
+      const rank = (food: NormalizedFood) => photoMatchRank(item.name, item.preparation, food)
+      const ranked = pool.map((food, index) => ({ food, index })).sort((a, b) => rank(a.food) - rank(b.food) || a.index - b.index).map(({ food }) => food)
+      const candidates = (dishPart ? [dishPart, ...ranked.filter((food) => food.id !== dishPart.id)] : ranked).slice(0, 6)
+      const bestMatch = candidates[0] ?? null
+
+      return [{
+        ...(component?.noAddedOil ? { noAddedOil: true } : {}),
         detectedName: item.name,
         estimatedGrams: item.estimatedGrams,
         detectionConfidence: item.confidence,
         notes: item.notes,
+        preparation: item.preparation,
+        preparationCertain: item.preparationCertain,
+        dish: item.dish,
         groundedFood: bestMatch,
         scaledMacros: bestMatch ? scaleMacrosToGrams(bestMatch.per100g, item.estimatedGrams) : null,
-      }
+        candidates,
+        searchStatus: searchResult.status,
+        ...(searchResult.partial ? { searchPartial: true } : {}),
+      }]
     }),
   )
 
-  return { status: "ok", items: grounded }
+  return { status: "ok", items: grounded.flat(), cookingOil: getLocalFallbackById("local-olive-oil") }
 }

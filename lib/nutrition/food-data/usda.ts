@@ -20,7 +20,8 @@ import "server-only"
  * whether to fall back to local data.
  */
 
-import type { FoodPreparationState, NormalizedFood } from "./types"
+import { classifyProviderError, type FoodPreparationState, type NormalizedFood, type ProviderOutcome } from "./types"
+import { logProviderFailure, providerFetch, sharedInFlight } from "./provider-fetch"
 
 const USDA_BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 
@@ -83,12 +84,12 @@ export function isUsdaConfigured(): boolean {
   return getApiKey() !== null
 }
 
-async function fetchWithTimeout(
-  url: string,
-  timeoutMs: number,
-): Promise<Response> {
-  // H0 WP1: the timeout stays on the request so it bounds the body read too (a cleared timer left `.json()` unbounded).
-  return fetch(url, { signal: AbortSignal.timeout(timeoutMs), cache: "no-store" })
+const inFlight = new Map<string, Promise<ProviderOutcome<NormalizedFood[]>>>()
+
+// USDA's search is a query-string parser: stray quotes, brackets or operators can make it answer HTTP 400.
+// Food names never need them.
+function toUsdaQuery(query: string): string {
+  return query.replace(/[^\p{L}\p{M}\p{N}\s'-]+/gu, " ").replace(/\s+/g, " ").trim()
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -303,19 +304,35 @@ export async function searchFood(
   query: string,
   options: UsdaSearchOptions = {},
 ): Promise<NormalizedFood[]> {
-  const apiKey = getApiKey()
-  const trimmedQuery = query.trim()
+  return (await searchFoodWithStatus(query, options)).value
+}
 
-  if (!apiKey || !trimmedQuery) {
-    return []
-  }
+export async function searchFoodWithStatus(
+  query: string,
+  options: UsdaSearchOptions = {},
+): Promise<ProviderOutcome<NormalizedFood[]>> {
+  const apiKey = getApiKey()
+  const trimmedQuery = toUsdaQuery(query)
+
+  if (!apiKey) return { status: "unconfigured", value: [] }
+  if (!trimmedQuery) return { status: "no_match", value: [] }
 
   const preferRawFoodTypes = options.preferRawFoodTypes ?? true
   const limit = Math.min(Math.max(options.limit ?? 5, 1), 20)
   const cacheKey = `search:${trimmedQuery.toLowerCase()}:${preferRawFoodTypes}:${limit}`
   const cached = getCachedSearch(cacheKey)
-  if (cached) return cached
+  if (cached) return { status: "results", value: cached }
 
+  return sharedInFlight(inFlight, cacheKey, () => fetchUsdaSearch(apiKey, trimmedQuery, preferRawFoodTypes, limit, cacheKey))
+}
+
+async function fetchUsdaSearch(
+  apiKey: string,
+  trimmedQuery: string,
+  preferRawFoodTypes: boolean,
+  limit: number,
+  cacheKey: string,
+): Promise<ProviderOutcome<NormalizedFood[]>> {
   const url = new URL(`${USDA_BASE_URL}/foods/search`)
   url.searchParams.set("api_key", apiKey)
   url.searchParams.set("query", trimmedQuery)
@@ -328,17 +345,11 @@ export async function searchFood(
   }
 
   try {
-    const response = await fetchWithTimeout(url.toString(), SEARCH_TIMEOUT_MS)
-
-    if (!response.ok) {
-      console.warn(`[USDA] search failed: HTTP ${response.status}`)
-      return []
-    }
-
+    const response = await providerFetch("USDA", url.toString(), { timeoutMs: SEARCH_TIMEOUT_MS })
     const data: unknown = await response.json()
 
     if (!isRecord(data) || !Array.isArray(data.foods)) {
-      return []
+      return { status: "error", value: [] }
     }
 
     const queryWords = trimmedQuery
@@ -368,10 +379,10 @@ export async function searchFood(
     }
 
     if (normalized.length > 0) setCachedSearch(cacheKey, normalized)
-    return normalized
+    return { status: normalized.length > 0 ? "results" : "no_match", value: normalized }
   } catch (error) {
-    console.warn("[USDA] search error:", error)
-    return []
+    logProviderFailure("USDA", "search", error)
+    return { status: classifyProviderError(error), value: [] }
   }
 }
 
@@ -386,13 +397,7 @@ export async function getFoodById(fdcId: string | number): Promise<NormalizedFoo
   url.searchParams.set("api_key", apiKey)
 
   try {
-    const response = await fetchWithTimeout(url.toString(), SEARCH_TIMEOUT_MS)
-
-    if (!response.ok) {
-      console.warn(`[USDA] getFoodById failed: HTTP ${response.status}`)
-      return null
-    }
-
+    const response = await providerFetch("USDA", url.toString(), { timeoutMs: SEARCH_TIMEOUT_MS })
     const data: unknown = await response.json()
 
     if (!isRecord(data)) {
@@ -401,7 +406,7 @@ export async function getFoodById(fdcId: string | number): Promise<NormalizedFoo
 
     return normalizeUsdaFood(data as UsdaFoodItem)
   } catch (error) {
-    console.warn("[USDA] getFoodById error:", error)
+    logProviderFailure("USDA", "getFoodById", error)
     return null
   }
 }

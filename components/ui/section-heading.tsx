@@ -33,7 +33,7 @@ export function SectionHeading({
             `
               mb-5 flex items-center gap-3
               text-xs font-bold uppercase
-              tracking-[0.22em]
+              tracking-[0.12em]
               text-[var(--color-accent-light)]
             `,
             centered && "justify-center",

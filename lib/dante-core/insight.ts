@@ -13,7 +13,7 @@ import type { ConfidenceLevel } from "@/lib/dante-core/types";
  * Nothing here performs new calculation. Every DanteInsight must be
  * built from data that was already computed deterministically
  * elsewhere (recovery score, training load, food log totals, etc.) —
- * see build-chat-suggestions.ts and build-chat-insight.ts.
+ * see today-context.ts and build-chat-insight.ts.
  *
  * This shape is intentionally adaptive-engine-ready: `action` /
  * `category` / `severity` / `nextAction` give a future Adaptive

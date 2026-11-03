@@ -8,4 +8,4 @@ export { normalizeQueryText, detectLanguage, foldDiacritics } from "./text";
 export { buildQueryDiagnostics, type QueryDiagnostics } from "./diagnostics";
 export { detectPhrases, maskPhrases, STATE_GLOSS, type PhraseHit, type PhraseState, type PhraseAction } from "./phrases";
 export { extractReadiness } from "./readiness";
-export { buildDanteDeferralReply, buildGemmaDeferralReply, dantePassesToGemma } from "./boundary";
+export { buildDanteDeferralReply, dantePassesToGemma } from "./boundary";

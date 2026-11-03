@@ -24,15 +24,22 @@ describe("protein target semantics", () => {
     expect(s.proteinRemaining).toBe(100)
   })
 
-  it("meal optimizer constraint is a per-meal figure (<=60g) that never replaces the daily target", () => {
+  it("meal optimizer constraint is a per-meal share of the daily target that never replaces it", () => {
     const s = snap()
     const c = contextConstraints(s)!
-    expect(c.proteinTarget).toBe(60)
+    expect(c.proteinTarget).toBe(46) // 35 % of 132, not the 100 g still left today
     expect(c.proteinTarget).not.toBe(s.proteinTarget)
     expect(s.proteinTarget).toBe(132)
   })
 
-  it("per-meal figure follows remaining protein when below the cap, never the daily target", () => {
+  it("per-meal figure follows remaining protein when below the share, never the daily target", () => {
     expect(contextConstraints(snap({ proteinRemaining: 35 }))!.proteinTarget).toBe(35)
+  })
+
+  it("one meal's calorie ceiling is a share of the day, not the whole remaining budget (S4-A: 902 kcal lunch)", () => {
+    expect(contextConstraints(snap({ caloriesTarget: 1990, caloriesRemaining: 1600 }))!.calorieCeiling).toBe(597)
+    expect(contextConstraints(snap({ caloriesTarget: 3170, caloriesRemaining: 3000 }))!.calorieCeiling).toBe(900)
+    // Less left than a share: the remaining budget is the ceiling.
+    expect(contextConstraints(snap({ caloriesTarget: 2200, caloriesRemaining: 300 }))!.calorieCeiling).toBe(300)
   })
 })

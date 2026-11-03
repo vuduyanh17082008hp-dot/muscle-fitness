@@ -4,9 +4,10 @@ import { HeartPulse, Flame, Beef, Scale } from "lucide-react";
 export type AthleteStateStripProps = {
   recoveryScore: number | null;
   recoveryStatus: string | null;
-  caloriesConsumed: number;
+  /** Null when today's food log could not be read — shown as unavailable, never 0. */
+  caloriesConsumed: number | null;
   caloriesTarget: number | null;
-  proteinConsumed: number;
+  proteinConsumed: number | null;
   proteinTarget: number | null;
   weightKg: number | null;
 };
@@ -28,19 +29,19 @@ export function AthleteStateStrip({
       {/* 1. Recovery State */}
       <Link
         href="/dashboard/recovery"
-        className="group flex flex-col justify-between rounded-xl border border-white/10 bg-mf-glass-surface/80 p-3 transition hover:border-white/20 hover:bg-mf-glass-surface"
+        className="group flex min-h-20 flex-col justify-between rounded-xl border border-mf-glass-border bg-mf-glass-surface p-3 transition hover:border-mf-glass-text"
       >
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-mf-glass-text-muted">Recovery</span>
+          <span className="text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-muted">Recovery</span>
           <HeartPulse className="size-3.5 text-mf-glass-dante" />
         </div>
         <div className="mt-2 flex items-baseline gap-1.5">
           {recoveryScore !== null ? (
             <>
-              <span className="text-lg font-black text-mf-glass-text">{recoveryScore}</span>
-              <span className="text-[10px] text-mf-glass-text-muted">/100</span>
+              <span className="font-heading text-2xl font-black tabular-nums text-mf-glass-text">{recoveryScore}</span>
+              <span className="text-xs text-mf-glass-text-muted">/100</span>
               {recoveryStatus ? (
-                <span className="ml-auto text-[10px] font-bold uppercase text-mf-glass-dante">
+                <span className="ml-auto text-xs font-bold uppercase text-mf-glass-dante">
                   {recoveryStatus}
                 </span>
               ) : null}
@@ -54,59 +55,67 @@ export function AthleteStateStrip({
       {/* 2. Fuel / Calories */}
       <Link
         href="/dashboard/nutrition"
-        className="group flex flex-col justify-between rounded-xl border border-white/10 bg-mf-glass-surface/80 p-3 transition hover:border-white/20 hover:bg-mf-glass-surface"
+        className="group flex min-h-20 flex-col justify-between rounded-xl border border-mf-glass-border bg-mf-glass-surface p-3 transition hover:border-mf-glass-text"
       >
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-mf-glass-text-muted">Fuel</span>
+          <span className="text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-muted">Fuel</span>
           <Flame className="size-3.5 text-amber-400" />
         </div>
         <div className="mt-2 flex items-baseline gap-1">
-          <span className="text-lg font-black text-mf-glass-text">
+          {caloriesConsumed === null ? (
+            <span className="text-xs font-semibold text-mf-glass-warning">Log unavailable</span>
+          ) : (<>
+          <span className="font-heading text-2xl font-black tabular-nums text-mf-glass-text">
             {caloriesConsumed.toLocaleString()}
           </span>
           {caloriesTarget ? (
-            <span className="text-[10px] text-mf-glass-text-muted">
+            <span className="text-xs text-mf-glass-text-muted">
               / {caloriesTarget.toLocaleString()} kcal
             </span>
           ) : (
-            <span className="text-[10px] text-mf-glass-text-muted">kcal</span>
+            <span className="text-xs text-mf-glass-text-muted">kcal</span>
           )}
+          </>)}
         </div>
       </Link>
 
       {/* 3. Protein */}
       <Link
         href="/dashboard/nutrition"
-        className="group flex flex-col justify-between rounded-xl border border-white/10 bg-mf-glass-surface/80 p-3 transition hover:border-white/20 hover:bg-mf-glass-surface"
+        className="group flex min-h-20 flex-col justify-between rounded-xl border border-mf-glass-border bg-mf-glass-surface p-3 transition hover:border-mf-glass-text"
       >
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-mf-glass-text-muted">Protein</span>
+          <span className="text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-muted">Protein</span>
           <Beef className="size-3.5 text-emerald-400" />
         </div>
         <div className="mt-2 flex items-baseline gap-1">
-          <span className="text-lg font-black text-mf-glass-text">{Math.round(proteinConsumed)}</span>
+          {proteinConsumed === null ? (
+            <span className="text-xs font-semibold text-mf-glass-warning">Log unavailable</span>
+          ) : (<>
+          <span className="font-heading text-2xl font-black tabular-nums text-mf-glass-text">{Math.round(proteinConsumed)}</span>
           {proteinTarget ? (
-            <span className="text-[10px] text-mf-glass-text-muted">/ {proteinTarget}g</span>
+            <span className="text-xs text-mf-glass-text-muted">/ {proteinTarget}g</span>
           ) : (
-            <span className="text-[10px] text-mf-glass-text-muted">g</span>
+            <span className="text-xs text-mf-glass-text-muted">g</span>
           )}
+          </>)}
         </div>
       </Link>
 
       {/* 4. Weight / Body State */}
       <Link
         href="/dashboard/progress"
-        className="group flex flex-col justify-between rounded-xl border border-white/10 bg-mf-glass-surface/80 p-3 transition hover:border-white/20 hover:bg-mf-glass-surface"
+        className="group flex min-h-20 flex-col justify-between rounded-xl border border-mf-glass-border bg-mf-glass-surface p-3 transition hover:border-mf-glass-text"
       >
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-mf-glass-text-muted">Weight</span>
+          <span className="text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-text-muted">Weight</span>
           <Scale className="size-3.5 text-mf-glass-analytics" />
         </div>
         <div className="mt-2 flex items-baseline gap-1">
           {weightKg !== null ? (
             <>
-              <span className="text-lg font-black text-mf-glass-text">{weightKg}</span>
-              <span className="text-[10px] text-mf-glass-text-muted">kg</span>
+              <span className="font-heading text-2xl font-black tabular-nums text-mf-glass-text">{weightKg}</span>
+              <span className="text-xs text-mf-glass-text-muted">kg</span>
             </>
           ) : (
             <span className="text-xs font-semibold text-mf-glass-text-muted">Log weight</span>

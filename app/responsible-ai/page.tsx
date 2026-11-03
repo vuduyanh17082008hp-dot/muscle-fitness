@@ -63,6 +63,7 @@ const safeguards = [
 export default function ResponsibleAIPage() {
   return (
     <main
+      data-theme="paper"
       className="
         min-h-screen
 
@@ -90,7 +91,7 @@ export default function ResponsibleAIPage() {
             text-sm
             font-semibold
 
-            text-zinc-500
+            text-zinc-400
 
             transition
 
@@ -135,7 +136,7 @@ export default function ResponsibleAIPage() {
 
                 uppercase
 
-                tracking-[0.26em]
+                tracking-[0.12em]
               "
             >
               Responsible AI
@@ -230,7 +231,7 @@ export default function ResponsibleAIPage() {
                     text-sm
                     leading-6
 
-                    text-zinc-500
+                    text-zinc-400
                   "
                 >
                   {item.text}
@@ -264,7 +265,7 @@ export default function ResponsibleAIPage() {
             "
           >
             <div>
-              <BrainCircuit className="size-5 text-amber-400" />
+              <BrainCircuit className="size-5 text-mf-brand" />
 
               <h2
                 className="
@@ -284,7 +285,7 @@ export default function ResponsibleAIPage() {
                   text-sm
                   leading-7
 
-                  text-zinc-500
+                  text-zinc-400
                 "
               >
                 Contextual coaching, evidence-aware explanation,
@@ -294,7 +295,7 @@ export default function ResponsibleAIPage() {
             </div>
 
             <div>
-              <Database className="size-5 text-amber-400" />
+              <Database className="size-5 text-mf-brand" />
 
               <h2
                 className="
@@ -314,7 +315,7 @@ export default function ResponsibleAIPage() {
                   text-sm
                   leading-7
 
-                  text-zinc-500
+                  text-zinc-400
                 "
               >
                 Authenticated client profile data, workout and nutrition

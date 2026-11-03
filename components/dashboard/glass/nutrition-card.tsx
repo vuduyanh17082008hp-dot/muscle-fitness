@@ -73,7 +73,7 @@ export function NutritionCard({ target, totals, error = false }: NutritionCardPr
       <GlassCardHeader title="Nutrition" />
 
       <div className="mt-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-mf-glass-text-muted">Protein</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-mf-glass-text-muted">Protein</p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-mf-glass-text">
           {Math.round(comparison.protein.consumed)}
           <span className="text-base font-semibold text-mf-glass-text-muted"> / {Math.round(comparison.protein.target)} g</span>

@@ -381,6 +381,49 @@ export async function mutateReplaceExercise(
       }
     }
 
+    // Integrity guards (Adaptive Workouts 2.0). Sets hang off the session-exercise
+    // row, so swapping its exercise_id after a set is logged would silently
+    // re-attribute that history to the new exercise.
+    const typed = await createClient()
+
+    const [{ data: rowSets, error: rowSetsError }, { data: siblings, error: siblingsError }] =
+      await Promise.all([
+        typed
+          .from("exercise_sets")
+          .select("id, completed")
+          .eq("session_exercise_id", sessionExerciseId),
+        typed
+          .from("workout_session_exercises")
+          .select("id, exercise_id, is_skipped")
+          .eq("workout_session_id", sessionId),
+      ])
+
+    if (rowSetsError || siblingsError) {
+      return {
+        success: false,
+        message: rowSetsError?.message ?? siblingsError?.message ?? "Unable to check this exercise.",
+      }
+    }
+
+    if ((rowSets ?? []).some((set) => set.completed === true)) {
+      return {
+        success: false,
+        message:
+          "You've already logged sets on this exercise, so it can't be swapped — those sets stay recorded as they are. Finish or skip it, and use the alternative as a reference.",
+      }
+    }
+
+    if (
+      (siblings ?? []).some(
+        (row) => row.id !== sessionExerciseId && row.exercise_id === replacementExerciseId && row.is_skipped !== true,
+      )
+    ) {
+      return {
+        success: false,
+        message: `${exerciseName} is already in this workout.`,
+      }
+    }
+
     const { error } = await supabase
       .from("workout_session_exercises")
       .update({
@@ -400,9 +443,26 @@ export async function mutateReplaceExercise(
       }
     }
 
+    // Unlogged rows may hold values saved for the old exercise; a new exercise
+    // never inherits its weight or reps.
+    const { error: clearError } = await typed
+      .from("exercise_sets")
+      .update({ weight_kg: null, reps: null, rir: null, rpe: null, updated_at: new Date().toISOString() })
+      .eq("session_exercise_id", sessionExerciseId)
+      .eq("completed", false)
+
+    if (clearError) {
+      // The swap itself is saved; say so truthfully and flag what wasn't.
+      return {
+        success: true,
+        message: `Replaced with ${exerciseName}, but values on the remaining sets couldn't be cleared — check them before logging.`,
+        data: { sessionExerciseId, replacementExerciseId, clearedUnloggedSets: false },
+      }
+    }
+
     return {
       success: true,
-      message: `Replaced with ${exerciseName}.`,
+      message: `Replaced with ${exerciseName}. Pick a fresh load — weights from the previous exercise don't carry over.`,
       data: {
         sessionExerciseId,
         replacementExerciseId,

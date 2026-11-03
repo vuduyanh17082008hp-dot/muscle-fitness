@@ -57,7 +57,7 @@ export function ProfileGateway() {
           </div>
 
           <div className="border-l-2 border-[var(--mf-brand)]/60 pl-5 lg:mt-1 lg:pl-7">
-            <h3 className="text-xs font-black uppercase tracking-[0.18em] text-zinc-300">
+            <h3 className="text-xs font-black uppercase tracking-[0.12em] text-zinc-300">
               From profile to your next session
             </h3>
             <ol className="mt-5 space-y-5">

@@ -48,7 +48,7 @@ export const getTodayPlanTool: DanteTool<Record<string, never>, TodayPlanToolOut
       todaySession,
       hasCheckinToday: recoveryContext ? recoveryContext.today !== null : false,
       proteinTargetG: nutritionContext.targets.protein,
-      proteinLoggedG: todayFoodLog.totals.protein,
+      proteinLoggedG: todayFoodLog.totals?.protein ?? null,
     }).map((action) => ({ title: action.title, status: action.status, subtitle: action.subtitle }));
 
     return { ok: true, data: { items } };

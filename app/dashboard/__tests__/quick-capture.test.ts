@@ -52,10 +52,17 @@ describe("PF-02: Quick Capture & Floating Controls Architecture", () => {
     expect(shellFile).toContain("<FloatingDante />");
   });
 
-  it("positions floating actions above mobile nav and respects safe-area insets", () => {
-    // Container bottom takes mobile nav into account and env(safe-area-inset-bottom)
-    expect(shellFile).toContain("bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]");
-    expect(shellFile).toContain("lg:bottom-6 lg:right-6");
+  it("shows floating actions only on desktop, inside a gutter main reserves (UX WP1 F-02/F-09)", () => {
+    // Below lg they covered Dante's Send, chat replies and the workout bar;
+    // the mobile bottom nav already carries every Quick Capture destination and Dante.
+    expect(shellFile).toContain("fixed bottom-6 right-6 z-40 hidden flex-col-reverse items-center gap-3 lg:flex");
+    expect(shellFile).toContain('<main className="min-h-screen pb-28 lg:pb-10 lg:pl-72 lg:pr-20">');
+    for (const href of ["/dashboard/nutrition", "/dashboard/workouts", "/dashboard/recovery", "/dashboard/ai-coach"]) {
+      expect(shellFile).toMatch(new RegExp(`mobilePrimaryNav[\\s\\S]*href: "${href}"`));
+    }
+    // V4: five tabs; Progress moved to the More drawer (and Today's secondary strip), still one tap from the header.
+    expect(shellFile).toMatch(/title: "Track",[\s\S]*href: "\/dashboard\/progress"/);
+    expect(shellFile).toContain('aria-label="More: Progress, Calendar, History, Library, Settings"');
   });
 
   it("uses column-reverse layout to prevent overlap between Dante and Quick Capture", () => {

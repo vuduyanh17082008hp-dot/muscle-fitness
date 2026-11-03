@@ -1,6 +1,8 @@
 import { Activity, Gauge, Timer, TrendingDown, Waves } from "lucide-react";
 
-import type { SetVisionAnalysis } from "@/lib/setvision/types";
+import { EXERCISE_CONFIGS } from "@/lib/setvision/exercise-config";
+import { ENGINE_CAPABILITY, SOURCE_TEXT, type ExerciseSource } from "@/lib/setvision/exercise-selection";
+import type { MovementEvent, SetVisionAnalysis } from "@/lib/setvision/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,20 +23,28 @@ function StatTile({
 }) {
   return (
     <div className="rounded-xl border border-white/[0.07] bg-black/20 p-3">
-      <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">{label}</p>
+      <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">{label}</p>
       <p className="mt-1 text-lg font-black text-white">{value}</p>
-      {sub ? <p className="mt-0.5 text-[11px] text-zinc-500">{sub}</p> : null}
+      {sub ? <p className="mt-0.5 text-xs text-zinc-500">{sub}</p> : null}
     </div>
   );
 }
 
-function ConsistencyBar({ label, value }: { label: string; value: number | null }) {
+function ConsistencyBar({
+  label,
+  value,
+  unavailableText,
+}: {
+  label: string;
+  value: number | null;
+  unavailableText: string;
+}) {
   return (
     <div>
-      <div className="flex items-center justify-between text-xs">
+      <div className="flex items-center justify-between gap-3 text-xs">
         <span className="font-semibold text-zinc-400">{label}</span>
-        <span className="font-bold text-white">
-          {value === null ? "—" : `${Math.round(value * 100)}%`}
+        <span className={value === null ? "text-right text-zinc-500" : "font-bold text-white"}>
+          {value === null ? unavailableText : `${Math.round(value * 100)}%`}
         </span>
       </div>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
@@ -56,51 +66,165 @@ function ConsistencyBar({ label, value }: { label: string; value: number | null 
   );
 }
 
-export function SetVisionResultsPanel({ analysis }: { analysis: SetVisionAnalysis }) {
-  const { velocity, technique } = analysis;
+/** The engines track a body landmark, never the bar — name the landmark. */
+const PATH_LABEL: Partial<Record<SetVisionAnalysis["exercise"], string>> = {
+  squat: "Shoulder-path consistency (not the bar)",
+  deadlift: "Hand-path consistency (not the bar)",
+};
+
+const seconds = (ms: number | null) => (ms === null ? null : `${(ms / 1000).toFixed(1)} s`);
+
+function average(values: Array<number | null>): number | null {
+  const present = values.filter((v): v is number => v !== null);
+  return present.length ? Math.round((present.reduce((x, y) => x + y, 0) / present.length) * 100) / 100 : null;
+}
+
+/** Coarse band for the UNCALIBRATED heuristic score — never shown as a % likelihood. */
+function qualityBand(score: number): string {
+  if (score >= 0.75) return "Higher";
+  if (score >= 0.5) return "Moderate";
+  return "Low";
+}
+
+const EVENT_TEXT: Record<MovementEvent["kind"], string> = {
+  partial: "Partial — did not reach the working end",
+  uncertain: "Uncertain — tracking lost or clip ended mid-movement",
+  excluded: "Not counted — body position did not match this exercise",
+};
+
+function TimestampButton({ ms, onSeek, missing = "not observed" }: { ms: number | null; onSeek?: (ms: number) => void; missing?: string }) {
+  if (ms === null) return <span className="text-zinc-600">{missing}</span>;
+  const label = seconds(ms);
+  if (!onSeek) return <span>{label}</span>;
+  return (
+    <button
+      type="button"
+      onClick={() => onSeek(ms)}
+      className="font-semibold text-zinc-200 underline decoration-dotted underline-offset-2 hover:text-white"
+      aria-label={`Jump video to ${label}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+export function SetVisionResultsPanel({
+  analysis,
+  onSeek,
+  identity,
+  timelineRecorded = true,
+  heading = "SetVision analysis",
+}: {
+  analysis: SetVisionAnalysis;
+  onSeek?: (ms: number) => void;
+  /** Who said which exercise this is — shown separately from how well it was tracked. */
+  identity?: { label: string; source: ExerciseSource } | null;
+  /** False for a restored analysis saved before phase timestamps were stored. */
+  timelineRecorded?: boolean;
+  heading?: string;
+}) {
+  const { velocity, technique, exerciseClassification: classification } = analysis;
+  const identified = classification.exercise !== null;
+  const config = EXERCISE_CONFIGS[analysis.exercise];
+  const label = identity?.label ?? config.displayName;
+  const experimental = ENGINE_CAPABILITY[analysis.exercise] !== "ANALYSIS_VERIFIED";
+  const abstained = identified && Boolean(analysis.abstainReason);
+  const insufficient = identified && !abstained && analysis.reps === 0;
+  const [leaveRest, workEnd, leaveWork, backAtRest] = config.phaseNames;
+  const eccentricIsOutbound = config.outbound === "eccentric";
+  const events = analysis.events ?? [];
+  const tempos = analysis.perRep.tempo;
+  const notEnoughReps = analysis.reps < 2 ? "Not enough reps (needs 2+)" : "Unavailable";
+  const avgHold = average(tempos.map((t) => t.pauseSec));
 
   return (
-    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
-      <div className="flex items-center justify-between gap-3">
+    <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8" data-testid="sv-result">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Activity className="size-4 text-amber-400" aria-hidden="true" />
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
-            SetVision analysis
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
+            {heading}
           </p>
+          {experimental ? (
+            <span className="rounded-full border border-amber-400/30 px-2 py-0.5 text-[11px] font-bold text-amber-300">
+              Experimental
+            </span>
+          ) : null}
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-400">
-          {Math.round(analysis.confidence * 100)}% confidence
-        </span>
+        {identified ? (
+          <span
+            className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-bold uppercase tracking-[0.1em] text-zinc-400"
+            title="Heuristic from tracking visibility, rep count and torso visibility only — choosing the exercise does not change it. Not calibrated, not a probability."
+            data-testid="sv-quality"
+          >
+            Analysis quality: {qualityBand(analysis.confidence)}
+          </span>
+        ) : null}
       </div>
 
-      <h3 className="mt-3 text-lg font-black text-white">
-        {analysis.exercise.replace("_", " ")} — {analysis.reps} rep{analysis.reps === 1 ? "" : "s"}
+      <h3 className="mt-3 break-words text-lg font-black text-white" data-testid="sv-result-title">
+        {!identified
+          ? "Exercise not identified"
+          : abstained
+            ? `${label} — not analysed`
+            : insufficient
+              ? `${label} — not enough evidence`
+              : `${label} — ${analysis.reps} rep${analysis.reps === 1 ? "" : "s"}`}
       </h3>
 
-      <p className="mt-1 text-xs text-zinc-500">
-        Classified as {analysis.exerciseClassification.exercise ?? "unknown"} (
-        {Math.round(analysis.exerciseClassification.confidence * 100)}% confidence)
-        {analysis.exerciseClassification.signals[0]
-          ? ` — ${analysis.exerciseClassification.signals[0]}`
-          : ""}
+      <p className="mt-1 text-xs leading-5 text-zinc-500" data-testid="sv-classification">
+        {!identified
+          ? `${classification.signals[0] ?? "The exercise could not be identified."} Choose it in the selector above.`
+          : `${identity ? SOURCE_TEXT[identity.source] : "Exercise not recorded"} · ${config.family} engine, measured with the ${config.signalLabel}${analysis.measuredSide ? ` on the ${analysis.measuredSide} side` : ""}.${
+              identity?.source === "auto_suggestion" && classification.signals[0] ? ` Suggestion basis: ${classification.signals[0]}` : ""
+            }`}
       </p>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Reps" value={String(analysis.reps)} />
-        <StatTile
-          label="Avg eccentric"
-          value={analysis.averageEccentricTime !== null ? `${analysis.averageEccentricTime}s` : "—"}
-        />
-        <StatTile
-          label="Avg concentric"
-          value={analysis.averageConcentricTime !== null ? `${analysis.averageConcentricTime}s` : "—"}
-        />
-        <StatTile
-          label={velocity.calibrated ? "Mean velocity" : "Mean speed (normalized)"}
-          value={velocity.mean !== null ? `${velocity.mean} ${velocity.unit}` : "—"}
-          sub={velocity.calibrated ? undefined : "Not calibrated — not m/s"}
-        />
-      </div>
+      {abstained ? (
+        <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-3 text-sm leading-6 text-zinc-200" data-testid="sv-abstained">
+          Unsupported input for this exercise: {analysis.abstainReason} No reps, tempo or range are reported. You can still
+          mark the reps yourself below.
+        </p>
+      ) : null}
+
+      {insufficient ? (
+        <p className="mt-4 rounded-xl border border-white/[0.07] bg-black/20 p-3 text-sm leading-6 text-zinc-300" data-testid="sv-insufficient">
+          No complete rep could be measured from this video, so no tempo, range or consistency is reported. The
+          notes below say why.
+        </p>
+      ) : null}
+
+      {identified && !insufficient && !abstained ? (
+        <details className="group mt-5" data-testid="sv-advanced">
+          <summary className="cursor-pointer select-none text-xs font-bold uppercase tracking-[0.12em] text-zinc-400 hover:text-white">
+            Advanced metrics
+          </summary>
+          <p className="mt-2 text-xs leading-5 text-zinc-500">
+            Measured from 2D body landmarks. Speeds are in torso-lengths per second (not m/s) and only compare reps within this clip.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <StatTile label="Reps" value={String(analysis.reps)} sub={`${backAtRest} → ${workEnd.toLowerCase()} → ${backAtRest.toLowerCase()} cycles`} />
+            <StatTile
+              label="Avg eccentric"
+              value={analysis.averageEccentricTime !== null ? `${analysis.averageEccentricTime}s` : "—"}
+              sub={analysis.averageEccentricTime === null ? "Not observed" : `${eccentricIsOutbound ? leaveRest : leaveWork} phase`}
+            />
+            <StatTile
+              label={`Avg hold (${workEnd.toLowerCase()})`}
+              value={avgHold !== null ? `${avgHold}s` : "—"}
+              sub={avgHold === null ? "Not observed" : "Not counted in eccentric/concentric"}
+            />
+            <StatTile
+              label="Avg concentric"
+              value={analysis.averageConcentricTime !== null ? `${analysis.averageConcentricTime}s` : "—"}
+              sub={analysis.averageConcentricTime === null ? "Not observed" : `${eccentricIsOutbound ? leaveWork : leaveRest} phase`}
+            />
+            <StatTile
+              label={velocity.calibrated ? "Mean velocity" : "Mean speed (normalized)"}
+              value={velocity.mean !== null ? `${velocity.mean} ${velocity.unit}` : "—"}
+              sub={config.barProxy === null ? "Not measured for this movement" : velocity.calibrated ? undefined : "2D, not calibrated — not m/s"}
+            />
+          </div>
 
       {velocity.velocityLoss !== null ? (
         <div className="mt-4 flex items-center gap-3 rounded-xl border border-white/[0.07] bg-black/20 p-3">
@@ -112,13 +236,13 @@ export function SetVisionResultsPanel({ analysis }: { analysis: SetVisionAnalysi
             aria-hidden="true"
           />
           <div>
-            <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">Velocity loss</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-zinc-600">Velocity loss</p>
             <p className="text-lg font-black text-white">
               {Math.round(velocity.velocityLoss * 100)}%
             </p>
           </div>
-          <p className="ml-auto max-w-[55%] text-right text-[11px] leading-4 text-zinc-500">
-            First rep {velocity.peak ?? "—"} {velocity.unit} → final rep {velocity.final ?? "—"}{" "}
+          <p className="ml-auto max-w-[55%] text-right text-xs leading-4 text-zinc-500">
+            (first − final) ÷ first: first rep {velocity.perRep[0]?.meanSpeed ?? "—"} → final rep {velocity.final ?? "—"}{" "}
             {velocity.unit}
           </p>
         </div>
@@ -127,56 +251,69 @@ export function SetVisionResultsPanel({ analysis }: { analysis: SetVisionAnalysi
       <div className="mt-6 space-y-3">
         <div className="flex items-center gap-2">
           <Gauge className="size-3.5 text-zinc-500" aria-hidden="true" />
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
             Technique consistency
           </p>
         </div>
-        <ConsistencyBar label="ROM consistency" value={technique.romConsistency} />
-        <ConsistencyBar label="Tempo consistency" value={technique.tempoConsistency} />
-        <ConsistencyBar label="Bar-path consistency" value={technique.barPathConsistency} />
+        <ConsistencyBar label="Range consistency" value={technique.romConsistency} unavailableText={analysis.reps >= 2 && analysis.perRep.rom.length === 0 ? "Not measured from this camera angle" : notEnoughReps} />
+        <ConsistencyBar label="Tempo consistency" value={technique.tempoConsistency} unavailableText={notEnoughReps} />
+        {PATH_LABEL[analysis.exercise] ? (
+          <ConsistencyBar label={PATH_LABEL[analysis.exercise]!} value={technique.barPathConsistency} unavailableText={notEnoughReps} />
+        ) : null}
         {technique.asymmetryDeg !== null ? (
           <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-zinc-400">Left/right knee asymmetry</span>
+            <span className="font-semibold text-zinc-400">Left/right knee-angle difference at the bottom (2D, front view)</span>
             <span className="font-bold text-white">{technique.asymmetryDeg}°</span>
           </div>
         ) : null}
       </div>
 
-      {analysis.perRep.rom.length > 0 ? (
+      {tempos.length > 0 ? (
         <div className="mt-6">
           <div className="flex items-center gap-2">
             <Waves className="size-3.5 text-zinc-500" aria-hidden="true" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
-              Per-rep detail
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
+              Rep timeline
             </p>
           </div>
+          <p className="mt-1 text-xs leading-5 text-zinc-600">
+            Video time where each phase began{onSeek ? " — select a time to jump there" : ""}. A phase is
+            detected when the joint angle crosses a threshold, so it can trail the visible start of a movement by a few tenths of a second.
+            Joint range is the 2D change of the {config.signalLabel}, reported only from a {config.rangeViews.join(" or ")} view.
+          </p>
+          {!timelineRecorded ? (
+            <p className="mt-1 text-xs leading-5 text-amber-300" data-testid="sv-legacy-timeline">
+              This analysis was saved before phase times were stored, so its timeline has durations but no times.
+            </p>
+          ) : null}
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full min-w-[420px] text-left text-xs">
+            <table className="w-full min-w-[560px] text-left text-xs" data-testid="sv-rep-timeline">
               <thead>
                 <tr className="text-zinc-600">
                   <th className="py-1 pr-3 font-semibold">Rep</th>
-                  <th className="py-1 pr-3 font-semibold">ROM</th>
-                  <th className="py-1 pr-3 font-semibold">Eccentric</th>
-                  <th className="py-1 pr-3 font-semibold">Pause</th>
-                  <th className="py-1 pr-3 font-semibold">Concentric</th>
+                  <th className="py-1 pr-3 font-semibold">{leaveRest}</th>
+                  <th className="py-1 pr-3 font-semibold">{workEnd}</th>
+                  <th className="py-1 pr-3 font-semibold">{leaveWork}</th>
+                  <th className="py-1 pr-3 font-semibold">{backAtRest}</th>
+                  <th className="py-1 pr-3 font-semibold">Ecc / hold / con</th>
+                  <th className="py-1 pr-3 font-semibold">Joint range</th>
                 </tr>
               </thead>
               <tbody>
-                {analysis.perRep.rom.map((romEntry, i) => {
-                  const tempoEntry = analysis.perRep.tempo[i];
+                {tempos.map((t) => {
+                  const rom = analysis.perRep.rom.find((r) => r.repNumber === t.repNumber);
+                  const missing = timelineRecorded ? "not observed" : "not recorded";
                   return (
-                    <tr key={romEntry.repNumber} className="border-t border-white/[0.05]">
-                      <td className="py-1.5 pr-3 font-bold text-white">{romEntry.repNumber}</td>
-                      <td className="py-1.5 pr-3 text-zinc-300">{romEntry.romPercent}%</td>
-                      <td className="py-1.5 pr-3 text-zinc-300">
-                        {tempoEntry ? `${tempoEntry.eccentricSec}s` : "—"}
+                    <tr key={t.repNumber} className="border-t border-white/[0.05] text-zinc-300">
+                      <td className="py-1.5 pr-3 font-bold text-white">{t.repNumber}</td>
+                      <td className="py-1.5 pr-3"><TimestampButton ms={t.descentStartMs} onSeek={onSeek} missing={missing} /></td>
+                      <td className="py-1.5 pr-3"><TimestampButton ms={t.bottomReachedMs} onSeek={onSeek} missing={missing} /></td>
+                      <td className="py-1.5 pr-3"><TimestampButton ms={t.ascentStartMs} onSeek={onSeek} missing={missing} /></td>
+                      <td className="py-1.5 pr-3"><TimestampButton ms={t.repEndMs} onSeek={onSeek} missing={missing} /></td>
+                      <td className="whitespace-nowrap py-1.5 pr-3">
+                        {t.eccentricSec ?? "—"}s / {t.pauseSec ?? "—"}s / {t.concentricSec ?? "—"}s
                       </td>
-                      <td className="py-1.5 pr-3 text-zinc-300">
-                        {tempoEntry ? `${tempoEntry.pauseSec}s` : "—"}
-                      </td>
-                      <td className="py-1.5 pr-3 text-zinc-300">
-                        {tempoEntry ? `${tempoEntry.concentricSec}s` : "—"}
-                      </td>
+                      <td className="py-1.5 pr-3">{rom ? `${rom.rangeDeg}°` : "—"}</td>
                     </tr>
                   );
                 })}
@@ -185,8 +322,23 @@ export function SetVisionResultsPanel({ analysis }: { analysis: SetVisionAnalysi
           </div>
         </div>
       ) : null}
+        </details>
+      ) : null}
 
-      {analysis.limitations.length > 0 ? (
+      {identified && events.length > 0 ? (
+        <div className="mt-6" data-testid="sv-events">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">Seen but not counted</p>
+          <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+            {events.map((e, i) => (
+              <li key={i}>
+                <TimestampButton ms={e.startMs} onSeek={onSeek} />–<TimestampButton ms={e.endMs} onSeek={onSeek} /> · {EVENT_TEXT[e.kind]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {analysis.limitations.length > 0 && !abstained ? (
         <div className="mt-6 flex items-start gap-2 border-t border-white/[0.06] pt-4">
           <Timer className="mt-0.5 size-3.5 shrink-0 text-zinc-600" aria-hidden="true" />
           <ul className="space-y-1 text-xs leading-5 text-zinc-600">

@@ -15,6 +15,8 @@ type FoodQuantityConfirmProps = {
   onMealTypeChange: (mealType: MealType) => void
   onConfirm: (food: ConfirmedFood) => void
   onBack: () => void
+  /** Says what the button really does: "Add to Today" logs; inside a review it only adds to the review. */
+  confirmLabel?: string
 }
 
 type ServingDefinition = { name: string; grams: number }
@@ -36,6 +38,7 @@ export function FoodQuantityConfirm({
   onMealTypeChange,
   onConfirm,
   onBack,
+  confirmLabel = "Add to Today",
 }: FoodQuantityConfirmProps) {
   const mealSelectId = useId()
 
@@ -109,6 +112,8 @@ export function FoodQuantityConfirm({
   const selectedServingGrams = servingOptions.find((s) => s.name === servingName)?.grams ?? defaultServing?.grams ?? 0
 
   const effectiveGrams = unit === "servings" ? round1(servingsCount * selectedServingGrams) : grams
+  // Servings chosen but no serving size is known yet: there is no amount to calculate, which is not "0 g".
+  const servingUndefined = unit === "servings" && selectedServingGrams <= 0
   const scaled = scaleMacrosToGrams(food.per100g, effectiveGrams)
 
   function adjustGrams(delta: number) {
@@ -178,13 +183,13 @@ export function FoodQuantityConfirm({
     return (
       <div className="flex flex-col gap-5">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-400">Product found</p>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Product found</p>
           <h3 className="mt-1 text-lg font-bold text-white">{food.name}</h3>
           {food.brand ? <p className="text-sm text-zinc-400">{food.brand}</p> : null}
         </div>
 
         <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">Last portion</p>
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">Last portion</p>
           <p className="mt-1 text-base font-bold text-white">{label}</p>
           <p className="mt-1 text-xs text-zinc-500">
             {previewScaled.calories} kcal · {previewScaled.protein} P / {previewScaled.carbs} C / {previewScaled.fat} F
@@ -231,7 +236,7 @@ export function FoodQuantityConfirm({
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-400">Product found</p>
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Product found</p>
         <h3 className="mt-1 text-lg font-bold text-white">{food.name}</h3>
         {food.brand ? <p className="text-sm text-zinc-400">{food.brand}</p> : null}
 
@@ -248,7 +253,7 @@ export function FoodQuantityConfirm({
       </div>
 
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">How much did you eat?</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">How much did you eat?</p>
 
         <div className="mb-3 flex gap-2">
           <UnitTab label="Grams" active={unit === "grams"} onClick={() => setUnit("grams")} />
@@ -413,7 +418,7 @@ export function FoodQuantityConfirm({
       </div>
 
       <div>
-        <label htmlFor={mealSelectId} className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+        <label htmlFor={mealSelectId} className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
           Meal
         </label>
         <select
@@ -430,17 +435,23 @@ export function FoodQuantityConfirm({
         </select>
       </div>
 
-      <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
-        <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">
-          For {effectiveGrams} g
+      {servingUndefined ? (
+        <p role="status" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-zinc-300">
+          No serving size yet. Define one above, or switch to Grams — nothing is calculated until there is an amount.
         </p>
-        <div className="grid grid-cols-4 gap-2 text-center">
-          <MacroPreview label="kcal" value={scaled.calories} />
-          <MacroPreview label="P" value={scaled.protein} suffix="g" />
-          <MacroPreview label="C" value={scaled.carbs} suffix="g" />
-          <MacroPreview label="F" value={scaled.fat} suffix="g" />
+      ) : (
+        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.12em] text-amber-400">
+            For {effectiveGrams} g
+          </p>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <MacroPreview label="kcal" value={scaled.calories} />
+            <MacroPreview label="P" value={scaled.protein} suffix="g" />
+            <MacroPreview label="C" value={scaled.carbs} suffix="g" />
+            <MacroPreview label="F" value={scaled.fat} suffix="g" />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-3">
         <button
@@ -455,9 +466,9 @@ export function FoodQuantityConfirm({
           type="button"
           disabled={effectiveGrams <= 0}
           onClick={() => onConfirm(buildConfirmedFood())}
-          className="min-h-12 flex-[2] rounded-xl bg-amber-500 text-sm font-black uppercase tracking-wide text-black hover:bg-amber-400 disabled:opacity-40"
+          className="min-h-12 flex-[2] rounded-xl bg-mf-glass-brand text-sm font-black uppercase tracking-wide text-mf-glass-brand-ink hover:bg-mf-glass-brand-hover disabled:opacity-40"
         >
-          Add to Today
+          {confirmLabel}
         </button>
       </div>
     </div>
@@ -499,7 +510,7 @@ function MacroPreview({ label, value, suffix }: { label: string; value: number; 
         {value}
         {suffix ? <span className="text-xs font-semibold text-zinc-500">{suffix}</span> : null}
       </p>
-      <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-zinc-500">{label}</p>
     </div>
   )
 }

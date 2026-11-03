@@ -158,7 +158,7 @@ export function BudgetPlanner({
             value={budgetInput}
             onChange={(event) => setBudgetInput(event.target.value)}
             placeholder="e.g. 80"
-            className="w-40 rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-sm text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
+            className="w-40 rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep px-4 py-3 text-base text-mf-glass-text outline-none placeholder:text-mf-glass-text-muted focus:border-mf-glass-brand-border"
           />
         </label>
 
@@ -236,7 +236,7 @@ export function BudgetPlanner({
 
       {result.appliedSubstitutions.length > 0 ? (
         <div className="mt-6">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-text-muted">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Substitutions applied to fit your budget
           </p>
           <div className="space-y-2">
@@ -251,7 +251,7 @@ export function BudgetPlanner({
 
       {result.suggestedSubstitutions.length > 0 ? (
         <div className="mt-6">
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-text-muted">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
             <ArrowRightLeft className="size-3.5" />
             Swap an expensive food to save more
           </p>
@@ -306,7 +306,7 @@ function SummaryTile({
         accent ? "border-rose-400/25 bg-rose-400/8" : "border-mf-glass-border bg-white/[0.035]",
       )}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-mf-glass-text-muted">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-mf-glass-text-muted">
         {label}
       </p>
       <p className={cn("mt-2 text-2xl font-black", accent ? "text-rose-300" : "text-mf-glass-text")}>
@@ -341,7 +341,7 @@ function SubstitutionRow({
       </div>
 
       {applied ? (
-        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-300">
+        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-300">
           <CheckCircle2 className="size-3" />
           Applied
         </span>

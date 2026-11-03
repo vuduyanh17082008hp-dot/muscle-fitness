@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowLeft, Dumbbell, Flame, Footprints, Gauge } from "lucide-react";
 
-import { Logo } from "@/components/brand/logo";
+import { Wordmark } from "@/components/brand/wordmark";
 
 /**
  * The full telling of "The First Rep" — moved here so the homepage's
@@ -46,9 +46,9 @@ const moments = [
 
 export default function StoryPage() {
   return (
-    <main className="min-h-screen bg-mf-bg px-5 py-16 text-white sm:px-6 lg:px-8">
+    <main data-theme="paper" className="min-h-screen bg-mf-bg px-5 py-16 text-white sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
-        <Logo />
+        <Wordmark />
 
         <Link
           href="/#inspiration"

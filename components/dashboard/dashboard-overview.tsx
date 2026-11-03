@@ -206,7 +206,7 @@ export function DashboardOverview({
 
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
               <span>
                 {formatDashboardDate(
                   data.profile.timezone,
@@ -316,10 +316,10 @@ export function DashboardOverview({
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+        <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
                 Today&apos;s workout
               </p>
 
@@ -370,7 +370,7 @@ export function DashboardOverview({
                     </div>
 
                     <span
-                      className={`w-fit rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] ${
+                      className={`w-fit rounded-full px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] ${
                         workout.status ===
                         'completed'
                           ? 'bg-emerald-400/10 text-emerald-300'
@@ -397,10 +397,10 @@ export function DashboardOverview({
           )}
         </article>
 
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+        <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
                 Recovery score
               </p>
 
@@ -451,10 +451,10 @@ export function DashboardOverview({
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+        <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
                 Weight trend
               </p>
 
@@ -499,10 +499,10 @@ export function DashboardOverview({
         </article>
 
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
-          <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+          <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
                   Weekly adherence
                 </p>
 
@@ -552,10 +552,10 @@ export function DashboardOverview({
             )}
           </article>
 
-          <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+          <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
                   Current goal
                 </p>
 
@@ -604,10 +604,10 @@ export function DashboardOverview({
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
-        <article className="rounded-3xl border border-white/10 bg-[#101216] p-5 sm:p-6">
+        <article className="rounded-3xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.17em] text-zinc-500">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
                 Coach message
               </p>
 
@@ -633,7 +633,7 @@ export function DashboardOverview({
                       'Muscle Fitness Coach'}
                   </p>
 
-                  <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-600">
+                  <p className="text-xs uppercase tracking-[0.12em] text-zinc-600">
                     {
                       data.coachMessage
                         .senderRole
@@ -665,7 +665,7 @@ export function DashboardOverview({
               <Sparkles className="size-5" />
             </span>
 
-            <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.17em] text-violet-300/60">
+            <p className="mt-5 text-xs font-bold uppercase tracking-[0.12em] text-violet-300/60">
               Dante shortcut
             </p>
 

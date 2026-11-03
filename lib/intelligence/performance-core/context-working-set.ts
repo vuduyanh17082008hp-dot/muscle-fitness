@@ -17,7 +17,7 @@ import { fold } from "./text";
  */
 
 export type ContextFactKind =
-  | "PED_USE" | "PREGNANCY" | "INJURY" | "ALLERGY" | "MEDICATION" | "CONDITION" | "LOW_ENERGY_INTAKE" | "SYMPTOM"
+  | "PED_USE" | "PREGNANCY" | "INJURY" | "ALLERGY" | "MEDICATION" | "CONDITION" | "LOW_ENERGY_INTAKE" | "SYMPTOM" | "ILLNESS"
   | "BODYWEIGHT" | "PROTEIN_INTAKE" | "DIET_PATTERN" | "GOAL" | "SELF_REPORT";
 
 /** CURRENT = true now as stated; HISTORICAL = true in the past (ended, or stated as past). */
@@ -52,6 +52,8 @@ export type ContextWorkingSet = {
   facts: ContextFact[];
   /** The previous user message, kept only when the current one is a short follow-up that may lean on it. */
   followUpOf: string | null;
+  /** S0 D-01/D-02: the profile allergy read failed or timed out — unknown, never "no allergies". */
+  storedAllergies?: "UNAVAILABLE";
 };
 
 type Op = "ASSERT" | "END" | "NEGATE";
@@ -112,9 +114,9 @@ const SITES: Array<[string, RegExp]> = [
   ["ankle", /\b(?:ankles?|achilles|co chan)\b/],
   ["hamstring", /\bhamstrings?\b/],
   ["groin", /\bgroin\b/],
-  ["foot", /\b(?:foot|feet|plantar)\b/],
+  ["foot", /\b(?:foot|feet|plantar|heels?|toes?|arch|ban chan|got chan|ngon chan)\b/],
 ];
-const INJURY_CUE = /\b(?:diagnosed|torn|tear|tore|ruptured?|sprain\w*|strain(?:ed)?|fractur\w*|broken|broke|herniat\w*|bulging|dislocat\w*|tendin\w*|impinge\w*|injur\w*|surgery|reconstruct\w*|pain|painful|hurts?|hurting|aches?|aching|tweaked|pulled|chan thuong|dau|bi dau|rach|dut)\b/;
+const INJURY_CUE = /\b(?:diagnosed|torn|tear|tore|ruptured?|sprain\w*|strain(?:ed)?|fractur\w*|broken|broke|herniat\w*|bulging|dislocat\w*|tendin\w*|impinge\w*|injur\w*|surgery|reconstruct\w*|pain|painful|hurts?|hurting|aches?|aching|tweaked|pulled|twist(?:ed)?|rolled|chan thuong|dau|bi dau|rach|dut|bi trat|trat)\b/;
 const INJURY_END = /\b(?:healed|fully recovered|recovered fully|all good now|better now|no longer hurts?|doesn'?t hurt (?:anymore|any more)|pain is gone|cleared (?:by|to)|het dau|lanh roi|khoi roi)\b/;
 const INJURY_NEGATE = /\b(?:no|not|without|doesn'?t|don'?t have|khong)\s+(?:any\s+)?(?:\w+\s+)?(?:pain|injur\w*|hurt|dau)\b/;
 const CLINICIAN = String.raw`(?:physio\w*|doctor|dr|surgeon|clinician|physical therapist|pt|ortho\w*|gp|specialist|bac si|chuyen gia)`;
@@ -199,6 +201,14 @@ const SYMPTOMS: Array<[string, string, RegExp]> = [
   ["dizziness", "dizziness", /\b(?:dizzy|dizziness|lightheaded|chong mat)\b/],
 ];
 
+const ILLNESSES: Array<[string, string, RegExp]> = [
+  ["headache", "a headache", /\b(?:headaches?|migraines?|my head (?:hurts|is pounding|is killing me)|dau dau|nhuc dau)\b/],
+  ["cold_flu", "a cold or flu symptoms", /\b(?:a (?:head )?cold|the flu|flu symptoms|sore throat|runny nose|blocked nose|stuffy nose|congested|cough(?:ing)?|cam cum|cam lanh|so mui|dau hong)\b/],
+  ["fever", "a fever", /\b(?:fever|feverish|high temperature|bi sot|dang sot|sot cao)\b/],
+  ["stomach", "nausea or a stomach upset", /\b(?:nause\w*|vomit\w*|throwing up|threw up|stomach (?:bug|ache|upset|flu|is off)|upset stomach|diarrh\w*|food poisoning|buon non|dau bung|tieu chay)\b/],
+  ["sick", "feeling sick", /\b(?:i'?m sick|im sick|feel(?:ing)? (?:sick|ill|unwell)|i'?m (?:ill|unwell)|bi om|dang om|bi benh)\b/],
+];
+
 const DIETS: Array<[string, RegExp]> = [
   ["vegan", /\bvegan\b|\ban chay truong\b/],
   ["vegetarian", /\bvegetarian\b|\ban chay\b/],
@@ -229,8 +239,24 @@ const allergyIsSomeoneElses = (text: string) => {
   const parts = text.split(/[.?!;,]|\b(?:so|but|because|which is why)\b/).filter((part) => ALLERGY_CUE.test(part) || CLINICIAN_AVOID.test(part));
   return parts.length > 0 && parts.every(aboutSomeoneElse);
 };
+// S0 D-03: "someone I know", "a friend of mine", "tôi có người bạn": the speaker's "I" only introduces another person.
+const INTRODUCES_OTHER = /\b(?:someone|somebody|a (?:friend|guy|girl|person|woman|man)|people)(?: (?:that|who))? i know\b|\b(?:a )?(?:friend|cousin|colleague|teammate)s? of mine\b|\b(?:toi|minh|em) co (?:mot )?(?:nguoi |dua |co |anh |chi )?(?:ban|chi gai|em gai|anh trai|dong nghiep)\b|\b(?:nguoi ban|ban cua (?:toi|minh|em)|ban (?:toi|minh))\b/g;
+/** Whose intake a clause states: true when it is someone else's (the nutrition coach's safety copy reads this too). */
+export const intakeIsSomeoneElses = (clause: string) => aboutSomeoneElse(fold(clause).replace(INTRODUCES_OTHER, " someone "));
+const clauseAround = (text: string, index: number) => {
+  const start = Math.max(...[".", "?", "!", ";", "\n"].map((mark) => text.lastIndexOf(mark, index - 1))) + 1;
+  const ends = [".", "?", "!", ";", "\n"].map((mark) => text.indexOf(mark, index)).filter((at) => at >= 0);
+  return text.slice(start, ends.length ? Math.min(...ends) : text.length);
+};
+const quotedAt = (text: string, index: number) => ((text.slice(0, index).match(/["“”]/g) ?? []).length % 2) === 1;
+const PAST_INTAKE = /\b(?:last (?:year|month|summer|winter|spring|autumn|fall)|(?:years?|months?) ago|in the past|used to|back (?:then|when)|when i was|at one point|nam ngoai|nam truoc|truoc day|hoi truoc|ngay xua|tung)\b/;
+const CURRENT_INTAKE = /\b(?:now|currently|these days|lately|this week|today|still|again|bay gio|hien tai|dao nay|hom nay|van)\b/;
+const INTAKE_NOT_MINE = /\b(?:(?:i was |i'?m |was )?(?:only |just )?asking (?:hypothetically|in theory|for a friend|for someone else|about (?:my |a )?(?:friend|someone else))|(?:it|that) (?:was|is) (?:just |only )?(?:hypothetical|a hypothetical|about (?:my |a )?(?:friend|someone else)|not about me)|(?:it|that) (?:wasn'?t|was not|isn'?t|is not) (?:about )?me|i don'?t (?:actually )?eat (?:that|so) (?:little|few)|chi (?:la )?hoi (?:thoi|gia su|cho ban)|gia su thoi|hoi cho ban|khong phai (?:toi|minh) an)\b/;
+
 // "What is a fish allergy like?" asks; it does not disclose.
-const generalQuestion = (raw: string, text: string) => /\?\s*$/.test(raw.trim()) && !FIRST_PERSON.test(text);
+// MF-F2: a subjectless Vietnamese report ("bàn chân bị đau. Hôm nay tập gì?") is personal, not a general question.
+const SUBJECTLESS_VI_REPORT = /\b(?:bi dau|dang dau|bi trat)\b/;
+const generalQuestion = (raw: string, text: string) => /\?\s*$/.test(raw.trim()) && !FIRST_PERSON.test(text) && !SUBJECTLESS_VI_REPORT.test(text);
 
 function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, lastPedMention = false): Candidate[] {
   const text = fold(raw);
@@ -284,7 +310,8 @@ function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, last
     else if (INJURY_END.test(clause)) out.push({ key, kind: "INJURY", relevance: "SAFETY", op: "END", label: `${anySite} injury or pain — the user says it has resolved` });
     else if (INJURY_NEGATE.test(clause) && !restriction) out.push({ key, kind: "INJURY", relevance: "SAFETY", op: "NEGATE", label: `no ${anySite} pain` });
     // Verbless disclosures are the user's too: "Rotator cuff tear, …", "Torn cuff, no painful overhead work".
-    else if (FIRST_PERSON.test(clause) || /\b(?:diagnosed|torn|tear|tore|ruptured?|herniat\w*|fractur\w*|rach|dut)\b/.test(clause) || /^\s*\w+ (?:pain|hurts)/.test(clause) || restriction) {
+    // MF-F2: Vietnamese drops the subject — "bàn chân bị đau" is the user's own report.
+    else if (FIRST_PERSON.test(clause) || /\b(?:diagnosed|torn|tear|tore|ruptured?|herniat\w*|fractur\w*|rach|dut)\b/.test(clause) || /^\s*\w+ (?:pain|hurts)/.test(clause) || SUBJECTLESS_VI_REPORT.test(clause) || restriction) {
       const diagnosed = /\b(?:diagnosed|torn|tear|tore|ruptured?|fractur\w*|broken|herniat\w*|dislocat\w*|surgery|reconstruct\w*|rach|dut)\b/.test(clause);
       const base = diagnosed ? `${anySite}: diagnosed / structural injury` : `${anySite} pain or injury`;
       out.push({ key, kind: "INJURY", relevance: "SAFETY", op: "ASSERT", label: restriction ? `${base}; clinician restriction: ${clip(restriction, 70)}` : base });
@@ -365,23 +392,47 @@ function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, last
 
   // Energy intake: a stated kcal/day. Below 1200 is dangerously low for a training adult.
   // Past tense counts: "yesterday I ate around 650 calories" is the same disclosure as "I eat 650 a day".
-  const EAT = String.raw`(?:eat(?:ing|en)?|ate|had|having|consumed|managed|got in|(?:minh|toi|em|tao) (?:chi )?an(?: duoc)?)`;
+  const EAT = String.raw`(?:eat(?:ing|en)?|ate|had|having|consumed|managed|got in|(?:minh|toi|em|tao) (?:chi |moi |da |dang )?an(?: duoc)?)`;
   const QUALIFIERS = String.raw`(?:(?:only|just|about|around|like|maybe|roughly|barely|approximately|approx|khoang|tam|chung|co|chi) |~){0,3}`;
   const kcal = text.match(new RegExp(String.raw`(\d{3,4})\s*(?:k?cals?|kcal|calories|calo|cal)\b[^.?!]{0,30}\b(?:a day|per day|daily|\/ ?day|each day|moi ngay|mot ngay)\b|\b(?:${EAT}|on|at)\s+${QUALIFIERS}(\d{3,4})\s*(?:k?cals?|kcal|calories|calo)\b`))
     // H1-LM: the unit is often dropped after an eating verb when the day is named: "I've only had about 650 today".
-    ?? text.match(new RegExp(String.raw`\b${EAT}\s+${QUALIFIERS}(\d{3,4})\s+(?:so far )?(?:today|yesterday|hom nay|hom qua)\b`));
+    ?? text.match(new RegExp(String.raw`\b${EAT}\s+${QUALIFIERS}(\d{3,4})\s+(?:so far )?(?:today|yesterday|hom nay|hom qua)\b`))
+    // "My coach told me to eat 500, and I've been following that plan": the advice names the figure, the user says it is theirs.
+    ?? (followsAdvice(text) ? text.match(new RegExp(String.raw`\b(?:eat|an)\s+${QUALIFIERS}(\d{3,4})\b(?!\s*(?:g|grams?|kg|ml)\b)`)) : null);
   const kcalValue = kcal ? Number(kcal[1] ?? kcal[2]) : null;
-  if (kcalValue !== null && kcalValue >= 200 && kcalValue < 6000 && !/\b(?:burn\w*|target|goal|should i|deficit of|surplus of)\b/.test(text)) {
+  // S0 D-03: the figure's own clause decides whose intake it is and when. Someone else's ("someone I know eats 500 a day",
+  // "tôi có người bạn ăn 500") or a quoted one is never the athlete's; a past one is history, not current intake.
+  const kcalClause = kcal ? clauseAround(text, kcal.index ?? 0) : "";
+  const notTheirs = kcal !== null && (intakeIsSomeoneElses(kcalClause) || quotedAt(text, kcal.index ?? 0));
+  const historical = kcal !== null && PAST_INTAKE.test(kcalClause) && !CURRENT_INTAKE.test(kcalClause);
+  if (kcalValue !== null && kcalValue >= 200 && kcalValue < 6000 && !notTheirs && historical) {
+    out.push({ key: "ENERGY_INTAKE_PAST", kind: "LOW_ENERGY_INTAKE", relevance: "DOMAIN", op: "ASSERT", temporal: "HISTORICAL", unit: "kcal/day",
+      label: `ate about ${kcalValue} kcal/day in the past — historical, not their current intake` });
+  } else if (kcalValue !== null && kcalValue >= 200 && kcalValue < 6000 && !notTheirs && !/\b(?:burn\w*|target|goal|should i|deficit of|surplus of)\b/.test(text)) {
     const low = kcalValue < 1200;
     // One day said as one day (today / yesterday) is not called a habit; a daily figure is.
     const day = /\b(?:a day|per day|daily|each day|every day|moi ngay|mot ngay|for (?:a|the past|\d+) (?:week|days|weeks))\b/.test(text) ? null
       : /\b(?:yesterday|hom qua)\b/.test(text) ? "yesterday" : /\b(?:today|hom nay|so far)\b/.test(text) ? "today" : null;
-    out.push({ key: "ENERGY_INTAKE", kind: "LOW_ENERGY_INTAKE", relevance: low ? "SAFETY" : "DOMAIN", op: "ASSERT", value: kcalValue, unit: "kcal/day",
-      label: !low ? `reports eating about ${kcalValue} kcal/day`
+    // "I want to eat only 500 a day": the plan is the same safety risk, but it is not what they eat — no intake figure
+    // (the food log owns that), so no reminder can voice "at about 500 kcal a day" as their current intake.
+    const planned = low && /\b(?:wants? to|going to|gonna|plan(?:ning)? to|i'?ll|i will|muon|dinh)\b[^.?!]{0,20}\b(?:eat|an|cut|diet|stick)\b/.test(text);
+    // S0 D-03: "Can I eat only 500 a day?", "Is eating 600 a day safe?", "…500 calo mỗi ngày được không?" ask about an intake;
+    // they report nothing. Only a stated report ("I've been eating", "hôm nay mình mới ăn") is what the user eats.
+    const asked = !planned && INTAKE_QUESTION.test(text) && !INTAKE_REPORT.test(text);
+    // Codex S0 P1: being told to eat 500 a day is not eating 500 a day — unless they say they are following it.
+    const advised = !planned && !asked && INTAKE_ADVICE.test(kcalClause) && !followsAdvice(text) && !OWN_EATING.test(kcalClause);
+    out.push({ key: "ENERGY_INTAKE", kind: "LOW_ENERGY_INTAKE", relevance: low ? "SAFETY" : "DOMAIN", op: "ASSERT", value: planned || asked || advised ? undefined : kcalValue, unit: "kcal/day",
+      label: asked ? `${ASKED_INTAKE_LABEL} about ${kcalValue} kcal/day — a question, not a report of what they eat`
+        : advised ? `${ADVISED_INTAKE_LABEL} about ${kcalValue} kcal/day — advice they received, not a report of what they eat`
+        : planned ? `wants to eat only about ${kcalValue} kcal/day — a dangerously low intake to plan`
+        : !low ? `reports eating about ${kcalValue} kcal/day`
         : day ? `ate only about ${kcalValue} kcal ${day} (a single-day report) — dangerously low energy intake for training on`
           : `eats only about ${kcalValue} kcal/day — dangerously low energy intake` });
   } else if (active.has("ENERGY_INTAKE") && /\b(?:eating (?:normally|properly|enough|more) (?:again|now)|back to (?:eating )?(?:normal(?:ly)?|maintenance|my usual)|an (?:uong )?binh thuong lai)\b/.test(text)) {
     out.push({ key: "ENERGY_INTAKE", kind: "LOW_ENERGY_INTAKE", relevance: "SAFETY", op: "NEGATE", label: "says they are eating normally again" });
+  } else if (active.has("ENERGY_INTAKE") && INTAKE_NOT_MINE.test(text)) {
+    // S0 D-03: "I was only asking hypothetically", "that was about my friend": the earlier figure was never their intake.
+    out.push({ key: "ENERGY_INTAKE", kind: "LOW_ENERGY_INTAKE", relevance: "SAFETY", op: "NEGATE", label: "says that intake was hypothetical or someone else's, not what they eat" });
   } else if (/\b(?:barely|hardly)(?: been)? eat(?:ing)? (?:anything|at all|any food|food)\b|\b(?:ate|eaten|had) (?:barely|hardly) (?:anything|any food)\b|\b(?:barely|hardly) ate\b|\b(?:i'?m|im|i am|been) (?:barely|hardly|not) eating\s*(?:[.!?,]|$|anything|at all)|\bstopped eating\b|\bstarving myself\b|\bskip(?:ping)? (?:all )?meals all day\b|\bnhin an\b|\bbo bua ca ngay\b/.test(text) && FIRST_PERSON.test(text)) {
     out.push({ key: "ENERGY_INTAKE", kind: "LOW_ENERGY_INTAKE", relevance: "SAFETY", op: "ASSERT", label: "reports barely eating — dangerously low energy intake" });
   }
@@ -399,6 +450,17 @@ function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, last
       out.push({ key, kind: "SYMPTOM", relevance: "SAFETY", op: "NEGATE", label: `no ${label}` });
     } else if (FIRST_PERSON.test(clause) || clause.trim().split(/\s+/).length <= 6) {
       out.push({ key, kind: "SYMPTOM", relevance: "SAFETY", op: "ASSERT", label: `reported ${label}` });
+    }
+  }
+  // MF-S1: an everyday illness the user reports about themselves (not a red flag — the safety layer stops those). It
+  // keeps the newest concern in view so a follow-up is answered for it, never for an older injury.
+  for (const [id, label, re] of ILLNESSES) {
+    if (!re.test(text)) continue;
+    const key = `ILLNESS:${id}`;
+    if (new RegExp(`(?:${re.source})[^.?!]{0,24}\\b(?:is gone|has gone|gone now|went away|passed|better now|cleared up|het roi|do roi)\\b`).test(text) || /\b(?:no|not|without|don'?t have|khong)\s+(?:a\s+)?(?:\w+\s+)?$/.test(text.split(re)[0]?.slice(-24) ?? "")) {
+      if (active.has(key)) out.push({ key, kind: "ILLNESS", relevance: "SAFETY", op: "END", label: `${label} — the user says it has resolved` });
+    } else {
+      out.push({ key, kind: "ILLNESS", relevance: "SAFETY", op: "ASSERT", label: `reports ${label}` });
     }
   }
   // The correction "I meant my chest MUSCLES are sore" names no symptom phrase at all: it still clears an active chest-pain report.
@@ -454,7 +516,8 @@ function extractTurn(raw: string, active: ReadonlyMap<string, ContextFact>, last
 
 /* ---------- resolution ---------- */
 
-const FOLLOW_UP = /^(?:and|but|so|ok(?:ay)?|what about|how about|how much|how many|how often|when|which|why|is it|is that|are they|should i|can i|do i|then|also|con|the con|bao nhieu|vay|the|sao)\b|\b(?:it|that|this|those|them|these|then|instead|cai do|cai nay)\??$/;
+const FOLLOW_UP = /^(?:and|but|so|ok(?:ay)?|what about|how about|how much|how many|how often|when|which|why|is it|is that|are they|should i|can i|do i|then|also|con|the con|bao nhieu|vay|the|sao|continue|go on|tiep(?: tuc)?)\b|\b(?:it|that|this|those|them|these|then|instead|above|earlier|again|cai do|cai nay|o tren)[?.!]*$/;
+const isFollowUp = (folded: string) => folded.split(/\s+/).length <= 8 && FOLLOW_UP.test(folded);
 
 /**
  * Prior USER messages (oldest → newest) plus the current one → the bounded working set. Pure and deterministic.
@@ -471,6 +534,8 @@ export function buildContextWorkingSet(input: { priorUserMessages?: readonly str
     const lastPedMention = new RegExp(`\\b${PED_TERM}\\b`).test(previous.replace(NON_PED_CYCLE, " "));
     for (const candidate of extractTurn(turn, active, lastPedMention)) {
       const previous = active.get(candidate.key);
+      // S0 D-03: a question about an intake answers its own turn only, and never replaces what the user reported.
+      if (turnOnlyIntake(candidate) && (turnsAgo > 0 || previous)) continue;
       const { op, temporal, ...rest } = candidate;
       const supersede = (by: string) => {
         if (!previous) return;
@@ -502,13 +567,53 @@ export function buildContextWorkingSet(input: { priorUserMessages?: readonly str
       facts.push(fact);
     }
   });
-  const current = fold(input.message).trim();
-  const prior = input.priorUserMessages?.at(-1)?.trim() ?? null;
-  const followUpOf = prior && current.split(/\s+/).length <= 8 && FOLLOW_UP.test(current) ? clip(prior, 220) : null;
+  const priors = (input.priorUserMessages ?? []).map((text) => text.trim()).filter(Boolean);
+  let followUpOf: string | null = null;
+  if (priors.length > 0 && isFollowUp(fold(input.message).trim())) {
+    // A follow-up to a follow-up still continues the task that set the topic: walk back (≤3) to that message.
+    let anchor = priors.length - 1;
+    while (anchor > 0 && priors.length - anchor <= 3 && isFollowUp(fold(priors[anchor]))) anchor--;
+    const last = priors.length - 1;
+    followUpOf = anchor === last ? clip(priors[last], 220) : `${clip(priors[anchor], 160)}" → then: "${clip(priors[last], 100)}`;
+  }
   return { facts, followUpOf };
 }
 
+/** Label prefix of an intake the user only asked about: it applies to that turn's answer and is never published or carried. */
+export const ASKED_INTAKE_LABEL = "asks about eating";
+/** Label prefix of an intake someone advised the user to eat: like a question, it answers that turn only and is never published. */
+export const ADVISED_INTAKE_LABEL = "was advised to eat";
+export const turnOnlyIntake = (fact: { kind: string; label: string }) =>
+  fact.kind === "LOW_ENERGY_INTAKE" && (fact.label.startsWith(ASKED_INTAKE_LABEL) || fact.label.startsWith(ADVISED_INTAKE_LABEL));
+// Advice directed at the speaker by someone else: "told me to", "said I should", "recommended", "HLV bảo tôi", "bác sĩ khuyên".
+// Past-tense recommend/advise/suggest only, and never with I/you as subject: "can you suggest meals?" asks; it reports no advice.
+const INTAKE_ADVICE = /\b(?:told me|tells me|telling me|wants? me to|put me on|asked me to|instructed me|(?:said|says) (?:that )?i (?:should|must|need to|have to)|(?<!\b(?:i|you) )(?:recommended|advised|suggested|prescribed)|(?:bao|khuyen|dan|ke) (?:toi|minh|em))\b/;
+const FOLLOWS_ADVICE = /\b(?:i'?ve|i have|i am|i'?m|i)\s+(?:actually |really |now |already |still |been )*(?:following|sticking to|stuck to|doing (?:that|it|this)|eating (?:that|like that|that much))\b|\b(?:toi|minh|em) (?:da |dang |van |thuc su )*(?:lam theo|an theo|an nhu vay)\b/;
+const REJECTS_ADVICE = /\b(?:haven'?t|have not|didn'?t|did not|don'?t|do not|won'?t|will not|not|never)\s+(?:actually |really |been )?(?:follow\w*|stick\w*|stuck|doing (?:that|it|this)|done (?:that|it)|eat\w* (?:that|like that))\b|\b(?:khong|chua) (?:lam theo|an theo)\b/;
+// The user as the one eating ("I've been eating 500 even though my coach recommended 1800"), not as the one told ("bảo tôi ăn").
+const OWN_EATING = /(?<!\b(?:bao|khuyen|dan|told|tell|tells|wants?|asked) )\b(?:i'?ve|i have|i'?m|i am|i)\s+(?:(?:only|just|barely|been|actually|really|usually|normally)\s+)*(?:eat(?:ing)?|ate|eaten|consumed)\b|(?<!\b(?:bao|khuyen|dan) )\b(?:toi|minh|em) (?:(?:thuc su|da|dang|moi|chi) )*an\b/;
+const followsAdvice = (text: string) => INTAKE_ADVICE.test(text) && FOLLOWS_ADVICE.test(text) && !REJECTS_ADVICE.test(text);
+const INTAKE_QUESTION = /\?\s*$|\b(?:can i|could i|should i|is it|is eating|is \d{3,4}|are \d{3,4}|what if|what happens|if (?:i|you|someone|a person)|suppose|hypothetical\w*|would (?:it|that|eating)|duoc khong|co (?:sao|on|duoc|nen|an toan) khong|neu|gia su|co nen)\b/;
+const INTAKE_REPORT = /(?<!\b(?:can|could|should|would|if|may|might|do|to)\s)\b(?:i'?ve|i have|i'?m|i am|been|i)\s+(?:(?:only|just|barely|been|usually|normally)\s+)*(?:eat|eating|ate|eaten|had|having|managed|consumed)\b|\b(?:today|yesterday|this week|so far|lately|recently|these days|hom nay|hom qua|tuan nay|dao nay|gan day|dang an|da an|moi an)\b/;
+
 export const activeFacts = (set: ContextWorkingSet | null | undefined): ContextFact[] => (set?.facts ?? []).filter((fact) => fact.status === "ACTIVE");
+
+export const STORED_ALLERGY_VIA = "recorded on their profile";
+
+/**
+ * S0 D-01/D-02: the allergies stored on the athlete's profile join the working set as ACTIVE CURRENT facts, so the shared
+ * policy and output integrity (stripAllergens) enforce them on both coaches exactly like an allergy said in chat. The
+ * record is the authority: a chat "not allergic" never removes it. turnsAgo 1 keeps it out of the disclosure publisher.
+ */
+export function withStoredAllergies(set: ContextWorkingSet, stored: readonly string[] | null): ContextWorkingSet {
+  // null = the read failed: what the chat established still applies, and the record is marked unknown (ALLERGY_DATA_UNAVAILABLE).
+  if (stored === null) return { ...set, storedAllergies: "UNAVAILABLE" };
+  const text = fold(stored.join(" ; "));
+  const added: ContextFact[] = ALLERGENS.filter(([item, re]) => re.test(text) || (VI_BARE[item] !== undefined && new RegExp(String.raw`\b(?:${VI_BARE[item]})\b`).test(text)))
+    .filter(([item]) => !activeFacts(set).some((fact) => fact.key === `ALLERGY:${item}`))
+    .map(([item]) => ({ key: `ALLERGY:${item}`, kind: "ALLERGY", relevance: "SAFETY", temporal: "CURRENT", origin: "USER_STATEMENT", status: "ACTIVE", label: `allergic to ${item}`, turnsAgo: 1, quote: "", via: STORED_ALLERGY_VIA }));
+  return added.length ? { ...set, facts: [...added, ...set.facts] } : set;
+}
 
 /**
  * Allergy / low-intake keys the user retracts or ends in THIS message, judged as if every such fact were on record — so a
@@ -543,13 +648,17 @@ export function renderContextWorkingSet(set: ContextWorkingSet | null | undefine
   if (!set) return [];
   const active = activeFacts(set);
   const superseded = set.facts.filter((fact) => fact.status === "SUPERSEDED").slice(-4);
-  if (active.length === 0 && superseded.length === 0 && !set.followUpOf) return [];
+  const unavailable = set.storedAllergies === "UNAVAILABLE"
+    ? ["STORED ALLERGIES UNAVAILABLE — the allergies saved on their profile could not be loaded this turn. That is unknown, not \"no allergies\": never call a food or meal safe for their allergies, and do not suggest specific foods or meals this turn: say their saved allergies couldn't be checked and to try again shortly."]
+    : [];
+  if (active.length === 0 && superseded.length === 0 && !set.followUpOf) return unavailable;
   // A fact from THIS message is never quoted: a per-request prompt must not receive a sibling request's words.
-  const line = (fact: ContextFact) => `- ${fact.label}${fact.origin === "USER_CORRECTION" ? " (user CORRECTION — this replaces what they said before)" : ""} — user, ${fact.via ? `${fact.via} (another chat; applies here too)` : `${when(fact.turnsAgo)}${fact.turnsAgo === 0 ? "" : `: "${fact.quote}"`}`}`;
+  const line = (fact: ContextFact) => `- ${fact.label}${fact.origin === "USER_CORRECTION" ? " (user CORRECTION — this replaces what they said before)" : ""} — user, ${fact.via === STORED_ALLERGY_VIA ? `${fact.via} (applies to every answer)` : fact.via ? `${fact.via} (another chat; applies here too)` : `${when(fact.turnsAgo)}${fact.turnsAgo === 0 ? "" : `: "${fact.quote}"`}`}`;
   const safety = active.filter((fact) => fact.relevance === "SAFETY").slice(0, 8);
   const domain = active.filter((fact) => fact.relevance === "DOMAIN").slice(0, 4);
   return [
     "CONVERSATION CONTEXT — what THIS user told you earlier in this chat (their own words, not verified records). It applies to the current answer even when the current message does not repeat it: do not ask for it again, do not contradict it, and do not quote this block. A user correction outranks what it corrects and outranks stored profile values for the same fact.",
+    ...unavailable,
     ...(safety.length ? ["ACTIVE — SAFETY-RELEVANT (shape the whole answer around these):", ...safety.map(line)] : []),
     ...(domain.length ? ["ACTIVE — CONTEXT:", ...domain.map(line)] : []),
     ...(superseded.length ? ["NO LONGER CURRENT (do not treat as true now):", ...superseded.map((fact) => `- ${fact.label} → replaced by: ${fact.supersededBy ?? "a later statement"}`)] : []),

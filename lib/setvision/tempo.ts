@@ -1,5 +1,8 @@
 import type { CompletedRep, RepTempo } from "@/lib/setvision/types";
 
+/** Whether leaving the rest position is the eccentric or the concentric phase (exercise-config.ts `outbound`). */
+export type Outbound = "eccentric" | "concentric";
+
 /**
  * Tempo (spec Part B §16). Directly derived from the rep state
  * machine's phase-transition timestamps — no separate estimation
@@ -12,20 +15,27 @@ function round(value: number, decimals = 2): number {
   return Math.round(value * factor) / factor;
 }
 
-export function computeRepTempo(rep: CompletedRep): RepTempo {
+export function computeRepTempo(rep: CompletedRep, outbound: Outbound = "eccentric"): RepTempo {
+  const outboundSec = rep.startObserved ? round((rep.bottomAtMs - rep.topAtMs) / 1000) : null;
+  const returnSec = round((rep.ascentEndAtMs - rep.ascentStartAtMs) / 1000);
   return {
     repNumber: rep.repNumber,
-    eccentricSec: round((rep.bottomAtMs - rep.topAtMs) / 1000),
-    pauseSec: round((rep.ascentStartAtMs - rep.bottomAtMs) / 1000),
-    concentricSec: round((rep.ascentEndAtMs - rep.ascentStartAtMs) / 1000),
+    eccentricSec: outbound === "eccentric" ? outboundSec : returnSec,
+    pauseSec: rep.startObserved ? round((rep.ascentStartAtMs - rep.bottomAtMs) / 1000) : null,
+    concentricSec: outbound === "eccentric" ? returnSec : outboundSec,
+    descentStartMs: rep.startObserved ? rep.topAtMs : null,
+    bottomReachedMs: rep.startObserved ? rep.bottomAtMs : null,
+    ascentStartMs: rep.ascentStartAtMs,
+    repEndMs: rep.ascentEndAtMs,
   };
 }
 
-export function computeAllRepTempo(reps: CompletedRep[]): RepTempo[] {
-  return reps.map(computeRepTempo);
+export function computeAllRepTempo(reps: CompletedRep[], outbound: Outbound = "eccentric"): RepTempo[] {
+  return reps.map((rep) => computeRepTempo(rep, outbound));
 }
 
-function average(values: number[]): number | null {
+function average(maybeValues: Array<number | null>): number | null {
+  const values = maybeValues.filter((v): v is number => v !== null);
   if (values.length === 0) return null;
   return round(values.reduce((sum, v) => sum + v, 0) / values.length);
 }
@@ -41,14 +51,18 @@ export function averageConcentricTime(tempos: RepTempo[]): number | null {
 /**
  * Tempo consistency across reps: 1 - coefficient of variation of
  * total rep duration (eccentric + pause + concentric), clamped to
- * [0, 1]. Null with fewer than 2 reps.
+ * [0, 1]. Null with fewer than 2 fully observed reps.
  */
 export function computeTempoConsistency(tempos: RepTempo[]): number | null {
-  if (tempos.length < 2) {
+  // Only fully observed reps: a rep with an unobserved descent has no comparable total.
+  const totals = tempos.flatMap((t) =>
+    t.eccentricSec === null || t.pauseSec === null || t.concentricSec === null ? [] : [t.eccentricSec + t.pauseSec + t.concentricSec],
+  );
+
+  if (totals.length < 2) {
     return null;
   }
 
-  const totals = tempos.map((t) => t.eccentricSec + t.pauseSec + t.concentricSec);
   const mean = totals.reduce((sum, v) => sum + v, 0) / totals.length;
 
   if (mean <= 0) {

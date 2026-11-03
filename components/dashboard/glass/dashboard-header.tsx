@@ -25,14 +25,14 @@ export function DashboardHeader({
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <h1 className="text-xl font-bold text-mf-glass-text sm:text-2xl">
-          {greeting}, {displayName}.
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">Today · {todayLabel}</p>
+        <h1 className="mt-1 font-heading text-3xl font-black uppercase leading-none tracking-tight text-mf-glass-text sm:text-5xl">
+          {greeting}, {displayName}
         </h1>
-        <p className="mt-1 text-sm text-mf-glass-text-muted">{todayLabel}</p>
       </div>
 
       <div className="flex items-center gap-4">
-        <p className="hidden text-right text-[10px] font-bold uppercase leading-tight tracking-[0.22em] text-mf-glass-text-muted lg:block">
+        <p className="hidden text-right text-xs font-bold uppercase leading-tight tracking-[0.12em] text-mf-glass-text-muted lg:block">
           Discipline
           <br />
           Builds

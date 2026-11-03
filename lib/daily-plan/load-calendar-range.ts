@@ -42,7 +42,7 @@ export async function loadCalendarRange(
   const [sessionsResponse, checkinsResponse] = await Promise.all([
     supabase
       .from("workout_sessions")
-      .select("id, name, scheduled_for, duration_minutes, session_state")
+      .select("id, name, scheduled_for, duration_minutes, session_state, workout_session_exercises(is_skipped)")
       .eq("user_id", userId)
       .not("scheduled_for", "is", null)
       .gte("scheduled_for", startIso)
@@ -86,17 +86,23 @@ export async function loadCalendarRange(
       scheduled_for: string;
       duration_minutes: number | null;
       session_state: string | null;
+      workout_session_exercises?: Array<{ is_skipped: boolean | null }> | null;
     }> | null) ?? [];
 
   for (const row of sessionRows) {
     const dateKey = localDateTimeParts(new Date(row.scheduled_for), timeZone).localDate;
+    // Same rule as classifyTodaySession: an untouched session whose every exercise was postponed (a confirmed rest day)
+    // is skipped, not still planned.
+    const exercises = row.workout_session_exercises ?? [];
+    const state = sessionStateToActionStatus(row.session_state);
+    const postponed = state === "planned" && exercises.length > 0 && exercises.every((exercise) => exercise.is_skipped === true);
 
     ensureDay(dateKey).push({
       id: `workout-${row.id}`,
       type: "workout",
       title: row.name ?? "Training session",
-      subtitle: row.duration_minutes ? `~${row.duration_minutes} min` : null,
-      status: sessionStateToActionStatus(row.session_state),
+      subtitle: postponed ? "Postponed" : row.duration_minutes ? `~${row.duration_minutes} min` : null,
+      status: postponed ? "skipped" : state,
       scheduledAt: row.scheduled_for,
       priority: 2,
       actionUrl: `/dashboard/workouts/session/${row.id}`,

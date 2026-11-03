@@ -207,7 +207,7 @@ function buildHawkerDishOption(
     source: "hawker_dish",
     adjustments: [],
     estimatedNutrition,
-    provenance: "Comparable Reference — HawkerLens dish reference data (not measured)",
+    provenance: "Typical hawker portion — reference values, not measured",
     logPayload: {
       foodName: template.displayName,
       source: "local",
@@ -263,7 +263,7 @@ function buildAdjustedHawkerDishOption(
     source: "hawker_dish",
     adjustments,
     estimatedNutrition,
-    provenance: "Comparable Reference — HawkerLens dish reference data (not measured)",
+    provenance: "Typical hawker portion — reference values, not measured",
     logPayload: {
       foodName: `${template.displayName} (${adjustments.join(", ")})`,
       source: "local",

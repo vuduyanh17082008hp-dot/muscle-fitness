@@ -12,17 +12,17 @@ import {
   Flame,
   Layers3,
   ListChecks,
-  PlayCircle,
   Target,
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/app-database.types";
+import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision";
+import { TrainingHoldNotice, WorkoutStartButton } from "@/components/training/workout-start-control";
 
 import {
   activateWorkoutPlanAction,
   archiveWorkoutPlanAction,
-  startWorkoutAction,
 } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -203,6 +203,13 @@ export default async function WorkoutPlanDetailsPage({
   if (!canManagePlan) {
     redirect("/dashboard/workouts");
   }
+
+  // The Daily Brief's safety decision (same as Today/Training): while it holds training, no day offers Start. Only the
+  // athlete's own active plan can be started here; a coach viewing a client's plan has no client check-in to read.
+  const { hold } =
+    plan.status === "active" && plan.client_id === user.id
+      ? await loadDailyDecision(supabase, user.id)
+      : { hold: null };
 
   /* =======================================================
      LOAD DAYS
@@ -418,7 +425,7 @@ export default async function WorkoutPlanDetailsPage({
                   </p>
 
                   <span
-                    className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${getStatusClasses(
+                    className={`rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${getStatusClasses(
                       planDetails.status,
                     )}`}
                   >
@@ -552,7 +559,7 @@ export default async function WorkoutPlanDetailsPage({
         <section className="mt-10">
           <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.28em] text-orange-400">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-orange-400">
                 Programme structure
               </p>
 
@@ -567,6 +574,12 @@ export default async function WorkoutPlanDetailsPage({
             </p>
           </div>
 
+          {hold ? (
+            <div className="mb-5">
+              <TrainingHoldNotice hold={hold} />
+            </div>
+          ) : null}
+
           {planDetails.days.length === 0 ? (
             <EmptyWorkoutDays planId={planDetails.id} />
           ) : (
@@ -576,6 +589,7 @@ export default async function WorkoutPlanDetailsPage({
                   key={day.id}
                   day={day}
                   canStart={planDetails.status === "active"}
+                  hold={hold}
                 />
               ))}
             </div>
@@ -607,7 +621,7 @@ function SummaryCard({
         {icon}
       </div>
 
-      <p className="mt-5 text-xs font-black uppercase tracking-[0.16em] text-zinc-600">
+      <p className="mt-5 text-xs font-black uppercase tracking-[0.12em] text-zinc-600">
         {label}
       </p>
 
@@ -643,11 +657,13 @@ function MetricCard({
 type WorkoutDayCardProps = {
   day: WorkoutDayWithExercises;
   canStart: boolean;
+  hold: "recovery" | "unverified" | null;
 };
 
 function WorkoutDayCard({
   day,
   canStart,
+  hold,
 }: WorkoutDayCardProps) {
   const startable =
     canStart &&
@@ -660,12 +676,12 @@ function WorkoutDayCard({
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
           <div>
             <div className="flex flex-wrap items-center gap-3">
-              <span className="rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-300">
+              <span className="rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-orange-300">
                 Day {day.day_number}
               </span>
 
               {day.rest_day ? (
-                <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-300">
+                <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-blue-300">
                   Recovery
                 </span>
               ) : null}
@@ -694,31 +710,13 @@ function WorkoutDayCard({
                 {day.exercises.length}
               </p>
 
-              <p className="text-[10px] font-black uppercase tracking-wider text-zinc-600">
+              <p className="text-xs font-black uppercase tracking-wider text-zinc-600">
                 Exercises
               </p>
             </div>
 
             {startable ? (
-              <form action={startWorkoutAction}>
-                <input
-                  type="hidden"
-                  name="workout_day_id"
-                  value={day.id}
-                />
-
-                <button
-                  type="submit"
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-amber-300"
-                >
-                  <PlayCircle
-                    aria-hidden="true"
-                    className="h-4 w-4"
-                  />
-
-                  Start workout
-                </button>
-              </form>
+              <WorkoutStartButton workoutDayId={day.id} hold={hold} />
             ) : null}
           </div>
         </div>

@@ -6,6 +6,7 @@ import type { CoachContext } from "../types"
 import type { ContextBudget } from "./budget"
 import { isPersonalStateQuestion } from "./needs"
 import { driftsFromActiveEntity } from "./provenance"
+import { BRAND_NAMES } from "./shared-query"
 import { supplementEducationReply } from "./safety"
 import type { ModelCall } from "./understand"
 import type { ToolResults } from "./tools"
@@ -37,7 +38,7 @@ function planView(plan: OrchestrationPlan, context: ConversationContext) {
 const MODE_RULES: Record<OrchestrationPlan["strategy"]["mode"], string> = {
   ANSWER: "Answer directly and naturally.",
   CONTINUE: "Continue the task named in PLAN.continuing: the user's agreement, pick or tweak applies to it (see CONTEXT.priorOffer / presentedOptions / chosenOption / activeReferent). Do not restart, re-introduce the topic, or repeat earlier options. A pick or a tweak is a conversation step, not a state change: never ask the user to confirm a choice unless PLAN.requiresConfirmation is true. Apply the user's change to PLAN.activeItem / CONTEXT.activeItem ONLY; never introduce a dish that is not in CONTEXT, RECENT CONVERSATION or the user's message. If CONTEXT.resume is present the user just answered your question: apply that answer and finish the original request (resume.resumeRequest); do not ask again and do not treat the answer as a new topic.",
-  PROPOSE: "Offer 2-3 strong options, not more unless the user asks. Propose a concrete option. Make clear nothing is logged or changed until the user confirms it in the Active Meal Draft panel.",
+  PROPOSE: "Offer 2-3 strong options, not more unless the user asks. Propose a concrete option. Make clear nothing is logged or changed until the user confirms it.",
   ASK_ONE_QUESTION: "Ask exactly the one question in PLAN.question and nothing else.",
   CLARIFY: "Briefly restate what you understood, then ask exactly the one question in PLAN.question.",
   ESCALATE: "Say this is outside nutrition coaching and suggest the appropriate professional or resource, kindly and briefly.",
@@ -55,18 +56,18 @@ export function buildResponsePrompt(message: string, plan: OrchestrationPlan, co
     .join("\n")
   const languageRule = context.language === "en" ? "Reply in English." : context.language === "vi" ? "Reply in Vietnamese." : "Reply in the same mixed Vietnamese/English style the user used."
   const view = { ...planView(plan, context), ...(plan.clarification ? { question: plan.clarification.question } : {}) }
-  return `You are the Muscle Fitness Nutrition Coach, a nutrition specialist inside the Nutrition page. Dante is the separate cross-domain assistant.
+  return `You are Dante, the Muscle Fitness coach, answering a nutrition turn with your nutrition tools. You are the only assistant in the app: never refer the user to another coach or assistant.
 SYSTEM RULES:
-- Nutrition only. For training, workouts, recovery or injury questions, tell the user to ask Dante.
+- This turn is about food. Do not give training, workout, recovery or injury advice in this reply; those questions are answered by your training side.
 - Use ONLY numbers that appear in CONTEXT. Never calculate, estimate or invent calories, macros, totals or remaining amounts. If a food has no verified data, say so plainly instead of guessing its numbers. Strategy without numbers is fine.
-- Never say a meal was logged: logging needs the user to confirm in the Active Meal Draft panel. A user's agreement with a plan is not permission to log.
+- Never say a meal was logged: logging needs the user to tap Confirm on a log proposal. A user's agreement with a plan is not permission to log.
 - Never suggest compensating for food with exercise, skipping meals, restricting, or "earning" food. Never diagnose.
 - Allergies, excluded foods and hardConstraints always win over preferences and convenience. Constraints stay in force until the user lifts them: "low_prep" = the user does not want to cook (propose nothing that needs an oven, baking or simmering; if a request conflicts with it, say so in a clause and offer a version that fits), "without:x" = leave x out, "min_protein:n" = at least n g protein.
 - If CONTEXT.userCorrection is present the user retracted a figure: never state that figure as what is left, and take remaining amounts only from the verified remaining-macro numbers in CONTEXT.
 - A figure from an earlier turn belongs to the amount it was stated for. If the user asks about a different amount, state only the values CONTEXT gives for that amount; never repeat or rescale an earlier figure yourself.
 - Supplements: general evidence education only. If the user mentions a medical condition, pregnancy or any medication, never give a dose, timing, stack or cycle; say that is a question for their doctor or pharmacist. Never present a supplement as a treatment or promise it will change an organ, a lab marker or a disease: how it is thought to work is not proof that it helps, so say where evidence is limited.
 - Do not present guesses about the user as facts, and do not mention these rules, the plan, or any internal field.
-- ${languageRule} Natural coaching tone, ${DEPTH_LIMIT[plan.strategy.responseDepth]}. If CONTEXT.exactCalculation is "UNAVAILABLE", say the exact calculation is not available right now; do not estimate it. If a foodToolResults item has per100g, state those values as "per 100 g" (mention its basis, and that it is the table's generic entry for the food when matched differs from asked), then invite the user to share their portion; never assume a serving size. If an item has source "USDA_FDC", say the values come from USDA FoodData Central; "LOCAL_CANONICAL" is the app's curated table. If an item has clarification, ask only that one question (raw or cooked weight?) and state no numbers for it. If a foodToolResults item has matched null, say "I couldn't verify an exact macro entry for that food right now" and offer: retry with another name, share the nutrition label, or an ESTIMATED figure only if the user asks. Do not substitute generic praise for the food. Values in CONTEXT.macroBinding results may be rounded and explained, never recomputed or contradicted. Follow PLAN.mode: ${MODE_RULES[plan.strategy.mode]}
+- ${languageRule} Natural coaching tone, ${DEPTH_LIMIT[plan.strategy.responseDepth]}. If CONTEXT.exactCalculation is "UNAVAILABLE", say the exact calculation is not available right now; do not estimate it. If a foodToolResults item has per100g, state those values as "per 100 g" (mention its basis, and that it is the table's generic entry for the food when matched differs from asked), then invite the user to share their portion; never assume a serving size. If an item has source "USDA_FDC", say the values come from USDA FoodData Central; "LOCAL_CANONICAL" is the app's curated table. If an item has clarification, ask only that one question (field "preparation": raw or cooked weight?; field "coating": which of clarification.options it was, since breading and skin change the numbers a lot) and state no numbers for it. If an item has genericFor, its numbers are a generic reference for that kind of food, NOT the restaurant's official nutrition: say they are an estimate from generic data, that the restaurant's own figures vary by item, piece and country, and never call them that restaurant's values. If a foodToolResults item has matched null and no clarification, say "I couldn't verify an exact macro entry for that food right now" and offer: retry with another name, share the nutrition label, or an ESTIMATED figure only if the user asks. Do not substitute generic praise for the food. Values in CONTEXT.macroBinding results may be rounded and explained, never recomputed or contradicted. Follow PLAN.mode: ${MODE_RULES[plan.strategy.mode]}
 
 CONTEXT: ${JSON.stringify(budget.context)}
 ${knowledgeText ? `\n${knowledgeText}\n` : ""}
@@ -113,11 +114,43 @@ export function contradictsBinding(reply: string, results: ToolResults, userNumb
   return LEFT_PATTERNS.some((pattern) => [...reply.matchAll(pattern)].some((match) => !allowed.has(Math.round(Number(match[1].replace(/,/g, ""))))))
 }
 
+const NUMBER = "(\\d[\\d,]*(?:\\.\\d+)?)"
+const EATEN = "(?:consumed|eaten|had|logged|total(?: of)?|tiêu thụ|đã ăn|tổng cộng)"
+const CONSUMED_CLAIMS = {
+  calories: [new RegExp(`${EATEN}[^.\\n\\d]{0,25}?${NUMBER}\\s*(?:kcal|calories|cal|calo)`, "giu"), new RegExp(`${NUMBER}\\s*(?:kcal|calories|cal|calo)[^.\\n\\d]{0,20}?(?:consumed|eaten|logged|so far)`, "giu")],
+  protein: [new RegExp(`${EATEN}[^.\\n\\d]{0,25}?${NUMBER}\\s*(?:g|grams?)\\s*(?:of\\s+)?(?:protein|đạm)`, "giu")],
+}
+const ASKS_CALORIES = /calor|kcal|(?<![\p{L}])calo(?![\p{L}])/iu
+const ASKS_PROTEIN = /protein|đạm/iu
+const ONE_MEAL = /(?<![\p{L}])(?:breakfast|lunch|dinner|snacks?|pre[- ]?workout|post[- ]?workout|bữa (?:sáng|trưa|tối|phụ)|last meal)(?![\p{L}])/iu
+
+/**
+ * True when a reply about today's intake misstates the logged total: it skips the number the user asked for, or attaches an
+ * eaten/consumed claim to a figure that is neither the day's total nor one logged meal (e.g. the remaining calories as eaten).
+ */
+export function misstatesConsumed(reply: string, message: string, state: NonNullable<ToolResults["athleteState"]>): boolean {
+  const consumed = state.consumed!
+  const near = (value: number, pool: number[]) => pool.some((n) => Math.abs(n - value) <= 0.5)
+  const read = (text: string) => Number(text.replace(/,/g, ""))
+  const said = (value: number) => (reply.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map(read).some((n) => Math.abs(n - value) <= 0.5)
+  // "How many calories at lunch?" asks about one meal, whose number is that meal's, not the day's.
+  const dayQuestion = !ONE_MEAL.test(message)
+  if (dayQuestion && ASKS_CALORIES.test(message) && !said(Math.round(consumed.calories))) return true
+  if (dayQuestion && ASKS_PROTEIN.test(message) && !ASKS_CALORIES.test(message) && !said(consumed.protein) && !said(Math.round(consumed.protein))) return true
+  const meals = state.meals ?? []
+  const allowed = { calories: [consumed.calories, ...meals.map((meal) => meal.calories)], protein: [consumed.protein, Math.round(consumed.protein), ...meals.map((meal) => meal.protein)] }
+  const rowNumbers = meals.flatMap((meal) => (meal.foods.join(" ").match(/\d+(?:\.\d+)?/g) ?? []).map(Number))
+  return (["calories", "protein"] as const).some((kind) => CONSUMED_CLAIMS[kind].some((pattern) => [...reply.matchAll(pattern)].some((match) => !near(read(match[1]), [...allowed[kind], ...rowNumbers]))))
+}
+
 const SUPPLEMENT_EDUCATION_ONLY = "Supplement education only: say what it is, how it is thought to work, what it has been studied for and how uncertain the evidence is. Remove every statement that it treats, improves, protects, repairs, supports, detoxes or lowers anything in the body (an organ, a disease, a lab marker), and do not predict a benefit for the user."
 
 const COOKING_STEPS =/(?<![\p{L}\p{N}])(?:bak(?:e|ed|es|ing)|oven|preheat\w*|simmer\w*|saut[eé]\w*|roast\w*|boil\w*)(?![\p{L}\p{N}])/iu
 const ACKNOWLEDGES_NO_COOK = /no[- ]cook|without cooking|(?:don'?t|do not) (?:want|have) to cook|skip (?:the )?(?:oven|cooking)|if you (?:do )?want to cook|since you (?:don'?t|do not) want to cook|không cần nấu|không nấu|nếu bạn muốn nấu/iu
 const CONFIRM_THE_CHOICE = /(?:confirm|lock in|finali[sz]e)\s+(?:this|that|your|the)\s+(?:choice|selection|pick|option)|(?:choice|selection|pick|option)[^.?!]{0,20}\bconfirm/i
+
+// "Approximately 289 kcal" is a rounding, not a disclaimer: the reply must say the figures are a generic estimate.
+const GENERIC_LABEL = /(?<![\p{L}])(?:estimat\w*|generic|ước tính|tham khảo chung)(?![\p{L}])/iu
 
 /** Deterministic checks on the model's reply against the plan's contract. Empty = the reply honours it. */
 export function replyViolations(reply: string, plan: OrchestrationPlan, context: ConversationContext, message: string, results?: ToolResults): string[] {
@@ -128,6 +161,8 @@ export function replyViolations(reply: string, plan: OrchestrationPlan, context:
   const picking = plan.strategy.mode === "CONTINUE" && (plan.strategy.continuationTarget === "PENDING_CHOICE" || plan.strategy.continuationTarget === "ACTIVE_MODIFICATION")
   if (picking && !plan.strategy.requiresConfirmation && CONFIRM_THE_CHOICE.test(reply)) violations.push("Choosing an option is not a state change. Do not ask the user to confirm the choice; just continue with it.")
   if (picking && driftsFromActiveEntity(reply, plan.activeEntity, context, message)) violations.push(`Stay on the chosen item only (${plan.activeEntity?.label}); do not switch to another option or dish.`)
+  const branded = results?.foods?.find((food) => food.genericFor && (food.macros || food.per100g))
+  if (branded && !GENERIC_LABEL.test(reply)) violations.push(`The numbers for ${branded.asked} are generic reference values, not ${BRAND_NAMES[branded.genericFor!] ?? branded.genericFor}'s official nutrition. Say plainly that they are an estimate from generic data.`)
   return violations
 }
 
@@ -151,12 +186,17 @@ export function foodLookupReply(results: ToolResults, language: ConversationCont
   const vi = language === "vi"
   const lines: string[] = []
   for (const food of foods) {
+    if (food.clarification?.field === "coating") {
+      lines.push(vi ? `${food.asked} của bạn là loại tẩm bột còn da, hay bỏ da và không tẩm bột? Lớp bột và da làm calo khác nhau đáng kể.` : `Was the ${food.asked} breaded with the skin on, or skinless with no breading? The coating and skin change the calories a lot.`)
+      continue
+    }
     if (food.clarification) {
       lines.push(vi ? `Khối lượng ${food.asked} là lúc còn sống hay đã nấu chín? Hai con số này khác nhau đáng kể.` : `Is the weight of the ${food.asked} raw or cooked? The two differ a lot in calories and protein.`)
       continue
     }
     const src = food.source ? SOURCE_LABEL[food.source][vi ? "vi" : "en"] : null
-    const from = src ? (vi ? ` (nguồn: ${src})` : ` (source: ${src})`) : ""
+    const brand = food.genericFor ? BRAND_NAMES[food.genericFor] ?? food.genericFor.toUpperCase() : null
+    const from = (src ? (vi ? ` (nguồn: ${src})` : ` (source: ${src})`) : "") + (brand ? (vi ? `. Đây là ước tính từ số liệu chung, không phải số liệu chính thức của ${brand}; con số của ${brand} khác nhau theo món, miếng và quốc gia` : `. This is a generic estimate, not ${brand}'s official nutrition, which varies by item, piece and country`) : "")
     if (food.macros && food.grams !== null) {
       const m = food.macros
       const state = food.basis === "RAW" || food.basis === "COOKED" ? ` (${food.basis.toLowerCase()})` : ""
@@ -197,6 +237,8 @@ export async function composeReply(params: {
   budget: ContextBudget
   knowledgeText: string | null
   call: ModelCall
+  /** The turn asks about today's food log: only current state may supply a number, never an earlier turn (the meal may be edited or deleted since). */
+  currentFactsOnly?: boolean
 }): Promise<ComposedReply | null> {
   const { message, plan, ctx, results, budget, knowledgeText, call } = params
   // ICH-1 conversation control: an explicit language request outranks the language the message happens to be written in.
@@ -218,6 +260,11 @@ export async function composeReply(params: {
     if (!plan.toolNeed.needFoodLookup || isPersonalStateQuestion(message) || ASKS_FIT.test(message) || results.entity || results.budgetResume || results.exactUnavailable) return null
     const reply = foodLookupReply(results, context.language)
     return reply ? { reply, source: "lookup" } : null
+  }
+  // Every food needs one answer first (raw or cooked? breaded or skinless?): the question is the reply, no model call needed.
+  if (results.foods?.length && results.foods.every((food) => food.clarification)) {
+    const question = lookup()
+    if (question) return question
   }
   const prompt = buildResponsePrompt(message, plan, context, budget, knowledgeText, brief?.promptBlock ?? "")
   let raw = await call(prompt)
@@ -243,9 +290,12 @@ export async function composeReply(params: {
   // earlier turns may belong to a different (or since-edited) meal, so they cannot pass as the answer.
   // The same holds when the user names a NEW amount and no tool ran for it: an earlier turn's "23 g protein" described a different
   // quantity, so it may not be re-attached to this one (live defect: 100 g = 23 g protein, then "150 g = about 23 g").
-  const fromTurns = plan.toolNeed.needMacroCalculation || STATES_AMOUNT.test(message) ? [] : context.turns.flatMap((turn) => (turn.text.match(/\d+(?:\.\d+)?/g) ?? []).map(Number))
+  const fromTurns = params.currentFactsOnly || plan.toolNeed.needMacroCalculation || STATES_AMOUNT.test(message) ? [] : context.turns.flatMap((turn) => (turn.text.match(/\d+(?:\.\d+)?/g) ?? []).map(Number))
   const allowed = [...results.numbers, ...(message.match(/\d+(?:\.\d+)?/g) ?? []).map(Number), ...fromTurns, ...(ctx.intelligence?.numbers ?? [])]
   if (hasUngroundedMacros(raw, allowed)) return lookup()
+  // Today's intake comes from the food log: a total question answered without it, or with another allowed number (the remaining
+  // or the target) presented as eaten, is rejected so the food log answers instead (chat.ts lastResortReply).
+  if (params.currentFactsOnly && results.athleteState?.consumed && misstatesConsumed(raw, message, results.athleteState)) return null
   if (mentionsBlockedFood(raw, ctx.guards)) return null
   if (contradictsBinding(raw, results, [...(message.match(/\d+(?:\.\d+)?/g) ?? []).map(Number)], context.correction ? context.statedBudget.invalidatedRemaining : null)) return lookup()
   return { reply: raw, source: "model" }

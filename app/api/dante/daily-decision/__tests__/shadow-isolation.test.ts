@@ -17,7 +17,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/athlete-state/build-athlete-state", () => ({ buildAthleteState: vi.fn() }));
 vi.mock("@/lib/training/load-training-context", () => ({ loadTrainingContext: vi.fn() }));
 vi.mock("@/lib/training/load-today-session", () => ({
-  loadTodaySession: vi.fn(),
+  loadTodaySessionRead: vi.fn(),
   resolveUserTimeZone: vi.fn(async () => "UTC"),
 }));
 vi.mock("@/lib/dante-core/daily-decision-engine", () => ({ buildDailyDecision: vi.fn() }));
@@ -31,7 +31,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
-import { loadTodaySession } from "@/lib/training/load-today-session";
+import { loadTodaySessionRead } from "@/lib/training/load-today-session";
 import { buildDailyDecision } from "@/lib/dante-core/daily-decision-engine";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { logProgramAdaptations } from "@/lib/dante-core/program-adaptation-log";
@@ -84,7 +84,7 @@ describe("daily-decision shadow-to-production isolation", () => {
     } as unknown as Awaited<ReturnType<typeof createClient>>);
     vi.mocked(buildAthleteState).mockResolvedValue({ generatedAt: "2026-09-17T00:00:00.000Z" } as never);
     vi.mocked(loadTrainingContext).mockResolvedValue({} as never);
-    vi.mocked(loadTodaySession).mockResolvedValue({ id: "session-1" } as never);
+    vi.mocked(loadTodaySessionRead).mockResolvedValue({ status: "OK", session: { id: "session-1" } } as never);
     vi.mocked(buildDailyDecision).mockReturnValue({
       decision: structuredClone(productionDecision),
       proposedActions: [],

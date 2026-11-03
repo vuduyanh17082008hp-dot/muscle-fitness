@@ -2,60 +2,55 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
-import { SETVISION_EXERCISES } from "@/lib/setvision/types";
-import type { SetVisionAnalysis } from "@/lib/setvision/types";
+import {
+  EMPTY_REVIEW,
+  resolveIdentity,
+  restoreSavedAnalysis,
+  SAVED_ANALYSIS_COLUMNS,
+  saveRequestSchema,
+  type SavedAnalysisRow,
+} from "@/lib/setvision/saved-analysis";
+import { MANUAL_REVIEW_EXERCISE, type SetVisionAnalysis } from "@/lib/setvision/types";
 import { emitEvent } from "@/lib/events/emit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const analysisSchema = z.object({
-  exercise: z.enum(SETVISION_EXERCISES as [string, ...string[]]),
-  exerciseClassification: z.object({
-    exercise: z.enum(SETVISION_EXERCISES as [string, ...string[]]).nullable(),
-    confidence: z.number().min(0).max(1),
-    signals: z.array(z.string()),
-  }),
-  reps: z.number().int().min(0),
-  romConsistency: z.number().min(0).max(1).nullable(),
-  averageEccentricTime: z.number().min(0).nullable(),
-  averageConcentricTime: z.number().min(0).nullable(),
-  velocity: z.object({
-    calibrated: z.boolean(),
-    unit: z.enum(["m/s", "torso-lengths/s"]),
-    perRep: z.array(z.object({ repNumber: z.number(), meanSpeed: z.number() })),
-    mean: z.number().nullable(),
-    peak: z.number().nullable(),
-    final: z.number().nullable(),
-    velocityLoss: z.number().min(0).max(1).nullable(),
-  }),
-  technique: z.object({
-    romConsistency: z.number().min(0).max(1).nullable(),
-    tempoConsistency: z.number().min(0).max(1).nullable(),
-    barPathConsistency: z.number().min(0).max(1).nullable(),
-    asymmetryDeg: z.number().nullable(),
-  }),
-  confidence: z.number().min(0).max(1),
-  perRep: z.object({
-    rom: z.array(z.object({ repNumber: z.number(), romPercent: z.number() })),
-    tempo: z.array(
-      z.object({
-        repNumber: z.number(),
-        eccentricSec: z.number(),
-        pauseSec: z.number(),
-        concentricSec: z.number(),
-      }),
-    ),
-  }),
-  limitations: z.array(z.string()),
-});
+type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
-const requestSchema = z.object({
-  analysis: analysisSchema,
-  workoutSessionId: z.string().uuid().nullable().optional(),
-  sessionExerciseId: z.string().uuid().nullable().optional(),
-  videoStoragePath: z.string().max(500).nullable().optional(),
-});
+/**
+ * A linked workout row must be the caller's OWN. RLS alone would also let a
+ * coach see a client's session, and an FK only proves the id exists.
+ */
+async function linkedRowsAreOwn(
+  supabase: ServerClient,
+  userId: string,
+  workoutSessionId: string | null,
+  sessionExerciseId: string | null,
+): Promise<boolean> {
+  let sessionId = workoutSessionId;
+
+  if (sessionExerciseId) {
+    const { data } = await supabase
+      .from("workout_session_exercises")
+      .select("workout_session_id")
+      .eq("id", sessionExerciseId)
+      .maybeSingle();
+    if (!data) return false;
+    if (sessionId && data.workout_session_id !== sessionId) return false;
+    sessionId = data.workout_session_id;
+  }
+
+  if (!sessionId) return true;
+
+  const { data } = await supabase
+    .from("workout_sessions")
+    .select("id")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return Boolean(data);
+}
 
 /**
  * POST /api/setvision/results — persists a SetVision analysis (spec
@@ -63,6 +58,16 @@ const requestSchema = z.object({
  * client-computed, structured analysis and (optionally) a storage
  * path the video was separately uploaded to. See
  * /api/setvision/upload-url for the upload step.
+ *
+ * The rep timeline (phase timestamps) is validated for order, internal
+ * consistency and the video's duration, and stored intact — an analysis
+ * whose timeline can't be stored truthfully is rejected, not trimmed.
+ *
+ * `analysis: null` saves a MANUAL REVIEW (custom exercise, or one without an
+ * engine): exercise 'manual_review', no automated metrics (NULL, never 0),
+ * only the user's own marked reps and notes. A custom name is validated and
+ * kept on this row only — it is never added to the exercise catalogue.
+ * Nothing here writes to workout sets or performance history.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -83,7 +88,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const parsed = requestSchema.safeParse(body);
+  const parsed = saveRequestSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
@@ -92,7 +97,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const { analysis, workoutSessionId, sessionExerciseId, videoStoragePath } = parsed.data;
+  const { analysis, workoutSessionId, sessionExerciseId, videoStoragePath, videoDurationMs } = parsed.data;
+  const review = parsed.data.review ?? EMPTY_REVIEW;
+
+  if (videoStoragePath && !videoStoragePath.startsWith(`${user.id}/`)) {
+    return NextResponse.json({ ok: false, error: "Invalid video path." }, { status: 400 });
+  }
+
+  if (!(await linkedRowsAreOwn(supabase, user.id, workoutSessionId ?? null, sessionExerciseId ?? null))) {
+    return NextResponse.json({ ok: false, error: "Workout not found." }, { status: 404 });
+  }
+
+  const identity = resolveIdentity(parsed.data);
 
   const { data, error } = await supabase
     .from("setvision_analyses")
@@ -100,25 +116,33 @@ export async function POST(request: Request) {
       user_id: user.id,
       workout_session_id: workoutSessionId ?? null,
       session_exercise_id: sessionExerciseId ?? null,
-      exercise: analysis.exercise,
+      exercise: analysis?.exercise ?? MANUAL_REVIEW_EXERCISE,
       video_storage_path: videoStoragePath ?? null,
-      reps: analysis.reps,
-      rom_consistency: analysis.technique.romConsistency,
-      tempo_consistency: analysis.technique.tempoConsistency,
-      bar_path_consistency: analysis.technique.barPathConsistency,
-      asymmetry_deg: analysis.technique.asymmetryDeg,
-      average_eccentric_time_sec: analysis.averageEccentricTime,
-      average_concentric_time_sec: analysis.averageConcentricTime,
-      velocity_calibrated: analysis.velocity.calibrated,
-      velocity_unit: analysis.velocity.unit,
-      velocity_mean: analysis.velocity.mean,
-      velocity_peak: analysis.velocity.peak,
-      velocity_final: analysis.velocity.final,
-      velocity_loss: analysis.velocity.velocityLoss,
-      exercise_classification_confidence: analysis.exerciseClassification.confidence,
-      confidence: analysis.confidence,
-      limitations: analysis.limitations,
-      per_rep: analysis.perRep,
+      reps: analysis ? analysis.reps : null,
+      rom_consistency: analysis?.technique.romConsistency ?? null,
+      tempo_consistency: analysis?.technique.tempoConsistency ?? null,
+      bar_path_consistency: analysis?.technique.barPathConsistency ?? null,
+      asymmetry_deg: analysis?.technique.asymmetryDeg ?? null,
+      average_eccentric_time_sec: analysis?.averageEccentricTime ?? null,
+      average_concentric_time_sec: analysis?.averageConcentricTime ?? null,
+      velocity_calibrated: analysis?.velocity.calibrated ?? false,
+      velocity_unit: analysis?.velocity.unit ?? "torso-lengths/s",
+      velocity_mean: analysis?.velocity.mean ?? null,
+      velocity_peak: analysis?.velocity.peak ?? null,
+      velocity_final: analysis?.velocity.final ?? null,
+      velocity_loss: analysis?.velocity.velocityLoss ?? null,
+      exercise_classification_confidence: analysis?.exerciseClassification.confidence ?? null,
+      confidence: analysis ? analysis.confidence : null,
+      limitations: analysis?.limitations ?? [],
+      per_rep: {
+        ...(analysis ? analysis.perRep : {}),
+        events: analysis?.events ?? [],
+        abstainReason: analysis?.abstainReason ?? null,
+        measuredSide: analysis?.measuredSide ?? null,
+        videoDurationMs,
+        identity,
+        review,
+      },
     })
     .select("id, analyzed_at")
     .single();
@@ -131,42 +155,31 @@ export async function POST(request: Request) {
     );
   }
 
-  await emitEvent(supabase, {
-    type: "SET_ANALYZED",
-    userId: user.id,
-    payload: {
-      exercise: analysis.exercise,
-      reps: analysis.reps,
-      velocityLoss: analysis.velocity.velocityLoss,
-      confidence: analysis.confidence,
-    },
-  });
+  // Only an engine run is a SET_ANALYZED event; a manual review measured nothing.
+  if (analysis) {
+    await emitEvent(supabase, {
+      type: "SET_ANALYZED",
+      userId: user.id,
+      payload: {
+        exercise: analysis.exercise,
+        reps: analysis.reps,
+        velocityLoss: analysis.velocity.velocityLoss,
+        confidence: analysis.confidence,
+      },
+    });
+  }
 
   return NextResponse.json({ ok: true, id: data.id, analyzedAt: data.analyzed_at });
 }
 
-type SetVisionAnalysisRow = {
-  id: string;
-  exercise: string;
-  reps: number;
-  rom_consistency: number | null;
-  tempo_consistency: number | null;
-  bar_path_consistency: number | null;
-  average_eccentric_time_sec: number | null;
-  average_concentric_time_sec: number | null;
-  velocity_calibrated: boolean;
-  velocity_unit: string;
-  velocity_mean: number | null;
-  velocity_loss: number | null;
-  confidence: number;
-  analyzed_at: string;
-  workout_session_id: string | null;
-  session_exercise_id: string | null;
-};
+const LIST_COLUMNS =
+  "id, exercise, reps, rom_consistency, tempo_consistency, bar_path_consistency, average_eccentric_time_sec, average_concentric_time_sec, velocity_calibrated, velocity_unit, velocity_mean, velocity_loss, confidence, analyzed_at, workout_session_id, session_exercise_id, per_rep->identity, per_rep->review";
 
 /**
  * GET /api/setvision/results?sessionExerciseId=... — history for the
  * current user, optionally scoped to one logged exercise.
+ * GET /api/setvision/results?id=... — one of the caller's analyses, restored
+ * in full (per-rep timeline included). Another user's id is a 404.
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -180,13 +193,39 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+
+  if (id !== null) {
+    if (!z.string().uuid().safeParse(id).success) {
+      return NextResponse.json({ ok: false, error: "Invalid id." }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from("setvision_analyses")
+      .select(SAVED_ANALYSIS_COLUMNS)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[SETVISION RESULTS API ERROR]", error);
+      return NextResponse.json({ ok: false, error: "Could not load the analysis." }, { status: 500 });
+    }
+
+    const restored = data ? restoreSavedAnalysis(data as unknown as SavedAnalysisRow) : null;
+
+    if (!restored) {
+      return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true, result: restored });
+  }
+
   const sessionExerciseId = searchParams.get("sessionExerciseId");
 
   let query = supabase
     .from("setvision_analyses")
-    .select(
-      "id, exercise, reps, rom_consistency, tempo_consistency, bar_path_consistency, average_eccentric_time_sec, average_concentric_time_sec, velocity_calibrated, velocity_unit, velocity_mean, velocity_loss, confidence, analyzed_at, workout_session_id, session_exercise_id",
-    )
+    .select(LIST_COLUMNS)
     .eq("user_id", user.id)
     .order("analyzed_at", { ascending: false })
     .limit(50);
@@ -205,7 +244,7 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, results: (data ?? []) as SetVisionAnalysisRow[] });
+  return NextResponse.json({ ok: true, results: data ?? [] });
 }
 
 export type { SetVisionAnalysis };

@@ -24,7 +24,9 @@ Client (end user), business (coach/gym operator), and platform-admin are
 - `/dashboard/*`, `/account*`, `/onboarding`, `/coach`, `/chatbot` — end
   user, gated by `lib/auth/permissions.ts` / per-page `supabase.auth.getUser()`
   checks, role resolved via `lib/auth/permissions.ts::resolveActorRole` (`user_roles`
-  table first, `profiles.role` fallback, defaults to `"client"`).
+  only, missing/malformed row → `"client"`; SQL `private.current_app_role()`
+  matches). `profiles.role` is a display mirror, never an authority, and
+  clients can't write it (`profiles_guard_role` trigger).
 - `/business/*` — coach/gym-owner portal, gated by
   `requireBusinessAdmin()` (`lib/business/require-business-admin.ts`), backed
   by the `businesses` / `business_staff` tables. `/admin/login` is actually
@@ -68,6 +70,21 @@ The chat component is `components/dante-chat.tsx` (`DanteChat`). The route
 renaming it is a deliberate follow-up (needs a redirect for existing links),
 not done yet.
 
+**One AI coach.** There is no second user-facing assistant. "Gemma" is only the
+internal codename of Dante's nutrition engine (`lib/nutrition/coach/`, `coachMode:
+"nutrition"`, `GEMMA` ids in `lib/intelligence/`); never put it (or "Nutrition Coach")
+in user-facing copy or model prompts, and never write "ask Gemma / ask Dante" referrals.
+`/api/chatbot` is the domain router: on the Dante chat, meal/food-lookup turns and
+follow-ups on live nutrition state (see `danteTurnContinuesNutrition`) run the
+nutrition engine and come back as `done.nutrition` + a `log_meal_draft`
+`pendingConfirmation` card; on the Nutrition page chat (also Dante),
+`nutritionTurnForMainPipeline` sends training/recovery turns to the main pipeline.
+**One Day, One Thread:** every Dante surface writes to the tab's active thread
+(`lib/dante-core/active-thread.ts`, sessionStorage; fallback = today's latest thread
+only; "New chat" starts a fresh one). The meal state lives server-side in the thread
+(`ai_messages.metadata.nutrition`, read by `loadThreadNutritionState`), so "log that"
+on any surface sees the meal picked on another. Don't add a client-side meal copy.
+
 Dante must only receive **structured, deterministic context**, never raw
 database dumps. `lib/athlete-state/build-athlete-state.ts::buildAthleteState()`
 is that structured-context layer today — it aggregates training, nutrition,
@@ -102,6 +119,16 @@ readiness score is computed deterministically in
 never invents or adjusts it. Keep that separation when extending recovery
 logic.
 
+A limitation the user reports in chat ("readiness 94 but my foot hurts —
+today's workout?") never gets cleared by the readiness number. It goes
+through `lib/recovery/limitation-turn.ts` (MF-F2): today's real session,
+per-exercise region load from `lib/training/body-region-load.ts`
+(curated stance metadata, never "safe"), region-filtered substitution
+alternatives, and a signed recovery proposal behind a chat Confirm card
+(`apply_workout_adjustment` / `replace_session_exercise`, not
+model-selectable). Red flags (can't bear weight, a pop) are hard-blocked
+earlier by the safety layer. Nutrition is reviewed, never changed there.
+
 ## Testing
 
 Run before considering any change done:
@@ -117,6 +144,30 @@ npm run build
 must show 0 errors; a handful of pre-existing low-risk warnings (unused
 `<img>` vs `next/image`, one `useMemo` dependency nit) are tracked, not
 blocking.
+
+Report task completion in the terminal, not as a new Markdown/report file in
+the repo (unless the user asks for one or something depends on it). Live
+browser/API harnesses stay at `docs/evaluation/hackathon-repair-2026-10-18/harness/`
+and `docs/evaluation/h1-truth-closure-2026-10-18/harness/` (absolute paths
+inside — don't move them); their run output is git-ignored.
+
+## Local runtime
+
+Muscle Fitness canonical local development URL: http://localhost:3000
+(use `localhost`, not `127.0.0.1` — the IDE's `next dev` has no `-H`, so
+127.0.0.1 never hydrates).
+
+- Temporary ports and isolated worktrees are permitted for safe testing,
+  but final user-facing acceptance requires verification on
+  localhost:3000 at the exact integrated revision.
+- Never claim a feature is available in the main application solely
+  because it works on an isolated port.
+- Identify the actual server process, worktree, branch and database
+  before changing or restarting anything.
+- Never terminate, overwrite or replace another agent's active runtime
+  without explicit authorization.
+- If localhost:3000 verification cannot be performed safely, report
+  PARTIAL or BLOCKED rather than VERIFIED.
 
 ## Dante Core
 
@@ -157,13 +208,30 @@ synchronous. Public API: `index.ts` (`buildIntelligenceBrief`,
 
 `lib/setvision/` — MoveNet-based (reuses the same pose detector as the
 pre-existing Form Coach feature) rep counting, ROM, tempo, velocity, bar-path
-and technique-consistency analysis for Bench Press/Squat/Deadlift, driven
-from an uploaded video processed entirely client-side. Public API:
-`lib/setvision/index.ts` (`analyzeWorkoutVideo`). Product surface:
-`/dashboard/workouts/setvision`. **No real accuracy numbers exist yet** —
-see docs/setvision.md's Benchmarking section before ever quoting one.
-Persistence needs `supabase/migrations/20260916090000_setvision.sql`
-applied (not done automatically by this pass — review before running).
+and technique-consistency analysis, driven from an uploaded video processed
+entirely client-side. Public API: `lib/setvision/index.ts`
+(`analyzeWorkoutVideo`). Product surface: `/dashboard/workouts/setvision` —
+one searchable exercise combobox (catalogue/custom; Auto-detect lists
+candidates and is confirm-first). Squat is the only verified engine; hinge,
+presses, pulls, curl, triceps extensions and lateral raise are experimental
+movement-family engines (`lib/setvision/exercise-config.ts`); the rest of the
+catalogue is manual review (`exercise-selection.ts::CATALOGUE_COVERAGE`).
+Every exercise can be reviewed, corrected and saved. **No real accuracy
+numbers exist yet** — see docs/setvision.md before ever quoting one.
+Persistence needs `supabase/migrations/20260916090000_setvision.sql` and
+`20261102090000_setvision_multi_exercise.sql` applied (not done
+automatically — review before running).
+
+SetVision **P0** (`lib/setvision/squat-p0/`, `/dashboard/workouts/setvision/squat`)
+is a separate MediaPipe-based spike: bodyweight squat, side view, ≤ 30 s,
+timestamped COMPLETED/PARTIAL/UNCERTAIN cycles with abstention. Unvalidated,
+no persistence — see docs/setvision.md "P0".
+
+Form Coach **P1A** (`/dashboard/workouts/form-coach/live`,
+`lib/setvision/squat-p0/live.ts`, `components/form-coach/live/`) drives that
+same P0 engine from a live camera (explicit Start, 10 Hz, no recording or
+persistence). It is the squat only, tested on camera-like input. Accuracy is
+unevaluated — see docs/setvision.md "Form Coach P1A".
 
 ## HawkerLens SG
 

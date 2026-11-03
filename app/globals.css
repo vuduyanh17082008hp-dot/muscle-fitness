@@ -95,6 +95,29 @@
   --mf-glass-analytics: var(--mf-cyan);
   --mf-glass-warning: var(--mf-warning);
   --mf-glass-danger: var(--mf-danger);
+  --mf-glass-success: var(--mf-success);
+
+  /* ---- Semantic roles (UX-R1.4): what a colour is FOR. New and
+     touched components use these; a future light theme overrides only
+     this block (and the surface/text tokens above), never components.
+     Usage rules:
+       action     — the ONE primary CTA in a context (lime). Not for
+                    decoration, borders or large fills.
+       training   — workout-domain accent (sunset/gold): progress, set
+                    logging. Never a page-level CTA.
+       assistant  — Dante only (violet). Small marks, not glows.
+       status-*   — success / warning / danger / info meaning only.
+       focus      — keyboard focus ring; visible on every surface. ---- */
+  --mf-action: var(--mf-brand);
+  --mf-action-hover: var(--mf-brand-hover);
+  --mf-action-ink: var(--mf-brand-ink);
+  --mf-training: var(--mf-gold);
+  --mf-assistant: var(--mf-violet);
+  --mf-status-success: var(--mf-success);
+  --mf-status-warning: var(--mf-warning);
+  --mf-status-danger: var(--mf-danger);
+  --mf-status-info: var(--mf-cyan);
+  --mf-focus: var(--mf-brand);
 }
 
 @theme {
@@ -148,6 +171,18 @@
   --color-mf-glass-analytics: var(--mf-glass-analytics);
   --color-mf-glass-warning: var(--mf-glass-warning);
   --color-mf-glass-danger: var(--mf-glass-danger);
+  --color-mf-glass-success: var(--mf-glass-success);
+
+  --color-mf-action: var(--mf-action);
+  --color-mf-action-hover: var(--mf-action-hover);
+  --color-mf-action-ink: var(--mf-action-ink);
+  --color-mf-training: var(--mf-training);
+  --color-mf-assistant: var(--mf-assistant);
+  --color-mf-status-success: var(--mf-status-success);
+  --color-mf-status-warning: var(--mf-status-warning);
+  --color-mf-status-danger: var(--mf-status-danger);
+  --color-mf-status-info: var(--mf-status-info);
+  --color-mf-focus: var(--mf-focus);
 
   /* ---- Tailwind's built-in `amber` scale, remapped to Ocean Sunset
      gold/sunset. This is what actually retints the ~700 existing
@@ -385,9 +420,13 @@ body::before {
   );
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/* Layered so Tailwind text-* utilities on links win; unlayered, this
+   reset overrode every link colour (lime CTAs rendered white text). */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 button,
@@ -397,16 +436,25 @@ select {
   font: inherit;
 }
 
+/* Phones zoom into any editable field under 16px, so every one stays at 16px there (was food logging only). */
+@media (max-width: 639px) {
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]), select, textarea) {
+    font-size: 16px;
+  }
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
 
-img,
-video,
-svg {
-  display: block;
-  max-width: 100%;
+@layer base {
+  img,
+  video,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
 }
 
 button {
@@ -426,14 +474,28 @@ button:disabled {
    TYPOGRAPHY
    ========================================================= */
 
+/* Margin and colour are layered (like the link reset above) so Tailwind
+   margin and text colour utilities on headings and paragraphs apply. Family,
+   weight, leading and tracking stay unlayered: they are the app-wide
+   heading identity and many headings carry font-black/leading utilities
+   that would otherwise turn them heavier and taller. */
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    color: var(--color-text-primary);
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
 h1,
 h2,
 h3,
 h4,
 h5,
 h6 {
-  margin: 0;
-  color: var(--color-text-primary);
   font-family: var(--font-heading);
   font-weight: 600;
   line-height: 0.98;
@@ -443,10 +505,6 @@ h6 {
      so tracking is dialed back and uppercase is opt-in per heading
      rather than a blanket rule. */
   letter-spacing: 0.01em;
-}
-
-p {
-  margin: 0;
 }
 
 .font-heading {
@@ -637,7 +695,7 @@ input:-webkit-autofill:focus {
    ========================================================= */
 
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--mf-focus);
   outline-offset: 3px;
 }
 

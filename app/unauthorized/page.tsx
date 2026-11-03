@@ -2,10 +2,10 @@ import Link from "next/link"
 
 export default function UnauthorizedPage() {
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black px-4 text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.10),transparent_38%),linear-gradient(135deg,#030303,#0a0a0a)]" />
+    <main data-theme="paper" className="relative flex min-h-screen items-center justify-center overflow-hidden bg-mf-bg px-4 text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.10),transparent_38%)]" />
 
-      <section className="relative z-10 w-full max-w-xl rounded-[36px] border border-red-400/20 bg-zinc-950/80 p-8 text-center shadow-[0_40px_120px_rgba(0,0,0,0.75)] backdrop-blur-xl sm:p-12">
+      <section className="relative z-10 w-full max-w-xl rounded-[36px] border border-red-400/20 bg-zinc-950/80 p-8 text-center shadow-[var(--shadow-card)] backdrop-blur-xl sm:p-12">
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl border border-red-400/20 bg-red-500/10 text-red-400">
           <LockIcon />
         </div>
@@ -26,14 +26,14 @@ export default function UnauthorizedPage() {
         <div className="mt-9 grid gap-3 sm:grid-cols-2">
           <Link
             href="/dashboard"
-            className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.16em] text-black transition hover:bg-orange-400"
+            className="flex h-13 min-h-13 items-center justify-center rounded-2xl bg-orange-500 text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-orange-400"
           >
             Dashboard
           </Link>
 
           <Link
             href="/"
-            className="flex h-13 min-h-13 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.16em] transition hover:bg-white/[0.07]"
+            className="flex h-13 min-h-13 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] text-xs font-black uppercase tracking-[0.12em] transition hover:bg-white/[0.07]"
           >
             Homepage
           </Link>

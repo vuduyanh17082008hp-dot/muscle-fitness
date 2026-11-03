@@ -54,10 +54,11 @@ async function loadNutritionModel(
       loadNutritionContext(supabase, userId),
     ])
     const totals = foodLog.totals
+    if (!totals) return { available: false, unavailable: true, rings: [] }
     const hasLog = foodLog.entries.length > 0
     return {
       available: hasLog,
-      unavailable: foodLog.unavailable === true,
+      unavailable: false,
       rings: [
         { label: "Calories", consumed: totals.calories, target: targets.calories, unit: "kcal" },
         { label: "Protein", consumed: totals.protein, target: targets.protein, unit: "g" },

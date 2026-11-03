@@ -24,7 +24,7 @@ function FreshnessBadge({ label, signal }: { label: string; signal: DataFreshnes
 
   return (
     <div className={`rounded-xl border px-3 py-2 ${tone}`}>
-      <p className="text-[10px] font-black uppercase tracking-[0.14em]">{label}</p>
+      <p className="text-xs font-black uppercase tracking-[0.14em]">{label}</p>
       <p className="mt-0.5 text-xs font-semibold">{signal.humanReadable}</p>
     </div>
   );
@@ -98,12 +98,12 @@ export function DigitalTwinPanel({
     <section className="rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-mf-glass-analytics">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-analytics">
             Athlete Digital Twin
           </p>
           <h2 className="mt-1 text-xl font-bold text-mf-glass-text">Your current state, explained</h2>
         </div>
-        <span className="rounded-full border border-mf-glass-border bg-white/[0.04] px-3 py-1 text-[11px] font-bold text-mf-glass-text-secondary">
+        <span className="rounded-full border border-mf-glass-border bg-white/[0.04] px-3 py-1 text-xs font-bold text-mf-glass-text-secondary">
           {Math.round(derived.overallConfidence * 100)}% confidence
         </span>
       </div>

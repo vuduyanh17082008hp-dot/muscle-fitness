@@ -45,6 +45,7 @@ const standout = [
 export default function AIFairPage() {
   return (
     <main
+      data-theme="paper"
       className="
         min-h-screen
 
@@ -72,7 +73,7 @@ export default function AIFairPage() {
             text-sm
             font-semibold
 
-            text-zinc-500
+            text-zinc-400
 
             transition
 
@@ -97,14 +98,14 @@ export default function AIFairPage() {
             border
             border-white/10
 
-            bg-[radial-gradient(circle_at_80%_20%,rgba(245,158,11,0.12),transparent_30%),#0d0d0d]
+            bg-[radial-gradient(circle_at_80%_20%,rgba(216,255,32,0.10),transparent_30%),var(--color-mf-surface)]
 
             p-7
 
             sm:p-10
           "
         >
-          <div className="flex items-center gap-2 text-amber-400">
+          <div className="flex items-center gap-2 text-mf-brand">
             <Sparkles className="size-5" />
 
             <p
@@ -190,7 +191,7 @@ export default function AIFairPage() {
               p-7
             "
           >
-            <div className="flex items-center gap-2 text-amber-400">
+            <div className="flex items-center gap-2 text-mf-brand">
               <BrainCircuit className="size-5" />
 
               <h2 className="text-xl font-black">
@@ -205,7 +206,7 @@ export default function AIFairPage() {
                 text-sm
                 leading-7
 
-                text-zinc-500
+                text-zinc-400
               "
             >
               Fitness decisions depend on interacting variables: goal,
@@ -243,7 +244,7 @@ export default function AIFairPage() {
                 text-sm
                 leading-7
 
-                text-zinc-500
+                text-zinc-400
               "
             >
               The product distinguishes fitness education from medical
@@ -342,9 +343,9 @@ export default function AIFairPage() {
             rounded-3xl
 
             border
-            border-amber-400/15
+            border-mf-brand/15
 
-            bg-amber-400/4
+            bg-mf-brand/4
 
             p-7
           "
@@ -385,7 +386,7 @@ export default function AIFairPage() {
                       text-xs
                       font-black
 
-                      text-amber-400
+                      text-mf-brand
                     "
                   >
                     0
@@ -427,7 +428,7 @@ export default function AIFairPage() {
 
               rounded-xl
 
-              bg-amber-400
+              bg-mf-brand
 
               px-5
               py-3
@@ -435,7 +436,7 @@ export default function AIFairPage() {
               text-sm
               font-black
 
-              text-black
+              text-mf-brand-ink
             "
           >
             Demo Dante

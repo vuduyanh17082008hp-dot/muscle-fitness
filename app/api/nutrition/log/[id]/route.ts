@@ -60,7 +60,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   })
 
   if (!result.success) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 500 })
+    return NextResponse.json({ ok: false, error: result.error }, { status: result.status ?? 500 })
   }
 
   return NextResponse.json({ ok: true, entry: result.data })
@@ -83,7 +83,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   const result = await deleteFoodLog(supabase, user.id, id)
 
   if (!result.success) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 500 })
+    return NextResponse.json({ ok: false, error: result.error }, { status: result.status ?? 500 })
   }
 
   return NextResponse.json({ ok: true, id: result.data.id })

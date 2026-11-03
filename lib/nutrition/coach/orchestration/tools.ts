@@ -26,6 +26,10 @@ export type ToolResults = {
     goal: string | null
     remaining: { calories: number; protein: number }
     targets: { calories: number; protein: number }
+    /** Today's logged intake, and per meal exactly as logged — "what have I eaten today" is answered from these, never guessed. */
+    consumed?: { calories: number; protein: number }
+    meals?: Array<{ meal: string; calories: number; protein: number; foods: string[] }>
+    lastLogged?: { meal: string; food: string }
   }
   foods?: Array<{
     asked: string
@@ -39,8 +43,10 @@ export type ToolResults = {
     per100g?: MacroTotals & { basis: string; status: "VERIFIED" | "ESTIMATED" | "UNKNOWN" }
     /** Where the numbers came from (shared food resolver provenance). Absent for the legacy local-table path. */
     source?: "LOCAL_CANONICAL" | "USDA_FDC"
-    /** The user did not say raw or cooked and the choice moves the answer materially: ask this ONE question instead of stating numbers. */
-    clarification?: { field: "preparation"; options: string[] }
+    /** The user did not say raw or cooked (or, for fried food, breaded or not) and it moves the answer materially: ask this ONE question instead of stating numbers. */
+    clarification?: { field: "preparation" | "coating"; options: string[] }
+    /** The restaurant item these generic numbers stand in for ("kfc"): the reply must call them a generic estimate, not that brand's nutrition. */
+    genericFor?: string
   }>
   fit?: { afterCalories: number; afterProtein: number; withinCalories: boolean; withinProtein: boolean }
   /** Exact macros of THE active entity (its own server-held items, recomputed here). entityRef is checked against plan.activeEntity before any number is stated. */
@@ -71,16 +77,17 @@ function foodFromResolver(asked: string, grams: number | null, resolved: Resolve
   const p = resolved.per100g
   if (resolved.status === "UNRESOLVED" || resolved.source === "NONE" || !p || p.calories === null || p.protein === null || p.carbs === null || p.fat === null) return { asked, matched: null, grams, macros: null }
   const source = resolved.source
+  const brand = resolved.genericFor ? { genericFor: resolved.genericFor } : {}
   if (grams === null) {
     const per100g = { calories: round(p.calories), protein: gram(p.protein), carbs: gram(p.carbs), fat: gram(p.fat), basis: resolved.basis.toUpperCase(), status: resolved.status === "VERIFIED" ? ("VERIFIED" as const) : ("ESTIMATED" as const) }
     numbers.push(100, per100g.calories, per100g.protein, per100g.carbs, per100g.fat)
-    return { asked, matched: resolved.name, grams: null, macros: null, per100g, source }
+    return { asked, matched: resolved.name, grams: null, macros: null, per100g, source, ...brand }
   }
   // The ONE scaling step: the shared resolver's own arithmetic, from the unrounded source profile (never from a displayed figure).
   const s = scalePer100g(p, grams)
   const macros = { calories: round(s.calories!), protein: s.protein!, carbs: s.carbs!, fat: s.fat! }
   numbers.push(grams, macros.calories, macros.protein, macros.carbs, macros.fat)
-  return { asked, matched: resolved.name, grams, macros, basis: resolved.basis.toUpperCase(), source }
+  return { asked, matched: resolved.name, grams, macros, basis: resolved.basis.toUpperCase(), source, ...brand }
 }
 
 export function runDeterministicTools(plan: OrchestrationPlan, ctx: CoachContext, extras: Pick<PlanningExtras, "activeDraftItems" | "resolvedFoods"> = {}): ToolResults {
@@ -120,8 +127,12 @@ export function runDeterministicTools(plan: OrchestrationPlan, ctx: CoachContext
         goal: plan.toolNeed.needGoalContext ? snapshot.goal : null,
         remaining: { calories: round(snapshot.caloriesRemaining), protein: round(snapshot.proteinRemaining) },
         targets: { calories: round(snapshot.caloriesTarget), protein: round(snapshot.proteinTarget) },
+        consumed: { calories: round(snapshot.caloriesConsumed), protein: gram(snapshot.proteinConsumed) },
+        meals: ctx.todayMeals?.map((meal) => ({ meal: meal.meal, calories: meal.calories, protein: meal.protein, foods: meal.foods })),
+        lastLogged: ctx.lastLogged,
       }
-      results.numbers.push(round(snapshot.caloriesRemaining), round(snapshot.proteinRemaining), round(snapshot.caloriesTarget), round(snapshot.proteinTarget))
+      results.numbers.push(round(snapshot.caloriesRemaining), round(snapshot.proteinRemaining), round(snapshot.caloriesTarget), round(snapshot.proteinTarget), round(snapshot.caloriesConsumed), gram(snapshot.proteinConsumed))
+      for (const meal of ctx.todayMeals ?? []) results.numbers.push(meal.calories, meal.protein, ...(meal.foods.join(" ").match(/\d+(?:\.\d+)?/g) ?? []).map(Number))
     }
 
     if (step.tool === "food_lookup") {

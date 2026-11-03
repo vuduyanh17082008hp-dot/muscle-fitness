@@ -1,3 +1,5 @@
+import type { WorkoutPlayerExercise } from './types'
+
 export type ProgressionInput = {
   previousWeightKg: number
   completedSets: number
@@ -112,4 +114,51 @@ export function calculateProgression(
     reason:
       'Keep the current load and build more repetitions before increasing.',
   }
+}
+
+export type SetSuggestion = {
+  weightKg: number | null
+  reps: number | null
+  /** Where the values came from: an earlier logged set today, the same set last session, or the plan's rep target. */
+  source: { kind: 'set'; setNumber: number } | { kind: 'history' } | { kind: 'target' }
+}
+
+/**
+ * Carry-forward for an unlogged set: the closest earlier logged set of this exercise, else last session's same set
+ * (or its last set), else the planned reps. A hint only: the player shows it as a placeholder and never saves it
+ * unless the athlete logs the set.
+ */
+export function suggestSetValues(
+  exercise: Pick<WorkoutPlayerExercise, 'sets' | 'previous'>,
+  setIndex: number,
+): SetSuggestion | null {
+  for (let index = setIndex - 1; index >= 0; index -= 1) {
+    const earlier = exercise.sets[index]!
+    if (earlier.completed && (earlier.weightKg !== null || earlier.reps !== null)) {
+      return { weightKg: earlier.weightKg, reps: earlier.reps, source: { kind: 'set', setNumber: earlier.setNumber } }
+    }
+  }
+
+  const set = exercise.sets[setIndex]
+  const history = exercise.previous?.sets ?? []
+  const past = history.find((item) => item.setNumber === set?.setNumber) ?? history.at(-1)
+  if (past && (past.weightKg !== null || past.reps !== null)) {
+    return { weightKg: past.weightKg, reps: past.reps, source: { kind: 'history' } }
+  }
+
+  return set?.targetReps != null ? { weightKg: null, reps: set.targetReps, source: { kind: 'target' } } : null
+}
+
+// Equipment that carries no external load: a blank weight there means bodyweight, not "forgot to type it".
+const NO_LOAD_EQUIPMENT = new Set(['bodyweight', 'pull_up_bar'])
+
+/** Loaded movements need an explicit kg; logging one blank would silently record zero volume. */
+export function requiresExplicitLoad(equipment: string): boolean {
+  return !NO_LOAD_EQUIPMENT.has(equipment.trim().toLowerCase())
+}
+
+/** Feedback for a confirmed set write: logging, undoing and editing each say what actually happened. */
+export function setSaveMessage(wasCompleted: boolean, isCompleted: boolean): string {
+  if (!isCompleted) return 'Set undone — it no longer counts.'
+  return wasCompleted ? 'Changes saved.' : 'Set saved.'
 }

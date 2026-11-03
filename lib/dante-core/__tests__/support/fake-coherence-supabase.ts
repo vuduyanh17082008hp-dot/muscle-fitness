@@ -46,37 +46,37 @@ export function fakeCoherenceFrom(table: FakeCoherenceTable, profiles: { timezon
     }
     if (name !== "dante_coherence_state") return inertQuery();
 
+    // S0 D-04: rows are keyed by (user_id, thread_key); the legacy '' thread keeps the bare user id as its map key.
+    const keyOf = (filters: Record<string, unknown>) => (filters.thread_key ? `${filters.user_id}:${filters.thread_key}` : String(filters.user_id));
+    type Filters = Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a chainable PostgREST builder stub
+    const filtered = (done: (filters: Filters) => object, filters: Filters = {}): any => ({ ...done(filters), eq: (column: string, value: unknown) => filtered(done, { ...filters, [column]: value }) });
     return {
-      select: () => ({
-        eq: (_column: string, userId: string) => ({
-          maybeSingle: async () => ({ data: table.rows.get(userId) ?? null, error: null }),
-        }),
-      }),
-      insert: async (row: FakeCoherenceRow) => {
-        if (table.rows.has(row.user_id)) {
+      select: () => filtered((filters: Filters) => ({ maybeSingle: async () => ({ data: table.rows.get(keyOf(filters)) ?? null, error: null }) })),
+      insert: async (row: FakeCoherenceRow & { thread_key?: string }) => {
+        const key = keyOf(row);
+        if (table.rows.has(key)) {
           table.writes.push({ kind: "insert", version: row.state_version, expected: null, applied: false });
           return { error: { code: "23505", message: "duplicate key value violates unique constraint" } };
         }
-        table.rows.set(row.user_id, JSON.parse(JSON.stringify(row)));
+        table.rows.set(key, JSON.parse(JSON.stringify(row)));
         table.writes.push({ kind: "insert", version: row.state_version, expected: null, applied: true });
         return { error: null };
       },
-      update: (payload: Omit<FakeCoherenceRow, "user_id">) => ({
-        eq: (_userColumn: string, userId: string) => ({
-          eq: (_versionColumn: string, expected: number) => ({
-            select: async () => {
-              const row = table.rows.get(userId);
-              if (!row || row.state_version !== expected) {
-                table.writes.push({ kind: "update", version: payload.state_version, expected, applied: false });
-                return { data: [], error: null };
-              }
-              table.rows.set(userId, { user_id: userId, ...JSON.parse(JSON.stringify(payload)) });
-              table.writes.push({ kind: "update", version: payload.state_version, expected, applied: true });
-              return { data: [{ state_version: payload.state_version }], error: null };
-            },
-          }),
-        }),
-      }),
+      update: (payload: Omit<FakeCoherenceRow, "user_id">) => filtered((filters: Filters) => ({
+        select: async () => {
+          const key = keyOf(filters);
+          const expected = filters.state_version as number;
+          const row = table.rows.get(key);
+          if (!row || row.state_version !== expected) {
+            table.writes.push({ kind: "update", version: payload.state_version, expected, applied: false });
+            return { data: [], error: null };
+          }
+          table.rows.set(key, { ...row, ...JSON.parse(JSON.stringify(payload)) });
+          table.writes.push({ kind: "update", version: payload.state_version, expected, applied: true });
+          return { data: [{ state_version: payload.state_version }], error: null };
+        },
+      })),
     };
   };
 }

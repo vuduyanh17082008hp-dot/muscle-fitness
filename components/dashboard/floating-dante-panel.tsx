@@ -5,7 +5,6 @@ import Link from "next/link";
 import { X } from "lucide-react";
 
 import DanteChat from "@/components/dante-chat";
-import { DanteMascot } from "@/components/dante/dante-mascot";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 
 type FloatingDantePanelProps = {
@@ -19,7 +18,7 @@ function PanelFooter() {
   return (
     <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
       <Link href="/dashboard/ai-coach" className="text-xs font-bold text-mf-glass-dante hover:underline">
-        Open full coach chat →
+        Open full Dante chat →
       </Link>
     </div>
   );
@@ -65,14 +64,13 @@ function DesktopPanel({
         ref={panelRef}
         role="dialog"
         aria-label="Ask Dante"
-        className="fixed bottom-24 right-6 z-40 flex max-h-[min(80vh,640px)] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d111a]/95 backdrop-blur-xl p-4 shadow-2xl"
+        className="pointer-events-auto fixed bottom-24 right-6 z-40 flex h-[min(80vh,640px)] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-mf-glass-bg-deep/95 backdrop-blur-xl p-4 shadow-2xl"
       >
         <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b border-white/10 pb-3">
           <div className="flex items-center gap-2.5">
-            <DanteMascot size="xs" state="idle" />
             <div>
-              <p className="text-xs font-bold text-mf-glass-text">Dante AI Coach</p>
-              <p className="text-[11px] text-mf-glass-text-muted">Evidence-aware performance assistant</p>
+              <p className="text-xs font-bold text-mf-glass-text">Dante</p>
+              <p className="text-xs text-mf-glass-text-muted">Training, nutrition and recovery</p>
             </div>
           </div>
 
@@ -86,8 +84,9 @@ function DesktopPanel({
           </button>
         </div>
 
+        {/* The panel has a fixed height, so the chat fills what's left and its composer is never pushed below the footer. */}
         <div className="min-h-0 flex-1 overflow-hidden">
-          <DanteChat compact heroSubtitle={contextualPrompt} />
+          <DanteChat compact heroSubtitle={contextualPrompt} restoreHistory className="h-full max-h-full min-h-0" />
         </div>
 
         <div className="shrink-0">
@@ -105,7 +104,7 @@ export function FloatingDantePanel({ open, onOpenChange, isDesktop, contextualPr
 
   return (
     <BottomSheet open={open} onOpenChange={onOpenChange} title="Dante">
-      <DanteChat compact heroSubtitle={contextualPrompt} />
+      <DanteChat compact heroSubtitle={contextualPrompt} restoreHistory />
       <PanelFooter />
     </BottomSheet>
   );

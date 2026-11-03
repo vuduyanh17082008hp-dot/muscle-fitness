@@ -6,7 +6,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
  *   SCHEDULED = a plan day is assigned to today's weekday;
  *   FLEXIBLE  = the plan has unscheduled days: the next one in rotation (after the last completed plan day);
  *   REST      = the plan assigns weekdays and none is today;
- *   null      = no active plan, or the read failed (the caller keeps its existing empty state).
+ *   null      = no active plan, or a plan with no training day.
+ * A failed read THROWS: it is never "no plan", so the dashboard and the Daily Brief can say the status is unknown (F-03B).
  */
 export type PlannedDay = { kind: "SCHEDULED" | "FLEXIBLE"; dayId: string; name: string; exerciseCount: number } | { kind: "REST" }
 
@@ -28,12 +29,17 @@ export function resolvePlannedDay(days: DayRow[], weekday: number, lastCompleted
 
 export async function loadPlannedDay(supabase: SupabaseClient, userId: string, now: Date, timeZone: string): Promise<PlannedDay | null> {
   const { data: plan, error } = await supabase.from("workout_plans").select("id").eq("client_id", userId).eq("status", "active").order("updated_at", { ascending: false }).limit(1).maybeSingle()
-  if (error || !plan) return null
-  const [{ data: days, error: daysError }, { data: last }] = await Promise.all([
+  if (error) throw new Error(`loadPlannedDay: plan read failed: ${error.message}`)
+  if (!plan) return null
+  const [{ data: days, error: daysError }, { data: last, error: lastError }] = await Promise.all([
     supabase.from("workout_days").select("id, name, day_order, scheduled_weekday, rest_day, workout_exercises(id)").eq("workout_plan_id", plan.id),
     supabase.from("workout_sessions").select("workout_day_id").eq("user_id", userId).eq("workout_plan_id", plan.id).eq("session_state", "completed").order("completed_at", { ascending: false }).limit(1).maybeSingle(),
   ])
-  if (daysError || !days) return null
+  if (daysError || lastError || !days) throw new Error(`loadPlannedDay: plan days read failed: ${(daysError ?? lastError)?.message ?? "no rows"}`)
   const weekday = WEEKDAY[new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(now)] ?? now.getUTCDay()
   return resolvePlannedDay(days as DayRow[], weekday, (last as { workout_day_id?: string | null } | null)?.workout_day_id ?? null)
 }
+
+/** For callers that need the read outcome as data: a failed plan read is `planUnavailable` (unknown), never "no plan". */
+export const loadPlannedDayRead = (supabase: SupabaseClient, userId: string, now: Date, timeZone: string) =>
+  loadPlannedDay(supabase, userId, now, timeZone).then((plannedDay) => ({ plannedDay, planUnavailable: false }), () => ({ plannedDay: null, planUnavailable: true }))

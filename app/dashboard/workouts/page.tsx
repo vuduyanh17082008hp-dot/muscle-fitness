@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import {
   ArrowRight,
   BookOpen,
+  ChevronDown,
   Dumbbell,
   ExternalLink,
   Layers3,
@@ -15,10 +16,12 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { SectionTabs } from "@/components/dashboard/section-tabs";
 import { TRAIN_TABS } from "@/components/dashboard/train-tabs";
-import { loadTodaySession } from "@/lib/training/load-today-session";
+import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision";
+import { trainingHeroAction } from "@/lib/dashboard/training-hero-action";
 import { resolveCanonicalMuscle, MUSCLE_DISPLAY_NAME } from "@/lib/training/muscle-taxonomy";
-import { PrimaryButton } from "@/components/ui/button";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MicrocycleStrip } from "@/components/training/microcycle-strip";
 
 /** A rough, honestly-labeled ("~") estimate from each exercise's own target sets and rest time — never a fabricated fixed number. 45s is an assumed average set-execution time, not measured. */
 const ASSUMED_SET_EXECUTION_SECONDS = 45;
@@ -268,6 +271,24 @@ const BANNER_TONE = {
 } as const;
 
 /**
+ * New-plan options (recommended, splits, wger). With an active plan they sit
+ * behind one closed disclosure so the hub leads with today's session and
+ * the current plan; without one they stay open as the page's main content.
+ */
+function PlanOptions({ collapsed, children }: { collapsed: boolean; children: React.ReactNode }) {
+  if (!collapsed) return <>{children}</>;
+  return (
+    <details className="group rounded-[20px] border border-mf-glass-border bg-mf-glass-surface">
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 rounded-[20px] px-5 py-3 text-base font-semibold text-mf-glass-text transition-colors hover:bg-white/[0.03] [&::-webkit-details-marker]:hidden">
+        Build a different plan
+        <ChevronDown aria-hidden="true" className="size-5 text-mf-glass-text-muted transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+      </summary>
+      <div className="space-y-10 border-t border-mf-glass-border p-5 sm:p-6">{children}</div>
+    </details>
+  );
+}
+
+/**
  * A single reusable horizontal promo/status pattern — replaces four
  * near-identical hand-rolled card blocks (Form Coach, SetVision,
  * Active plan, Recommended split) that previously duplicated the
@@ -309,7 +330,7 @@ function PromoBanner({
       )}
     >
       <div className="min-w-0">
-        <span className={cn("rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider", t.badge)}>
+        <span className={cn("rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider", t.badge)}>
           {badge}
         </span>
 
@@ -351,7 +372,7 @@ export default async function WorkoutsPage() {
     fitnessResponse,
     plansResponse,
     externalTemplates,
-    todaySession,
+    { todaySession, todaySessionStatus, hold, plannedDay },
   ] =
     await Promise.all([
       supabase
@@ -401,7 +422,8 @@ export default async function WorkoutsPage() {
         .limit(4),
 
       loadWgerTemplates(),
-      loadTodaySession(supabase, user.id),
+      // Same session/plan classification and safety hold as the Today hero (Daily Brief decision).
+      loadDailyDecision(supabase, user.id),
     ]);
 
   const fitness =
@@ -449,6 +471,15 @@ export default async function WorkoutsPage() {
 
   const estimatedMinutes = activeExercises.length > 0 ? estimateSessionMinutes(activeExercises) : null;
   const hasTodaySession = todaySession !== null && activeExercises.length > 0;
+  const planDay = !todaySession && plannedDay && plannedDay.kind !== "REST" ? plannedDay : null;
+  const heroAction = trainingHeroAction({
+    status: todaySessionStatus,
+    hold,
+    sessionId: todaySession?.id ?? null,
+    activePlanId: activePlan?.id ?? null,
+    restDay: plannedDay?.kind === "REST",
+    buildPlanHref: `/dashboard/workouts/plans/new?preset=${recommended}`,
+  });
 
   return (
     <main className="space-y-10">
@@ -467,12 +498,21 @@ export default async function WorkoutsPage() {
             <div className="flex items-center gap-2 text-mf-glass-brand">
               <Dumbbell className="h-4 w-4" />
 
-              <p className="text-xs font-black uppercase tracking-[0.28em]">
-                {hasTodaySession ? "Today's Session" : "Workout System"}
+              <p className="text-xs font-black uppercase tracking-[0.12em]">
+                {heroAction.eyebrow}
               </p>
             </div>
 
-            {hasTodaySession ? (
+            {planDay ? (
+              <>
+                <h1 className="mt-4 text-4xl font-black tracking-tight text-mf-glass-text sm:text-5xl">
+                  {planDay.name}
+                </h1>
+                <p className="mt-4 text-sm text-mf-glass-text-muted sm:text-base">
+                  {planDay.exerciseCount} exercise{planDay.exerciseCount === 1 ? "" : "s"} · not started yet
+                </p>
+              </>
+            ) : hasTodaySession ? (
               <>
                 <h1 className="mt-4 text-4xl font-black tracking-tight text-mf-glass-text sm:text-5xl">
                   {todaySession!.name ?? "Today's session"}
@@ -509,50 +549,31 @@ export default async function WorkoutsPage() {
                 </p>
               </>
             )}
+
+            {heroAction.note ? (
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-mf-glass-text-muted">{heroAction.note}</p>
+            ) : null}
           </div>
 
-          {hasTodaySession ? (
+          {/* One action from trainingHeroAction: completed/postponed are reviewed, a safety hold replaces Start/Resume. */}
+          {heroAction.primary ? (
             <PrimaryButton size="lg" asChild>
-              <Link href={`/dashboard/workouts/session/${todaySession!.id}`}>
-                Start workout
-                <ArrowRight className="size-4" />
-              </Link>
-            </PrimaryButton>
-          ) : activePlan ? (
-            // An active plan's days start from the plan page; offering to build a new plan here would bury it.
-            <PrimaryButton size="lg" asChild>
-              <Link href={`/dashboard/workouts/plans/${activePlan.id}`}>
-                Start from your plan
+              <Link href={heroAction.href}>
+                {heroAction.label === "Build recommended plan" ? <WandSparkles className="size-4" /> : null}
+                {heroAction.label}
                 <ArrowRight className="size-4" />
               </Link>
             </PrimaryButton>
           ) : (
-            <PrimaryButton size="lg" asChild>
-              <Link href={`/dashboard/workouts/plans/new?preset=${recommended}`}>
-                <WandSparkles className="size-4" />
-                Build recommended plan
+            <SecondaryButton size="lg" asChild>
+              <Link href={heroAction.href}>
+                {heroAction.label}
+                <ArrowRight className="size-4" />
               </Link>
-            </PrimaryButton>
+            </SecondaryButton>
           )}
         </div>
       </header>
-
-      {/* ===================================================
-          MUSCLE INTELLIGENCE — the Train domain's entry point
-          into the existing /dashboard/training-intelligence
-          Atlas. A core capability, not a beta feature, so it
-          gets the lime CTA pill and sits above the Beta
-          banners rather than inside that grid.
-      =================================================== */}
-
-      <PromoBanner
-        href="/dashboard/training-intelligence"
-        badge="Insights"
-        tone="amber"
-        title="Muscle Intelligence"
-        description="Explore muscle anatomy, training exposure, exercises and personal insights."
-        ctaLabel="Explore Muscles"
-      />
 
       {/* ===================================================
           BETA FEATURES — quieter secondary surface; the hero
@@ -573,7 +594,7 @@ export default async function WorkoutsPage() {
           badge="Beta"
           tone="neutral"
           title="SetVision"
-          description="Upload a set for rep count, ROM, tempo, bar-path consistency and velocity loss on Bench, Squat and Deadlift."
+          description="Choose your exercise and upload a set: rep count, phase timing and consistency for squats; deadlifts, presses, pulls and arm lifts are experimental; any exercise can be reviewed and corrected by hand."
         />
       </div>
 
@@ -586,10 +607,12 @@ export default async function WorkoutsPage() {
           <div className="mb-5 flex items-center gap-2 text-emerald-400">
             <Dumbbell className="h-4 w-4" />
 
-            <p className="text-xs font-black uppercase tracking-[0.22em]">
+            <p className="text-xs font-black uppercase tracking-[0.12em]">
               Your current training plan
             </p>
           </div>
+
+          <MicrocycleStrip planId={activePlan.id} userId={user.id} />
 
           <PromoBanner
             href={`/dashboard/workouts/plans/${activePlan.id}`}
@@ -603,7 +626,7 @@ export default async function WorkoutsPage() {
         </section>
       ) : (
         <section className="rounded-[20px] border border-dashed border-mf-glass-border bg-white/[0.02] p-6 sm:p-8">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Your current training plan
           </p>
 
@@ -616,6 +639,7 @@ export default async function WorkoutsPage() {
         </section>
       )}
 
+      <PlanOptions collapsed={Boolean(activePlan)}>
       {/* ===================================================
           RECOMMENDED
       =================================================== */}
@@ -625,7 +649,7 @@ export default async function WorkoutsPage() {
           <div className="flex items-center gap-2 text-mf-glass-brand">
             <Sparkles className="h-4 w-4" />
 
-            <p className="text-xs font-black uppercase tracking-[0.22em]">
+            <p className="text-xs font-black uppercase tracking-[0.12em]">
               Recommended for you
             </p>
           </div>
@@ -651,7 +675,7 @@ export default async function WorkoutsPage() {
 
       <section>
         <div className="mb-5">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Choose your structure
           </p>
 
@@ -714,7 +738,7 @@ export default async function WorkoutsPage() {
             <div className="flex items-center gap-2 text-emerald-400">
               <BookOpen className="h-4 w-4" />
 
-              <p className="text-xs font-black uppercase tracking-[0.22em]">
+              <p className="text-xs font-black uppercase tracking-[0.12em]">
                 Open-source source
               </p>
             </div>
@@ -757,7 +781,7 @@ export default async function WorkoutsPage() {
                   className="rounded-[20px] border border-emerald-500/15 bg-emerald-500/5 p-5 transition hover:-translate-y-0.5 hover:border-emerald-500/30 hover:bg-emerald-500/8"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-400">
+                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-black uppercase text-emerald-400">
                       wger
                     </span>
 
@@ -813,13 +837,15 @@ export default async function WorkoutsPage() {
         </p>
       </section>
 
+      </PlanOptions>
+
       {/* ===================================================
           EXISTING PLANS
       =================================================== */}
 
       {plans.length > 0 && (
         <section>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Saved plans
           </p>
 
@@ -844,7 +870,7 @@ export default async function WorkoutsPage() {
                       }
                     </h3>
 
-                    <span className="text-[10px] font-black uppercase text-mf-glass-text-muted">
+                    <span className="text-xs font-black uppercase text-mf-glass-text-muted">
                       {
                         plan.status
                       }

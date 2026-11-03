@@ -788,7 +788,7 @@ export default async function WorkoutHistoryPage() {
 
         <Link
           href="/dashboard/workouts"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
+          className="-my-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-mf-glass-text-muted transition hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
 
@@ -889,7 +889,7 @@ export default async function WorkoutHistoryPage() {
         <section className="mt-10">
           <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.27em] text-orange-400">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-orange-400">
                 Strength performance
               </p>
 
@@ -940,7 +940,7 @@ export default async function WorkoutHistoryPage() {
         <section className="mt-12">
           <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.27em] text-orange-400">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-orange-400">
                 Completed training
               </p>
 
@@ -1081,7 +1081,7 @@ function PersonalRecordCard({
 
         <Link
           href={`/dashboard/workouts/session/${record.sessionId}`}
-          className="mt-2 inline-flex text-xs font-bold text-orange-400 transition hover:text-orange-300"
+          className="mt-1 inline-flex min-h-11 items-center text-sm font-bold text-orange-400 transition hover:text-orange-300"
         >
           View session
         </Link>
@@ -1129,7 +1129,7 @@ function WorkoutHistoryCard({
                   {dayName}
                 </h3>
 
-                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-300">
                   <CheckCircle2 className="h-3.5 w-3.5" />
 
                   Completed
@@ -1269,7 +1269,7 @@ function WorkoutHistoryCard({
                             </p>
 
                             {exercise.is_skipped ? (
-                              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-zinc-500">
+                              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-xs font-black uppercase tracking-wider text-zinc-500">
                                 Skipped
                               </span>
                             ) : null}
@@ -1307,7 +1307,7 @@ function WorkoutHistoryCard({
                           )}
                         </p>
 
-                        <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-zinc-700">
+                        <p className="mt-1 text-xs font-bold uppercase tracking-wider text-zinc-700">
                           Exercise volume
                         </p>
                       </div>
@@ -1369,7 +1369,7 @@ function SessionMetric({
       <div className="flex items-center gap-2 text-orange-400">
         {icon}
 
-        <p className="text-[10px] font-black uppercase tracking-wider text-zinc-600">
+        <p className="text-xs font-black uppercase tracking-wider text-zinc-600">
           {label}
         </p>
       </div>

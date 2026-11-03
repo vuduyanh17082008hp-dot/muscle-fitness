@@ -271,6 +271,60 @@ export function generateWorkoutAdjustmentProposal(input: {
   })
 }
 
+/**
+ * MF-F2: a proposal for a limitation the user reported (e.g. "my foot hurts"). Same signed proposal shape, same apply
+ * RPC, same one-adjustment-per-session rule as the check-in proposal — only the scope source differs. Reduce-only:
+ * SKIP_AFFECTED postpones the named exercises (REMOVE), REST postpones every exercise left today. Nothing is added,
+ * so it stays applicable under a training hold (apply-proposal.ts isReduceOnlyChange).
+ */
+export function buildLimitationProposal(input: {
+  subjectRef: string
+  session: TodaySession
+  mode: "SKIP_AFFECTED" | "REST"
+  affectedSessionExerciseIds: string[]
+  recoveryStateRef: string
+  safetyEvaluationRef: string
+  evidenceRefs: string[]
+  createdAt: string
+}): WorkoutAdjustmentProposal {
+  const affected = new Set(input.affectedSessionExerciseIds)
+  const changes = input.session.exercises.map((exercise): WorkoutChange => {
+    if (exercise.isSkipped) return keep(exercise, input.evidenceRefs, "ALREADY_SKIPPED", "Already out of today's session.")
+    const remove = input.mode === "REST" || affected.has(exercise.sessionExerciseId)
+    if (!remove) return keep(exercise, input.evidenceRefs, "OUT_OF_SCOPE", "Doesn't load the area you reported — stays as planned.")
+    const action: WorkoutChangeAction = input.mode === "REST" ? "REST" : "REMOVE"
+    return {
+      changeId: changeId(exercise.sessionExerciseId, action),
+      exerciseId: exercise.exerciseId,
+      sessionExerciseId: exercise.sessionExerciseId,
+      exerciseName: exercise.exerciseName,
+      action,
+      before: prescriptionOf(exercise),
+      after: { ...prescriptionOf(exercise), isSkipped: true },
+      reasonCode: input.mode === "REST" ? "USER_LIMITATION_REST" : "USER_LIMITATION_LOADS_AREA",
+      reasonDisplay:
+        input.mode === "REST"
+          ? "Rest today: every exercise is postponed."
+          : "This movement loads the area you reported — postponed for today.",
+      evidenceRefs: [...input.evidenceRefs, input.safetyEvaluationRef],
+      constraintRefs: ["user_reported_limitation"],
+    }
+  })
+  return finalize({
+    subjectRef: input.subjectRef,
+    workoutRef: input.session.id,
+    planVersionRef: buildPlanVersionRef(input.session),
+    recoveryStateRef: input.recoveryStateRef,
+    safetyEvaluationRef: input.safetyEvaluationRef,
+    createdAtRef: input.createdAt,
+    expiresAtRef: new Date(Date.parse(input.createdAt) + 12 * 60 * 60 * 1000).toISOString(),
+    evidenceRefs: input.evidenceRefs,
+    status: input.mode === "REST" ? "REST_RECOMMENDED" : "MINOR_ADJUSTMENT",
+    decisionState: "RESOLVED",
+    changes,
+  })
+}
+
 function keep(
   exercise: TodaySessionExercise,
   evidenceRefs: string[],

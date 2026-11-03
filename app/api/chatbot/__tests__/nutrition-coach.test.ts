@@ -186,28 +186,26 @@ describe("auth, shared rate limit, isolation", () => {
 })
 
 describe("scope and safety", () => {
-  it("redirects training/recovery questions to Dante without loading data or calling the model", async () => {
+  // ONE AI COACH: the Nutrition page chat is Dante. A training / recovery question asked there runs Dante's main pipeline
+  // (streamed like any Dante turn) — never the nutrition engine, and never an "ask Dante" referral.
+  const streamedText = async (response: Response) => parseChatStreamChunk("", `${await response.text()}\n`).events.flatMap((event) => (event.type === "delta" ? [event.text] : [])).join("")
+
+  it("runs a training/recovery question asked on the Nutrition page through Dante's main pipeline", async () => {
     const response = await post({ message: "Change my squat program and tell me how to treat my sore knee", coachMode: "nutrition" })
-    const json = await response.json()
-    expect(json.route).toBe("redirect_training")
-    expect(json.reply).toMatch(/Dante/)
-    expect(loadNutritionContext).not.toHaveBeenCalled()
-    expect(callOpenAiWithFallback).not.toHaveBeenCalled()
+    expect(response.headers.get("Content-Type")).toMatch(/ndjson/)
+    expect(handleNutritionCoachChat).not.toHaveBeenCalled()
+    expect(await streamedText(response)).not.toMatch(/ask Dante|one for Dante|I only work on nutrition/i)
   })
 
   it.each([
-    ["tôi muốn đi tập nhưng buồn ngủ quá, nên đi ko bạn", /Buồn ngủ là một tín hiệu thật/],
-    ["I'm really sleepy but want to train. Should I go?", /Feeling sleepy is a real readiness signal/],
-  ])("defers a train/rest decision to Dante without a data load or model call: %s", async (message, ack) => {
+    ["tôi muốn đi tập nhưng buồn ngủ quá, nên đi ko bạn"],
+    ["I'm really sleepy but want to train. Should I go?"],
+  ])("a train/rest decision on the Nutrition page is answered by Dante's main pipeline, not referred: %s", async (message) => {
+    // This harness's provider mock is shaped for the nutrition engine, so the main pipeline's own reply isn't asserted here
+    // (live-verified); the routing is: the engine never runs and no referral text is produced.
     const response = await post({ message, coachMode: "nutrition" })
-    const json = await response.json()
-    expect(json.route).toBe("defer_to_dante")
-    expect(json.reply).toMatch(ack)
-    expect(json.reply).toMatch(/Dante/)
-    // sleepy is not bored is not sad, and no generic gym-motivation fallback
-    expect(json.reply).not.toMatch(/chán|bored|buồn bã|great way|mood|motivat|động lực/i)
-    expect(loadNutritionContext).not.toHaveBeenCalled()
-    expect(callOpenAiWithFallback).not.toHaveBeenCalled()
+    expect(handleNutritionCoachChat).not.toHaveBeenCalled()
+    expect(await response.text()).not.toMatch(/ask Dante|hỏi Dante|Dante's call|việc của Dante|"coachMode":"nutrition"/i)
   })
 
   it("answers compensation/restriction talk with the safe message, never an exercise prescription", async () => {
@@ -273,6 +271,115 @@ describe("conversation edits are deterministic", () => {
     expect(json.action.type).toBe("ASK_BEFORE_BUILD")
     expect(json.mealDraft).toBeNull()
     expect(json.draft).toBeNull()
+  })
+
+  it("'What about my last meal?' is answered from the food log, not routed as a craving", async () => {
+    const entry = (id: string, mealType: string, foodName: string, calories: number, proteinG: number) => ({ id, logDate: "2026-10-07", mealType, foodName, quantityGrams: 200, servingName: null, servingsConsumed: null, calories, proteinG, carbsG: 0, fatG: 0 })
+    vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries: [entry("1", "breakfast", "Oatmeal", 300, 10), entry("2", "lunch", "Chicken Rice", 620, 38)], totals: { calories: 920, protein: 48, carbs: 0, fat: 0 } } as never)
+    const json = await (await post({ message: "What about my last meal?", coachMode: "nutrition" })).json()
+    expect(json.intent).not.toBe("NEW_CRAVING_REQUEST")
+    expect(json.route).not.toBe("craving_ask")
+    // A question about "that meal" is not a draft edit; an edit with no draft still says there is none.
+    expect((await (await post({ message: "Was that meal suitable for my goal?", coachMode: "nutrition" })).json()).route).not.toBe("no_draft")
+    expect((await (await post({ message: "make that meal cheaper", coachMode: "nutrition" })).json()).route).toBe("no_draft")
+    // A real switch to a food stays a craving topic.
+    const craving = await (await post({ message: "what about pizza?", coachMode: "nutrition" })).json()
+    expect(craving.intent).toBe("NEW_CRAVING_REQUEST")
+  })
+
+  it("planner failure: 'what did I eat?' is answered from the food log, and the fallback model sees the log", async () => {
+    const entry = (id: string, mealType: string, foodName: string, calories: number, proteinG: number) => ({ id, logDate: "2026-10-07", mealType, foodName, quantityGrams: 200, servingName: null, servingsConsumed: null, calories, proteinG, carbsG: 0, fatG: 0 })
+    vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries: [entry("1", "breakfast", "Oatmeal", 300, 10), entry("2", "lunch", "Chicken Rice", 620, 38)], totals: { calories: 920, protein: 48, carbs: 0, fat: 0 } } as never)
+    // Every provider call fails: the planner, its retry and the fallback all return nothing.
+    vi.mocked(callOpenAiWithFallback).mockResolvedValue(null as never)
+    const today = await (await post({ message: "What did I eat today?", coachMode: "nutrition" })).json()
+    expect(today.reply).toContain("Oatmeal (200 g): 300 kcal")
+    expect(today.reply).toContain("Chicken Rice (200 g): 620 kcal")
+    expect((await (await post({ message: "What about my last meal?", coachMode: "nutrition" })).json()).reply).toBe("Your last logged meal today was lunch: Chicken Rice (200 g): 620 kcal, 38 g protein.")
+    // The planner fails but the fallback model is up: it never answers the intake question itself...
+    vi.mocked(callOpenAiWithFallback).mockReset().mockResolvedValue({ reply: "not a plan", model: "test" })
+    expect((await (await post({ message: "What did I eat today?", coachMode: "nutrition" })).json()).reply).toContain("Oatmeal")
+    expect(vi.mocked(callOpenAiWithFallback).mock.calls.some(([prompt]) => prompt.startsWith("Handle one ambiguous"))).toBe(false)
+    // ...and a follow-up it does answer carries today's log as context.
+    await post({ message: "Was that meal suitable for my goal?", coachMode: "nutrition" })
+    const fallbackPrompt = vi.mocked(callOpenAiWithFallback).mock.calls.map(([prompt]) => prompt).find((prompt) => prompt.startsWith("Handle one ambiguous"))
+    expect(fallbackPrompt).toContain("Chicken Rice (200 g): 620 kcal")
+    // An empty log is said plainly, never filled in.
+    vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 } } as never)
+    vi.mocked(callOpenAiWithFallback).mockResolvedValue(null as never)
+    expect((await (await post({ message: "What did I eat today?", coachMode: "nutrition" })).json()).reply).toBe("Nothing is logged for today yet, so I can't say what you've eaten.")
+  })
+
+  it("planner failure: follow-ups about a logged meal resolve from the log, never invent a food, goal or number", async () => {
+    const entry = (id: string, mealType: string, foodName: string, calories: number, proteinG: number) => ({ id, logDate: "2026-10-07", mealType, foodName, quantityGrams: 200, servingName: null, servingsConsumed: null, calories, proteinG, carbsG: 0, fatG: 0 })
+    const log = (...entries: ReturnType<typeof entry>[]) => vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries, totals: { calories: entries.reduce((s, e) => s + e.calories, 0), protein: entries.reduce((s, e) => s + e.proteinG, 0), carbs: 0, fat: 0 } } as never)
+    // Like the panel, each turn echoes the food-log snapshot the previous reply returned (what "it" could have meant).
+    let loggedRows: unknown
+    const ask = async (message: string, lastCoach?: string) => {
+      const json = await (await post({ message, coachMode: "nutrition", conversation: lastCoach ? { recentMessages: [{ role: "coach", text: lastCoach }], loggedRows } : undefined })).json()
+      loggedRows = json.conversation?.loggedRows
+      return json
+    }
+    const ambiguousCalls = () => vi.mocked(callOpenAiWithFallback).mock.calls.filter(([prompt]) => prompt.startsWith("Handle one ambiguous")).length
+    log(entry("1", "breakfast", "Oatmeal", 300, 10), entry("2", "lunch", "Chicken Rice", 620, 38))
+    const LUNCH = "Your lunch (Chicken Rice (200 g)) had 38 g protein and 620 kcal, from your food log."
+
+    for (const providerDown of [true, false]) {
+      // Planner unavailable (null) vs. planner returns malformed output with the fallback model up.
+      vi.mocked(callOpenAiWithFallback).mockReset().mockResolvedValue((providerDown ? null : { reply: "not a plan", model: "test" }) as never)
+      const last = (await ask("What about my last meal?")).reply
+      expect((await ask("How much protein was in it?", last)).reply).toBe(LUNCH)
+      const suitable = (await ask("Was that meal suitable for my goal?", last)).reply
+      expect(suitable).toBe(`${LUNCH} The goal on your profile is fat loss, but I can't give a proper judgement of how it fits right now. Try again in a moment.`)
+      expect(suitable).not.toMatch(/left today/)
+      expect((await ask("How much protein was in my breakfast?")).reply).toBe("Your breakfast (Oatmeal (200 g)) had 10 g protein and 300 kcal, from your food log.")
+      expect(ambiguousCalls()).toBe(0)
+    }
+
+    // Ambiguous pronoun: the last coach turn named two meals.
+    const today = (await ask("What did I eat today?")).reply
+    expect((await ask("How much protein was in it?", today)).reply).toBe("Which meal do you mean — breakfast or lunch?")
+    // A model-written intake reply rephrases portions but keeps the meal names.
+    expect((await ask("How much protein was in it?", "Today, you had: - **Breakfast**: 200 g of oatmeal (300 kcal) - **Lunch**: 200 g of chicken rice (620 kcal)")).reply).toBe("Which meal do you mean — breakfast or lunch?")
+    expect((await ask("How much protein was in it?", "Your last meal was lunch, which included 200 g of chicken rice.")).reply).toBe(LUNCH)
+    // Deleted meal: the coach named lunch, then it was removed from the log.
+    const last = (await ask("What about my last meal?")).reply
+    log(entry("1", "breakfast", "Oatmeal", 300, 10))
+    expect((await ask("How much protein was in it?", last)).reply).toBe("I can't find that meal in today's log anymore, so I can't give its numbers. Today's log has breakfast.")
+    expect((await ask("How much protein was in it?", "Your last meal was lunch, which included 200 g of chicken rice.")).reply).toContain("I can't find that meal in today's log anymore")
+    expect((await ask("what's a good snack for my dinner?")).route).not.toBe("food_log")
+    expect((await ask("Was my dinner ok?")).reply).toBe("Nothing is logged under dinner today, so I can't give its numbers. Today's log has breakfast.")
+
+    // Goal unavailable: said plainly, never filled in.
+    vi.mocked(loadNutritionContext).mockImplementation((async (_s: unknown, userId: string) => { const p = plan(userId); return { ...p, fitnessGoal: null, plan: { ...p.plan, input: { ...p.plan.input, goal: null } } } }) as never)
+    expect((await ask("Was my breakfast suitable for my goal?")).reply).toContain("There is no goal on your profile yet, and I can't give a proper judgement")
+    mockData()
+    log(entry("1", "breakfast", "Oatmeal", 300, 10))
+
+    // "it" that never pointed at the log (a food fact) still goes to the fallback model.
+    vi.mocked(callOpenAiWithFallback).mockReset().mockResolvedValue({ reply: "not a plan", model: "test" })
+    await ask("How much protein is in it?", "Greek yogurt is a solid high-protein snack.")
+    expect(ambiguousCalls()).toBe(1)
+
+    // Fallback model invents an unlogged food: replaced; a logged food or a hypothetical survives.
+    const fallback = (reply: string) => vi.mocked(callOpenAiWithFallback).mockReset().mockImplementation((async (prompt: string) => ({ reply: prompt.startsWith("Handle one ambiguous") ? JSON.stringify({ topic: { type: "GENERAL_NUTRITION", food: null, sensoryTargets: [] }, reply }) : "not a plan", model: "test" })) as never)
+    fallback("You had oatmeal and a protein shake this morning, nice start.")
+    expect((await ask("how's my day looking?")).reply).not.toMatch(/protein shake/)
+    fallback("You had oatmeal this morning, nice start.")
+    expect((await ask("how's my day looking?")).reply).toBe("You had oatmeal this morning, nice start.")
+    fallback("If you had pizza tonight, a thin crust with chicken would fit better.")
+    expect((await ask("could pizza work tonight?")).reply).toContain("pizza")
+
+    // Food-log read unavailable: no coaching answer at all.
+    vi.mocked(loadFoodLogForDate).mockResolvedValue({ date: "2026-10-07", entries: [], totals: null, unavailable: true } as never)
+    const unavailable = await post({ message: "How much protein was in it?", coachMode: "nutrition", conversation: { recentMessages: [{ role: "coach", text: LUNCH }] } })
+    expect(unavailable.status).toBe(422)
+
+    // Cravings stay cravings, even right after a food-log answer.
+    log(entry("1", "breakfast", "Oatmeal", 300, 10))
+    vi.mocked(callOpenAiWithFallback).mockReset().mockResolvedValue(null as never)
+    expect((await ask("I'm craving chocolate cereal", last)).intent).toBe("NEW_CRAVING_REQUEST")
+    expect((await ask("what about pizza?", last)).intent).toBe("NEW_CRAVING_REQUEST")
   })
 
   it("uses the LLM only for open conversation, with structured context", async () => {

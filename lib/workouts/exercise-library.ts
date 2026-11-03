@@ -24,6 +24,8 @@
  * inventing content, so those fields are intentionally left unset.
  */
 
+import { CATALOGUE_ADDITIONS, LEGACY_SEEDED_EXERCISES } from "@/lib/workouts/exercise-catalogue-additions";
+
 export type ExerciseDifficulty =
   | "beginner"
   | "intermediate"
@@ -62,7 +64,7 @@ export type ExerciseLibraryItem = {
   sourceUrl: string | null;
 };
 
-export const LOCAL_EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
+const ORIGINAL_BUILT_INS: ExerciseLibraryItem[] = [
   {
     id: "10000000-0000-4000-8000-000000000001",
     slug: "barbell-bench-press",
@@ -779,3 +781,16 @@ export const LOCAL_EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     sourceUrl: null,
   },
 ];
+
+/**
+ * Every built-in with a deterministic uuid (the original 24 + the Muscle Intelligence 2.0
+ * hypertrophy additions). Plans persist these ids directly, so each one is seeded by a
+ * migration (see lib/workouts/__tests__/builtin-exercise-identity.test.ts).
+ */
+export const LOCAL_EXERCISE_LIBRARY: ExerciseLibraryItem[] = [...ORIGINAL_BUILT_INS, ...CATALOGUE_ADDITIONS];
+
+/**
+ * The full recommendation catalogue: built-ins plus exercises that exist only as
+ * environment-seeded rows (id resolved by slug at runtime — see LEGACY_SEEDED_EXERCISES).
+ */
+export const EXERCISE_CATALOGUE: ExerciseLibraryItem[] = [...LOCAL_EXERCISE_LIBRARY, ...LEGACY_SEEDED_EXERCISES];

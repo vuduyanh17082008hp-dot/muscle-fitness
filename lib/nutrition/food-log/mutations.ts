@@ -58,7 +58,7 @@ export type CreateFoodLogInput = {
 
 export type MutationResult<T> =
   | { success: true; data: T }
-  | { success: false; error: string; status?: 400 | 500 }
+  | { success: false; error: string; status?: 400 | 404 | 500 }
 
 export async function createFoodLog(
   supabase: SupabaseClient,
@@ -126,8 +126,8 @@ export async function createFoodLog(
     : await supabase.from("food_logs").insert(row).select(FOOD_LOG_SELECT).single()
 
   if (error?.code === "23505") {
-    const existing = await loadFoodLogByIdempotencyKey(supabase, userId, idempotencyKey)
-    if (existing) return { success: true, data: existing }
+    const existing = await findFoodLogByIdempotencyKey(supabase, userId, idempotencyKey)
+    if (existing.ok && existing.entry) return { success: true, data: existing.entry }
   }
 
   if (error || !data) {
@@ -151,19 +151,24 @@ export async function createFoodLog(
   return { success: true, data: savedEntry }
 }
 
-async function loadFoodLogByIdempotencyKey(
+/** The user's own row for this key. `ok: false` = the read failed, which proves nothing either way. */
+export async function findFoodLogByIdempotencyKey(
   supabase: SupabaseClient,
   userId: string,
   idempotencyKey: string,
-): Promise<ReturnType<typeof mapFoodLogRow> | null> {
-  const { data } = await supabase
+): Promise<{ ok: true; entry: ReturnType<typeof mapFoodLogRow> | null } | { ok: false }> {
+  const { data, error } = await supabase
     .from("food_logs")
     .select(FOOD_LOG_SELECT)
     .eq("user_id", userId)
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle()
 
-  return data ? mapFoodLogRow(data as FoodLogRow) : null
+  if (error) {
+    console.error("[FOOD LOG] idempotency lookup failed:", error.message)
+    return { ok: false }
+  }
+  return { ok: true, entry: data ? mapFoodLogRow(data as FoodLogRow) : null }
 }
 
 export type UpdateFoodLogQuantityInput = {
@@ -200,7 +205,7 @@ export async function updateFoodLogQuantity(
 
   if (fetchError || !existing) {
     if (fetchError) console.error("[FOOD LOG] updateFoodLogQuantity fetch failed:", fetchError.message)
-    return { success: false, error: "Food log entry not found." }
+    return { success: false, error: "Food log entry not found.", status: 404 }
   }
 
   const originalGrams = Number(existing.quantity_grams)
@@ -250,15 +255,20 @@ export async function deleteFoodLog(
   userId: string,
   id: string,
 ): Promise<MutationResult<{ id: string }>> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("food_logs")
     .delete()
     .eq("id", id)
     .eq("user_id", userId)
+    .select("id")
 
   if (error) {
     console.error("[FOOD LOG] deleteFoodLog failed:", error.message)
     return { success: false, error: "Nutrition data couldn't be deleted. Please try again." }
+  }
+  // Zero rows (someone else's entry, or already gone) is not a deletion: never report success for it.
+  if (!data?.length) {
+    return { success: false, error: "Food log entry not found.", status: 404 }
   }
 
   return { success: true, data: { id } }

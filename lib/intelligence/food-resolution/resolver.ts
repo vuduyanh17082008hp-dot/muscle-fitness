@@ -16,6 +16,22 @@ const COMMON_VARIETY_HINTS = ["atlantic", "farm", "all varieties"]
 const tokens = (text: string) => text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 1);
 const singular = (t: string) => (t.length > 3 && t.endsWith("s") ? t.slice(0, -1) : t);
 
+/**
+ * Cooking methods by how they cook: dry heat adds nothing, moist heat cooks in water, frying adds oil. A record cooked in
+ * another group is a different preparation ("grilled" breast is never the "braised" record), so it cannot be chosen.
+ */
+const METHOD_GROUP: Record<string, "dry" | "moist" | "fried"> = {
+  grilled: "dry", broiled: "dry", roasted: "dry", baked: "dry", rotisserie: "dry", dry: "dry",
+  boiled: "moist", stewed: "moist", braised: "moist", poached: "moist", simmered: "moist", steamed: "moist", moist: "moist",
+  fried: "fried",
+};
+function methodConflicts(preparation: string | undefined, desc: string[]): boolean {
+  const want = preparation ? METHOD_GROUP[preparation.toLowerCase()] : undefined;
+  if (!want) return false;
+  const have = new Set(desc.flatMap((t) => (METHOD_GROUP[t] ? [METHOD_GROUP[t]] : [])));
+  return have.size > 0 && !have.has(want);
+}
+
 /** Tokens that make the request more specific than the generic base ("atlantic" in "atlantic cod"). */
 export function varietyTokens(req: ResolveRequest): string[] {
   const core = tokens(req.base ?? req.text).map(singular);
@@ -37,6 +53,7 @@ export function scoreUsdaCandidate(candidate: FoodCandidate, req: ResolveRequest
   const desc = tokens(candidate.name).map(singular);
   const core = tokens(req.base ?? req.text).map(singular);
   if (core.length === 0 || !core.every((t) => desc.includes(t))) return -Infinity;
+  if (methodConflicts(req.preparation, desc)) return -Infinity;
   const all = tokens(req.text).map(singular);
   const variety = varietyTokens(req);
   let score = 40;
@@ -56,6 +73,70 @@ export function scoreUsdaCandidate(candidate: FoodCandidate, req: ResolveRequest
   return score;
 }
 
+/**
+ * Frying adds oil and usually a coating, so it changes the food, not just its state: a record that was not fried (plain cooked
+ * or grilled chicken breast) can never answer a fried request. The dry methods (grilled, baked, boiled, steamed, roasted,
+ * poached) add no fat and stay on the existing raw/cooked path.
+ */
+const FAT_ADDING_METHODS = new Set(["fried"]);
+/** A cut changes the food too: "fried chicken" is not a fried breast, and a breast is not mixed pieces. */
+const CUT_WORDS = ["breast", "thigh", "drumstick", "wing", "leg", "back", "neck"];
+/** Restaurant records ("KFC, Fried Chicken, ...") are that brand's product, never a generic reference. */
+const BRAND_RECORD = /^[A-Z][A-Z'&. ]{2,},/;
+const NO_COATING = /\b(?:meat only|unbreaded|naked|breading removed|(?:no|without)(?: the)?(?: skin(?: or| and|,))? (?:breading|batter))\b/;
+const COATED = /\b(?:batter(?:ed)?|bread(?:ed|ing)|coated|crispy)\b/;
+const NO_SKIN = /\b(?:skinless|no skin|without (?:the )?skin)\b/;
+const COATING_OPTIONS = ["breaded, with skin", "skinless, no breading"];
+
+/** Coating of a record or of the user's words. "Meat only, no skin or batter" names the batter it lacks, so that is checked first. */
+export function coatingOf(text: string): "coated" | "plain" | undefined {
+  const t = text.toLowerCase();
+  if (NO_COATING.test(t)) return "plain";
+  if (COATED.test(t)) return "coated";
+  return NO_SKIN.test(t) ? "plain" : undefined;
+}
+
+async function resolveFried(req: ResolveRequest, deps: ResolverDeps, base: string, diagnostics: FoodResolutionDiagnostics, now: () => number): Promise<ResolvedFood> {
+  const reasons = ["requested_fried"];
+  const core = tokens(base).map(singular);
+  const asked = tokens(`${req.text} ${base}`).map(singular);
+  const fits = (c: FoodCandidate) => {
+    const desc = tokens(c.name).map(singular);
+    return core.every((t) => desc.includes(t)) && desc.includes("fried") && !BRAND_RECORD.test(c.name) && CUT_WORDS.every((cut) => desc.includes(cut) === asked.includes(cut));
+  };
+  let pool = (deps.searchPrepared?.(base, "fried") ?? []).filter(fits);
+  if (pool.length) reasons.push("usda_offline_copy");
+  else {
+    const start = now();
+    let status: UsdaStatus = "NO_RESULT";
+    try {
+      const res = await deps.searchUsda(`${req.text} fried`);
+      status = !res.configured ? "NOT_CONFIGURED" : res.foods.length ? "OK" : "NO_RESULT";
+      pool = res.foods.filter(fits);
+    } catch {
+      reasons.push("usda_lookup_failed");
+    }
+    diagnostics.USDA_LOOKUP = { status, candidates: pool.length, latencyMs: Math.max(0, now() - start) };
+  }
+  const want = req.coating ?? coatingOf(req.text);
+  if (want) pool = pool.filter((c) => (coatingOf(c.name) ?? want) === want);
+  // Shortest description = the plain generic record; ties broken by id so the same request always picks the same record.
+  pool.sort((a, b) => a.name.length - b.name.length || a.id.localeCompare(b.id));
+  if (!pool.length) {
+    reasons.push("no_fried_record");
+    return { status: "UNRESOLVED", source: "NONE", name: null, basis: "unknown", per100g: null, reasons, diagnostics };
+  }
+  if (!want) {
+    const coated = pool.find((c) => coatingOf(c.name) === "coated")?.per100g.calories;
+    const plain = pool.find((c) => coatingOf(c.name) === "plain")?.per100g.calories;
+    if (coated && plain && Math.abs(coated - plain) / Math.max(coated, plain) > AMBIGUITY_CALORIE_SPREAD) {
+      return { status: "AMBIGUOUS", source: "NONE", name: null, basis: "unknown", per100g: null, reasons: [...reasons, "coating_changes_answer"], clarification: { field: "coating", options: COATING_OPTIONS }, diagnostics };
+    }
+  }
+  reasons.push(`coating_${want ?? coatingOf(pool[0].name) ?? "unknown"}`);
+  return fromUsda(pool[0], reasons, diagnostics);
+}
+
 const unknownDiagnostics = (): FoodResolutionDiagnostics => ({ LOCAL_LOOKUP: { hit: false, latencyMs: 0 }, USDA_LOOKUP: { status: "SKIPPED", candidates: 0, latencyMs: 0 } });
 
 function fromLocal(hit: LocalFoodHit, reasons: string[], diagnostics: FoodResolutionDiagnostics, status: ResolvedFood["status"] = hit.verification): ResolvedFood {
@@ -73,11 +154,19 @@ function fromUsda(c: FoodCandidate, reasons: string[], diagnostics: FoodResoluti
  * Never throws; every degradation is reported in `reasons`.
  */
 export async function resolveFoodEntity(req: ResolveRequest, deps: ResolverDeps): Promise<ResolvedFood> {
+  const resolved = await resolveGeneric(req, deps);
+  // A generic record standing in for a restaurant's item is an estimate of that item, never its official nutrition.
+  if (!req.brand || !resolved.per100g) return resolved;
+  return { ...resolved, status: "ESTIMATED", genericFor: req.brand, reasons: [...resolved.reasons, "generic_reference_for_brand"] };
+}
+
+async function resolveGeneric(req: ResolveRequest, deps: ResolverDeps): Promise<ResolvedFood> {
   const now = deps.now ?? Date.now;
   const diagnostics = unknownDiagnostics();
   const base = (req.base ?? req.text).toLowerCase().trim();
   const reasons: string[] = [];
   if (!base) return { status: "UNRESOLVED", source: "NONE", name: null, basis: "unknown", per100g: null, reasons: ["empty_query"], diagnostics };
+  if (req.preparation && FAT_ADDING_METHODS.has(req.preparation.toLowerCase())) return resolveFried(req, deps, base, diagnostics, now);
 
   let local: LocalFoodHit | null = null;
   const localStart = now();

@@ -20,6 +20,11 @@ export type SearchFoodToolOutput = {
     brand: string | null;
     per100g: { calories: number; protein: number; carbs: number; fat: number };
   }>;
+  /** provider_timeout / provider_error: the databases weren't reachable — never "this food doesn't exist". */
+  status: "results" | "no_match" | "provider_timeout" | "provider_error" | "invalid_input";
+  /** True when `results` are local fallback rows, not USDA / Open Food Facts records. */
+  usedFallback: boolean;
+  warning?: string;
 };
 
 /**
@@ -54,6 +59,9 @@ export const searchFoodTool: DanteTool<{ query: string; category?: "any" | "raw"
             fat: food.per100g.fat,
           },
         })),
+        status: result.status,
+        usedFallback: result.usedFallback,
+        ...(result.warning ? { warning: result.warning } : {}),
       },
     };
   },

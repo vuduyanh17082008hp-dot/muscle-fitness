@@ -46,12 +46,12 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
   if (!plan) {
     return (
       <div className="mx-auto max-w-3xl space-y-6">
-        <header className="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-8">
+        <header className="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-8">
           <span className="inline-grid size-14 place-items-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
             <ShoppingCart className="size-6" />
           </span>
 
-          <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+          <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-amber-300">
             Shopping List
           </p>
 
@@ -80,7 +80,7 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 pb-16">
-      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
+      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-7 sm:p-9">
         <Link
           href="/dashboard/nutrition"
           className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-400 transition hover:text-white"
@@ -93,7 +93,7 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
           <ShoppingCart className="size-6" />
         </span>
 
-        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+        <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-amber-300">
           Shopping List
         </p>
 
@@ -107,7 +107,7 @@ export default async function ShoppingListPage({ searchParams }: ShoppingListPag
         </p>
 
         <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/8 px-4 py-2.5">
-          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-400">
+          <span className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">
             Estimated market price
           </span>
           <span className="text-lg font-black text-white">

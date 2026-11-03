@@ -20,8 +20,13 @@ const SESSION_EXERCISE_ID = "22222222-2222-2222-2222-222222222222"
 const ORIGINAL_EXERCISE_ID = "33333333-3333-3333-3333-333333333333"
 const REPLACEMENT_EXERCISE_ID = "44444444-4444-4444-4444-444444444444"
 
-function fakeClient() {
-  const updates: Array<{ table: string; values: Record<string, unknown> }> = []
+type ListRows = {
+  exercise_sets?: Array<{ id: string; completed: boolean }>
+  workout_session_exercises?: Array<{ id: string; exercise_id: string; is_skipped: boolean }>
+}
+
+function fakeClient(lists: ListRows = {}) {
+  const updates: Array<{ table: string; values: Record<string, unknown>; filters: Array<[string, unknown]> }> = []
   const selects: Array<{ table: string; columns: string }> = []
 
   return {
@@ -41,6 +46,12 @@ function fakeClient() {
             const query = {
               eq() {
                 return query
+              },
+              then<TResult1>(
+                onfulfilled?: ((value: { data: unknown[]; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
+              ) {
+                const data = (lists as Record<string, unknown[] | undefined>)[table] ?? []
+                return Promise.resolve({ data, error: null }).then(onfulfilled)
               },
               async maybeSingle() {
                 if (table === "workout_sessions") {
@@ -64,9 +75,11 @@ function fakeClient() {
             return query
           },
           update(values: Record<string, unknown>) {
-            updates.push({ table, values })
+            const filters: Array<[string, unknown]> = []
+            updates.push({ table, values, filters })
             const query = {
-              eq() {
+              eq(column: string, value: unknown) {
+                filters.push([column, value])
                 return query
               },
               then<TResult1 = { error: null }>(
@@ -136,5 +149,56 @@ describe("workout session mutation schema contract", () => {
     })
     expect(update?.values).not.toHaveProperty("exercise_name")
     expect(update?.values).not.toHaveProperty("replacement_exercise_id")
+  })
+
+  it("clears values on unlogged sets so a replacement never inherits the old weight", async () => {
+    const fake = fakeClient({ exercise_sets: [{ id: "set-1", completed: false }] })
+    vi.mocked(createClient).mockResolvedValue(fake.client as never)
+
+    const result = await mutateReplaceExercise(SESSION_ID, {
+      sessionExerciseId: SESSION_EXERCISE_ID,
+      replacementExerciseId: REPLACEMENT_EXERCISE_ID,
+    })
+
+    expect(result.success).toBe(true)
+    const clear = fake.updates.find((entry) => entry.table === "exercise_sets")
+    expect(clear?.values).toMatchObject({ weight_kg: null, reps: null, rir: null, rpe: null })
+    expect(clear?.filters).toEqual([
+      ["session_exercise_id", SESSION_EXERCISE_ID],
+      ["completed", false],
+    ])
+  })
+
+  it("refuses to swap an exercise that already has logged sets (history stays attributed)", async () => {
+    const fake = fakeClient({ exercise_sets: [{ id: "set-1", completed: true }] })
+    vi.mocked(createClient).mockResolvedValue(fake.client as never)
+
+    const result = await mutateReplaceExercise(SESSION_ID, {
+      sessionExerciseId: SESSION_EXERCISE_ID,
+      replacementExerciseId: REPLACEMENT_EXERCISE_ID,
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toMatch(/already logged sets/)
+    expect(fake.updates).toEqual([])
+  })
+
+  it("refuses a replacement that is already in the workout (no duplicate entries)", async () => {
+    const fake = fakeClient({
+      workout_session_exercises: [
+        { id: SESSION_EXERCISE_ID, exercise_id: ORIGINAL_EXERCISE_ID, is_skipped: false },
+        { id: "other-row", exercise_id: REPLACEMENT_EXERCISE_ID, is_skipped: false },
+      ],
+    })
+    vi.mocked(createClient).mockResolvedValue(fake.client as never)
+
+    const result = await mutateReplaceExercise(SESSION_ID, {
+      sessionExerciseId: SESSION_EXERCISE_ID,
+      replacementExerciseId: REPLACEMENT_EXERCISE_ID,
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toMatch(/already in this workout/)
+    expect(fake.updates).toEqual([])
   })
 })

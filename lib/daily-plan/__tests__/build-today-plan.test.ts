@@ -126,3 +126,12 @@ describe("buildTodayPlan — adaptive integration", () => {
     expect(workout.metadata?.adaptiveLabel).toBeNull();
   });
 });
+
+describe("buildTodayPlan — unreadable food log", () => {
+  it("omits the protein item instead of reporting the full target as 'remaining' from a fake 0 g", () => {
+    const base = { todaySession: null, hasCheckinToday: true, proteinTargetG: 150 }
+
+    expect(buildTodayPlan({ ...base, proteinLoggedG: null }).some((a) => a.type === "nutrition")).toBe(false)
+    expect(buildTodayPlan({ ...base, proteinLoggedG: 0 }).find((a) => a.type === "nutrition")?.subtitle).toBe("150 g protein remaining")
+  })
+})

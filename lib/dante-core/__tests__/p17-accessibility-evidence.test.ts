@@ -196,6 +196,12 @@ describe("mutation checks", () => {
     expect(applyEvidenceLite({ draft: "Your recovery score is 72.", language: "en" })).not.toMatch(/recovery score is 72/i);
   });
 
+  // Live 2026-10-23: a verified food-log answer was replaced by "I don't have verified data for that number."
+  it("a food-log statement is kept (Layer 6 verifies intake against the log)", () => {
+    const draft = "The last thing you logged today was Chicken Breast — cooked (120 g), under pre-workout.";
+    expect(applyEvidenceLite({ draft, language: "en" })).toBe(draft);
+  });
+
   it("P-15 exclusion is not the same as hiding statistics", () => {
     expect(detectHideStatistics("don't use my recovery data")).toBe(false);
     expect(scopeOf("don't use my recovery data. Should I train?")?.mode).toBe("EXCLUDE");

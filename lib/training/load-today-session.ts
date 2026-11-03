@@ -31,6 +31,10 @@ export type TodaySession = {
   workoutPlanId?: string | null;
   updatedAt?: string | null;
   planUpdatedAt?: string | null;
+  /** The exercise read failed: `exercises` is empty because it is unknown, not because the session has none. */
+  exercisesUnavailable?: true;
+  /** Sets actually logged (exercise_sets.completed). Planned = sum of targetSets. null/absent = unknown, never assumed. */
+  completedSets?: number | null;
   exercises: TodaySessionExercise[];
 };
 
@@ -155,6 +159,22 @@ export async function loadTodaySession(
   now: Date = new Date(),
   timeZoneOverride?: string | null,
 ): Promise<TodaySession | null> {
+  const read = await loadTodaySessionRead(supabase, userId, now, timeZoneOverride);
+  return read.status === "OK" ? read.session : null;
+}
+
+/** UNAVAILABLE = the session read failed: never the same thing as "nothing scheduled today". */
+export type TodaySessionRead = { status: "OK"; session: TodaySession | null } | { status: "UNAVAILABLE" };
+
+// The day's actionable session wins: one in progress, then one not started, then a finished one.
+const SESSION_STATE_RANK: Record<string, number> = { in_progress: 0, paused: 0, not_started: 1, completed: 3, cancelled: 4 };
+
+export async function loadTodaySessionRead(
+  supabase: SupabaseClient,
+  userId: string,
+  now: Date = new Date(),
+  timeZoneOverride?: string | null,
+): Promise<TodaySessionRead> {
   const timeZone = await resolveUserTimeZone(supabase, userId, timeZoneOverride);
 
   const { startIso, endIso } = localDayRangeUtc(now, timeZone);
@@ -166,13 +186,17 @@ export async function loadTodaySession(
     .gte("scheduled_for", startIso)
     .lte("scheduled_for", endIso)
     .order("scheduled_for", { ascending: true })
-    .limit(1);
+    .limit(5);
 
-  if (sessionError || !sessionRows || sessionRows.length === 0) {
-    return null;
+  if (sessionError) {
+    console.warn("[TODAY SESSION] Unable to load today's session:", sessionError.message);
+    return { status: "UNAVAILABLE" };
+  }
+  if (!sessionRows || sessionRows.length === 0) {
+    return { status: "OK", session: null };
   }
 
-  const session = sessionRows[0] as {
+  type SessionRow = {
     id: string;
     name: string | null;
     scheduled_for: string | null;
@@ -181,6 +205,8 @@ export async function loadTodaySession(
     updated_at?: string | null;
     workout_plan_id?: string | null;
   };
+  const rank = (row: SessionRow) => SESSION_STATE_RANK[row.session_state ?? "not_started"] ?? 2;
+  const session = (sessionRows as SessionRow[]).reduce((best, row) => (rank(row) < rank(best) ? row : best));
 
   let planUpdatedAt: string | null = null;
   if (session.workout_plan_id) {
@@ -232,7 +258,23 @@ export async function loadTodaySession(
     }
   }
 
-  return {
+  // Logged sets, so "done" is never shown as the planned total. A failed (or unsupported) read stays null: unknown.
+  let completedSets: number | null = null;
+  if (!exerciseError && rows.length === 0) completedSets = 0;
+  else if (!exerciseError) {
+    try {
+      const { count, error } = await supabase
+        .from("exercise_sets")
+        .select("id", { count: "exact", head: true })
+        .in("session_exercise_id", rows.map((row) => row.id))
+        .eq("completed", true);
+      completedSets = error ? null : (count ?? null);
+    } catch {
+      completedSets = null;
+    }
+  }
+
+  return { status: "OK", session: {
     id: session.id,
     name: session.name,
     scheduledFor: session.scheduled_for,
@@ -241,6 +283,8 @@ export async function loadTodaySession(
     workoutPlanId: session.workout_plan_id ?? null,
     updatedAt: session.updated_at ?? null,
     planUpdatedAt,
+    completedSets,
+    ...(exerciseError ? { exercisesUnavailable: true } : {}),
     exercises: rows.map((row) => ({
       sessionExerciseId: row.id,
       exerciseId: row.exercise_id,
@@ -252,5 +296,5 @@ export async function loadTodaySession(
       primaryMuscle: primaryMuscleById.get(row.exercise_id) ?? null,
       isSkipped: row.is_skipped === true,
     })),
-  };
+  } };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDanteDeferralReply, buildGemmaDeferralReply, dantePassesToGemma, parseUserQuery } from "..";
+import { buildDanteDeferralReply, dantePassesToGemma, parseUserQuery } from "..";
 import { buildDanteQueryContext, type DanteCurrentRecovery } from "../dante-context";
 
 const dante = { surface: "DANTE" } as const;
@@ -51,14 +51,14 @@ describe("Gemma: training/readiness decisions belong to Dante", () => {
     expect(f.owner).toBe("GEMMA");
   });
 
-  it("the boundary reply names the right state, points to Dante, and is not generic gym motivation", () => {
+  it("the boundary reply names the right state, never refers to another assistant, and is not generic gym motivation", () => {
     const vi = buildDanteDeferralReply(parseUserQuery(GEMMA_VI, gemma));
     expect(vi).toMatch(/Buồn ngủ/);
-    expect(vi).toMatch(/Dante/);
+    expect(vi).not.toMatch(/Gemma|hỏi Dante/i);
     expect(vi).not.toMatch(/chán|bored|great way|mood|motivat/i);
     const en = buildDanteDeferralReply(parseUserQuery(GEMMA_EN, gemma));
     expect(en).toMatch(/sleepy/);
-    expect(en).toMatch(/Dante/);
+    expect(en).not.toMatch(/Gemma|ask Dante|Dante's call/i);
     const bored = buildDanteDeferralReply(parseUserQuery("buồn chán quá, có nên đi gym cho vui không", gemma));
     expect(bored).toMatch(/chán/);
     expect(bored).not.toMatch(/Buồn ngủ/);
@@ -100,14 +100,12 @@ describe("Dante: readiness decision frame", () => {
     expect(f.safetySignal).toBe(true);
   });
 
-  it("Dante defers meal construction and pure food lookups to Gemma (reverse boundary)", () => {
+  it("Dante routes meal construction and pure food lookups to its nutrition capability", () => {
     for (const q of ["build me a 600 kcal dinner", "tối nay ăn gì đủ 60g protein?", "macro cho cá tuyết"]) {
       const f = parseUserQuery(q, dante);
       expect(f.primaryDomain).toBe("NUTRITION");
       expect(dantePassesToGemma(f)).toBe(true);
     }
-    expect(buildGemmaDeferralReply("vi")).toMatch(/Gemma/);
-    expect(buildGemmaDeferralReply("en")).toMatch(/Gemma/);
   });
 
   it("Dante keeps nutrition FACTS that serve a training/recovery question, and every readiness question", () => {

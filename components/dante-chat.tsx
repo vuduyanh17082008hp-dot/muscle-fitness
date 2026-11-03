@@ -2,6 +2,7 @@
 
 import React, {
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -12,14 +13,13 @@ import type {
 } from "react";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowUp, ChevronDown, History, RotateCcw, SquarePen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 
-import { DanteRobot } from "@/components/dante/dante-robot";
-import { BiometricFieldCanvas } from "@/components/dante/biometric-field-canvas";
-import hudStyles from "@/components/dante/holographic-telemetry-pod.module.css";
 import {
   DANTE_STATE_LABEL,
   useDantePresence,
@@ -34,25 +34,29 @@ import {
   isDanteRateLimitedMessage,
 } from "@/lib/dante-chat-http-error";
 import type { DanteInsight } from "@/lib/dante-core/insight";
-import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT } from "@/lib/coach-context-event";
+import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT, FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event";
 import {
   parseChatStreamChunk,
   resolveAbortedContent,
   resolveConfirmationOutcome,
   resolveStreamErrorContent,
   type ChatStreamEvent,
+  type ChatStreamPendingConfirmation,
   type ChatStreamSource,
+  type DanteNutritionTurn,
 } from "@/lib/dante-core/chat-stream-protocol";
+import { NutritionBlocks, NutritionQuickActions } from "@/components/nutrition/coach/coach-chat-ui";
+import { readLastThread, rememberThread, todaysThread } from "@/lib/dante-core/active-thread";
+import type { StoredDanteMessage } from "@/lib/dante-core/conversation-store";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { DanteVoiceInput } from "@/components/dante-voice-input";
+import type { ContextStatus, DanteTodayContext } from "@/lib/dante-core/today-context";
 
 /* =========================================================
    TYPES
 ========================================================= */
 
-type PendingConfirmation = {
-  actionId: string;
-  toolName: string;
-  summary: string;
-};
+type PendingConfirmation = ChatStreamPendingConfirmation;
 
 type ChatMessage = {
   id: string;
@@ -63,10 +67,42 @@ type ChatMessage = {
   insight?: DanteInsight | null;
   sources?: ChatStreamSource[] | null;
   pendingConfirmation?: PendingConfirmation | null;
-  confirmationResolution?: "confirmed" | "cancelled" | "failed" | "unknown" | null;
+  confirmationResolution?: ConfirmationResolution;
+  /** MF-S1: the server's own words for the outcome (read-back result, or why it was refused). */
+  confirmationMessage?: string | null;
   isComplete?: boolean;
   wasAborted?: boolean;
+  /** Client id of the turn (user message + its reply) — what a retry resends so the server never duplicates it. */
+  turnId?: string;
+  /** Set when the reply was never confirmed complete (refresh/disconnect mid-stream, or a failure). */
+  historyStatus?: "pending" | "interrupted" | "error";
+  /** The server said this turn did NOT reach conversation history. */
+  notSaved?: boolean;
+  /** Dante's nutrition capability answered: engine-built option lists / comparisons / ingredient tables / change proposals. */
+  nutrition?: DanteNutritionTurn | null;
 };
+
+type ConfirmationResolution = "confirmed" | "cancelled" | "superseded" | "failed" | "expired" | "unknown" | null;
+
+type ThreadSummary = { id: string; title: string; updatedAt: string };
+
+function fromStoredMessage(message: StoredDanteMessage): ChatMessage {
+  if (message.role === "user") {
+    return { id: message.id, role: "user", content: message.content, createdAt: message.createdAt, turnId: message.clientMessageId ?? undefined };
+  }
+  return {
+    id: message.id,
+    role: "assistant",
+    content: message.status === "error" ? resolveStreamErrorContent(message.content, false, DANTE_UNAVAILABLE_MESSAGE) : message.content,
+    insight: message.insight ?? null,
+    sources: message.sources ?? [],
+    pendingConfirmation: message.pendingConfirmation,
+    confirmationResolution: message.confirmationResolution,
+    isComplete: true,
+    turnId: message.clientMessageId ?? undefined,
+    historyStatus: message.status === "complete" ? undefined : message.status,
+  };
+}
 
 export type QuickPrompt = {
   tag?: string;
@@ -77,22 +113,22 @@ export type QuickPrompt = {
 const QUICK_PROMPTS: QuickPrompt[] = [
   {
     tag: "Today's training",
-    label: "What should I train today?",
+    label: "What to train today",
     prompt: "Based on my current readiness, what should I train today?",
   },
   {
     tag: "Nutrition target",
-    label: "How do I hit my protein target?",
+    label: "Hit my protein target",
     prompt: "What should I eat to hit my remaining protein target?",
   },
   {
-    tag: "Recovery check-in",
-    label: "I haven't checked in today.",
-    prompt: "I still need to do my daily recovery check-in. What should I log?",
+    tag: "Recovery",
+    label: "Recovery check",
+    prompt: "How is my recovery looking today, and what is driving it?",
   },
   {
     tag: "30-day trajectory",
-    label: "How did I progress this month?",
+    label: "Last 30 days",
     prompt: "How did my training and recovery progress over the last 30 days?",
   },
 ];
@@ -106,14 +142,6 @@ export type DanteChatProps = {
   heroTitle?: string;
   heroSubtitle?: string;
   quickPrompts?: QuickPrompt[];
-  /**
-   * Real-state-aware conversation starters (spec: "Contextual
-   * Suggestions") — built server-side from the caller's own already-
-   * loaded data via lib/dante-core/build-chat-suggestions.ts. When
-   * provided, these replace `quickPrompts` in the empty state. Omit
-   * when there is no per-user signal to fall back to the generic starters.
-   */
-  contextualSuggestions?: DanteInsight[];
   compact?: boolean;
   className?: string;
   /**
@@ -125,14 +153,31 @@ export type DanteChatProps = {
    * rather than trusting it blindly.
    */
   contextPayload?: Record<string, unknown>;
+  /**
+   * Restore the saved conversation on mount (`?c=<id>` when not compact, otherwise the most recent one) and show
+   * the history picker. Contextual embeds leave this off: their turns are still saved, each embed starts fresh.
+   */
+  restoreHistory?: boolean;
+  /**
+   * Today's verified athlete context, built server-side (lib/dante-core/today-context.ts) from what actually loaded —
+   * never guessed. Shown above the conversation so older replies in a restored thread are never mistaken for today.
+   */
+  todayContext?: DanteTodayContext;
 };
+
+/** The conversation this tab last had open ("" = a new, unsaved chat), so returning to Dante reopens it. */
+function formatAsOf(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "earlier";
+  return date.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
 
 const DEFAULT_WELCOME_MESSAGE =
   "Hi. I'm **Dante**, your Muscle Fitness intelligence coach. Ask me about your training, nutrition, recovery or progress.";
 
 const SEVERITY_DOT: Record<string, string> = {
-  warning: "bg-rose-400",
-  notice: "bg-amber-400",
+  warning: "bg-mf-glass-warning",
+  notice: "bg-mf-glass-warning",
   info: "bg-[var(--mf-violet)]",
 };
 
@@ -153,12 +198,12 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
   }
 
   return (
-    <div className="mt-4 border-t border-white/8 pt-4">
+    <div className="mt-1 flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {insight.nextAction ? (
           <Link
             href={insight.nextAction.href}
-            className="inline-flex h-9 items-center rounded-xl bg-amber-400 px-4 text-xs font-black uppercase tracking-[0.06em] text-black transition hover:bg-amber-300"
+            className="inline-flex min-h-11 items-center rounded-md border border-mf-glass-text bg-mf-glass-brand px-4 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
           >
             {insight.nextAction.label}
           </Link>
@@ -166,7 +211,7 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
 
         {hasWhy ? (
           <details className="group">
-            <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-white/10 px-4 text-xs font-black uppercase tracking-[0.06em] text-zinc-400 transition hover:bg-white/[0.06]">
+            <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-md border border-mf-glass-border-strong px-4 text-sm font-semibold text-mf-glass-text-secondary transition hover:bg-mf-glass-hover">
               {insight.severity ? (
                 <span
                   className={cn("size-1.5 rounded-full", SEVERITY_DOT[insight.severity])}
@@ -176,11 +221,11 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
               Why this?
             </summary>
 
-            <div className="mt-3 space-y-3 rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="mt-3 space-y-3 rounded-md border border-mf-glass-border bg-mf-glass-bg-deep p-4">
               {insight.reasons.length > 0 ? (
                 <ul className="space-y-1.5">
                   {insight.reasons.map((reason, index) => (
-                    <li key={index} className="text-sm leading-6 text-zinc-300">
+                    <li key={index} className="text-sm leading-6 text-mf-glass-text-secondary">
                       • {reason}
                     </li>
                   ))}
@@ -192,14 +237,14 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
                   {insight.evidence.map((item) => (
                     <div
                       key={item.label}
-                      className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5"
+                      className="rounded-md border border-mf-glass-border bg-mf-glass-surface p-2.5"
                     >
-                      <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-600">
+                      <p className="text-xs font-semibold text-mf-glass-text-muted">
                         {item.label}
                       </p>
-                      <p className="mt-0.5 text-sm font-bold text-white">{item.value}</p>
+                      <p className="mt-0.5 text-sm font-bold tabular-nums text-mf-glass-text">{item.value}</p>
                       {item.note ? (
-                        <p className="mt-0.5 text-[11px] text-zinc-500">{item.note}</p>
+                        <p className="mt-0.5 text-xs text-mf-glass-text-muted">{item.note}</p>
                       ) : null}
                     </div>
                   ))}
@@ -207,7 +252,7 @@ function DanteInsightPanel({ insight }: { insight: DanteInsight }) {
               ) : null}
 
               {insight.confidence ? (
-                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                <p className="text-xs font-semibold text-mf-glass-text-muted">
                   {insight.confidence} confidence
                 </p>
               ) : null}
@@ -241,25 +286,25 @@ function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
   }
 
   return (
-    <div className="mt-4 border-t border-white/8 pt-4">
+    <div className="mt-1 flex flex-col gap-2">
       <details className="group">
-        <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-white/10 px-4 text-xs font-black uppercase tracking-[0.06em] text-zinc-400 transition hover:bg-white/[0.06]">
+        <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-md border border-mf-glass-border-strong px-4 text-sm font-semibold text-mf-glass-text-secondary transition hover:bg-mf-glass-hover">
           Sources ({safeSources.length})
         </summary>
 
-        <ul className="mt-3 space-y-2 rounded-2xl border border-white/8 bg-black/20 p-4">
+        <ul className="mt-3 space-y-2 rounded-md border border-mf-glass-border bg-mf-glass-bg-deep p-4">
           {safeSources.map((source, index) => (
             <li key={`${source.url}-${index}`} className="text-sm leading-6">
               <a
                 href={source.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-amber-400 underline decoration-amber-400/30 underline-offset-2 hover:text-amber-300"
+                className="font-semibold text-mf-glass-text underline underline-offset-4"
               >
                 {source.title}
               </a>
               {source.type ? (
-                <span className="ml-2 text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-600">
+                <span className="ml-2 text-xs text-mf-glass-text-muted">
                   {source.type}
                 </span>
               ) : null}
@@ -277,6 +322,120 @@ function DanteSourcesPanel({ sources }: { sources: ChatStreamSource[] }) {
    arrived, and nothing is saved until CONFIRM actually succeeds.
 ========================================================= */
 
+/* MF-S1: a reviewable proposal (title, reason, current → proposed, uncertainty) with Accept / Modify / Reject.
+   Status comes only from the server: PROPOSED until an Accept is confirmed as APPLIED (read back), never optimistic. */
+function ProposalCard({
+  pendingConfirmation,
+  details,
+  resolution,
+  message,
+  isBusy,
+  onConfirm,
+  onCancel,
+  onModify,
+}: {
+  pendingConfirmation: PendingConfirmation;
+  details: NonNullable<PendingConfirmation["details"]>;
+  resolution: ConfirmationResolution | undefined;
+  message: string | null | undefined;
+  isBusy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  onModify: (value: number) => void;
+}) {
+  const vi = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(details.title);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(details.modify?.value ?? ""));
+  const status = resolution === "confirmed" ? "APPLIED" : resolution === "cancelled" ? "REJECTED" : resolution === "superseded" ? "REPLACED" : resolution === "expired" ? "EXPIRED" : resolution === "failed" ? "FAILED" : resolution === "unknown" ? "UNKNOWN" : "PROPOSED";
+  const statusLabel = vi
+    ? { PROPOSED: "Đề xuất", APPLIED: "Đã áp dụng", REJECTED: "Đã từ chối", REPLACED: "Đã thay", EXPIRED: "Hết hạn", FAILED: "Không áp dụng được", UNKNOWN: "Chưa rõ kết quả" }[status]
+    : { PROPOSED: "Proposed", APPLIED: "Applied", REJECTED: "Rejected", REPLACED: "Replaced", EXPIRED: "Expired", FAILED: "Not applied", UNKNOWN: "Result unknown" }[status];
+  const tone = status === "APPLIED" ? "text-mf-glass-success" : status === "FAILED" || status === "UNKNOWN" ? "text-mf-glass-warning" : "text-mf-glass-text-muted";
+  const outcome = message
+    ?? (status === "APPLIED" ? (vi ? "Đã lưu và đọc lại từ dữ liệu của bạn." : "Saved and read back from your data.")
+      : status === "REJECTED" ? (vi ? "Không có gì thay đổi." : "Nothing was changed.")
+      : status === "REPLACED" ? (vi ? "Một đề xuất mới hơn đã thay thế đề xuất này — không có gì thay đổi từ nó." : "A newer proposal replaced this one — nothing was changed by it.")
+      : status === "EXPIRED" ? (vi ? "Đề xuất đã hết hạn — không có gì thay đổi." : "This proposal expired — nothing was changed.")
+      : status === "FAILED" ? (vi ? "Không áp dụng được. Không có gì thay đổi." : "It couldn't be applied. Nothing was changed.")
+      : status === "UNKNOWN" ? (vi ? "Không xác nhận được kết quả — hãy kiểm tra trước khi thử lại." : "We couldn't confirm the result — check before trying again.")
+      : null);
+  const parsed = Number(value);
+  const modifyValid = details.modify !== null && Number.isFinite(parsed) && parsed >= details.modify.min && parsed <= details.modify.max;
+  const fieldId = `modify-${pendingConfirmation.actionId}`;
+
+  return (
+    <section aria-label={details.title} className="mt-3 rounded-md border border-mf-glass-border-strong bg-mf-glass-bg-deep p-3 text-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-semibold text-mf-glass-text">{details.title}</h3>
+        <span className={cn("text-xs font-bold uppercase tracking-[0.08em]", tone)} aria-live="polite">{statusLabel}</span>
+      </div>
+      <p className="mt-1 text-mf-glass-text-secondary">{details.reason}</p>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <dt className="text-mf-glass-text-muted">{vi ? "Áp dụng cho" : "Changes"}</dt>
+        <dd className="text-mf-glass-text">{details.target}</dd>
+        <dt className="text-mf-glass-text-muted">{vi ? "Hiện tại" : "Now"}</dt>
+        <dd className="text-mf-glass-text break-words">{details.current}</dd>
+        <dt className="text-mf-glass-text-muted">{vi ? "Đề xuất" : "Proposed"}</dt>
+        <dd className="font-semibold text-mf-glass-text break-words">{details.proposed}</dd>
+      </dl>
+      {details.uncertainty ? <p className="mt-2 text-xs text-mf-glass-text-muted">{details.uncertainty}</p> : null}
+
+      {status === "PROPOSED" ? (
+        editing && details.modify ? (
+          <form
+            className="mt-3 flex flex-wrap items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (modifyValid) onModify(parsed);
+            }}
+          >
+            <label htmlFor={fieldId} className="flex flex-col text-xs text-mf-glass-text-muted">
+              {details.modify.label} ({details.modify.unit})
+              <input
+                id={fieldId}
+                type="number"
+                inputMode="numeric"
+                min={details.modify.min}
+                max={details.modify.max}
+                step={details.modify.step}
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                className="mt-1 min-h-11 w-28 rounded-md border border-mf-glass-border-strong bg-mf-glass-bg px-2 text-base text-mf-glass-text"
+              />
+            </label>
+            <button type="submit" disabled={isBusy || !modifyValid} className="min-h-11 rounded-md border border-mf-glass-text bg-mf-glass-brand px-4 font-semibold text-mf-glass-brand-ink disabled:opacity-50">
+              {vi ? "Cập nhật đề xuất" : "Update proposal"}
+            </button>
+            <button type="button" disabled={isBusy} onClick={() => setEditing(false)} className="min-h-11 rounded-md border border-mf-glass-border-strong px-4 font-semibold text-mf-glass-text-secondary disabled:opacity-50">
+              {vi ? "Thôi" : "Back"}
+            </button>
+          </form>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled={isBusy} onClick={onConfirm} className="min-h-11 rounded-md border border-mf-glass-text bg-mf-glass-brand px-4 font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:opacity-50">
+              {vi ? "Chấp nhận" : "Accept"}
+            </button>
+            {details.modify ? (
+              <button type="button" disabled={isBusy} onClick={() => setEditing(true)} className="min-h-11 rounded-md border border-mf-glass-border-strong px-4 font-semibold text-mf-glass-text transition hover:bg-mf-glass-hover disabled:opacity-50">
+                {vi ? "Sửa" : "Modify"}
+              </button>
+            ) : null}
+            <button type="button" disabled={isBusy} onClick={onCancel} className="min-h-11 rounded-md border border-mf-glass-border-strong px-4 font-semibold text-mf-glass-text-secondary transition hover:bg-mf-glass-hover disabled:opacity-50">
+              {vi ? "Từ chối" : "Reject"}
+            </button>
+          </div>
+        )
+      ) : null}
+      {outcome || (status === "PROPOSED" && message) ? <p className={cn("mt-2 font-semibold", tone)} role="status">{outcome ?? message}</p> : null}
+      {status === "APPLIED" ? (
+        <Link href={details.href} className="mt-2 inline-flex min-h-11 items-center font-semibold text-mf-glass-text underline underline-offset-4">
+          {details.hrefLabel} →
+        </Link>
+      ) : null}
+    </section>
+  );
+}
+
 function PendingConfirmationPanel({
   pendingConfirmation,
   resolution,
@@ -285,30 +444,39 @@ function PendingConfirmationPanel({
   onCancel,
 }: {
   pendingConfirmation: PendingConfirmation;
-  resolution: "confirmed" | "cancelled" | "failed" | "unknown" | null | undefined;
+  resolution: ConfirmationResolution | undefined;
   isBusy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  // Restored from history: dante_tool_actions says it was never claimed before it expired.
+  if (resolution === "expired") {
+    return (
+      <p className="mt-3 text-sm font-semibold text-mf-glass-text-muted">
+        This proposal expired — nothing was changed.
+      </p>
+    );
+  }
+
   if (resolution === "confirmed") {
     return (
-      <p className="mt-3 text-xs font-semibold text-emerald-400">
+      <p className="mt-3 text-sm font-semibold text-mf-glass-success">
         ✓ Done — {pendingConfirmation.summary.toLowerCase()}.
       </p>
     );
   }
 
-  if (resolution === "cancelled") {
+  if (resolution === "cancelled" || resolution === "superseded") {
     return (
-      <p className="mt-3 text-xs font-semibold text-zinc-500">
-        Cancelled — nothing was changed.
+      <p className="mt-3 text-sm font-semibold text-mf-glass-text-muted">
+        {resolution === "superseded" ? "Replaced by a newer proposal" : "Cancelled"} — nothing was changed.
       </p>
     );
   }
 
   if (resolution === "failed") {
     return (
-      <p className="mt-3 text-xs font-semibold text-rose-400">
+      <p className="mt-3 text-sm font-semibold text-mf-glass-warning">
         That couldn&apos;t be saved. Nothing was changed.
       </p>
     );
@@ -317,21 +485,21 @@ function PendingConfirmationPanel({
   // The request may have reached the server before the connection failed: never claim "nothing changed" here.
   if (resolution === "unknown") {
     return (
-      <p className="mt-3 text-xs font-semibold text-amber-400">
+      <p className="mt-3 text-sm font-semibold text-mf-glass-warning">
         We couldn&apos;t confirm the result. Check your log before trying again — it may already be saved.
       </p>
     );
   }
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-3">
-      <span className="mr-2 text-xs text-zinc-300">{pendingConfirmation.summary}</span>
+    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-mf-glass-border-strong bg-mf-glass-bg-deep p-3">
+      <span className="mr-2 text-sm text-mf-glass-text">{pendingConfirmation.summary}</span>
 
       <button
         type="button"
         disabled={isBusy}
         onClick={onConfirm}
-        className="rounded-lg bg-amber-400 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-black transition hover:bg-amber-300 disabled:opacity-50"
+        className="min-h-11 rounded-md border border-mf-glass-text bg-mf-glass-brand px-4 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:opacity-50"
       >
         Confirm
       </button>
@@ -340,7 +508,7 @@ function PendingConfirmationPanel({
         type="button"
         disabled={isBusy}
         onClick={onCancel}
-        className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
+        className="min-h-11 rounded-md border border-mf-glass-border-strong px-4 text-sm font-semibold text-mf-glass-text-secondary transition hover:bg-mf-glass-hover disabled:opacity-50"
       >
         Cancel
       </button>
@@ -354,20 +522,20 @@ function PendingConfirmationPanel({
 
 export default function DanteChat({
   welcomeMessage = DEFAULT_WELCOME_MESSAGE,
-  heroTitle = "Dante, Your Performance Coach",
+  heroTitle = "Dante",
+  heroSubtitle,
   quickPrompts = QUICK_PROMPTS,
-  contextualSuggestions,
   compact = false,
   className,
   contextPayload,
+  restoreHistory = false,
+  todayContext,
 }: DanteChatProps = {}) {
-  const emptyStatePrompts: QuickPrompt[] =
-    contextualSuggestions && contextualSuggestions.length > 0
-      ? contextualSuggestions.map((insight) => ({
-          label: insight.action,
-          prompt: insight.prompt ?? insight.action,
-        }))
-      : quickPrompts;
+  const router = useRouter();
+  const composerHintId = useId();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // True while the user has scrolled up and a newer reply exists below.
+  const [showJump, setShowJump] = useState(false);
   const [messages, setMessages] =
     useState<ChatMessage[]>([
       {
@@ -386,16 +554,21 @@ export default function DanteChat({
   const [isLoading, setIsLoading] =
     useState(false);
 
+  // The conversation every turn is saved into; null until the first send (or a restore) picks one.
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [isRestoring, setIsRestoring] = useState(restoreHistory);
+  // Once the user has sent something, a late restore must never replace that conversation.
+  const sendStartedRef = useRef(false);
+  // Engine option buttons and suggested replies act only on the newest reply: an older list is no longer the one on screen.
+  const lastAssistantId = [...messages].reverse().find((message) => message.role === "assistant")?.id;
+
   const [activity, setActivity] = useState<DanteActivity>("idle");
-  const [hoveredPromptIndex, setHoveredPromptIndex] = useState<number | null>(null);
   const visualState = useDantePresence(activity);
+  // A conversation reopened from history: how many saved messages it brought back, and when the last one was written.
+  const [restored, setRestored] = useState<{ count: number; asOf: string } | null>(null);
 
   const isEmpty = messages.length === 1;
-
-  const messagesEndRef =
-    useRef<HTMLDivElement | null>(
-      null
-    );
 
   const abortControllerRef =
     useRef<AbortController | null>(null);
@@ -425,15 +598,49 @@ export default function DanteChat({
 
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     shouldAutoScrollRef.current = distanceFromBottom < NEAR_BOTTOM_THRESHOLD_PX;
+    setShowJump(!shouldAutoScrollRef.current);
+  }
+
+  function jumpToLatest() {
+    const el = chatWindowRef.current;
+    if (!el) return;
+    shouldAutoScrollRef.current = true;
+    setShowJump(false);
+    el.scrollTo({ top: el.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
 
   useEffect(() => {
     if (!shouldAutoScrollRef.current) return;
 
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-    });
+    // Scroll the chat window itself — scrollIntoView also scrolled the
+    // page, pushing the selector and NEW CHAT under the mobile header.
+    const el = chatWindowRef.current;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el?.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" });
   }, [messages, isLoading]);
+
+  /* =======================================================
+     DRAFT — the full page keeps an unsent message across
+     navigation within this tab (never sent anywhere).
+  ======================================================= */
+
+  const DRAFT_KEY = "mf.dante.draft";
+  const draftLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (!restoreHistory || compact) return;
+    // The first run is the mount: the restore effect below reads the saved draft; don't clear it first.
+    if (!draftLoadedRef.current) {
+      draftLoadedRef.current = true;
+      return;
+    }
+    try {
+      if (input) window.sessionStorage.setItem(DRAFT_KEY, input);
+      else window.sessionStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // storage blocked
+    }
+  }, [input, restoreHistory, compact]);
 
   /* =======================================================
      COMPOSER AUTO-GROW — grows with content up to a sensible
@@ -459,10 +666,90 @@ export default function DanteChat({
      them, and confirm re-checks atomically).
   ======================================================= */
 
+  function syncThreadUrl(id: string | null) {
+    if (!restoreHistory || compact) return;
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("c", id);
+    else url.searchParams.delete("c");
+    window.history.replaceState(window.history.state, "", url);
+  }
+
+  async function refreshThreads() {
+    const response = await fetch("/api/dante/conversations").catch(() => null);
+    const data = response?.ok ? ((await response.json()) as { threads?: ThreadSummary[] }) : null;
+    if (data?.threads) setThreads(data.threads);
+    return data?.threads ?? [];
+  }
+
+  /** Loads a saved conversation from the server; false when it doesn't exist for this user. */
+  async function openThread(id: string, isMountRestore = false): Promise<boolean> {
+    const response = await fetch(`/api/dante/conversations?id=${encodeURIComponent(id)}`).catch(() => null);
+    if (!response?.ok) return false;
+    const data = (await response.json()) as { messages?: StoredDanteMessage[] };
+    // Only the automatic mount restore yields to a send already in progress; a picked conversation always opens.
+    if (isMountRestore && sendStartedRef.current) return true;
+    const stored = data.messages ?? [];
+    setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }, ...stored.map(fromStoredMessage)]);
+    setRestored(stored.length > 0 ? { count: stored.length, asOf: stored[stored.length - 1].createdAt } : null);
+    setThreadId(id);
+    syncThreadUrl(id);
+    if (restoreHistory) rememberThread(id);
+    return true;
+  }
+
+  function startNewConversation() {
+    abortControllerRef.current?.abort();
+    setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }]);
+    setRestored(null);
+    setThreadId(null);
+    syncThreadUrl(null);
+    if (restoreHistory) rememberThread(null);
+  }
+
+  async function selectThread(id: string) {
+    if (!id) return startNewConversation();
+    setIsRestoring(true);
+    if (!(await openThread(id))) startNewConversation();
+    setIsRestoring(false);
+  }
+
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/dante/tools/pending")
-      .then((response) => (response.ok ? response.json() : null))
+    async function restore() {
+      if (!restoreHistory) return;
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = compact ? null : params.get("c");
+      // ?ask= (a contextual "Ask Dante" link): a fresh conversation with the question drafted, never sent automatically.
+      const ask = compact ? null : params.get("ask")?.trim().slice(0, 500) || null;
+      if (!compact && !ask) {
+        try {
+          const draft = window.sessionStorage.getItem(DRAFT_KEY);
+          if (draft) setInput((current) => current || draft);
+        } catch {
+          // storage blocked: the draft simply isn't kept
+        }
+      }
+      if (ask) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("ask");
+        window.history.replaceState(window.history.state, "", url);
+        setInput(ask);
+        rememberThread(null);
+        await refreshThreads();
+        return;
+      }
+      const list = await refreshThreads();
+      // URL first, then the conversation this tab last had open ("" = it was on a new chat), then today's most recent one
+      // (One Day, One Thread: an older day's conversation is never reopened by default).
+      const remembered = readLastThread();
+      const target = fromUrl ?? (remembered === null ? todaysThread(list) : remembered || null);
+      if (!cancelled && target && !sendStartedRef.current && !(await openThread(target, true))) syncThreadUrl(null);
+    }
+    void restore()
+      .catch(() => {})
+      .finally(() => !cancelled && setIsRestoring(false))
+      .then(() => (cancelled ? null : fetch("/api/dante/tools/pending")))
+      .then((response) => (response?.ok ? response.json() : null))
       .then((data: { pending?: Array<PendingConfirmation & { expiresAt: string }> } | null) => {
         const pending = data?.pending ?? [];
         if (cancelled || pending.length === 0) return;
@@ -473,8 +760,8 @@ export default function DanteChat({
             .map((item): ChatMessage => ({
               id: `pending-${item.actionId}`,
               role: "assistant",
-              content: "This is still waiting for you — nothing is saved until you tap Confirm.",
-              pendingConfirmation: { actionId: item.actionId, toolName: item.toolName, summary: item.summary },
+              content: item.details ? "This proposal is still waiting for you — nothing changes until you tap Accept." : "This is still waiting for you — nothing is saved until you tap Confirm.",
+              pendingConfirmation: { actionId: item.actionId, toolName: item.toolName, summary: item.summary, details: item.details ?? null },
               confirmationResolution: null,
               isComplete: true,
             }));
@@ -485,6 +772,8 @@ export default function DanteChat({
     return () => {
       cancelled = true;
     };
+    // Mount-only: restore, then proposals still pending anywhere (deduped against the restored ones).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* =======================================================
@@ -536,7 +825,8 @@ export default function DanteChat({
     );
   }
 
-  async function sendMessage(override?: string) {
+  /** `retry` resends an unfinished turn under its original id: the server reuses its rows (or replays a stored reply). */
+  async function sendMessage(override?: string, retry?: { turnId: string; assistantId: string }) {
     const trimmed =
       (override ?? input).trim();
 
@@ -547,25 +837,36 @@ export default function DanteChat({
       return;
     }
 
+    sendStartedRef.current = true;
+    // One Day, One Thread: a chat that opened before another Dante surface (e.g. the Nutrition page) started today's thread
+    // joins that thread instead of starting a parallel one — unless this tab chose "New chat" ("" remembered).
+    const activeThreadId = threadId ?? (restoreHistory ? readLastThread() || crypto.randomUUID() : crypto.randomUUID());
+    if (!threadId) {
+      setThreadId(activeThreadId);
+      syncThreadUrl(activeThreadId);
+      if (restoreHistory) rememberThread(activeThreadId);
+    }
+
+    const turnId = retry?.turnId ?? crypto.randomUUID();
     const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: turnId,
       role: "user",
       content: trimmed,
       createdAt: new Date().toISOString(),
+      turnId,
     };
 
-    const assistantId = crypto.randomUUID();
+    const assistantId = retry?.assistantId ?? crypto.randomUUID();
+    const streamingReply: ChatMessage = { id: assistantId, role: "assistant", content: "", isComplete: false, turnId };
+    // History sent to the server: everything before this turn (a retried turn's own question is already in `messages`).
+    const retryIndex = retry ? messages.findIndex((message) => message.turnId === retry.turnId) : -1;
+    const priorMessages = retryIndex >= 0 ? messages.slice(0, retryIndex) : messages;
 
-    setMessages((previous) => [
-      ...previous,
-      userMessage,
-      {
-        id: assistantId,
-        role: "assistant",
-        content: "",
-        isComplete: false,
-      },
-    ]);
+    setMessages((previous) =>
+      retry
+        ? previous.map((message) => (message.id === assistantId ? streamingReply : message))
+        : [...previous, userMessage, streamingReply]
+    );
 
     shouldAutoScrollRef.current = true;
 
@@ -595,7 +896,7 @@ export default function DanteChat({
               // Recent user turns only — the server selects a bounded context
               // working set from them (H0 cluster A); never dumped into a prompt.
               messages: [
-                ...messages
+                ...priorMessages
                   .filter((entry) => entry.role === "user" && entry.content.trim())
                   .map((entry) => ({
                     role: "user" as const,
@@ -609,6 +910,8 @@ export default function DanteChat({
                 },
               ].slice(-20),
               ...contextPayload,
+              threadId: activeThreadId,
+              clientMessageId: turnId,
             }),
 
           signal:
@@ -646,6 +949,7 @@ export default function DanteChat({
         let appendedText = "";
         let doneEvent: Extract<ChatStreamEvent, { type: "done" }> | null = null;
         let errorEvent: Extract<ChatStreamEvent, { type: "error" }> | null = null;
+        let savedEvent: Extract<ChatStreamEvent, { type: "saved" }> | null = null;
 
         for (const event of parsed.events) {
           if (event.type === "delta") {
@@ -654,6 +958,8 @@ export default function DanteChat({
             doneEvent = event;
           } else if (event.type === "error") {
             errorEvent = event;
+          } else if (event.type === "saved") {
+            savedEvent = event;
           }
         }
 
@@ -666,18 +972,28 @@ export default function DanteChat({
 
         if (doneEvent) {
           const finalEvent = doneEvent;
+          // The meal state itself is held by the server per thread (One Day, One Thread); a write refreshes food-log views.
+          if (finalEvent.nutrition?.foodLogChanged) window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT));
 
-          updateStreamingMessage(assistantId, (message) => ({
-            ...message,
-            insight: finalEvent.insight,
-            sources: Array.isArray(finalEvent.sources) ? finalEvent.sources : [],
-            // A pending confirmation is only ever attached here, from
-            // the server's own completed `done` event — never
-            // rendered speculatively while text is still streaming.
-            pendingConfirmation: finalEvent.pendingConfirmation,
-            confirmationResolution: null,
-            isComplete: true,
-          }));
+          updateStreamingMessage(assistantId, (message) => {
+            // QA-08: a finished reply with no text and nothing to confirm would render as a silent blank — say so instead
+            // (same copy as any failed turn) and offer Retry.
+            const empty = message.content.trim().length === 0 && !finalEvent.pendingConfirmation;
+            return {
+              ...message,
+              content: empty ? UNAVAILABLE_MESSAGE : message.content,
+              insight: finalEvent.insight,
+              sources: Array.isArray(finalEvent.sources) ? finalEvent.sources : [],
+              // A pending confirmation is only ever attached here, from
+              // the server's own completed `done` event — never
+              // rendered speculatively while text is still streaming.
+              pendingConfirmation: finalEvent.pendingConfirmation,
+              nutrition: finalEvent.nutrition ?? null,
+              confirmationResolution: null,
+              isComplete: true,
+              ...(empty ? { historyStatus: "error" as const } : {}),
+            };
+          });
 
           setActivity("success");
         }
@@ -689,9 +1005,14 @@ export default function DanteChat({
             ...message,
             content: resolveStreamErrorContent(message.content, finalError.partial, UNAVAILABLE_MESSAGE),
             isComplete: true,
+            historyStatus: "error",
           }));
 
           setActivity("error");
+        }
+
+        if (savedEvent && !savedEvent.ok) {
+          updateStreamingMessage(assistantId, (message) => ({ ...message, notSaved: true }));
         }
       }
     } catch (error: unknown) {
@@ -704,8 +1025,8 @@ export default function DanteChat({
       );
 
       setActivity(wasAborted ? "idle" : "error");
-      // The message stays in the conversation, and back in the composer so retrying is one tap (never auto-resent).
-      if (!wasAborted) setInput((current) => current || trimmed);
+      // The message stays in the conversation; retrying is the reply's own Retry button (same turn id, never
+      // auto-resent) — refilling the composer would send it again as a second, duplicate turn.
 
       /*
        * Reassuring, non-technical failure state (spec: "Failure
@@ -730,10 +1051,12 @@ export default function DanteChat({
           : message.content || failureCopy,
         isComplete: true,
         wasAborted,
+        historyStatus: wasAborted ? "interrupted" : "error",
       }));
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      if (restoreHistory) void refreshThreads();
       // A turn may have published or withdrawn a disclosure (allergy, low intake): surfaces derived from it re-fetch.
       window.dispatchEvent(new Event(COACH_CONTEXT_CHANGED_EVENT));
     }
@@ -763,17 +1086,29 @@ export default function DanteChat({
         body: JSON.stringify({ actionId, intent }),
       });
 
-      const data = (await response.json().catch(() => ({}))) as { ok?: boolean };
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; result?: { message?: unknown } };
 
       const resolution = resolveConfirmationOutcome(intent, { status: response.status, ok: data.ok });
+      // The server's own words: the read-back result on success, the exact refusal (stale, expired, held) otherwise.
+      const serverMessage = resolution === "confirmed"
+        ? (typeof data.result?.message === "string" ? data.result.message : null)
+        : resolution === "failed" && typeof data.error === "string" ? data.error : null;
 
       setMessages((previous) =>
         previous.map((message) =>
           message.id === messageId
-            ? { ...message, confirmationResolution: resolution }
+            ? { ...message, confirmationResolution: resolution, confirmationMessage: serverMessage }
             : message
         )
       );
+
+      // A confirmed write changed athlete data: re-render the server-built Today context (chat state is kept).
+      if (resolution === "confirmed" && todayContext) router.refresh();
+      // A confirmed write refreshes food-log views (the server re-validates the thread's pending log on the next turn).
+      if (resolution === "confirmed") {
+        window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT));
+        window.dispatchEvent(new Event(COACH_CONTEXT_CHANGED_EVENT));
+      }
     } catch (error) {
       console.error("[DANTE CONFIRM ACTION ERROR]", error);
 
@@ -784,6 +1119,36 @@ export default function DanteChat({
             : message
         )
       );
+    } finally {
+      setConfirmingActionId(null);
+    }
+  }
+
+  /* MF-S1 MODIFY: the server re-runs the proposal builder with the edited value; the card is replaced by the NEW
+     proposal (still PROPOSED — Accept is a separate step). A refusal is shown on the unchanged card. */
+  async function handleModifyAction(messageId: string, actionId: string, value: number) {
+    setConfirmingActionId(actionId);
+    try {
+      const response = await fetch("/api/dante/tools/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionId, intent: "modify", value }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; status?: string; pending?: PendingConfirmation };
+      setMessages((previous) =>
+        previous.map((message) => {
+          if (message.id !== messageId) return message;
+          if (data.ok && data.pending) return { ...message, pendingConfirmation: data.pending, confirmationResolution: null, confirmationMessage: null };
+          const handled = data.status === "already_handled" || data.status === "expired" || data.status === "not_found";
+          return {
+            ...message,
+            confirmationResolution: handled ? (data.status === "expired" ? "expired" : "unknown") : message.confirmationResolution,
+            confirmationMessage: data.error ?? "That change couldn't be prepared. Nothing was changed.",
+          };
+        })
+      );
+    } catch {
+      setMessages((previous) => previous.map((message) => (message.id === messageId ? { ...message, confirmationMessage: "Couldn't reach the server. Nothing was changed." } : message)));
     } finally {
       setConfirmingActionId(null);
     }
@@ -834,462 +1199,304 @@ export default function DanteChat({
   }
 
   /* =======================================================
-     UI
+     UI — conversation first: a compact header, today's context,
+     the messages, quick actions and the composer.
   ======================================================= */
 
+  const welcome = messages[0];
+  const conversation = messages.slice(1);
+  const currentThread = threads.find((thread) => thread.id === threadId) ?? null;
+  const fullPage = restoreHistory && !compact;
+  const Heading = fullPage ? "h1" : "p";
+
+  const threadList = (onPicked?: () => void) => (
+    <ul className="space-y-1">
+      {threads.length === 0 ? (
+        <li className="px-2 py-2 text-sm text-mf-glass-text-muted">{isRestoring ? "Loading conversations…" : "No saved conversations yet."}</li>
+      ) : null}
+      {threads.map((thread) => (
+        <li key={thread.id}>
+          <button
+            type="button"
+            onClick={() => {
+              onPicked?.();
+              void selectThread(thread.id);
+            }}
+            disabled={isLoading || isRestoring}
+            aria-current={thread.id === threadId ? "true" : undefined}
+            className={cn(
+              "flex min-h-11 w-full flex-col justify-center rounded-md px-3 py-2 text-left text-sm transition disabled:opacity-50",
+              thread.id === threadId ? "bg-mf-glass-bg-deep font-semibold text-mf-glass-text" : "text-mf-glass-text-secondary hover:bg-mf-glass-hover"
+            )}
+          >
+            <span className="w-full truncate">{thread.title}</span>
+            <span className="text-xs font-normal text-mf-glass-text-muted">{new Date(thread.updatedAt).toLocaleDateString()}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+
   return (
-    <div
+    <section
+      aria-label={heroTitle}
       className={cn(
-        "relative flex w-full flex-col font-sans overflow-hidden rounded-[24px] border border-white/6 p-4 sm:p-6 transition-all duration-500",
-        hudStyles.obsidianCanvas,
+        // isolate: keeps the chat's internal z-layers from painting over the dashboard header.
+        // mf-touch-inputs: the composer stays 16px on phones (no zoom on focus).
+        "relative isolate flex w-full flex-col font-sans overflow-hidden bg-mf-glass-surface mf-touch-inputs",
         compact
-          ? "h-[min(65dvh,560px)] max-h-[min(65dvh,560px)] min-h-[420px]"
-          : "h-[min(82dvh,860px)] min-h-[520px] sm:min-h-[580px]",
+          ? "h-[min(65dvh,560px)] max-h-[min(65dvh,560px)] min-h-[420px] rounded-md border border-mf-glass-border"
+          // Below lg: one surface, no nested card — fits between the shell header (4rem), the page's top padding
+          // (1.25rem) and the bottom nav (4.5rem) so the composer is never under the nav.
+          : "max-lg:h-[calc(100dvh-9.75rem-env(safe-area-inset-bottom,0px))] max-lg:min-h-[360px] max-lg:rounded-md max-lg:border max-lg:border-mf-glass-border lg:h-[min(82dvh,860px)] lg:min-h-[580px] lg:rounded-md lg:border lg:border-mf-glass-border",
         className
       )}
     >
-      {/* 2D PROCEDURAL BIOMETRIC FIELD CANVAS (Grid & Micro-Particles) */}
-      <BiometricFieldCanvas />
-
-      {/* Ambient Lighting Washes — Persistent in BOTH States */}
-      <div aria-hidden="true" className={`absolute inset-0 pointer-events-none z-0 ${hudStyles.topLimeWash}`} />
-      <div aria-hidden="true" className={`absolute inset-0 pointer-events-none z-0 ${hudStyles.bottomVioletWash}`} />
-      <div aria-hidden="true" className={`absolute inset-0 pointer-events-none z-0 ${hudStyles.leftBlueWash}`} />
-
-      {/* Screen Reader Accessibility */}
       <span aria-live="polite" className="sr-only">
         {DANTE_STATE_LABEL[visualState]}
       </span>
 
-      {/* ===================================================
-          DANTE SUPERVISOR HEADER (IN-PLACE FLUID MORPH)
-      =================================================== */}
-      <div
-        className={cn(
-          "relative z-20 flex shrink-0 transition-all duration-500",
-          isEmpty
-            ? "flex-col items-center justify-center gap-3 px-1 py-2 text-center"
-            : "mb-3 flex-row items-center justify-between rounded-[18px] border border-white/6 bg-[#0e1016]/60 px-3 py-2 sm:px-4 sm:py-2.5 backdrop-blur-md"
-        )}
-      >
-        {/* Living Mascot Supervisor */}
-        <div
-          className={cn(
-            "flex items-center gap-3",
-            isEmpty ? "w-full max-w-md flex-col sm:flex-row sm:justify-center" : "min-w-0 flex-1"
-          )}
-        >
-          <div
-            className={cn(
-              "relative flex shrink-0 items-center justify-center transition-all duration-500",
-              isEmpty ? "p-2 sm:p-4" : "origin-left scale-75"
-            )}
-          >
-            {/* Volumetric Cone Light (Active in State 1) */}
-            {isEmpty && (
-              <div aria-hidden="true" className={`absolute -top-2 hidden w-[180px] h-[130px] pointer-events-none sm:block ${hudStyles.volumetricCone}`} />
-            )}
-
-            {/* Elliptical Floor Reflection Sheen */}
-            {isEmpty && (
-              <div aria-hidden="true" className={`absolute bottom-1 hidden w-[130px] h-[22px] rounded-full pointer-events-none sm:block ${hudStyles.floorSheen}`} />
-            )}
-
-            {/* Concentric SVG Dashed Orbit Rings */}
-            {isEmpty && (
-              <svg
-                viewBox="-300 -140 600 280"
-                className="pointer-events-none absolute inset-0 hidden size-full overflow-visible sm:block"
-                aria-hidden="true"
-              >
-                <ellipse
-                  rx="275"
-                  ry="115"
-                  fill="none"
-                  stroke="rgba(212, 255, 0, 0.35)"
-                  strokeWidth="1"
-                  strokeDasharray="4 8"
-                  transform="rotate(-8)"
-                  className={hudStyles.orbitRingCW}
-                />
-                <ellipse
-                  rx="210"
-                  ry="85"
-                  fill="none"
-                  stroke="rgba(212, 255, 0, 0.22)"
-                  strokeWidth="1"
-                  strokeDasharray="2 6"
-                  transform="rotate(12)"
-                  className={hudStyles.orbitRingCCW}
-                />
-              </svg>
-            )}
-
-            {/* Laser Scanline Beam & Mascot Float */}
-            <div className="relative z-10 overflow-hidden py-1">
-              {isEmpty && (
-                <div className={`absolute left-0 right-0 z-20 pointer-events-none ${hudStyles.scanlineBeam}`} />
-              )}
-              <div className={cn(hudStyles.mascotFloat, isEmpty && "origin-center max-sm:scale-[0.78]")}>
-                <DanteRobot
-                  state={visualState}
-                  size="sm"
-                  interactive
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Morphing Metadata Breadcrumb */}
-          <div className={cn("min-w-0", isEmpty ? "text-center sm:text-left" : "text-left")}>
-            <p className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-[#D4FF00] sm:text-[10px] sm:tracking-[0.2em]">
-              {isEmpty ? "DANTE • ONLINE" : "DANTE • LIVE"}
+      {/* HEADER — Dante | history | new chat. */}
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-mf-glass-border px-3 sm:px-4">
+        <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-md border border-mf-glass-dante/30 font-heading text-base font-black text-mf-glass-dante">
+          D
+        </span>
+        <div className="min-w-0 flex-1">
+          <Heading className="font-heading text-xl font-black uppercase leading-none tracking-tight text-mf-glass-text">Dante</Heading>
+          {restoreHistory ? (
+            <p className="mt-0.5 truncate text-xs text-mf-glass-text-muted">
+              {isRestoring ? "Opening your conversation…" : currentThread?.title ?? "New conversation"}
             </p>
-            {isEmpty ? (
-              <h2 className="mt-1 text-lg font-bold tracking-tight text-white sm:text-xl md:text-2xl lg:text-3xl">
-                {heroTitle}
-              </h2>
-            ) : (
-              <p className="truncate text-[11px] font-mono text-zinc-400">
-                TRAINING • RECOVERY • NUTRITION
-              </p>
-            )}
-          </div>
+          ) : null}
         </div>
 
-        {/* Live Status Beacon (when in active chat mode) */}
-        {!isEmpty && (
-          <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-            <span
+        {restoreHistory ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              aria-label="Conversation history"
+              aria-haspopup="dialog"
               className={cn(
-                "size-2 rounded-full transition-colors",
-                visualState === "error"
-                  ? "bg-rose-400 shadow-[0_0_8px_#f43f5e]"
-                  : visualState === "idle"
-                    ? "bg-[#D4FF00] shadow-[0_0_8px_#D4FF00]"
-                    : "bg-[var(--mf-violet)] shadow-[0_0_8px_var(--mf-violet)] animate-pulse"
+                "grid size-11 shrink-0 place-items-center rounded-md text-mf-glass-text-secondary transition hover:bg-mf-glass-hover",
+                fullPage && "xl:hidden"
               )}
-            />
-            <span>{visualState === "idle" ? "ONLINE" : visualState}</span>
+            >
+              <History aria-hidden="true" className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={startNewConversation}
+              disabled={isLoading || isRestoring || threadId === null}
+              aria-label="New chat"
+              className="inline-flex h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-mf-glass-text-secondary transition hover:bg-mf-glass-hover disabled:opacity-40"
+            >
+              <SquarePen aria-hidden="true" className="size-5" />
+              <span className="max-sm:sr-only">New chat</span>
+            </button>
+          </>
+        ) : null}
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+      {/* CONVERSATION RAIL — full page, desktop only. */}
+      {fullPage ? (
+        <nav aria-label="Conversation history" className="hidden w-64 shrink-0 flex-col border-r border-mf-glass-border xl:flex">
+          <p className="px-4 pb-2 pt-3 text-xs font-semibold text-mf-glass-text-muted">Conversations</p>
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">{threadList()}</div>
+        </nav>
+      ) : null}
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {todayContext ? <TodayContextBar context={todayContext} /> : null}
+
+      {/* CONVERSATION */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div
+        ref={chatWindowRef}
+        onScroll={handleChatWindowScroll}
+        className="h-full overflow-y-auto overscroll-contain px-4 py-5 sm:px-6"
+      >
+        <div className="mx-auto max-w-2xl space-y-6">
+          <div>
+            <p className="mb-1 text-xs font-semibold text-mf-glass-dante">Dante</p>
+            <AssistantText content={welcome.content} />
+            {isEmpty && heroSubtitle ? <p className="mt-2 text-sm leading-6 text-mf-glass-text-muted">{heroSubtitle}</p> : null}
           </div>
-        )}
+
+          {conversation.map((message, index) => {
+            const isUser = message.role === "user";
+            // One marker where the reopened history ends: replies above it describe the data as it was then.
+            const earlierBoundary = restored && index === restored.count - 1;
+
+            return (
+              <React.Fragment key={message.id}>
+                <div className={cn("dante-message-in flex w-full", isUser ? "justify-end" : "justify-start")}>
+                  {isUser ? (
+                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-mf-glass-bg-deep px-4 py-2.5 text-base leading-7 text-mf-glass-text sm:max-w-[75%]">
+                      <span className="sr-only">You: </span>
+                      <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                    </div>
+                  ) : (
+                    <div className="flex w-full min-w-0 flex-col gap-2">
+                      <p className="text-xs font-semibold text-mf-glass-dante">Dante</p>
+                      {message.content.length === 0 && !message.isComplete ? (
+                        <p aria-live="polite" className="flex items-center gap-2 py-1 text-sm text-mf-glass-text-muted">
+                          <span className="flex gap-1" aria-hidden="true">
+                            <span className="size-1.5 rounded-full bg-mf-glass-dante motion-safe:animate-pulse" />
+                            <span className="size-1.5 rounded-full bg-mf-glass-dante motion-safe:animate-pulse [animation-delay:150ms]" />
+                            <span className="size-1.5 rounded-full bg-mf-glass-dante motion-safe:animate-pulse [animation-delay:300ms]" />
+                          </span>
+                          Dante is thinking…
+                        </p>
+                      ) : (
+                        <AssistantText content={message.content} />
+                      )}
+
+                      {message.historyStatus === "pending" || message.historyStatus === "interrupted" ? (
+                        <p className="text-sm font-semibold text-mf-glass-warning">
+                          {message.historyStatus === "pending"
+                            ? "This reply was never confirmed as finished — it may have been cut off by a refresh or lost connection."
+                            : "This reply was interrupted before Dante finished."}
+                        </p>
+                      ) : null}
+
+                      {message.notSaved ? (
+                        <p className="text-sm font-semibold text-mf-glass-warning">
+                          This reply couldn&apos;t be saved to your conversation history.
+                        </p>
+                      ) : null}
+
+                      {message.historyStatus && message.turnId && !isLoading ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const question = messages.find((entry) => entry.role === "user" && entry.turnId === message.turnId);
+                            if (question) void sendMessage(question.content, { turnId: message.turnId!, assistantId: message.id });
+                          }}
+                          className="inline-flex min-h-11 items-center gap-2 self-start rounded-md border border-mf-glass-border-strong px-4 text-sm font-semibold text-mf-glass-text transition hover:bg-mf-glass-hover"
+                        >
+                          <RotateCcw aria-hidden="true" className="size-4" />
+                          Retry
+                        </button>
+                      ) : null}
+
+                      {message.nutrition?.blocks.length ? (
+                        <NutritionBlocks blocks={message.nutrition.blocks} disabled={isLoading || message.id !== lastAssistantId} onPick={(text) => void sendMessage(text)} />
+                      ) : null}
+
+                      {message.nutrition?.hints.length && message.id === lastAssistantId && !isLoading ? (
+                        <NutritionQuickActions actions={message.nutrition.hints.map((hint) => ({ label: hint.charAt(0).toUpperCase() + hint.slice(1), message: hint }))} disabled={isLoading} onPick={(text) => void sendMessage(text)} />
+                      ) : null}
+
+                      {message.insight ? <DanteInsightPanel insight={message.insight} /> : null}
+
+                      {message.sources && message.sources.length > 0 ? <DanteSourcesPanel sources={message.sources} /> : null}
+
+                      {message.pendingConfirmation?.details ? (
+                        <ProposalCard
+                          key={message.pendingConfirmation.actionId}
+                          pendingConfirmation={message.pendingConfirmation}
+                          details={message.pendingConfirmation.details}
+                          resolution={message.confirmationResolution}
+                          message={message.confirmationMessage}
+                          isBusy={confirmingActionId === message.pendingConfirmation.actionId}
+                          onConfirm={() => void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "confirm")}
+                          onCancel={() => void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "cancel")}
+                          onModify={(value) => void handleModifyAction(message.id, message.pendingConfirmation!.actionId, value)}
+                        />
+                      ) : message.pendingConfirmation ? (
+                        <PendingConfirmationPanel
+                          pendingConfirmation={message.pendingConfirmation}
+                          resolution={message.confirmationResolution}
+                          isBusy={confirmingActionId === message.pendingConfirmation.actionId}
+                          onConfirm={() => void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "confirm")}
+                          onCancel={() => void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "cancel")}
+                        />
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
+                {earlierBoundary ? (
+                  <p role="note" className="flex items-center gap-3 text-xs font-semibold text-mf-glass-text-muted">
+                    <span className="h-px flex-1 bg-mf-glass-border" aria-hidden="true" />
+                    <span className="text-center">Earlier conversation · figures above were current {formatAsOf(restored.asOf)}</span>
+                    <span className="h-px flex-1 bg-mf-glass-border" aria-hidden="true" />
+                  </p>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ===================================================
-          STATE 1: SATELLITE PROMPT ORBIT SYSTEM
-      =================================================== */}
-      {isEmpty && (
-        <div className="relative z-30 flex-1 w-full max-w-7xl mx-auto grid grid-cols-1 gap-3.5 sm:block sm:h-full my-auto transition-all duration-300">
-          {emptyStatePrompts.slice(0, 4).map((item, index) => {
-            const driftClasses = [
-              hudStyles.satelliteDriftA,
-              hudStyles.satelliteDriftB,
-              hudStyles.satelliteDriftC,
-              hudStyles.satelliteDriftD,
-            ];
-            const driftClass = driftClasses[index % 4];
-            const isHovered = hoveredPromptIndex === index;
-            const isAnyHovered = hoveredPromptIndex !== null;
-            const opacityClass = isAnyHovered && !isHovered ? "opacity-45 scale-[0.98]" : "opacity-100";
-
-            const spatialPositionClass = [
-              "sm:absolute sm:top-2 sm:left-0 md:left-2 lg:left-6 xl:left-10 sm:max-w-[280px]",
-              "sm:absolute sm:top-2 sm:right-0 md:right-2 lg:right-6 xl:right-10 sm:max-w-[280px]",
-              "sm:absolute sm:bottom-6 sm:left-2 md:left-4 lg:left-10 xl:left-16 sm:max-w-[280px]",
-              "sm:absolute sm:bottom-6 sm:right-2 md:right-4 lg:right-10 xl:right-16 sm:max-w-[280px]",
-            ][index % 4];
-
-            return (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => handleQuickPrompt(item.prompt)}
-                onPointerEnter={() => setHoveredPromptIndex(index)}
-                onPointerLeave={() => setHoveredPromptIndex(null)}
-                disabled={isLoading}
-                className={`relative px-4 py-3.5 text-left transition ${hudStyles.hudCard} ${driftClass} ${spatialPositionClass} ${opacityClass} disabled:cursor-not-allowed disabled:opacity-40`}
-              >
-                <p className="font-mono text-[9.5px] font-bold uppercase tracking-wider text-[#D4FF00]/90 mb-1">
-                  {item.tag ?? "Prompt"}
-                </p>
-                <p className="text-xs font-semibold leading-5 text-zinc-100">
-                  {item.label}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ===================================================
-          STATE 2: ACTIVE CONVERSATION THREAD (HUD GLASS TELEMETRY)
-      =================================================== */}
-      {!isEmpty && (
-        <div
-          ref={chatWindowRef}
-          onScroll={handleChatWindowScroll}
-          className="relative z-20 flex-1 min-h-0 w-full max-w-3xl mx-auto overflow-y-auto px-2 sm:px-4 py-3 space-y-4"
+      {showJump ? (
+        <button
+          type="button"
+          onClick={jumpToLatest}
+          className="absolute bottom-3 left-1/2 inline-flex min-h-11 -translate-x-1/2 items-center gap-1.5 rounded-full border border-mf-glass-border-strong bg-mf-glass-surface px-4 text-sm font-semibold text-mf-glass-text shadow-[var(--shadow-card)]"
         >
-          {messages.map((message) => {
-            const isUser = message.role === "user";
+          <ArrowDown aria-hidden="true" className="size-4" />
+          Latest
+        </button>
+      ) : null}
+      </div>
 
-            return (
-              <div
-                key={message.id}
-                className={cn(
-                  "dante-message-in flex w-full",
-                  isUser ? "justify-end" : "justify-start"
-                )}
-              >
-                {isUser ? (
-                  /* User Message: Sleek right-aligned obsidian glass pill */
-                  <div className="max-w-[85%] sm:max-w-[75%] rounded-[16px_16px_4px_16px] border border-[#D4FF00]/25 bg-[#16181e]/85 px-4.5 py-3 text-sm sm:text-base font-medium leading-relaxed text-white shadow-lg backdrop-blur-md">
-                    <p className="whitespace-pre-wrap">{message.content}</p>
-                  </div>
-                ) : (
-                  /* Dante Message: Left-aligned glass panel */
-                  <div className="flex w-full max-w-[95%] sm:max-w-[90%] flex-col gap-2 rounded-[16px_16px_16px_4px] border border-white/8 bg-[#0e1016]/75 p-4 sm:p-5 shadow-xl backdrop-blur-xl">
-                    {/* Header status pill: [D] icon badge with glowing lime pulse dot */}
-                    <div className="flex items-center gap-2">
-                      <span className="flex size-5 items-center justify-center rounded-md border border-[#D4FF00]/30 bg-[#D4FF00]/10 font-mono text-[10px] font-black text-[#D4FF00]">
-                        D
-                      </span>
-                      <span className="size-1.5 rounded-full bg-[#D4FF00] shadow-[0_0_6px_#D4FF00]" />
-                      <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                        DANTE // INTELLIGENCE COACH
-                      </span>
-                    </div>
-
-                    {/* Thinking state with 3 animated equalizer bars */}
-                    {message.content.length === 0 && !message.isComplete ? (
-                      <div
-                        aria-live="polite"
-                        className="flex items-center gap-2.5 py-2 font-mono text-xs font-bold tracking-wider text-[#D4FF00]"
-                      >
-                        <span className="size-1.5 rounded-full bg-[#D4FF00] animate-ping" />
-                        <span>{"// DANTE ANALYZING BIOMETRICS"}</span>
-                        <div className="flex items-center gap-0.5 ml-1 select-none" aria-hidden="true">
-                          <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
-                          <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.2s" }} />
-                          <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.4s" }} />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="prose prose-invert max-w-none text-white/90 text-sm leading-relaxed">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeRaw, rehypeSanitize]}
-                          components={{
-                            p({ children }) {
-                              return (
-                                <p className="mb-3.5 text-sm sm:text-[15px] leading-relaxed text-[#edf0f5] last:mb-0">
-                                  {children}
-                                </p>
-                              );
-                            },
-                            h1({ children }) {
-                              return (
-                                <h1 className="mb-4 mt-2 text-xl sm:text-2xl font-bold tracking-tight text-white">
-                                  {children}
-                                </h1>
-                              );
-                            },
-                            h2({ children }) {
-                              return (
-                                <h2 className="mb-3 mt-5 text-lg sm:text-xl font-semibold tracking-wide text-white">
-                                  {children}
-                                </h2>
-                              );
-                            },
-                            h3({ children }) {
-                              return (
-                                <h3 className="mb-2 mt-4 text-base font-semibold text-[#D4FF00]">
-                                  {children}
-                                </h3>
-                              );
-                            },
-                            strong({ children }) {
-                              return (
-                                <strong className="font-semibold text-white">
-                                  {children}
-                                </strong>
-                              );
-                            },
-                            ul({ children }) {
-                              return (
-                                <ul className="mb-4 ml-5 list-disc space-y-1.5 marker:text-[#D4FF00]">
-                                  {children}
-                                </ul>
-                              );
-                            },
-                            // `start` must pass through: a list interrupted by a paragraph or heading continues as <ol start="n">.
-                            ol({ children, start }) {
-                              return (
-                                <ol start={start} className="mb-4 ml-5 list-decimal space-y-1.5 marker:font-semibold marker:text-[#D4FF00]">
-                                  {children}
-                                </ol>
-                              );
-                            },
-                            li({ children }) {
-                              return (
-                                <li className="pl-1 text-sm sm:text-[15px] leading-relaxed">
-                                  {children}
-                                </li>
-                              );
-                            },
-                            br() {
-                              return <br className="block content-['']" />;
-                            },
-                            table({ children }) {
-                              return (
-                                <div className="my-4 w-full overflow-x-auto rounded-xl border border-white/10">
-                                  <table className="w-full min-w-160 border-collapse text-left text-xs sm:text-sm">
-                                    {children}
-                                  </table>
-                                </div>
-                              );
-                            },
-                            thead({ children }) {
-                              return (
-                                <thead className="bg-[#12141a] text-[#D4FF00]">
-                                  {children}
-                                </thead>
-                              );
-                            },
-                            tbody({ children }) {
-                              return (
-                                <tbody className="divide-y divide-white/8">
-                                  {children}
-                                </tbody>
-                              );
-                            },
-                            tr({ children }) {
-                              return (
-                                <tr className="transition-colors hover:bg-white/4">
-                                  {children}
-                                </tr>
-                              );
-                            },
-                            th({ children }) {
-                              return (
-                                <th className="border-r border-white/8 px-4 py-3 text-left font-bold text-[#D4FF00] last:border-r-0">
-                                  {children}
-                                </th>
-                              );
-                            },
-                            td({ children }) {
-                              return (
-                                <td className="border-r border-white/8 px-4 py-3 align-top text-[#e1e5ec] last:border-r-0">
-                                  {children}
-                                </td>
-                              );
-                            },
-                            blockquote({ children }) {
-                              return (
-                                <blockquote className="my-4 rounded-r-xl border-l-4 border-[#D4FF00] bg-black/20 px-4 py-3 text-white/75">
-                                  {children}
-                                </blockquote>
-                              );
-                            },
-                            code({ children }) {
-                              return (
-                                <code className="rounded-md bg-black/35 px-1.5 py-0.5 font-mono text-xs text-[#D4FF00]">
-                                  {children}
-                                </code>
-                              );
-                            },
-                            pre({ children }) {
-                              return (
-                                <pre className="my-4 overflow-x-auto rounded-xl bg-black/45 p-4 font-mono text-xs leading-5">
-                                  {children}
-                                </pre>
-                              );
-                            },
-                            hr() {
-                              return <hr className="my-5 border-white/10" />;
-                            },
-                          }}
-                        >
-                          {message.content}
-                        </ReactMarkdown>
-                      </div>
-                    )}
-
-                    {message.insight ? (
-                      <DanteInsightPanel insight={message.insight} />
-                    ) : null}
-
-                    {message.sources && message.sources.length > 0 ? (
-                      <DanteSourcesPanel sources={message.sources} />
-                    ) : null}
-
-                    {message.pendingConfirmation ? (
-                      <PendingConfirmationPanel
-                        pendingConfirmation={message.pendingConfirmation}
-                        resolution={message.confirmationResolution}
-                        isBusy={confirmingActionId === message.pendingConfirmation.actionId}
-                        onConfirm={() =>
-                          void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "confirm")
-                        }
-                        onCancel={() =>
-                          void handleConfirmAction(message.id, message.pendingConfirmation!.actionId, "cancel")
-                        }
-                      />
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          <div ref={messagesEndRef} />
+      {/* QUICK ACTIONS — real requests through the same chat pipeline, only on an empty conversation. */}
+      {isEmpty && quickPrompts.length > 0 ? (
+        <div role="group" aria-label="Quick actions" className="flex shrink-0 gap-2 overflow-x-auto px-3 pb-1 pt-2 [scrollbar-width:none] sm:px-4">
+          {quickPrompts.slice(0, 5).map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => handleQuickPrompt(item.prompt)}
+              disabled={isLoading}
+              className="inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border border-mf-glass-border-strong bg-mf-glass-surface px-4 text-sm font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-dante/50 hover:text-mf-glass-text disabled:opacity-40"
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
-      )}
+      ) : null}
 
-      {/* ===================================================
-          COMPOSER — Persistent, Pinned at Bottom Center
-      =================================================== */}
+      {/* COMPOSER */}
       <form
         onSubmit={handleSubmit}
-        className="relative z-30 mt-3 w-full min-w-0 max-w-3xl mx-auto flex shrink-0 items-center gap-2 sm:gap-3 pb-[env(safe-area-inset-bottom)]"
+        className="relative flex shrink-0 items-end gap-2 border-t border-mf-glass-border px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:px-4"
       >
-        <div
-          className={`flex min-h-12 min-w-0 flex-1 items-center rounded-[18px] px-3 py-2 text-sm sm:px-4 ${hudStyles.hudInputContainer}`}
-        >
-          <span className="mr-2 font-mono text-xs font-bold text-[#D4FF00] select-none">
-            $&gt;
-          </span>
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          aria-label="Message to Dante"
+          aria-describedby={composerHintId}
+          placeholder="Ask Dante…"
+          className="max-h-40 min-h-11 min-w-0 flex-1 resize-none rounded-md border border-mf-glass-border-strong bg-mf-glass-surface px-3.5 py-2.5 text-base leading-6 text-mf-glass-text placeholder:text-mf-glass-text-muted focus-visible:border-mf-glass-dante"
+        />
+        <span id={composerHintId} className="sr-only">
+          Enter sends. Shift and Enter adds a new line.
+        </span>
 
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={handleInputFocus}
-            onBlur={handleInputBlur}
-            disabled={isLoading}
-            aria-label="Message to Dante"
-            placeholder="Ask Dante…"
-            className="max-h-40 min-w-0 w-full flex-1 resize-none border-none bg-transparent font-mono text-xs leading-5 text-white outline-none shadow-none placeholder:truncate placeholder:whitespace-nowrap placeholder:text-zinc-500 focus:border-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
-          />
+        {/* MF-S1: voice → editable text in this box; sending stays a separate, explicit step. */}
+        <DanteVoiceInput
+          disabled={isLoading}
+          onTranscript={(text) => {
+            setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
+            textareaRef.current?.focus();
+          }}
+        />
 
-          {/* Live Audio Waveform (4 mini equalizer bars) */}
-          <div className="hidden items-center gap-0.5 px-2 select-none sm:flex" aria-hidden="true">
-            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0s" }} />
-            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.3s" }} />
-            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.15s" }} />
-            <span className={`w-0.5 rounded-full bg-[#D4FF00] ${hudStyles.audioBar}`} style={{ animationDelay: "0.45s" }} />
-          </div>
-        </div>
-
-        {/* Send / Stop Button */}
         {isLoading ? (
           <button
             type="button"
             onClick={stopStreaming}
             aria-label="Stop Dante's response"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-400 shadow-lg transition hover:bg-rose-500/20 active:scale-95"
+            className="flex size-11 shrink-0 items-center justify-center rounded-md border border-mf-glass-border-strong text-mf-glass-text transition hover:bg-mf-glass-hover"
           >
             <span className="size-3 rounded-[2px] bg-current" aria-hidden="true" />
           </button>
@@ -1298,33 +1505,187 @@ export default function DanteChat({
             type="submit"
             disabled={!input.trim()}
             aria-label="Send message to Dante"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#D4FF00] text-black shadow-[0_0_16px_rgba(212,255,0,0.3)] transition hover:scale-105 hover:bg-[#D4FF00] hover:shadow-[0_0_22px_rgba(212,255,0,0.6)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+            className="flex size-11 shrink-0 items-center justify-center rounded-md border border-mf-glass-text bg-mf-glass-brand text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:cursor-not-allowed disabled:border-mf-glass-border disabled:bg-mf-glass-bg-deep disabled:text-mf-glass-text-muted"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M22 2L11 13"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M22 2L15 22L11 13L2 9L22 2Z"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <ArrowUp aria-hidden="true" className="size-5" />
           </button>
         )}
       </form>
+      </div>
+      </div>
+
+      {restoreHistory ? (
+        <BottomSheet open={historyOpen} onOpenChange={setHistoryOpen} title="Conversations">
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setHistoryOpen(false);
+                startNewConversation();
+              }}
+              disabled={isLoading || isRestoring || threadId === null}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-mf-glass-border-strong text-sm font-semibold text-mf-glass-text disabled:opacity-40"
+            >
+              <SquarePen aria-hidden="true" className="size-4" />
+              New chat
+            </button>
+            {threadList(() => setHistoryOpen(false))}
+          </div>
+        </BottomSheet>
+      ) : null}
+    </section>
+  );
+}
+
+const STATUS_TEXT: Record<ContextStatus, string> = {
+  current: "Current",
+  missing: "Not logged",
+  unavailable: "Couldn't load",
+  outdated: "From an earlier day",
+};
+
+function StatusDot({ status }: { status: ContextStatus }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "inline-block size-2.5 shrink-0 rounded-full border",
+        status === "current" && "border-mf-glass-success bg-mf-glass-success",
+        status === "missing" && "border-mf-glass-text-muted bg-transparent",
+        status === "outdated" && "border-mf-glass-warning bg-transparent",
+        status === "unavailable" && "border-mf-glass-warning bg-mf-glass-warning"
+      )}
+    />
+  );
+}
+
+function formatClock(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+/**
+ * Today's verified context (server-built in lib/dante-core/today-context.ts). Collapsed: one line of status per
+ * domain; expanded: what each value is, how fresh it is, and where to fix it. A hold is always visible.
+ */
+function TodayContextBar({ context }: { context: DanteTodayContext }) {
+  const [open, setOpen] = useState(false);
+  const panelId = "dante-today-context";
+  const dateLabel = context.localDate
+    ? new Date(`${context.localDate}T12:00:00Z`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
+    : null;
+
+  return (
+    <section aria-label="Today's context" className="shrink-0 border-b border-mf-glass-border px-3 py-2 sm:px-4">
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 text-sm">
+          <span className="font-semibold text-mf-glass-text">Today</span>
+          {dateLabel ? <span className="text-mf-glass-text-muted"> · {dateLabel}</span> : null}
+        </p>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((value) => !value)}
+          className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md px-2 text-sm font-semibold text-mf-glass-text-secondary hover:bg-mf-glass-hover"
+        >
+          {open ? "Hide context" : "View context"}
+          <ChevronDown aria-hidden="true" className={cn("size-4 transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+        </button>
+      </div>
+
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 pb-1 text-xs text-mf-glass-text-secondary" aria-label="Status by area">
+        {context.items.map((item) => (
+          <li key={item.id} className="inline-flex items-center gap-1.5">
+            <StatusDot status={item.status} />
+            <span className="font-semibold">{item.label}</span>
+            <span className="text-mf-glass-text-muted max-sm:sr-only">{item.summary}</span>
+            <span className="text-mf-glass-text-muted sm:sr-only">{STATUS_TEXT[item.status].toLowerCase()}</span>
+          </li>
+        ))}
+      </ul>
+
+      {context.holdNote ? (
+        <p role="status" className="mt-1 rounded-md border border-mf-glass-warning/40 px-3 py-2 text-sm font-semibold text-mf-glass-warning">
+          {context.holdNote}
+        </p>
+      ) : null}
+
+      {open ? (
+        <div id={panelId} className="mt-2 max-h-[38dvh] overflow-y-auto overscroll-contain pb-1">
+          <ul className="divide-y divide-mf-glass-border">
+            {context.items.map((item) => {
+              const asOf = formatClock(item.asOf);
+              return (
+                <li key={item.id} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-mf-glass-text">
+                      <StatusDot status={item.status} />
+                      {item.label}
+                      <span className="text-xs font-normal text-mf-glass-text-muted">· {STATUS_TEXT[item.status]}{asOf ? ` · updated ${asOf}` : ""}</span>
+                    </p>
+                    <p className="mt-0.5 text-sm text-mf-glass-text-secondary">{item.summary}</p>
+                    {item.detail ? <p className="text-sm text-mf-glass-text-muted">{item.detail}</p> : null}
+                  </div>
+                  <Link href={item.href} className="inline-flex min-h-11 items-center text-sm font-semibold text-mf-glass-text underline underline-offset-4">
+                    {item.linkLabel}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="pt-1 text-xs text-mf-glass-text-muted">
+            Loaded {formatClock(context.loadedAt) ?? "just now"}. Dante reads your data fresh on every message; this panel refreshes when you reload or confirm a change.
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+const MARKDOWN_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>["components"] = {
+  p: ({ children }) => <p className="mb-3 text-base leading-7 text-mf-glass-text last:mb-0">{children}</p>,
+  h1: ({ children }) => <h1 className="mb-3 mt-2 text-lg font-bold text-mf-glass-text">{children}</h1>,
+  h2: ({ children }) => <h2 className="mb-2 mt-4 text-base font-bold text-mf-glass-text">{children}</h2>,
+  h3: ({ children }) => <h3 className="mb-2 mt-3 text-base font-semibold text-mf-glass-text">{children}</h3>,
+  strong: ({ children }) => <strong className="font-semibold text-mf-glass-text">{children}</strong>,
+  ul: ({ children }) => <ul className="mb-3 ml-5 list-disc space-y-1 marker:text-mf-glass-text-muted">{children}</ul>,
+  // `start` must pass through: a list interrupted by a paragraph or heading continues as <ol start="n">.
+  ol: ({ children, start }) => <ol start={start} className="mb-3 ml-5 list-decimal space-y-1 marker:text-mf-glass-text-muted">{children}</ol>,
+  li: ({ children }) => <li className="pl-1 text-base leading-7 text-mf-glass-text">{children}</li>,
+  br: () => <br className="block content-['']" />,
+  table: ({ children }) => (
+    <div className="my-3 w-full overflow-x-auto rounded-xl border border-mf-glass-border">
+      <table className="w-full min-w-120 border-collapse text-left text-sm tabular-nums">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-mf-glass-bg-deep text-mf-glass-text-secondary">{children}</thead>,
+  tbody: ({ children }) => <tbody className="divide-y divide-mf-glass-border">{children}</tbody>,
+  tr: ({ children }) => <tr>{children}</tr>,
+  th: ({ children }) => <th className="px-3 py-2 text-left font-semibold">{children}</th>,
+  td: ({ children }) => <td className="px-3 py-2 align-top text-mf-glass-text">{children}</td>,
+  blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-mf-glass-dante/50 pl-3 text-mf-glass-text-secondary">{children}</blockquote>,
+  code: ({ children }) => <code className="rounded bg-mf-glass-bg-deep px-1 py-0.5 font-mono text-sm text-mf-glass-text">{children}</code>,
+  pre: ({ children }) => <pre className="my-3 overflow-x-auto rounded-md bg-mf-glass-bg-deep p-3 font-mono text-sm leading-6">{children}</pre>,
+  hr: () => <hr className="my-4 border-mf-glass-border" />,
+};
+
+/** A Dante reply as plain reading text (sanitized markdown), not a card. */
+const MARKDOWN_LINK: React.ComponentProps<typeof ReactMarkdown>["components"] = {
+  a: ({ children, href }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="font-semibold text-mf-glass-text underline underline-offset-4">
+      {children}
+    </a>
+  ),
+};
+
+function AssistantText({ content }: { content: string }) {
+  return (
+    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]} components={{ ...MARKDOWN_COMPONENTS, ...MARKDOWN_LINK }}>
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }

@@ -9,11 +9,11 @@ export const metadata = {
 
 export default function TermsPage() {
   return (
-    <main className="min-h-screen bg-mf-bg px-5 py-10 text-white sm:px-6 lg:px-8">
+    <main data-theme="paper" className="min-h-screen bg-mf-bg px-5 py-10 text-white sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-400 transition hover:text-white"
         >
           <ArrowLeft className="size-4" />
           Back home
@@ -111,7 +111,7 @@ export default function TermsPage() {
             </p>
           </section>
 
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
             Effective 6 October 2026
           </p>
         </article>

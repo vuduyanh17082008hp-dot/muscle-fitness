@@ -7,6 +7,14 @@ import { handleOAuthCallback } from "@/lib/auth/handle-oauth-callback";
 
 
 function redirectToLoginWithError(request: NextRequest, message: string) {
+  // A failed recovery link (expired, reused, opened in another browser)
+  // goes back to the form that can send a new one.
+  if (getSafeNext(request.nextUrl.searchParams.get("next")) === "/reset-password") {
+    return NextResponse.redirect(
+      new URL("/forgot-password?error=invalid-reset-link", request.url),
+    );
+  }
+
   const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set("error", message);
   return NextResponse.redirect(loginUrl);

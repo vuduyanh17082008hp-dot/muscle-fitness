@@ -39,6 +39,13 @@ export async function GET() {
       loadFrequentFoods(supabase, user.id),
     ]);
 
+    if (foodLog.unavailable) {
+      return NextResponse.json(
+        { ok: false, code: "FOOD_LOG_UNAVAILABLE", error: "Today's food log couldn't be loaded, so remaining macros are unknown." },
+        { status: 503 },
+      );
+    }
+
     const target = nutritionContext.targets.complete;
 
     if (!nutritionContext.plan || !target) {

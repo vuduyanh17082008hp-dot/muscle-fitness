@@ -7,6 +7,7 @@ import { hasAppliedAdjustment, persistWorkoutProposal } from "@/lib/recovery/sup
 import { createRecoveryAdminClient } from "@/lib/supabase/admin"
 import { proposalMutatesWorkout } from "@/lib/recovery/proposal"
 import { loadTodaySession } from "@/lib/training/load-today-session"
+import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,14 +23,16 @@ export async function GET() {
   }
 
   try {
-    const [recovery, session] = await Promise.all([
+    const [recovery, session, { hold }] = await Promise.all([
       loadRecoveryContext(supabase, user.id),
       loadTodaySession(supabase, user.id),
+      loadDailyDecision(supabase, user.id),
     ])
     const adjustment = buildTodayAdjustment({
       userId: user.id,
       recovery,
       session,
+      hold,
     })
     // One adjustment per session: once applied, no further (stacking) proposal is issued.
     const alreadyApplied = session ? (await hasAppliedAdjustment(supabase, user.id, session.id)) === true : false

@@ -1762,7 +1762,7 @@ export default function PlanBuilder({
       =================================================== */}
 
       <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
+        <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">
           Step 1
         </p>
 
@@ -1823,7 +1823,7 @@ export default function PlanBuilder({
       =================================================== */}
 
       <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
+        <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">
           Step 2
         </p>
 
@@ -2101,7 +2101,7 @@ export default function PlanBuilder({
       =================================================== */}
 
       <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
+        <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">
           Step 3
         </p>
 
@@ -2159,7 +2159,7 @@ export default function PlanBuilder({
       <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-400">
+            <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">
               Step 4
             </p>
 
@@ -2204,7 +2204,7 @@ export default function PlanBuilder({
                     : "border-white/10 bg-black/20"
                 }`}
               >
-                <p className="text-[10px] font-black uppercase text-zinc-600">
+                <p className="text-xs font-black uppercase text-zinc-600">
                   Day{" "}
                   {
                     day.dayNumber
@@ -2217,7 +2217,7 @@ export default function PlanBuilder({
                   }
                 </p>
 
-                <p className="mt-1 text-[10px] text-zinc-700">
+                <p className="mt-1 text-xs text-zinc-700">
                   {
                     day.exercises
                       .length
@@ -2245,6 +2245,7 @@ export default function PlanBuilder({
                     .value,
                 )
               }
+              aria-label="Day name"
               className="w-full bg-transparent text-xl font-black outline-none"
             />
 
@@ -2291,7 +2292,7 @@ export default function PlanBuilder({
                     key={
                       exercise.localId
                     }
-                    className="rounded-xl border border-white/10 bg-[#101010] p-4"
+                    className="rounded-xl border border-white/10 bg-mf-glass-surface p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -2304,7 +2305,7 @@ export default function PlanBuilder({
 
                           {exercise.source ===
                             "wger" && (
-                            <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase text-emerald-400">
+                            <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-black uppercase text-emerald-400">
                               wger
                             </span>
                           )}
@@ -2437,7 +2438,7 @@ export default function PlanBuilder({
       <section className="rounded-3xl border border-white/10 bg-mf-surface p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-400">
+            <p className="text-xs font-black uppercase tracking-[0.12em] text-emerald-400">
               Exercise library
             </p>
 
@@ -2532,7 +2533,7 @@ export default function PlanBuilder({
 
                 {exercise.source ===
                   "wger" && (
-                  <p className="mt-2 text-[10px] font-black uppercase text-emerald-400">
+                  <p className="mt-2 text-xs font-black uppercase text-emerald-400">
                     wger source
                   </p>
                 )}
@@ -2709,7 +2710,7 @@ function NumberField({
 }) {
   return (
     <label>
-      <span className="text-[9px] font-black uppercase text-zinc-700">
+      <span className="text-xs font-black uppercase text-zinc-700">
         {label}
       </span>
 

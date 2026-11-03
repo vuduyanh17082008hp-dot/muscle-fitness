@@ -18,19 +18,19 @@ import type {
 
 import {
   Beaker,
+  BookOpen,
   Bot,
+  CalendarCheck,
   CalendarDays,
   ChartNoAxesCombined,
-  ChevronRight,
   Dumbbell,
+  Flame,
   HeartPulse,
+  History,
   Home,
-  LayoutDashboard,
   LogOut,
   Menu,
   Settings,
-  Sparkles,
-  Utensils,
   X,
 } from "lucide-react";
 
@@ -38,9 +38,12 @@ import {
   logoutAction,
 } from "@/app/dashboard/actions";
 
-import { Logo } from "@/components/brand/logo";
+import { Toaster } from "react-hot-toast";
+
+import { Wordmark } from "@/components/brand/wordmark";
 import { FloatingDante } from "@/components/dashboard/floating-dante";
 import { QuickCapture } from "@/components/dashboard/quick-capture";
+import { isPaperRoute } from "@/lib/paper-theme";
 
 /* =========================================================
    TYPES
@@ -55,11 +58,11 @@ type NavItem = {
    * Additional route prefixes that should also mark this nav item
    * active. Used for Muscle Intelligence (/dashboard/training-intelligence),
    * which conceptually belongs under Train but lives at a sibling
-   * route rather than nested under /dashboard/workouts — without
-   * this, "Training" would stop reading as the active parent domain
-   * while the user is on that page.
+   * route rather than nested under /dashboard/workouts.
    */
   activePrefixes?: string[];
+  /** Dante keeps its violet identity in the nav. */
+  dante?: boolean;
 };
 
 type NavSection = {
@@ -70,112 +73,65 @@ type NavSection = {
 type SidebarContentProps = {
   pathname: string;
   hash: string;
+  activeSessionHref: string | null;
   onNavigate?: () => void;
 };
 
 /* =========================================================
-   NAVIGATION
+   NAVIGATION (Iron & Paper)
 
-   Grouped to match the Muscle Fitness client information
-   architecture: Overview, Your Plan (training + nutrition),
-   Tracking, Coaching, Account.
+   Five primary destinations — Today, Train, Fuel, Recovery, Dante —
+   match the mobile bar. Progress, Calendar, History and Library are a
+   "Track" group (sidebar on desktop, the More drawer on mobile, plus
+   Today's secondary strip), so nothing that was reachable before is
+   hidden. Routes are unchanged; only labels and grouping moved.
 ========================================================= */
 
-/*
- * Primary navigation is deliberately flat and short — Overview,
- * Train, Nutrition, Recovery, Progress, Dante. Everything that used
- * to be its own sidebar entry under "Your Plan"/"Tracking"/"Coaching"
- * (Today, Form Coach, Training Split, Macro Targets, Check-in) is
- * still fully reachable — as a contextual tab on the section it
- * belongs to (see components/dashboard/section-tabs.tsx wired into
- * the Train/Nutrition/Progress landing pages) rather than a flat
- * link here. No route was removed, only re-homed in the nav.
- */
-const navSections: NavSection[] = [
-  {
-    title: "Overview",
+const TODAY: NavItem = { label: "Today", href: "/dashboard", icon: CalendarCheck, exact: true };
+const TRAIN: NavItem = { label: "Train", href: "/dashboard/workouts", icon: Dumbbell, activePrefixes: ["/dashboard/training-intelligence"] };
+const FUEL: NavItem = { label: "Fuel", href: "/dashboard/nutrition", icon: Flame };
+const RECOVERY: NavItem = { label: "Recovery", href: "/dashboard/recovery", icon: HeartPulse };
+const DANTE: NavItem = { label: "Dante", href: "/dashboard/ai-coach", icon: Bot, dante: true };
 
+const navSections: NavSection[] = [
+  { title: "Train", items: [TODAY, TRAIN, FUEL, RECOVERY, DANTE] },
+  {
+    title: "Track",
     items: [
-      {
-        label: "Overview",
-        href: "/dashboard",
-        icon: LayoutDashboard,
-        exact: true,
-      },
-      {
-        label: "Training",
-        href: "/dashboard/workouts",
-        icon: Dumbbell,
-        activePrefixes: ["/dashboard/training-intelligence"],
-      },
-      {
-        label: "Nutrition",
-        href: "/dashboard/nutrition",
-        icon: Utensils,
-      },
-      {
-        label: "Recovery",
-        href: "/dashboard/recovery",
-        icon: HeartPulse,
-      },
-      {
-        label: "Progress",
-        href: "/dashboard/progress",
-        icon: ChartNoAxesCombined,
-      },
-      {
-        label: "Dante",
-        href: "/dashboard/ai-coach",
-        icon: Bot,
-      },
+      { label: "Progress", href: "/dashboard/progress", icon: ChartNoAxesCombined },
+      { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays },
+      { label: "History", href: "/dashboard/workouts/history", icon: History },
+      { label: "Library", href: "/dashboard/workouts/library", icon: BookOpen },
     ],
   },
-
   {
     title: "More",
-
     items: [
-      {
-        label: "Experiments",
-        href: "/dashboard/experiments",
-        icon: Beaker,
-      },
-      {
-        label: "Calendar",
-        href: "/dashboard/calendar",
-        icon: CalendarDays,
-      },
-      {
-        label: "Settings",
-        href: "/dashboard/settings",
-        icon: Settings,
-      },
+      { label: "Experiments", href: "/dashboard/experiments", icon: Beaker },
+      { label: "Settings", href: "/dashboard/settings", icon: Settings },
     ],
   },
 ];
 
 /* =========================================================
-   MOBILE PRIMARY NAV
-
-   A persistent thumb-reachable bottom bar for the primary sections used
-   most often on a phone (Overview, Training, Nutrition, Recovery, Progress,
-   Dante). This is additive, not a duplicate of the existing hamburger
-   drawer above: the drawer still holds Calendar, Settings and
-   Experiments; this bar is just a fast
-   path to the sections someone opens every day.
+   MOBILE PRIMARY NAV — five thumb-reachable tabs. Train becomes
+   "Active" (linking to the session) only while the server reports a
+   real in-progress or paused session; everything else is in More.
 ========================================================= */
 
 const mobilePrimaryNav: NavItem[] = [
-  { label: "Home", href: "/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Training", href: "/dashboard/workouts", icon: Dumbbell, activePrefixes: ["/dashboard/training-intelligence"] },
-  { label: "Nutrition", href: "/dashboard/nutrition", icon: Utensils },
+  { label: "Today", href: "/dashboard", icon: CalendarCheck, exact: true },
+  { label: "Train", href: "/dashboard/workouts", icon: Dumbbell, activePrefixes: ["/dashboard/training-intelligence"] },
+  { label: "Fuel", href: "/dashboard/nutrition", icon: Flame },
   { label: "Recovery", href: "/dashboard/recovery", icon: HeartPulse },
-  { label: "Progress", href: "/dashboard/progress", icon: ChartNoAxesCombined },
-  { label: "Dante", href: "/dashboard/ai-coach", icon: Bot },
+  { label: "Dante", href: "/dashboard/ai-coach", icon: Bot, dante: true },
 ];
 
+const ALL_ITEMS = [...navSections.flatMap((section) => section.items), ...mobilePrimaryNav];
+
 /* =========================================================
-   ACTIVE ROUTE
+   ACTIVE ROUTE — the most specific matching item wins, so
+   /dashboard/workouts/history lights History, not Train as well.
 ========================================================= */
 
 function splitHref(href: string): { path: string; hash: string | null } {
@@ -183,30 +139,32 @@ function splitHref(href: string): { path: string; hash: string | null } {
   return { path, hash: hash ?? null };
 }
 
-function isActive(
-  pathname: string,
-  currentHash: string,
-  item: NavItem,
-): boolean {
+function matchLength(pathname: string, currentHash: string, item: NavItem): number {
   const { path, hash } = splitHref(item.href);
 
   if (hash) {
-    return pathname === path && currentHash === `#${hash}`;
+    return pathname === path && currentHash === `#${hash}` ? path.length + 1 : -1;
   }
 
   if (item.exact) {
-    return pathname === path;
+    return pathname === path ? path.length : -1;
   }
 
   if (pathname === path || pathname.startsWith(`${path}/`)) {
-    return true;
+    return path.length;
   }
 
-  return (
-    item.activePrefixes?.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-    ) ?? false
-  );
+  const prefix = item.activePrefixes?.find((p) => pathname === p || pathname.startsWith(`${p}/`));
+  return prefix ? prefix.length : -1;
+}
+
+function activeHref(pathname: string, currentHash: string): string | null {
+  let best: { href: string; length: number } | null = null;
+  for (const item of ALL_ITEMS) {
+    const length = matchLength(pathname, currentHash, item);
+    if (length >= 0 && (!best || length > best.length)) best = { href: item.href, length };
+  }
+  return best?.href ?? null;
 }
 
 /* =========================================================
@@ -216,79 +174,77 @@ function isActive(
 function SidebarContent({
   pathname,
   hash,
+  activeSessionHref,
   onNavigate,
 }: SidebarContentProps) {
+  const current = activeHref(pathname, hash);
+
   return (
     <>
-      <div className="flex h-20 items-center border-b border-mf-glass-border px-5">
-        <Logo href="/dashboard" tagline="Client OS" showTextOnMobile onClick={onNavigate} />
+      <div className="flex h-16 items-center border-b border-mf-glass-border px-5">
+        <Wordmark href="/dashboard" label="Muscle Fitness — Today" onClick={onNavigate} />
       </div>
 
       <nav
         aria-label="Dashboard navigation"
         className="flex-1 space-y-6 overflow-y-auto px-3 py-5"
       >
-        {navSections.map((section, sectionIndex) => {
-          const isPrimary = sectionIndex === 0;
+        {navSections.map((section) => (
+          <div key={section.title}>
+            <p className="mb-1.5 px-3 text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
+              {section.title}
+            </p>
 
-          return (
-            <div key={section.title}>
-              {!isPrimary ? (
-                <p className="mb-1.5 px-3 text-[10px] font-black uppercase tracking-[0.2em] text-mf-glass-text-muted">
-                  {section.title}
-                </p>
-              ) : null}
+            <div className="space-y-0.5">
+              {section.items.map((item) => {
+                const active = current === item.href;
+                const Icon = item.icon;
+                const isTrain = item.href === TRAIN.href && activeSessionHref;
 
-              <div className={isPrimary ? "space-y-0.5" : "space-y-0.5"}>
-                {section.items.map((item) => {
-                  const active = isActive(pathname, hash, item);
-                  const Icon = item.icon;
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={onNavigate}
-                      aria-current={active ? "page" : undefined}
-                      className={`group relative flex items-center gap-3 rounded-xl px-3 transition ${
-                        isPrimary ? "py-2.5" : "py-2"
-                      } ${
-                        active
-                          ? "bg-mf-glass-hover text-mf-glass-text"
-                          : "text-mf-glass-text-muted hover:bg-mf-glass-hover/60 hover:text-mf-glass-text-secondary"
-                      }`}
-                    >
-                      {active ? (
-                        <span
-                          aria-hidden="true"
-                          className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-mf-glass-brand"
-                        />
-                      ) : null}
-
-                      <Icon
-                        className={`size-4 shrink-0 ${
-                          active ? "text-mf-glass-brand" : "text-mf-glass-text-muted group-hover:text-mf-glass-text-secondary"
-                        }`}
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    className={`relative flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition ${
+                      active
+                        ? `bg-mf-glass-hover font-bold ${item.dante ? "text-mf-glass-dante" : "text-mf-glass-text"}`
+                        : "font-medium text-mf-glass-text-secondary hover:bg-mf-glass-hover/60 hover:text-mf-glass-text"
+                    }`}
+                  >
+                    {active ? (
+                      <span
+                        aria-hidden="true"
+                        className={`absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full ${item.dante ? "bg-mf-glass-dante" : "bg-mf-glass-text"}`}
                       />
+                    ) : null}
 
-                      <span className={`flex-1 ${isPrimary ? "text-sm font-semibold" : "text-[13px] font-medium"}`}>
-                        {item.label}
+                    <Icon className="size-4 shrink-0" />
+
+                    <span className="flex-1">{item.label}</span>
+
+                    {isTrain ? (
+                      <span className="rounded border border-mf-glass-text px-1.5 py-0.5 text-xs font-bold uppercase leading-none">
+                        Active
                       </span>
+                    ) : null}
+                  </Link>
+                );
+              })}
 
-                      <ChevronRight
-                        className={`size-3.5 transition ${
-                          active
-                            ? "translate-x-0 text-mf-glass-brand opacity-60"
-                            : "-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-40"
-                        }`}
-                      />
-                    </Link>
-                  );
-                })}
-              </div>
+              {section.title === "Train" && activeSessionHref ? (
+                <Link
+                  href={activeSessionHref}
+                  onClick={onNavigate}
+                  className="ml-10 flex min-h-11 items-center text-sm font-semibold text-mf-glass-text underline decoration-mf-glass-border-strong underline-offset-4 hover:decoration-mf-glass-text"
+                >
+                  Open active session
+                </Link>
+              ) : null}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </nav>
 
       <div className="border-t border-mf-glass-border p-3">
@@ -297,23 +253,11 @@ function SidebarContent({
           onClick={
             onNavigate
           }
-          className="mb-3 flex w-full items-center gap-3 rounded-xl border border-mf-glass-border bg-white/[0.02] px-3 py-2.5 text-sm font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:bg-mf-glass-brand-soft hover:text-mf-glass-text"
+          className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-md border border-mf-glass-border px-3 text-sm font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-border-strong hover:text-mf-glass-text"
         >
           <Home className="size-4 shrink-0" />
 
           Back to homepage
-        </Link>
-
-        <Link
-          href="/dashboard/ai-coach"
-          onClick={
-            onNavigate
-          }
-          className="mb-3 flex w-full items-center gap-3 rounded-xl border border-mf-glass-border bg-white/[0.02] px-3 py-2.5 text-sm font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:bg-mf-glass-brand-soft hover:text-mf-glass-text"
-        >
-          <Sparkles className="size-4 shrink-0" />
-
-          Ask Dante
         </Link>
 
         <form
@@ -323,7 +267,7 @@ function SidebarContent({
         >
           <button
             type="submit"
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-mf-glass-text-muted transition hover:bg-red-500/10 hover:text-red-300"
+            className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold text-mf-glass-text-muted transition hover:bg-red-500/10 hover:text-red-300"
           >
             <LogOut className="size-4" />
 
@@ -339,28 +283,42 @@ function SidebarContent({
    MOBILE BOTTOM NAV
 ========================================================= */
 
-function MobileBottomNav({ pathname, hash }: { pathname: string; hash: string }) {
+function MobileBottomNav({ pathname, hash, activeSessionHref }: { pathname: string; hash: string; activeSessionHref: string | null }) {
+  const current = activeHref(pathname, hash);
+
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-mf-glass-border bg-mf-glass-bg/95 backdrop-blur-xl lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-mf-glass-border bg-mf-glass-bg/95 backdrop-blur-xl lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {mobilePrimaryNav.map((item) => {
-        const active = isActive(pathname, hash, item);
+        const isActiveSession = item.href === TRAIN.href && activeSessionHref !== null;
+        const href = isActiveSession && activeSessionHref ? activeSessionHref : item.href;
+        const active = current === item.href;
         const Icon = item.icon;
 
         return (
           <Link
             key={item.href}
-            href={item.href}
+            href={href}
             aria-current={active ? "page" : undefined}
-            className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 px-0.5 py-2 text-[10px] font-bold leading-tight transition ${
-              active ? "text-mf-glass-brand" : "text-mf-glass-text-muted"
+            className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-xs leading-none transition ${
+              active
+                ? `font-bold ${item.dante ? "text-mf-glass-dante" : "text-mf-glass-text"}`
+                : "font-medium text-mf-glass-text-muted"
             }`}
           >
-            <Icon className="size-[18px] shrink-0" />
-            <span className="max-w-full truncate">{item.label}</span>
+            {active ? (
+              <span aria-hidden="true" className={`absolute inset-x-4 top-0 h-[3px] rounded-b-full ${item.dante ? "bg-mf-glass-dante" : "bg-mf-glass-text"}`} />
+            ) : null}
+            <span className="relative">
+              <Icon className="size-5 shrink-0" />
+              {isActiveSession ? (
+                <span aria-hidden="true" className="absolute -right-1 -top-1 size-2.5 rounded-full border border-mf-glass-text bg-mf-glass-brand" />
+              ) : null}
+            </span>
+            <span className="max-w-full truncate">{isActiveSession ? "Active" : item.label}</span>
           </Link>
         );
       })}
@@ -374,12 +332,17 @@ function MobileBottomNav({ pathname, hash }: { pathname: string; hash: string })
 
 export function DashboardShell({
   children,
+  activeSessionId = null,
 }: {
   children:
     ReactNode;
+  /** A real in-progress/paused session id from the server, or null. */
+  activeSessionId?: string | null;
 }) {
   const pathname =
     usePathname();
+
+  const activeSessionHref = activeSessionId ? `/dashboard/workouts/session/${activeSessionId}` : null;
 
   const [
     mobileOpen,
@@ -403,6 +366,15 @@ export function DashboardShell({
     };
   }, [pathname]);
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
   function closeMobileMenu() {
     setMobileOpen(
       false,
@@ -410,17 +382,18 @@ export function DashboardShell({
   }
 
   return (
-    <div className="min-h-screen bg-mf-glass-bg text-mf-glass-text">
+    <div data-theme={isPaperRoute(pathname) ? "paper" : undefined} className="min-h-screen bg-mf-glass-bg text-mf-glass-text">
       {/* ===================================================
           DESKTOP SIDEBAR
       =================================================== */}
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-mf-glass-border bg-mf-glass-surface/95 backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-mf-glass-border bg-mf-glass-surface lg:flex">
         <SidebarContent
           pathname={
             pathname
           }
           hash={hash}
+          activeSessionHref={activeSessionHref}
         />
       </aside>
 
@@ -428,33 +401,23 @@ export function DashboardShell({
           MOBILE HEADER
       =================================================== */}
 
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-mf-glass-border bg-mf-glass-bg/90 px-4 backdrop-blur-xl lg:hidden">
-        <Logo href="/dashboard" showTextOnMobile className="min-w-0" />
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-mf-glass-border bg-mf-glass-bg/95 px-4 backdrop-blur-xl lg:hidden">
+        <Wordmark href="/dashboard" label="Muscle Fitness — Today" />
 
-        <div className="flex shrink-0 items-center gap-2">
-          <Link
-            href="/"
-            aria-label="Back to homepage"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-mf-glass-border bg-white/[0.02] px-3 py-2 text-xs font-semibold text-mf-glass-text-secondary transition hover:border-mf-glass-brand-border hover:text-mf-glass-brand"
-          >
-            <Home className="size-3.5" />
-
-            Home
-          </Link>
-
-          <button
-            type="button"
-            onClick={() =>
-              setMobileOpen(
-                true,
-              )
-            }
-            aria-label="Open dashboard navigation"
-            className="grid size-10 place-items-center rounded-xl border border-mf-glass-border bg-white/[0.02] text-mf-glass-text-secondary"
-          >
-            <Menu className="size-5" />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() =>
+            setMobileOpen(
+              true,
+            )
+          }
+          aria-label="More: Progress, Calendar, History, Library, Settings"
+          aria-expanded={mobileOpen}
+          className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-mf-glass-border-strong px-3 text-sm font-semibold text-mf-glass-text"
+        >
+          <Menu className="size-5" />
+          More
+        </button>
       </header>
 
       {/* ===================================================
@@ -466,6 +429,7 @@ export function DashboardShell({
           <button
             type="button"
             aria-label="Close dashboard navigation"
+            tabIndex={-1}
             onClick={
               closeMobileMenu
             }
@@ -479,7 +443,7 @@ export function DashboardShell({
                 closeMobileMenu
               }
               aria-label="Close dashboard navigation"
-              className="absolute right-3 top-5 z-10 grid size-9 place-items-center rounded-lg border border-mf-glass-border bg-white/[0.02] text-mf-glass-text-muted"
+              className="absolute right-3 top-3 z-10 grid size-11 place-items-center rounded-md border border-mf-glass-border text-mf-glass-text-secondary"
             >
               <X className="size-4" />
             </button>
@@ -489,6 +453,7 @@ export function DashboardShell({
                 pathname
               }
               hash={hash}
+              activeSessionHref={activeSessionHref}
               onNavigate={
                 closeMobileMenu
               }
@@ -501,7 +466,8 @@ export function DashboardShell({
           MAIN
       =================================================== */}
 
-      <main className="min-h-screen pb-28 lg:pb-10 lg:pl-72">
+      {/* lg:pr-20 reserves the floating-controls column so they never sit on a card. */}
+      <main className="min-h-screen pb-28 lg:pb-10 lg:pl-72 lg:pr-20">
         <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">
           {
             children
@@ -513,18 +479,29 @@ export function DashboardShell({
           MOBILE BOTTOM NAV
       =================================================== */}
 
-      <MobileBottomNav pathname={pathname} hash={hash} />
+      <MobileBottomNav pathname={pathname} hash={hash} activeSessionHref={activeSessionHref} />
+
+      {/* The one toast surface (Form Coach camera/pose errors used to fire with
+          nothing mounted). Bottom-centre above the tab bar, never over the
+          header; react-hot-toast announces through an aria-live status region. */}
+      <Toaster
+        position="bottom-center"
+        containerStyle={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+        toastOptions={{ style: { background: "var(--mf-glass-text)", color: "var(--mf-glass-bg)", fontSize: "14px", borderRadius: "10px" } }}
+      />
 
       {/* ===================================================
           FLOATING CONTROLS (PF-02) — Centralized floating layout
           for Floating Dante and Quick Capture (+).
-          Positioned above MobileBottomNav on mobile/tablet,
-          and anchored in the bottom-right corner on desktop.
+          Desktop only, in the gutter main reserves (lg:pr-20). Below
+          lg they covered Send, chat replies and the workout bar, and
+          the bottom nav plus the More drawer carry every Quick Capture
+          destination and Dante.
       =================================================== */}
 
       <aside
         aria-label="Floating quick actions"
-        className="pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] right-4 z-40 flex flex-col-reverse items-center gap-3 lg:bottom-6 lg:right-6"
+        className="pointer-events-none fixed bottom-6 right-6 z-40 hidden flex-col-reverse items-center gap-3 lg:flex"
       >
         <FloatingDante />
         <QuickCapture />

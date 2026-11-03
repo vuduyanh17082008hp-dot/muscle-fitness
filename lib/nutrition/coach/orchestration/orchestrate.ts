@@ -9,7 +9,7 @@ import { buildPlan } from "./plan"
 import { validateToolPlan } from "./toolplan"
 import type { RetrievalDecision, UserQueryFrame } from "@/lib/intelligence/query-understanding"
 
-import { buildGemmaFrame, foodReferenceFrom, frameLookupOutput, frameReferenceClarification, reconcileFoods, reconcileOutputWithFrame, recordGemmaQueryTelemetry, resolvePlanFoods, type FoodResolveFn, type ResolvedFoodReference } from "./shared-query"
+import { brandContext, buildGemmaFrame, foodReferenceFrom, frameLookupOutput, frameReferenceClarification, frameServingClarification, reconcileFoods, reconcileOutputWithFrame, recordGemmaQueryTelemetry, resolvePlanFoods, type FoodResolveFn, type ResolvedFoodReference } from "./shared-query"
 import { runDeterministicTools, type ToolResults } from "./tools"
 import type { ConversationContext, OrchestrationDiagnostics, OrchestrationPlan, PlannerOutput, PlanningExtras, RecentMessage } from "./types"
 import { runPlanner, type ModelCall } from "./understand"
@@ -92,13 +92,14 @@ export async function orchestrateTurn(params: {
 
     let output: PlannerOutput
     let failure: OrchestrationDiagnostics["fallbackReason"]
+    const brand = query ? brandContext(params.message, params.recent) : null
     if (planned.ok) {
-      output = query ? reconcileOutputWithFrame(planned.value, query.frame, { hasActiveDraft: extras.hasActiveDraft }) : planned.value
+      output = query ? reconcileOutputWithFrame(planned.value, query.frame, { hasActiveDraft: extras.hasActiveDraft, brand }) : planned.value
     } else {
       // Stage 2/4: deterministic understanding, if the evidence resolves the turn; otherwise stage 3 (existing path).
       failure = planned.reason
       // A confident food lookup (food + optional grams resolved by the frame) outranks the generic "continue" guess, which carries no foods.
-      const deterministic = (query && !extras.hasActiveDraft ? (frameLookupOutput(query.frame) ?? frameReferenceClarification(query.frame)) : null) ?? deterministicPlannerOutput(params.message, context, extras)
+      const deterministic = (query && !extras.hasActiveDraft ? (frameServingClarification(query.frame, brand) ?? frameLookupOutput(query.frame) ?? frameReferenceClarification(query.frame)) : null) ?? deterministicPlannerOutput(params.message, context, extras)
       if (!deterministic) return { kind: "fallback", diagnostics: fallbackDiagnostics(planned.reason, startedAt, plannerCalls, clock, { plannerLatencyMs }) }
       output = deterministic
       fallbackStage = deterministic.strategy.mode === "CLARIFY" ? 4 : 2
@@ -116,7 +117,7 @@ export async function orchestrateTurn(params: {
       if (frame && query && plan.toolNeed.needFoodLookup && plan.foods.length > 0) {
         planned2 = { ...plan, foods: reconcileFoods(plan.foods, frame) }
         const resolve = params.resolveFood ?? (await import("@/lib/intelligence/food-resolution/server")).resolveFood
-        resolvedFoods = await resolvePlanFoods(planned2.foods, frame, resolve, extras.foodReference)
+        resolvedFoods = await resolvePlanFoods(planned2.foods, frame, resolve, extras.foodReference, params.recent)
         foodReference = foodReferenceFrom(planned2.foods, resolvedFoods)
       }
       if (query) recordGemmaQueryTelemetry(query.frame, query.retrieval, resolvedFoods)

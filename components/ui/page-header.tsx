@@ -32,14 +32,14 @@ export function PageHeader({
         "relative overflow-hidden rounded-[24px] border p-6 sm:p-8",
         glass
           ? "border-mf-glass-border bg-gradient-to-br from-mf-glass-elevated via-mf-glass-surface to-mf-glass-bg"
-          : "border-white/10 bg-gradient-to-br from-mf-surface via-[#0a1622] to-mf-bg",
+          : "border-white/10 bg-gradient-to-br from-mf-surface via-mf-bg to-mf-bg",
         className,
       )}
     >
       <div className="relative z-10">
         <p
           className={cn(
-            "text-[11px] font-bold uppercase tracking-[0.3em]",
+            "text-xs font-bold uppercase tracking-[0.3em]",
             glass ? "text-mf-glass-brand" : "text-amber-400",
           )}
         >
@@ -95,7 +95,7 @@ export function SectionHeader({
     <div className={cn("flex items-center justify-between gap-3", className)}>
       <div>
         {eyebrow ? (
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-text-muted">{eyebrow}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-text-muted">{eyebrow}</p>
         ) : null}
         <h2 className="mt-1 text-section-title font-black text-white">{title}</h2>
       </div>

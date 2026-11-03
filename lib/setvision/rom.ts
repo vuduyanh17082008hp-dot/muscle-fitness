@@ -4,13 +4,15 @@ import type { CompletedRep, RepRom } from "@/lib/setvision/types";
 /**
  * Range of Motion (spec Part B §15).
  *
- * romPercent is the rep's observed angle range (max - min of the
- * exercise's primary joint angle) divided by a rough per-exercise
- * reference range (see exercise-config.ts). This is NOT clinical
- * biomechanics — it's a consistent, comparable, per-lifter proxy.
- * It is deliberately left unclamped above 100%: a lifter with more
- * mobility than the reference range shouldn't have that silently
- * hidden.
+ * rangeDeg is the rep's observed 2D range of the exercise's primary joint
+ * angle: from the standing/lockout angle just before the descent to the
+ * deepest angle. romPercent is that range as a % of a rough per-exercise
+ * reference range (exercise-config.ts) — NOT clinical biomechanics and not
+ * calibrated: full-depth reps on real side-view squats read 169–191%, so the
+ * UI shows rangeDeg and never presents romPercent as a ROM score.
+ *
+ * A rep whose range is not a real joint range (non-finite, ≤ 0° or > 180°,
+ * which no 2D joint angle can span) gets NO ROM entry — never a made-up 0.
  */
 
 function round(value: number, decimals = 1): number {
@@ -18,18 +20,25 @@ function round(value: number, decimals = 1): number {
   return Math.round(value * factor) / factor;
 }
 
-export function computeRepRom(rep: CompletedRep, config: ExerciseConfig): RepRom {
+export function computeRepRom(rep: CompletedRep, config: ExerciseConfig): RepRom | null {
   const observedRangeDeg = rep.maxAngleDeg - rep.minAngleDeg;
-  const romPercent = round((observedRangeDeg / config.referenceRangeDeg) * 100);
 
-  return { repNumber: rep.repNumber, romPercent };
+  if (!Number.isFinite(observedRangeDeg) || observedRangeDeg <= 0 || observedRangeDeg > 180) {
+    return null;
+  }
+
+  return {
+    repNumber: rep.repNumber,
+    rangeDeg: round(observedRangeDeg),
+    romPercent: round((observedRangeDeg / config.referenceRangeDeg) * 100),
+  };
 }
 
 export function computeAllRepRom(
   reps: CompletedRep[],
   config: ExerciseConfig,
 ): RepRom[] {
-  return reps.map((rep) => computeRepRom(rep, config));
+  return reps.map((rep) => computeRepRom(rep, config)).filter((r): r is RepRom => r !== null);
 }
 
 /**

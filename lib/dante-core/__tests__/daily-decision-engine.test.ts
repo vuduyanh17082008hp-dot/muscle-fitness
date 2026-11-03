@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDailyDecision } from "@/lib/dante-core/daily-decision-engine";
+import { buildDailyDecision, classifyTodaySession, type TodaySessionStatus } from "@/lib/dante-core/daily-decision-engine";
 import type { AthleteState } from "@/lib/athlete-state/types";
 import type { TrainingContext } from "@/lib/training/load-training-context";
 import type { TodaySession, TodaySessionExercise } from "@/lib/training/load-today-session";
@@ -106,6 +106,8 @@ function baseTrainingContext(
     lastSessionByExercise: new Map(),
     e1RmHistoryByExercise: new Map(),
     hasAnyLoggedData: true,
+    loggedSets: [],
+    completedSessions: [],
   };
 }
 
@@ -159,6 +161,38 @@ describe("buildDailyDecision", () => {
 
     expect(decision.decision.decisionCode).toBe("proceed_as_planned");
     expect(proposedActions).toHaveLength(0);
+  });
+
+  it("does not tell a low-readiness athlete the session is consistent with their recovery (F-07)", () => {
+    const state = baseAthleteState({
+      recovery: { ...baseAthleteState().recovery, score: 30, status: "Priority recovery", recoveryStatusCode: "priority" },
+      derived: {
+        ...baseAthleteState().derived,
+        muscleRecoveryMap: [muscleEntry({ muscle: "chest", score: 90, confidence: 0.8 })],
+      },
+    });
+    const context = baseTrainingContext(contributionsFor("exercise-1", "chest"));
+
+    const { decision, proposedActions } = buildDailyDecision(state, context, session([exercise()]));
+
+    expect(decision.decision.decisionCode).toBe("proceed_as_planned");
+    expect(proposedActions).toHaveLength(0);
+    expect(decision.recommendation).not.toMatch(/as planned/);
+    expect(decision.recommendation).toMatch(/readiness check-in is low/);
+    expect(decision.why.join(" ")).not.toMatch(/consistent with your recent recovery/);
+    expect(decision.why.join(" ")).toMatch(/30\/100/);
+  });
+
+  it("does not claim consistency when there is not enough muscle data to assess", () => {
+    const state = baseAthleteState({
+      derived: { ...baseAthleteState().derived, muscleRecoveryMap: [] },
+    });
+    const context = baseTrainingContext(contributionsFor("exercise-1", "chest"));
+
+    const { decision } = buildDailyDecision(state, context, session([exercise()]));
+
+    expect(decision.decision.decisionCode).toBe("insufficient_data");
+    expect(decision.why.join(" ")).not.toMatch(/consistent with your recent recovery/);
   });
 
   it("proposes postponing an exercise when its primary muscle recovery is below 30 with sufficient confidence", () => {
@@ -285,5 +319,123 @@ describe("buildDailyDecision", () => {
     const { proposedActions } = buildDailyDecision(state, context, today);
 
     expect(proposedActions).toHaveLength(0);
+  });
+});
+
+describe("FINAL-F F-03: decisions follow canonical workout state", () => {
+  const recovered = baseAthleteState({
+    derived: { ...baseAthleteState().derived, muscleRecoveryMap: [muscleEntry({ muscle: "chest", score: 90, confidence: 0.8 })] },
+  });
+  const sore = baseAthleteState({
+    derived: { ...baseAthleteState().derived, muscleRecoveryMap: [muscleEntry({ muscle: "chest", score: 10, confidence: 0.9 })] },
+  });
+  const context = baseTrainingContext(contributionsFor("exercise-1", "chest"));
+  const withState = (sessionState: string | null, exercises = [exercise()]) => ({ ...session(exercises), sessionState });
+  const PROCEED = /\b(proceed|start|continue)\b/i;
+
+  it("no scheduled workout → no_session_scheduled, no directive to train", () => {
+    const { decision, proposedActions } = buildDailyDecision(recovered, context, null);
+    expect(decision.decision.decisionCode).toBe("no_session_scheduled");
+    expect(decision.recommendation).not.toMatch(PROCEED);
+    expect(proposedActions).toEqual([]);
+  });
+
+  it("scheduled (not_started) workout → proceed as planned", () => {
+    const { decision } = buildDailyDecision(recovered, context, withState("not_started"));
+    expect(decision.decision.decisionCode).toBe("proceed_as_planned");
+    expect(decision.recommendation).toBe("Proceed with today's session as planned.");
+  });
+
+  it("active workout → continue the session in progress; never tells the athlete to start it", () => {
+    for (const state of ["in_progress", "paused"]) {
+      const { decision } = buildDailyDecision(recovered, context, withState(state));
+      expect(decision.decision.decisionCode).toBe("proceed_as_planned");
+      expect(decision.recommendation).toBe("Continue today's session in progress as planned.");
+    }
+  });
+
+  it("completed workout → session_completed, no proceed/repeat wording, no actions — even when a muscle is sore", () => {
+    for (const state of [recovered, sore]) {
+      const { decision, proposedActions } = buildDailyDecision(state, context, withState("completed"));
+      expect(decision.decision.decisionCode).toBe("session_completed");
+      expect(decision.recommendation).not.toMatch(PROCEED);
+      expect(decision.why.join(" ")).not.toMatch(/postpon|reduc/i);
+      expect(proposedActions).toEqual([]);
+    }
+  });
+
+  it("every exercise postponed, or the session cancelled → session_postponed (rest day), never 'proceed'", () => {
+    const postponed = buildDailyDecision(recovered, context, withState("not_started", [exercise({ isSkipped: true })]))
+    expect(postponed.decision.decision.decisionCode).toBe("session_postponed");
+    expect(postponed.decision.recommendation).toBe("Today's session is postponed — treat today as a rest day.");
+    expect(postponed.proposedActions).toEqual([]);
+
+    const cancelled = buildDailyDecision(recovered, context, withState("cancelled"));
+    expect(cancelled.decision.decision.decisionCode).toBe("session_postponed");
+    expect(cancelled.decision.recommendation).not.toMatch(PROCEED);
+  });
+
+  it("a partially postponed session still decides on the exercises left (postponed ones are not re-proposed)", () => {
+    const today = withState("not_started", [
+      exercise({ isSkipped: true }),
+      exercise({ sessionExerciseId: "session-exercise-2", exerciseName: "Incline Press" }),
+    ]);
+    const { decision, proposedActions } = buildDailyDecision(sore, context, today);
+    expect(decision.decision.decisionCode).toBe("modify_session");
+    expect(decision.decision.affectedExercises.map((e) => e.sessionExerciseId)).toEqual(["session-exercise-2"]);
+    expect(proposedActions).toHaveLength(1);
+  });
+
+  it("unknown or contradictory records → session_state_unknown, low confidence, no directive", () => {
+    const cases = [
+      buildDailyDecision(recovered, context, null, { sessionUnavailable: true }),
+      buildDailyDecision(recovered, context, withState("archived_by_import")),
+      buildDailyDecision(recovered, context, { ...withState("not_started", []), exercisesUnavailable: true }),
+    ];
+    for (const { decision, proposedActions } of cases) {
+      expect(decision.decision.decisionCode).toBe("session_state_unknown");
+      expect(decision.confidence).toBe("low");
+      expect(decision.recommendation).not.toMatch(/\bproceed\b|\bcontinue\b/i);
+      expect(proposedActions).toEqual([]);
+    }
+  });
+
+  it("pain/illness still overrides every session state", () => {
+    const pained = baseAthleteState({ recovery: { ...baseAthleteState().recovery, painFlag: true } });
+    for (const state of ["not_started", "in_progress", "completed", "cancelled", "weird"]) {
+      expect(buildDailyDecision(pained, context, withState(state)).decision.decision.decisionCode).toBe("prioritize_recovery");
+    }
+  });
+
+  it("state transitions over one day: scheduled → active → completed never repeats a 'proceed'", () => {
+    const codes = ["not_started", "in_progress", "completed"].map((s) => buildDailyDecision(recovered, context, withState(s)).decision);
+    expect(codes.map((d) => d.decision.decisionCode)).toEqual(["proceed_as_planned", "proceed_as_planned", "session_completed"]);
+    expect(codes[2].recommendation).not.toMatch(PROCEED);
+  });
+
+  // F-03B: the dashboard hero and "What matters" read classifyTodaySession(); the Daily Brief reads buildDailyDecision().
+  // Only "planned"/"active" may show a pending/continue prompt, and those are exactly the states where the Brief still trains.
+  it("dashboard session prompts and the Daily Brief read the same session state", () => {
+    const cases: Array<[string, TodaySession | null, { sessionUnavailable?: boolean }, TodaySessionStatus, string]> = [
+      ["scheduled", withState("not_started"), {}, "planned", "proceed_as_planned"],
+      ["scheduled (null state)", withState(null), {}, "planned", "proceed_as_planned"],
+      ["in progress", withState("in_progress"), {}, "active", "proceed_as_planned"],
+      ["paused", withState("paused"), {}, "active", "proceed_as_planned"],
+      ["completed", withState("completed"), {}, "completed", "session_completed"],
+      ["cancelled", withState("cancelled"), {}, "postponed", "session_postponed"],
+      ["all postponed", withState("not_started", [exercise({ isSkipped: true })]), {}, "postponed", "session_postponed"],
+      ["cancelled + all postponed", withState("cancelled", [exercise({ isSkipped: true })]), {}, "postponed", "session_postponed"],
+      ["unknown state", withState("archived_by_import"), {}, "unknown", "session_state_unknown"],
+      ["exercises unreadable", { ...withState("not_started", []), exercisesUnavailable: true }, {}, "unknown", "session_state_unknown"],
+      ["read failed", null, { sessionUnavailable: true }, "unknown", "session_state_unknown"],
+      ["no session", null, {}, "none", "no_session_scheduled"],
+    ];
+
+    for (const [label, today, options, status, code] of cases) {
+      expect(classifyTodaySession(today, options), label).toBe(status);
+      expect(buildDailyDecision(recovered, context, today, options).decision.decision.decisionCode, label).toBe(code);
+      const offersPending = status === "planned" || status === "active";
+      expect(offersPending, label).toBe(code === "proceed_as_planned");
+    }
   });
 });

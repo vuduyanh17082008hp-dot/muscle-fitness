@@ -78,6 +78,8 @@ export type WorkoutPlayerSet = {
 export type WorkoutPlayerExercise = {
   id: string
   exerciseId: string
+  /** exercise_library slug — links the row to the recommendation catalogue. */
+  slug?: string | null
   name: string
   primaryMuscle: string
   equipment: string
@@ -96,9 +98,18 @@ export type WorkoutPlayerExercise = {
 
 export type WorkoutReplacementOption = {
   id: string
+  /** Catalogue slug this library row resolves (public rows only). */
+  slug?: string | null
   name: string
   primaryMuscle: string
   equipment: string
+}
+
+/** Read-only context the Find Alternative sheet needs; never used to decide authorization. */
+export type WorkoutAlternativeContext = {
+  experience: "beginner" | "intermediate" | "advanced" | null
+  familiarSlugs: string[]
+  hold: boolean
 }
 
 export type WorkoutRecommendation = {

@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import type { ProposalDetails } from "@/lib/dante-core/chat-stream-protocol";
 import { getDanteTool } from "@/lib/dante-core/tools/registry";
 import type { ActionErrorCode, ToolContext } from "@/lib/dante-core/tools/types";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
@@ -173,6 +174,80 @@ export async function confirmPendingAction(
   logToolEvent("DANTE_TOOL_SUCCESS", { tool: toolName });
 
   return { ok: true, status: "executed", result: executionResult.data };
+}
+
+/**
+ * Read-only status of one of the caller's own actions (RLS + explicit user scope), for a caller that lost a confirm's
+ * outcome (timeout) and must find out whether the write happened before saying anything about it. Null = not found.
+ */
+export async function readPendingActionStatus(
+  supabase: SupabaseClient,
+  userId: string,
+  actionId: string,
+): Promise<{ status: PendingActionRow["status"]; result: unknown } | null> {
+  const { data, error } = await supabase.from("dante_tool_actions").select("status, result").eq("id", actionId).eq("user_id", userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? { status: data.status as PendingActionRow["status"], result: data.result } : null;
+}
+
+/** MF-S1: the reviewable card for a stored pending call (null when the tool has none or its args no longer validate). */
+export function pendingDetails(toolName: string, args: unknown): ProposalDetails | null {
+  const tool = getDanteTool(toolName);
+  if (!tool?.describe) return null;
+  const parsed = tool.inputSchema.safeParse(args);
+  return parsed.success ? tool.describe(parsed.data) : null;
+}
+
+export type ModifyOutcome =
+  | { ok: true; pending: { actionId: string; toolName: string; summary: string; details: ProposalDetails | null } }
+  | { ok: false; status: "not_found" | "already_handled" | "expired" | "invalid" | "failed"; error: string };
+
+/**
+ * MF-S1 MODIFY: one edited value → the tool's own builder re-runs against fresh state (revise) → a NEW pending row,
+ * and the old one is cancelled (compare-and-swap). Nothing executes: the user still has to Accept the new card.
+ * The new row is written first; if the old one was already handled meanwhile, the new one is cancelled again, so a
+ * double Modify can never leave two live cards.
+ */
+export async function modifyPendingAction(
+  supabase: SupabaseClient,
+  context: ToolContext,
+  actionId: string,
+  value: number,
+): Promise<ModifyOutcome> {
+  const { data: row, error } = await supabase
+    .from("dante_tool_actions")
+    .select("id, tool_name, args, status, expires_at")
+    .eq("id", actionId)
+    .eq("user_id", context.userId)
+    .maybeSingle();
+  if (error) return { ok: false, status: "failed", error: "We couldn't load this proposal right now. Please try again." };
+  if (!row) return { ok: false, status: "not_found", error: "Action not found." };
+  if (row.status !== "pending") return { ok: false, status: "already_handled", error: `This proposal was already ${row.status}.` };
+  if (Date.parse(row.expires_at as string) <= context.now.getTime()) return { ok: false, status: "expired", error: "This proposal has expired — please ask again." };
+
+  const tool = getDanteTool(row.tool_name as string);
+  const parsed = tool?.inputSchema.safeParse(row.args);
+  if (!tool?.revise || !parsed?.success) return { ok: false, status: "invalid", error: "This proposal can't be modified." };
+
+  const revised = await tool.revise(context, parsed.data, value);
+  if (!revised.ok) return { ok: false, status: "invalid", error: revised.error };
+
+  const created = await createPendingAction(supabase, context.userId, tool.name, revised.args, revised.summary, context.now);
+  const admin = createSupabaseAdminClient();
+  const { data: superseded } = await admin
+    .from("dante_tool_actions")
+    .update({ status: "cancelled", result: { supersededBy: created.actionId } })
+    .eq("id", actionId)
+    .eq("user_id", context.userId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (!superseded) {
+    await admin.from("dante_tool_actions").update({ status: "cancelled", result: { error: "superseded proposal was already handled" } }).eq("id", created.actionId).eq("status", "pending");
+    return { ok: false, status: "already_handled", error: "This proposal was already handled." };
+  }
+
+  return { ok: true, pending: { actionId: created.actionId, toolName: tool.name, summary: created.summary, details: tool.describe?.(revised.args) ?? null } };
 }
 
 export type CancelOutcome = { ok: true } | { ok: false; status: "not_found" | "already_handled"; error: string };

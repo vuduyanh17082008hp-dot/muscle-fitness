@@ -99,10 +99,10 @@ describe("candidate decisions through the real route", () => {
     expect(trace?.candidateTask).toBe("RANK:PERSONAL");
   });
 
-  it("a pure food fact still goes to Gemma", async () => {
-    const { done } = await post("how much protein is in 100g of salmon?");
-    expect(provider.prompts).toHaveLength(0);
-    expect((done as { model?: string } | undefined)?.model).toBe("dante-defer-to-gemma");
+  it("a pure food fact runs Dante's nutrition capability (one AI coach), not the general model", async () => {
+    const { done, text } = await post("how much protein is in 100g of salmon?");
+    expect((done as { model?: string } | undefined)?.model).toBe("dante-nutrition");
+    expect(text).not.toMatch(/Gemma/);
   });
 
   it("30. ranking + protein-left multi-intent: both obligations answered, ranking set complete, no leakage", async () => {

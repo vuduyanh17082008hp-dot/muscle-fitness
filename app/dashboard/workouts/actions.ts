@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import type { Json } from "@/database.types.generated";
 import { createClient, createTypedClient } from "@/lib/supabase/server";
+import { currentTrainingHold } from "@/lib/dante-core/server/training-hold-guard";
 
 /* =========================================================
    SHARED TYPES
@@ -1385,7 +1386,7 @@ export async function startWorkoutAction(
     );
   }
 
-  const { supabase } =
+  const { supabase, userId } =
     await requireUser();
 
   const clientId =
@@ -1399,6 +1400,12 @@ export async function startWorkoutAction(
     clientId,
   );
 
+  // QA-01: the UI withholds Start during a training hold; the server enforces the same canonical decision, so a stale
+  // tab or a replayed form cannot start a session while the Daily Brief holds training. Recovery explains the hold.
+  if (await currentTrainingHold(supabase, userId)) {
+    redirect("/dashboard/recovery");
+  }
+
   const {
     data: sessionId,
     error,
@@ -1409,6 +1416,11 @@ export async function startWorkoutAction(
         parsedDayId.data,
     },
   );
+
+  // The DB enforces the same hold (workout_sessions_training_hold): a hold set after the check above lands here.
+  if (error?.hint === "training_hold") {
+    redirect("/dashboard/recovery");
+  }
 
   if (
     error ||

@@ -3,22 +3,12 @@ import { z } from "zod"
 
 import { createClient } from "@/lib/supabase/server"
 import { estimateMealFromPhoto } from "@/lib/nutrition/photo-estimate"
+import { imageDataUrl, imageRejection } from "@/lib/nutrition/image-upload"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-// ~6MB base64 ceiling keeps this well under typical serverless body limits.
-const MAX_IMAGE_LENGTH = 8_000_000
-
-const requestSchema = z.object({
-  image: z
-    .string()
-    .min(1)
-    .max(MAX_IMAGE_LENGTH)
-    .refine((value) => value.startsWith("data:image/"), {
-      message: "Image must be a data URL (data:image/...).",
-    }),
-})
+const requestSchema = z.object({ image: imageDataUrl })
 
 /**
  * POST /api/nutrition/photo-estimate
@@ -49,10 +39,8 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(body)
 
   if (!parsed.success) {
-    return NextResponse.json(
-      { ok: false, error: "Invalid image payload.", details: parsed.error.flatten() },
-      { status: 400 },
-    )
+    const { error, status } = imageRejection(body, ["image"])
+    return NextResponse.json({ ok: false, error }, { status })
   }
 
   const result = await estimateMealFromPhoto(parsed.data.image)

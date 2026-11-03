@@ -180,7 +180,7 @@ export function StatCard({
             text-xs
             font-bold
             uppercase
-            tracking-[0.18em]
+            tracking-[0.12em]
             text-[var(--color-text-muted)]
           "
         >

@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { loadNutritionContext } from "@/lib/nutrition/load-nutrition-context"
 import { loadFoodLogForDate } from "@/lib/nutrition/food-log/load-food-log-context"
 import { loadRecentFoods } from "@/lib/nutrition/food-log/history"
-import { compareToTargets } from "@/lib/nutrition/food-log/totals"
+import { compareToTargets, describePortion, summarizeMeals } from "@/lib/nutrition/food-log/totals"
 import { localDateTimeParts, resolveUserTimeZone } from "@/lib/training/load-today-session"
 
 import { makeSnapshot } from "./draft"
@@ -66,6 +66,9 @@ export async function loadCoachContext(supabase: SupabaseClient, userId: string,
         recentFoodNames: recent.map((item) => item.foodName),
       },
       cookingAbility: nutrition.cookingAbility,
+      todayMeals: summarizeMeals(foodLog.entries),
+      // Rows are read in created_at order, so the last one is the latest thing logged.
+      lastLogged: foodLog.entries.length ? { meal: foodLog.entries.at(-1)!.mealType, food: describePortion(foodLog.entries.at(-1)!) } : undefined,
     },
   }
 }

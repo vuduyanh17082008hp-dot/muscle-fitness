@@ -243,6 +243,7 @@ function NumberField({
   max: number;
   suffix?: string;
 }) {
+  const outOfRange = value !== null && (value < min || value > max);
   return (
     <label className="block">
       <span className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-zinc-500">
@@ -259,6 +260,7 @@ function NumberField({
             const raw = event.target.value;
             onChange(raw === "" ? null : Number(raw));
           }}
+          aria-invalid={outOfRange || undefined}
           className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-base font-semibold text-white outline-none focus:border-amber-400/60 focus:ring-4 focus:ring-amber-400/10"
         />
         {suffix ? (
@@ -267,6 +269,11 @@ function NumberField({
           </span>
         ) : null}
       </div>
+      {outOfRange ? (
+        <span role="alert" className="mt-1.5 block text-xs text-red-400">
+          Enter a value between {min} and {max}{suffix ? ` ${suffix}` : ""}.
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -484,8 +491,13 @@ export function ShortOnboardingWizard({
       form.age >= 13 &&
       form.age <= 100 &&
       form.gender !== null &&
+      // QA-07: the same ranges features/onboarding/schema.ts enforces on submit, so a bad value is caught here, not on step 5.
       form.heightCm !== null &&
-      form.weightKg !== null;
+      form.heightCm >= 80 &&
+      form.heightCm <= 250 &&
+      form.weightKg !== null &&
+      form.weightKg >= 20 &&
+      form.weightKg <= 400;
 
     return (
       <>

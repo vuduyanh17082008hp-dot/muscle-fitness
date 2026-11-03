@@ -1,4 +1,6 @@
 import type { DanteInsight } from "@/lib/dante-core/insight";
+import type { StructuredBlock } from "@/lib/nutrition/coach/followup";
+import type { ActiveMealDraft } from "@/lib/nutrition/coach/types";
 
 /**
  * The wire format for /api/chatbot's streaming response — a plain
@@ -21,7 +23,26 @@ export type ChatStreamDeltaEvent = {
 
 export type ChatStreamSource = { type: string; title: string; url: string };
 export type ChatStreamAction = { label: string; type: string };
-export type ChatStreamPendingConfirmation = { actionId: string; toolName: string; summary: string };
+/**
+ * MF-S1: what a reviewable proposal card shows — derived on the server from the stored, validated args (never from the
+ * reply text), so a restored card and a fresh one say the same thing.
+ */
+export type ProposalDetails = {
+  title: string;
+  reason: string;
+  /** The record this changes ("Workout plan · Push Pull Legs"). */
+  target: string;
+  current: string;
+  proposed: string;
+  uncertainty: string | null;
+  /** The page where the result can be seen. */
+  href: string;
+  hrefLabel: string;
+  /** One editable number; Modify re-runs the server's proposal builder with it (never applied directly). */
+  modify: { label: string; unit: string; value: number; min: number; max: number; step: number } | null;
+};
+
+export type ChatStreamPendingConfirmation = { actionId: string; toolName: string; summary: string; details?: ProposalDetails | null };
 
 export type ChatStreamDoneEvent = {
   type: "done";
@@ -44,6 +65,21 @@ export type ChatStreamDoneEvent = {
   toolTraceSummary: string[];
   safetyTriggered?: boolean;
   safetyCategory?: string | null;
+  /** Present when Dante's nutrition capability answered the turn: the structured results and the state the client echoes next turn. */
+  nutrition?: DanteNutritionTurn | null;
+};
+
+/**
+ * Dante's nutrition capability (lib/nutrition/coach) speaking through the chat: option lists, comparisons, ingredient
+ * tables and change proposals are built from engine data, never parsed out of prose. `state` is echoed back as
+ * `nutrition` on the next request; the server re-validates all of it. A meal log never rides here — it is a
+ * `pendingConfirmation` card like every other Dante write.
+ */
+export type DanteNutritionTurn = {
+  blocks: StructuredBlock[];
+  hints: string[];
+  state: { activeDraft: ActiveMealDraft | null; conversation: Record<string, unknown> | null };
+  foodLogChanged: boolean;
 };
 
 export type ChatStreamErrorEvent = {
@@ -54,7 +90,10 @@ export type ChatStreamErrorEvent = {
   partial: boolean;
 };
 
-export type ChatStreamEvent = ChatStreamDeltaEvent | ChatStreamDoneEvent | ChatStreamErrorEvent;
+/** Appended by lib/dante-core/conversation-store.ts after the turn's history row was finalized; ok=false means it is NOT in history. */
+export type ChatStreamSavedEvent = { type: "saved"; ok: boolean };
+
+export type ChatStreamEvent = ChatStreamDeltaEvent | ChatStreamDoneEvent | ChatStreamErrorEvent | ChatStreamSavedEvent;
 
 export const CHAT_STREAM_CONTENT_TYPE = "application/x-ndjson; charset=utf-8";
 
@@ -142,7 +181,7 @@ function isChatStreamEvent(value: unknown): value is ChatStreamEvent {
     value !== null &&
     "type" in value &&
     (value as { type: unknown }).type !== undefined &&
-    ["delta", "done", "error"].includes((value as { type: unknown }).type as string)
+    ["delta", "done", "error", "saved"].includes((value as { type: unknown }).type as string)
   );
 }
 

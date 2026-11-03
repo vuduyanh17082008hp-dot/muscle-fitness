@@ -2,16 +2,10 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { createClient } from "@/lib/supabase/server"
-import { createPendingAction } from "@/lib/dante-core/tools/pending-actions"
-import { loadCoachContext } from "@/lib/nutrition/coach/context"
-import { isStale, STALE_MESSAGE } from "@/lib/nutrition/coach/draft"
-import { mealFingerprint } from "@/lib/nutrition/coach/fingerprint"
 import { readCoachJsonBody } from "@/lib/nutrition/coach/http"
-import { isIngredientBlocked, requireIngredient } from "@/lib/nutrition/coach/ingredients"
-import { totalsFor } from "@/lib/nutrition/coach/macros"
+import { proposeDraftLog } from "@/lib/nutrition/coach/propose-log"
 import { draftInputSchema } from "@/lib/nutrition/coach/schema"
-import { resolveLocalToday } from "@/lib/nutrition/food-log/load-food-log-context"
-import { MEAL_TYPES } from "@/lib/nutrition/food-log/types"
+import { MEAL_TYPES, type MealType } from "@/lib/nutrition/food-log/types"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -29,7 +23,8 @@ const requestSchema = z.object({
  * (dante_tool_actions) that the user must confirm via
  * /api/dante/tools/confirm. The confirmed action's UUID is the food-log
  * idempotency key, so retries can't double-log and a new action can log the
- * same meal again. The meal fingerprint is similarity-only.
+ * same meal again. The meal fingerprint is similarity-only. The validation
+ * itself is shared with the Gemma chat (lib/nutrition/coach/propose-log.ts).
  */
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -57,65 +52,20 @@ export async function POST(request: Request) {
   }
 
   const { draft, mealType, acknowledgeSimilar } = parsed.data
-  const ingredients = draft.ingredients.map(({ ingredientId, grams }) => ({ ingredientId, grams }))
 
   try {
-    const loaded = await loadCoachContext(supabase, user.id)
-    if (!loaded.ok) {
-      return NextResponse.json({ ok: false, code: loaded.code, error: loaded.message }, { status: 422 })
+    const result = await proposeDraftLog(supabase, user.id, draft, mealType as MealType, { acknowledgeSimilar })
+    if (result.ok) return NextResponse.json({ ok: true, pendingConfirmation: result.pending, nutrition: result.nutrition })
+    switch (result.code) {
+      case "CONTEXT_UNAVAILABLE":
+        return NextResponse.json({ ok: false, code: result.contextCode, error: result.message }, { status: 422 })
+      case "BLOCKED_INGREDIENT":
+        return NextResponse.json({ ok: false, code: result.code, error: result.message }, { status: 422 })
+      case "STALE_CONTEXT":
+        return NextResponse.json({ ok: false, code: result.code, message: result.message, actions: ["Refresh meal", "Keep current draft"] })
+      case "SIMILAR_MEAL_LOGGED_TODAY":
+        return NextResponse.json({ ok: false, code: result.code, message: result.message, actions: ["Log again", "Cancel"] })
     }
-    const blockedTerms = [...loaded.ctx.guards.allergies, ...loaded.ctx.guards.excludedFoods]
-    const blocked = ingredients
-      .map(({ ingredientId }) => requireIngredient(ingredientId))
-      .filter((ingredient) => isIngredientBlocked(ingredient, blockedTerms))
-    if (blocked.length > 0) {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "BLOCKED_INGREDIENT",
-          error: `This meal contains a food from your current allergies or exclusions: ${blocked.map((item) => item.shortName).join(", ")}.`,
-        },
-        { status: 422 },
-      )
-    }
-
-    // The draft's snapshot is client-held; Athlete State stays canonical. "Keep current draft"
-    // (acknowledgedContextVersion === current version) accepts the old meal concept only —
-    // allergy/exclusion checks above and at confirmation are never skipped.
-    const current = loaded.ctx.snapshot
-    if (isStale(draft.sessionContextSnapshot, current) && draft.acknowledgedContextVersion !== current.contextVersion) {
-      return NextResponse.json({ ok: false, code: "STALE_CONTEXT", message: STALE_MESSAGE, actions: ["Refresh meal", "Keep current draft"] })
-    }
-
-    const fingerprint = mealFingerprint(ingredients)
-
-    if (!acknowledgeSimilar) {
-      const today = await resolveLocalToday(supabase, user.id)
-      const { data: similar } = await supabase
-        .from("food_logs")
-        .select("id, food_name")
-        .eq("user_id", user.id)
-        .eq("log_date", today)
-        .eq("source", "local")
-        .eq("source_id", fingerprint)
-        .limit(1)
-
-      if (similar && similar.length > 0) {
-        return NextResponse.json({
-          ok: false,
-          code: "SIMILAR_MEAL_LOGGED_TODAY",
-          message: "You logged a similar meal earlier today. Log again?",
-          actions: ["Log again", "Cancel"],
-        })
-      }
-    }
-
-    const totals = totalsFor(ingredients)
-    const args = { mealType, name: draft.name, ingredients, context: current }
-    const summary = `Log "${draft.name}" (~${Math.round(totals.calories)} kcal, ${Math.round(totals.protein)}g protein) as ${mealType.replace("_", " ")}`
-    const pending = await createPendingAction(supabase, user.id, "log_meal_draft", args, summary)
-
-    return NextResponse.json({ ok: true, pendingConfirmation: pending, nutrition: totals })
   } catch (error) {
     console.error("[NUTRITION COACH LOG ERROR]", error)
     return NextResponse.json({ ok: false, error: "Couldn't prepare that log right now." }, { status: 500 })

@@ -2,6 +2,7 @@ import {
   checkCitationMismatch,
   checkDeterministicValueMutation,
   checkInventedAthleteMetric,
+  checkMealLevelClaims,
   checkSafetyAdherence,
   checkToolCapabilityClaim,
   EVIDENCE_LANGUAGE,
@@ -11,6 +12,7 @@ import type { TurnBudget } from "@/lib/dante-core/turn-budget";
 import { mapSentencesKeepingLists } from "@/lib/intelligence/performance-core/claim-revision";
 
 export type {
+  MealIntakeFact,
   VerifierCheckCode,
   VerifierFact,
   VerifierFinding,
@@ -24,6 +26,7 @@ export {
   checkCitationMismatch,
   checkDeterministicValueMutation,
   checkInventedAthleteMetric,
+  checkMealLevelClaims,
   checkSafetyAdherence,
   checkToolCapabilityClaim,
 } from "@/lib/dante-core/verifier/checks";
@@ -52,7 +55,7 @@ function outcomeForFindings(findings: VerifierFinding[]): VerifierOutcome {
   if (blockers.some((finding) => finding.code === "claimed_tool_capability")) return "tool_unavailable";
   if (
     blockers.some(
-      (finding) => finding.code === "invented_athlete_metric" || finding.code === "deterministic_value_mutation" || finding.code === "citation_mismatch",
+      (finding) => finding.code === "invented_athlete_metric" || finding.code === "deterministic_value_mutation" || finding.code === "citation_mismatch" || finding.code === "unsupported_intake_claim",
     )
   ) {
     return "insufficient_evidence";
@@ -66,6 +69,7 @@ export function verifyFinalResponse(input: VerifierInput): VerifierResult {
     ...checkSafetyAdherence(input),
     ...checkDeterministicValueMutation(input),
     ...checkInventedAthleteMetric(input),
+    ...checkMealLevelClaims(input),
     ...checkCitationMismatch(input),
     ...checkToolCapabilityClaim(input),
   ];

@@ -2,7 +2,11 @@
 
 Status legend: IMPLEMENTED · ADAPTER · DESIGNED · DEFERRED · RESEARCH_ONLY
 
-> The recorded R1A findings live in [AI-R1A-FORENSIC.md](./AI-R1A-FORENSIC.md). Its line references
+> **Naming (current).** "Gemma" below is the internal codename of Dante's nutrition engine
+> (`lib/nutrition/coach/`, `GEMMA` ids in `lib/intelligence/`). It is not a separate assistant:
+> Dante is the only user-facing AI coach, and `/api/chatbot` routes nutrition turns to this engine.
+
+> The recorded R1A findings file was retired (Git history: `docs/ai/AI-R1A-FORENSIC.md`). Its line references
 > came partly from read-only subagent reports and were not all independently rechecked.
 
 ## AI-R1A findings (summary)

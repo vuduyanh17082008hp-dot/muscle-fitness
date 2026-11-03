@@ -4,7 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
-import { loadTodaySession } from "@/lib/training/load-today-session";
+import { loadTodaySessionRead, resolveUserTimeZone } from "@/lib/training/load-today-session";
+import { loadPlannedDayRead } from "@/lib/training/planned-day";
 import { buildDailyDecision } from "@/lib/dante-core/daily-decision-engine";
 import { loadClientPolicy } from "@/lib/dante-core/policy/load-client-policy";
 import { runDanteCycle } from "@/lib/dante-core/orchestrator/index";
@@ -90,18 +91,20 @@ export async function runDanteCycleForUser(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<OrchestratorResult> {
-  const [athleteState, trainingContext, todaySession, policy, previousSnapshot] = await Promise.all([
+  const [athleteState, trainingContext, todaySessionRead, policy, previousSnapshot, planRead] = await Promise.all([
     buildAthleteState(supabase, userId),
     loadTrainingContext(supabase, userId),
-    loadTodaySession(supabase, userId),
+    loadTodaySessionRead(supabase, userId),
     loadClientPolicy(supabase, userId),
     loadPreviousSnapshot(supabase, userId),
+    resolveUserTimeZone(supabase, userId).then((timeZone) => loadPlannedDayRead(supabase, userId, new Date(), timeZone)),
   ]);
 
   const { decision: dailyDecision, proposedActions } = buildDailyDecision(
     athleteState,
     trainingContext,
-    todaySession,
+    todaySessionRead.status === "OK" ? todaySessionRead.session : null,
+    { sessionUnavailable: todaySessionRead.status !== "OK", ...planRead },
   );
 
   const result = runDanteCycle({

@@ -70,8 +70,11 @@ export async function POST(request: Request) {
 
   const { scanId, dish, mealType, components } = parsed.data;
 
-  const savedIds: string[] = [];
-  const errors: string[] = [];
+  // One outcome per component, keyed by its idempotency key, so the client can
+  // tell COMPLETE / PARTIAL / FAILED apart and retry only what failed.
+  const results: Array<
+    { idempotencyKey: string; ok: true; entryId: string } | { idempotencyKey: string; ok: false; error: string }
+  > = [];
 
   for (const component of components) {
     const result = await createFoodLog(supabase, user.id, {
@@ -93,14 +96,19 @@ export async function POST(request: Request) {
       estimationReason: `HawkerLens photo scan of ${dish.replace(/_/g, " ")}, user-confirmed.`,
     });
 
-    if (result.success) {
-      savedIds.push(result.data.id);
-    } else {
-      errors.push(`${component.name}: ${result.error}`);
-    }
+    results.push(
+      result.success
+        ? { idempotencyKey: component.idempotencyKey, ok: true, entryId: result.data.id }
+        : { idempotencyKey: component.idempotencyKey, ok: false, error: result.error },
+    );
   }
 
-  if (scanId) {
+  const savedCount = results.filter((r) => r.ok).length;
+  const status = savedCount === results.length ? "complete" : savedCount > 0 ? "partial" : "failed";
+
+  // The first request that saves anything records what the user confirmed; a
+  // retry (which carries only the failed components) must not overwrite it.
+  if (scanId && status !== "failed") {
     const { error: updateError } = await supabase
       .from("hawkerlens_scans")
       .update({
@@ -108,19 +116,21 @@ export async function POST(request: Request) {
         confirmed_at: new Date().toISOString(),
       })
       .eq("id", scanId)
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .is("confirmed_at", null);
 
     if (updateError) {
       console.error("[HAWKERLENS CONFIRM API] failed to record confirmation", updateError);
     }
   }
 
-  if (savedIds.length === 0) {
+  if (status === "failed") {
     return NextResponse.json(
-      { ok: false, error: "Could not save any component.", details: errors },
+      { ok: false, status, error: "Could not save any component.", results },
       { status: 500 },
     );
   }
 
-  return NextResponse.json({ ok: true, savedIds, errors: errors.length > 0 ? errors : undefined });
+  // 207: some rows exist and some don't — never a plain success.
+  return NextResponse.json({ ok: status === "complete", status, results }, { status: status === "complete" ? 200 : 207 });
 }

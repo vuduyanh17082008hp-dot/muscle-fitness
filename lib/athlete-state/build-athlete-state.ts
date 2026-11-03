@@ -90,7 +90,13 @@ function pickPerformanceTrendForMuscle(
 export async function buildAthleteState(
   supabase: SupabaseClient,
   userId: string,
-  options: { now?: Date; timeZoneOffsetMinutes?: number; timeZone?: string | null } = {},
+  options: {
+    now?: Date;
+    timeZoneOffsetMinutes?: number;
+    timeZone?: string | null;
+    /** Reuse a context the caller already loaded (same user, same time zone) instead of querying twice. */
+    trainingContext?: TrainingContext;
+  } = {},
 ): Promise<AthleteState> {
   const now = options.now ?? new Date();
   const timezone = await resolveUserTimeZone(supabase, userId, options.timeZone);
@@ -104,6 +110,7 @@ export async function buildAthleteState(
     latestFoodLogResponse,
     demoSettings,
   ] = await Promise.all([
+      options.trainingContext ??
       loadTrainingContext(supabase, userId, {
         now,
         timeZoneOffsetMinutes: options.timeZoneOffsetMinutes,
@@ -393,6 +400,7 @@ export async function buildAthleteState(
       soreness: recoveryContext?.today?.soreness ?? null,
       fatigue: recoveryContext?.today?.fatigue ?? null,
       painFlag: recoveryContext?.today?.pain_illness === "yes",
+      painFlagUnavailable: !recoveryContext || recoveryContext.checkinsUnavailable === true,
       recoveryStatusCode: recoveryStatus,
     },
 

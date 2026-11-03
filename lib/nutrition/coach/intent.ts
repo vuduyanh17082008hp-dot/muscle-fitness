@@ -1,6 +1,6 @@
 import { detectCravingKey } from "./craving"
 import type { DraftOp } from "./draft"
-import { findIngredientByText } from "./ingredients"
+import { COACH_INGREDIENTS, findIngredientByText } from "./ingredients"
 import type { ConstraintOverrides } from "./schema"
 import type { CravingKey } from "./types"
 
@@ -16,14 +16,15 @@ export const SAFETY_REPLY =
   "One meal doesn't require compensation. We can adjust the rest of the day around your overall target — no skipping meals, no punishing workouts. If food or eating feels stressful or out of control, talking to a doctor or a registered dietitian is a good next step."
 
 export const TRAINING_REDIRECT =
-  "That's a training or recovery question, so it's one for Dante — I only work on nutrition and I can't change your workouts or recovery. Ask Dante, and bring me back anything about meals, macros or cravings — including what to eat around that session."
+  "That's a training or recovery question — ask it on its own and I'll answer it from your training and recovery data. On the food side I can help with meals, macros or cravings — including what to eat around that session."
 
 const DISORDERED = /\b(starv\w*|purg\w*|laxative\w*|make myself (throw|vomit|sick)|throw (it )?up|vomit\w*|fast(ing)? for \d+\s*(days?|hours?)|skip (all|every) meals?|not eat (at all|for (days|a week)))\b/i
 const COMPENSATION = /\b(burn (it |this |that |these )?off|work (it |this |that )?off|make up for (it|what|that|eating)|earn (it|this|my|the|food|dinner|lunch|breakfast)|punish\w*|compensat\w*|cheat meal.*(run|exercise))\b/i
 const SUPPLEMENT_ASK = /\b(?:supplements?|supps?|creatine|pre-?workout|bcaas?|eaas?|multivitamins?|vitamins?|omega-?3|fish oil|magnesium|zinc|ashwagandha)\b/i
 // H0 cluster D: day names of a split ("push day", "leg day") and programming words are training, Dante's domain.
 const TRAINING = /\b(workout|exercise|training|program|routine|sets|reps|squat|deadlift|bench|injur\w*|pain|sore|soreness|recovery|rest day|cardio|stretch\w*|mobility|(?:push|pull|leg|legs|upper|lower|arm|chest|back|shoulder) day|split|hypertrophy block|1rm|progressive overload|deload)\b/i
-const FOODISH = /\b(meal|food|eat|eating|calorie|calories|kcal|protein|carb|carbs|macro|macros|recipe|snack|breakfast|lunch|dinner|ingredient|cook|cooking|hungry|craving|craving)\b/i
+// Plurals count: "give me some meals with tuna" is a meal request even without the word "protein".
+const FOODISH = /\b(meals?|foods?|eat|eating|calorie|calories|kcal|protein|carb|carbs|macro|macros|recipes?|snacks?|breakfast|lunch|dinner|ingredients?|cook|cooking|hungry|craving|dishes)\b/i
 
 export type Intent =
   | { kind: "safety"; reply: string }
@@ -55,11 +56,14 @@ export function isUnsafeCoachReply(reply: string): boolean {
   return COMPENSATION.test(reply) || /\b(starve|purge|you must earn|skip (dinner|lunch|breakfast|meals) (entirely|completely))\b/i.test(reply)
 }
 
+/** "with realistic portions", "with good macros": words about the REQUEST, never a food to look up (live: "realistic portions" was reported as a food with no data). */
+const REQUEST_QUALIFIER = /\b(?:portions?|servings?|sizes?|amounts?|quantit(?:y|ies)|macros?|calories|ingredients?|options?|choices?|variety|flavou?rs?|taste|nutrition|numbers)\b/i
+
 function splitFoods(text: string): string[] {
   return text
     .split(/,|\band\b|\bplus\b|\bwith\b|\+|&/i)
     .map((part) => part.replace(/\b(some|the|my|a|an|only|just|already|at home|in the fridge)\b/gi, "").trim())
-    .filter((part) => part.length > 1)
+    .filter((part) => part.length > 1 && !REQUEST_QUALIFIER.test(part))
 }
 
 export function resolveFoods(texts: string[]): { ids: string[]; unresolved: string[] } {
@@ -106,6 +110,52 @@ const SENSORY_ADDS: Array<[RegExp, string]> = [
   [/\b(salty|saltier|more umami|savou?ry)\b/i, "soy_sauce"],
   [/\b(tangy|tangier|fresher|more acid)\b/i, "lime"],
 ]
+
+/** "besides tuna" / "other than tuna" / "without tuna" / "no more tuna" / "ngoài cá ngừ": foods THIS request excludes. */
+const EXCLUSION = /(?<![\p{L}])(?:besides?|other than|apart from|except(?: for)?|without|no more|instead of|anything but|minus|ngoài|trừ|không có|không dùng|không ăn)\s+(?:any\s+|the\s+)?([\p{L}][\p{L} ]{1,30}?)(?=[,.;!?]|\s+(?:and|but|or|please|for|today|this|again|anymore)(?![\p{L}])|$)/giu
+
+/**
+ * Turn-level exclusions resolved against the curated catalogue. Request-scoped only: never an allergy, never persisted.
+ * `terms` feed the engine's excludedFoods matcher (names/tags); `ids` are the resolved ingredients.
+ */
+export function excludedFoodsIn(message: string): { ids: string[]; terms: string[] } {
+  const terms = [...message.matchAll(EXCLUSION)].map((match) => match[1].trim().toLowerCase()).filter((term) => resolveFoods([term]).ids.length > 0)
+  return { ids: resolveFoods(terms).ids, terms }
+}
+
+const OPTION_NOUNS = "(?:meals?|options?|choices?|ideas?|recipes?|dishes|suggestions?)"
+const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, couple: 2, few: 3 }
+const LOTS = new RegExp(`\\b(?:lots|loads|plenty|tons|heaps|a bunch|many|a lot|a wide range|variety)\\b(?: of)?[^.?!]{0,24}?\\b(?:${OPTION_NOUNS}|choice|variety)\\b|\\blots of choice\\b|(?<![\\p{L}])nhiều (?:lựa chọn|món|gợi ý)`, "iu")
+const EXPLICIT_N = new RegExp(`\\b(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|couple|few)\\s+(?:of\\s+)?(?:[a-z-]+\\s+){0,3}?${OPTION_NOUNS}\\b|(?<![\\p{L}])(\\d{1,2})\\s+(?:món|lựa chọn|gợi ý)`, "iu")
+const PLURAL = new RegExp(`\\b(?:meals|options|choices|ideas|recipes|dishes|suggestions)\\b|(?<![\\p{L}])(?:vài|mấy|các|một số) (?:món|lựa chọn|gợi ý)`, "iu")
+/** Most options one discovery may render; "lots of choices" asks for this many. */
+export const MAX_DISCOVERY_OPTIONS = 8
+
+/**
+ * How many distinct meals a discovery request asks for: explicit N (bounded), "lots of choices" → 8, a plural request → 5.
+ * null = a singular request ("build me a meal"), which keeps the engine's usual recommendation + 2 alternatives.
+ */
+export function requestedOptionCount(message: string): number | null {
+  if (LOTS.test(message)) return MAX_DISCOVERY_OPTIONS
+  const explicit = message.match(EXPLICIT_N)
+  if (explicit) {
+    const word = (explicit[1] ?? explicit[2]).toLowerCase()
+    const n = NUMBER_WORDS[word] ?? Number(word)
+    if (Number.isFinite(n) && n >= 1) return Math.min(MAX_DISCOVERY_OPTIONS, n)
+  }
+  return PLURAL.test(message) ? 5 : null
+}
+
+/** "more options" / "give me lots of choice" / "another high protein meals" / "thêm món khác": continue the LAST discovery, never re-voice one meal. */
+export const MORE_OPTIONS = new RegExp(
+  `\\b(?:more|other|another|different|new|lots of|loads of|plenty of|many)\\b[^.?!]{0,30}?\\b(?:${OPTION_NOUNS}|ones|choice)\\b|\\b(?:show|give) me (?:some )?(?:more|others)\\b|\\banything else\\b|\\bwhat else\\b|(?<![\\p{L}])(?:thêm (?:lựa chọn|món|gợi ý)|món khác|lựa chọn khác)`,
+  "iu",
+)
+
+/** Foods a message names by their catalogue short name ("more chicken options" → chicken_breast). */
+export function foodsNamedIn(message: string): string[] {
+  return COACH_INGREDIENTS.filter((item) => new RegExp(`(?<![\\p{L}])${item.shortName.toLowerCase()}(?![\\p{L}])`, "iu").test(message)).map((item) => item.id)
+}
 
 export function parseCoachMessage(message: string, options: { hasDraft: boolean }): Intent {
   const text = message.trim()
@@ -157,6 +207,7 @@ export function parseCoachMessage(message: string, options: { hasDraft: boolean 
     }
     if (/\bmore carbs?\b|\badd (?:more )?carbs?\b/.test(lower)) return { kind: "op", op: { type: "more_carbs" } }
     if (/\bmore protein\b|\bhigher protein\b|\bgive me more protein\b/.test(lower)) return { kind: "op", op: { type: "more_protein" } }
+    if (/\blower (?:in )?fat\b|\bless fat\b|\blow(?:er)?[- ]fat\b|\bleaner\b/.test(lower)) return { kind: "op", op: { type: "lower_fat" } }
     if (/\blower (?:the )?cal|\bfewer cal|\bless calor|\blighter\b/.test(lower)) return { kind: "op", op: { type: "lower_calories" } }
     if (/\bcheaper|\bless expensive|\bcheap(er)? option\b|\bbudget\b/.test(lower)) return { kind: "op", op: { type: "cheaper" } }
     if (/\bfaster|\bquicker|\bless time\b/.test(lower)) return { kind: "op", op: { type: "faster" } }
@@ -175,10 +226,15 @@ export function parseCoachMessage(message: string, options: { hasDraft: boolean 
   // Build a meal (from context, or from foods the user names)
   const proteinPriority = new RegExp(PROTEIN_PRIORITY.source, "i").test(lower)
   const foodText = lower.replace(PROTEIN_PRIORITY, " ").replace(/\s+/g, " ")
-  const foodsMatch = foodText.match(/\b(?:i have|i've got|using|use|from|with)\s*:?\s*(.+?)(?:\.|$| (?:under|below|and (?:high|under)|for (?:dinner|lunch|breakfast)))/)
-  const { ids, unresolved } = foodsMatch ? resolveFoods(splitFoods(foodsMatch[1])) : { ids: [], unresolved: [] }
-  const asksForMeal = (/\b(build|make me|make a|suggest|plan|what should i eat|what should i have|help me hit|help me (?:decide|choose|pick|figure out|plan|find)|use my remaining|what meal|give me|i need a|i want a|put together|create)\b/.test(lower) && FOODISH.test(text)) || /\bwhat (?:to|should i) (?:eat|have)\b/.test(lower)
-  const namesFoodsForMeal = ids.length > 0 && /\b(dinner|lunch|breakfast|snack|meal|calories?|kcal|protein)\b/.test(lower)
+  // `\b` after the verb: "without tuna" must not read as "with: out tuna" (which selected the excluded food).
+  const foodsMatch = foodText.match(/\b(?:i have|i've got|using|use|from|with)\b\s*:?\s*(.+?)(?:\.|$| (?:under|below|and (?:high|under)|for (?:dinner|lunch|breakfast)))/)
+  const excluded = excludedFoodsIn(text).ids
+  const named = foodsMatch ? resolveFoods(splitFoods(foodsMatch[1])) : { ids: [], unresolved: [] }
+  const ids = named.ids.filter((id) => !excluded.includes(id))
+  const unresolved = named.unresolved
+  // "recommend a high-protein dinner" is a meal request too (live, Dante unified: it fell to the open model, which wrote number-free options).
+  const asksForMeal = (/\b(build|make me|make a|suggest|recommend|plan|what should i eat|what should i have|help me hit|help me (?:decide|choose|pick|figure out|plan|find)|use my remaining|what meal|give me|i need a|i want a|put together|create)\b/.test(lower) && FOODISH.test(text)) || /\bwhat (?:to|should i) (?:eat|have)\b/.test(lower)
+  const namesFoodsForMeal = ids.length > 0 && /\b(dinner|lunch|breakfast|snacks?|meals?|calories?|kcal|protein)\b/.test(lower)
 
   if (asksForMeal || namesFoodsForMeal || /\bbuild\b/.test(lower) || /^(high[- ]protein|meal under)/.test(lower)) {
     const overrides: ConstraintOverrides = {}

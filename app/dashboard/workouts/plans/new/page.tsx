@@ -161,7 +161,7 @@ export default async function NewWorkoutPlanPage({
       <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <Link
           href="/dashboard/workouts"
-          className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
+          className="inline-flex min-h-11 w-fit items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
 
@@ -183,11 +183,11 @@ export default async function NewWorkoutPlanPage({
         </div>
       </div>
 
-      <header className="mb-8 rounded-3xl border border-white/10 bg-linear-to-br from-[#171717] to-black p-7">
+      <header className="mb-8 rounded-3xl border border-white/10 bg-linear-to-br from-zinc-900 to-black p-7">
         <div className="flex items-center gap-2 text-amber-400">
           <Dumbbell className="h-4 w-4" />
 
-          <p className="text-xs font-black uppercase tracking-[0.25em]">
+          <p className="text-xs font-black uppercase tracking-[0.12em]">
             Workout Plan Builder
           </p>
         </div>

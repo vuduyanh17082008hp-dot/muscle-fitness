@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 
 import { AuthShell } from "@/components/auth/auth-shell"
+import { isRecoverySession } from "@/lib/auth/recovery-session"
 import { createClient } from "@/lib/supabase/server"
 
 import { ResetPasswordForm } from "./reset-password-form"
@@ -18,6 +19,17 @@ export default async function ResetPasswordPage() {
     redirect(
       "/forgot-password?error=invalid-reset-link"
     )
+  }
+
+  /*
+   * Only a session opened by a recovery link may use this form; an
+   * ordinary signed-in session goes back to the dashboard.
+   */
+  const { data: claimsData } =
+    await supabase.auth.getClaims()
+
+  if (!isRecoverySession(claimsData?.claims)) {
+    redirect("/dashboard")
   }
 
   return (

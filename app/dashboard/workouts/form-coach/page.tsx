@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default function FormCoachPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-16">
-      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-[#111111] to-black p-7 sm:p-9">
+      <header className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-7 sm:p-9">
         <Link
           href="/dashboard/workouts"
           className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-400 transition hover:text-white"
@@ -27,7 +27,7 @@ export default function FormCoachPage() {
           <ScanEye className="size-6" />
         </span>
 
-        <p className="mt-5 text-[11px] font-black uppercase tracking-[0.2em] text-amber-300">
+        <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-amber-300">
           Form Coach — Beta
         </p>
 
@@ -40,6 +40,19 @@ export default function FormCoachPage() {
           real time to count reps and surface one prioritised cue at a
           time — for Squat, Push-up and Plank.
         </p>
+
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+          Beta: rep counts and cues are on-device estimates from your camera, not validated
+          measurements. Treat a cue as something to check, and stop if anything hurts.
+        </p>
+
+        <Link
+          href="/dashboard/workouts/form-coach/live"
+          className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-white underline-offset-4 hover:underline"
+          data-testid="form-coach-live-link"
+        >
+          Pilot: live squat rep counting with review and corrections →
+        </Link>
       </header>
 
       <FormCoachCameraClient />

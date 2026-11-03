@@ -3,8 +3,9 @@ import { after, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildAthleteState } from "@/lib/athlete-state/build-athlete-state";
 import { loadTrainingContext } from "@/lib/training/load-training-context";
-import { loadTodaySession, resolveUserTimeZone } from "@/lib/training/load-today-session";
+import { loadTodaySessionRead, resolveUserTimeZone } from "@/lib/training/load-today-session";
 import { buildDailyDecision } from "@/lib/dante-core/daily-decision-engine";
+import { loadPlannedDayRead } from "@/lib/training/planned-day";
 import { buildAdaptiveProgram } from "@/lib/dante-core/adaptive-program-engine";
 import { logProgramAdaptations } from "@/lib/dante-core/program-adaptation-log";
 import { buildPerformanceForecast } from "@/lib/dante-core/performance-forecast";
@@ -38,16 +39,18 @@ export async function GET(request: Request) {
   try {
     const now = new Date();
     const timeZone = await resolveUserTimeZone(supabase, user.id);
-    const [athleteState, trainingContext, todaySession] = await Promise.all([
+    const [athleteState, trainingContext, todaySessionRead, planRead] = await Promise.all([
       buildAthleteState(supabase, user.id, { now, timeZone }),
       loadTrainingContext(supabase, user.id, { now, timeZone }),
-      loadTodaySession(supabase, user.id, now, timeZone),
+      loadTodaySessionRead(supabase, user.id, now, timeZone),
+      loadPlannedDayRead(supabase, user.id, now, timeZone),
     ]);
 
     const { decision, proposedActions } = buildDailyDecision(
       athleteState,
       trainingContext,
-      todaySession,
+      todaySessionRead.status === "OK" ? todaySessionRead.session : null,
+      { sessionUnavailable: todaySessionRead.status !== "OK", ...planRead },
     );
 
     const programAdaptations = buildAdaptiveProgram(athleteState, trainingContext);

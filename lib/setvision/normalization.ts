@@ -1,4 +1,5 @@
-import { getBestSide, midpoint } from "@/lib/form-coach/geometry";
+import { midpoint } from "@/lib/form-coach/geometry";
+import { sameSidePoints } from "@/lib/setvision/exercise-config";
 import type { Landmark, PoseFrame } from "@/lib/setvision/types";
 
 /**
@@ -21,20 +22,24 @@ export function distance(a: Landmark, b: Landmark): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-/** Shoulder-midpoint to hip-midpoint distance, in the same pixel units as the pose landmarks. Null if either side isn't visible. */
+/**
+ * Shoulder-to-hip distance on ONE clearly tracked body side (score ≥ 0.4,
+ * same floor as the primary angles), in landmark pixel units. Null when
+ * neither side is clearly tracked — a low-score shoulder or hip can make the
+ * torso near-zero and blow normalized speeds up to implausible values.
+ */
 export function estimateTorsoLength(frame: PoseFrame): number | null {
-  const shoulder = getBestSide(frame, "shoulder");
-  const hip = getBestSide(frame, "hip");
+  const points = sameSidePoints(frame, ["shoulder", "hip"]);
+  if (!points) return null;
 
-  if (!shoulder || !hip) return null;
-
-  return distance(shoulder, hip);
+  const length = distance(points[0], points[1]);
+  return Number.isFinite(length) && length > 0 ? length : null;
 }
 
 export function averageTorsoLength(frames: PoseFrame[]): number | null {
   const lengths = frames
     .map(estimateTorsoLength)
-    .filter((v): v is number => v !== null && v > 0);
+    .filter((v): v is number => v !== null);
 
   if (lengths.length === 0) return null;
 

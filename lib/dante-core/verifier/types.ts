@@ -13,6 +13,7 @@ export type VerifierCheckCode =
   | "citation_mismatch"
   | "safety_override_violated"
   | "claimed_tool_capability"
+  | "unsupported_intake_claim"
   /** Not produced by any check function — set directly by runVerifiedGeneration when `generate` itself throws (a provider failure, not a content problem). */
   | "generation_failed";
 
@@ -51,6 +52,13 @@ export type VerifierFact = {
   cue?: RegExp;
 };
 
+/** One meal of today's food log as logged (lib/nutrition/food-log/totals.ts::summarizeMeals). */
+export type MealIntakeFact = {
+  meal: "breakfast" | "lunch" | "dinner" | "snack" | "pre_workout" | "post_workout";
+  /** Every number the log supports for this meal: its calories/protein/carbs/fat and the portions of its foods. */
+  values: number[];
+};
+
 export type VerifierSafetyState = {
   triggered: boolean;
   /** The exact escalation text the reply must match when triggered is true. Null only if triggered is false. */
@@ -73,6 +81,12 @@ export type VerifierInput = {
    * — see checkToolCapabilityClaim.
    */
   executedActions?: string[];
+  /**
+   * Today's food log by meal, on paths that loaded it. `meals` = the meals that have rows (a meal absent has nothing
+   * logged), or null when the log could not be read; `dayValues` = the day's consumed/target/remaining figures, which a
+   * sentence naming a meal may also state. Omitted = this path has no food log, and meal claims are not checked.
+   */
+  mealIntake?: { meals: MealIntakeFact[] | null; dayValues: number[] };
 };
 
 export type VerifierResult = {

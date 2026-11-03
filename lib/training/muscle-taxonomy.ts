@@ -33,6 +33,7 @@ export type CanonicalMuscle =
   | "glutes"
   | "calves"
   | "abdominals"
+  | "obliques"
   | "lower_back";
 
 export const CANONICAL_MUSCLES: CanonicalMuscle[] = [
@@ -52,6 +53,7 @@ export const CANONICAL_MUSCLES: CanonicalMuscle[] = [
   "glutes",
   "calves",
   "abdominals",
+  "obliques",
   "lower_back",
 ];
 
@@ -72,6 +74,7 @@ export const MUSCLE_DISPLAY_NAME: Record<CanonicalMuscle, string> = {
   glutes: "Glutes",
   calves: "Calves",
   abdominals: "Abdominals",
+  obliques: "Obliques",
   lower_back: "Lower Back",
 };
 
@@ -157,7 +160,14 @@ const MUSCLE_ALIASES: Record<string, CanonicalMuscle> = {
   abdominals: "abdominals",
   abs: "abdominals",
   core: "abdominals",
-  obliques: "abdominals",
+
+  // Obliques were folded into abdominals before Muscle Intelligence 2.0 gave them their own
+  // region; exercise rows that say "obliques" now attribute there (resolution is read-time
+  // only — no stored history changes).
+  obliques: "obliques",
+  oblique: "obliques",
+  external_obliques: "obliques",
+  internal_obliques: "obliques",
 
   lower_back: "lower_back",
   erectors: "lower_back",

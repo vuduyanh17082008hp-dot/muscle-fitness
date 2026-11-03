@@ -99,7 +99,7 @@ export function GroundTruthAnnotator() {
   return (
     <div className="space-y-6">
       <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
           Ground-truth annotation (internal tool)
         </p>
         <p className="mt-2 text-sm text-zinc-500">
@@ -185,7 +185,7 @@ export function GroundTruthAnnotator() {
 
       {reps.length > 0 ? (
         <article className="rounded-3xl border border-white/10 bg-mf-surface p-6 sm:p-8">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
             Recorded reps ({reps.length})
           </p>
 

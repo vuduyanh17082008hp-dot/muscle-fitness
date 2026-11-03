@@ -36,7 +36,7 @@ export function ProgressMetric({
 
       <AnimatedProgress percent={percent} color={color} />
 
-      {footnote ? <p className="text-[11px] text-mf-text-muted">{footnote}</p> : null}
+      {footnote ? <p className="text-xs text-mf-text-muted">{footnote}</p> : null}
     </div>
   );
 }

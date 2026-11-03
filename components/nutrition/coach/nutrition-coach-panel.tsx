@@ -1,7 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import { Loader2, Sparkles } from "lucide-react"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
+import { ChevronDown, Loader2, Sparkles } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { PrimaryButton, SecondaryButton } from "@/components/ui/button"
@@ -9,10 +9,13 @@ import type { DraftOp, SwapWarning } from "@/lib/nutrition/coach/draft"
 import { COACH_INGREDIENTS } from "@/lib/nutrition/coach/ingredients"
 import type { NutritionIntent, NutritionTopic, PreferenceSignal } from "@/lib/nutrition/coach/conversation"
 import type { FollowUpState, StructuredBlock } from "@/lib/nutrition/coach/followup"
+import { draftIdentity, type PendingLog } from "@/lib/nutrition/coach/log-action"
 import { QUICK_ACTIONS } from "@/lib/nutrition/coach/quick-actions"
 import type { ActiveMealDraft, ContextSnapshot, CravingKey, MealDraftHistoryItem } from "@/lib/nutrition/coach/types"
 import { MEAL_TYPE_LABEL, MEAL_TYPES, type MealType } from "@/lib/nutrition/food-log/types"
-import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT } from "@/lib/coach-context-event"
+import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT, FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event"
+import { readLastThread, rememberThread, todaysThread } from "@/lib/dante-core/active-thread"
+import { parseChatStreamChunk, resolveConfirmationOutcome, type ChatStreamPendingConfirmation, type DanteNutritionTurn } from "@/lib/dante-core/chat-stream-protocol"
 
 import { MealDraftCard } from "./meal-draft-card"
 import {
@@ -28,8 +31,8 @@ import {
 } from "./coach-chat-ui"
 
 type Proposal = { draft: ActiveMealDraft; warnings: SwapWarning[]; from: string; to: string }
-type ChatMessage = { role: "user" | "coach"; text: string; blocks?: StructuredBlock[] }
-type Pending = { actionId: string; summary: string }
+type ChatMessage = { role: "user" | "coach"; text: string; blocks?: StructuredBlock[]; proposal?: ChatStreamPendingConfirmation | null; resolved?: string | null }
+type Pending = { actionId: string; summary: string; expiresAt?: string }
 
 /** What the server echoes back each turn. The one-turn draft handoff is recomputed server-side every reply. */
 type ConversationState = {
@@ -41,6 +44,8 @@ type ConversationState = {
   deactivateDraft?: boolean
   /** Ephemeral follow-up context the server echoes back (TTL-bound; the server validates and recomputes everything). */
   followUp?: FollowUpState | null
+  /** The chat's pointer to its pending meal-log action; the server re-validates it every turn. */
+  pendingLog?: PendingLog | null
 }
 
 type DraftHistoryEntry = { item: MealDraftHistoryItem; draft: ActiveMealDraft }
@@ -59,7 +64,7 @@ const GROUPS: Array<{ role: string; label: string }> = [
 ]
 
 const card = "rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-6"
-const eyebrow = "text-[11px] font-black uppercase tracking-[0.2em] text-mf-glass-brand"
+const eyebrow = "text-xs font-black uppercase tracking-[0.2em] text-mf-glass-brand"
 
 function defaultMealType(): MealType {
   const hour = new Date().getHours()
@@ -67,6 +72,21 @@ function defaultMealType(): MealType {
   if (hour < 15) return "lunch"
   if (hour < 21) return "dinner"
   return "snack"
+}
+
+/** One chat turn. Dante's nutrition capability answers JSON; a training / recovery turn runs Dante's main pipeline and streams NDJSON. */
+async function postChat<T>(body: Record<string, unknown>): Promise<{ status: number; json: T; proposal: ChatStreamPendingConfirmation | null }> {
+  // One Day, One Thread: the same conversation the Dante page and floating panel write to (a "New chat" there starts a new one).
+  const threadId = readLastThread() || crypto.randomUUID()
+  rememberThread(threadId)
+  const response = await fetch("/api/chatbot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, threadId, clientMessageId: crypto.randomUUID() }) })
+  if (!(response.headers.get("Content-Type") ?? "").includes("ndjson")) return { status: response.status, json: (await response.json().catch(() => ({}))) as T, proposal: null }
+  const { events } = parseChatStreamChunk("", `${await response.text()}\n`)
+  const text = events.flatMap((event) => (event.type === "delta" ? [event.text] : [])).join("")
+  const done = events.find((event) => event.type === "done")
+  const failed = events.find((event) => event.type === "error")
+  const reply = text.trim() ? text : failed?.type === "error" ? failed.error : undefined
+  return { status: response.status, json: { reply } as T, proposal: done?.type === "done" ? done.pendingConfirmation : null }
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<{ status: number; json: T }> {
@@ -120,15 +140,44 @@ export function NutritionCoachPanel() {
    * refresh after any coach turn that may have changed it. A failed refresh clears the cards: a card fetched before a new
    * restriction must never stay on screen looking eligible.
    */
+  const refreshSeq = useRef(0)
   const refreshSuggestions = useCallback(async () => {
+    const seq = ++refreshSeq.current
     const [ctx, suggest] = await Promise.all([
       postJson<CoachResponse>("/api/nutrition/coach", { action: "context" }).catch(() => null),
       postJson<CoachResponse>("/api/nutrition/coach", { action: "suggest" }).catch(() => null),
     ])
+    // Back-to-back log changes each re-read; only the newest read may land, never an older total over a newer one.
+    if (seq !== refreshSeq.current) return
     if (ctx?.json.context) setContext(ctx.json.context)
     setBlockedIds(ctx?.json.blockedIngredientIds ?? [])
     setSuggestions(suggest?.json.drafts ?? [])
     setSuggestionsStale(false)
+  }, [])
+
+  /**
+   * Continue today's Dante thread (One Day, One Thread): the last few turns, and the meal list / draft / pending log the
+   * server stored with its last nutrition reply — so a meal picked on the Dante page is still "this" here. A chat the user
+   * already started on this page is never overwritten.
+   */
+  const restoreThread = useCallback(async () => {
+    try {
+      const remembered = readLastThread()
+      if (remembered === "") return // "New chat" was chosen in this tab
+      const id = remembered ?? todaysThread(((await (await fetch("/api/dante/conversations")).json()) as { threads?: Array<{ id: string; updatedAt: string }> }).threads ?? [])
+      if (!id) return
+      const response = await fetch(`/api/dante/conversations?id=${encodeURIComponent(id)}`)
+      if (!response.ok) return
+      rememberThread(id)
+      const { messages = [] } = (await response.json()) as { messages?: Array<{ role: "user" | "assistant"; content: string; status: string; nutrition?: DanteNutritionTurn["state"] | null }> }
+      const shown = messages.filter((message) => message.status === "complete" && message.content.trim()).slice(-6)
+      const state = [...messages].reverse().find((message) => message.nutrition)?.nutrition ?? null
+      setChat((current) => (current.length ? current : shown.map((message) => ({ role: message.role === "user" ? ("user" as const) : ("coach" as const), text: message.content }))))
+      if (state?.conversation) setConv((current) => (current.followUp || current.pendingLog ? current : { ...current, ...(state.conversation as Partial<ConversationState>) }))
+      if (state?.activeDraft && "nutrition" in state.activeDraft && state.activeDraft.status !== "LOGGED") setDraft((current) => current ?? state.activeDraft)
+    } catch {
+      // History unavailable: the page still works; the server continues the thread's meal state on the next turn.
+    }
   }, [])
 
   useEffect(() => {
@@ -136,6 +185,7 @@ export function NutritionCoachPanel() {
     void (async () => {
       await refreshSuggestions()
       setMealType(defaultMealType())
+      await restoreThread()
     })()
     // After a coach turn the server-rendered plan / budget sections re-render too (they read the same safety context).
     const onCoachTurn = () => {
@@ -143,13 +193,18 @@ export function NutritionCoachPanel() {
       void refreshSuggestions()
     }
     const onTurnStarted = () => setSuggestionsStale(true)
+    // The tracker changed today's log: re-read the server's remaining macros (and the cards sized to them).
+    const onFoodLogChanged = () => void refreshSuggestions()
     window.addEventListener(COACH_CONTEXT_CHANGED_EVENT, onCoachTurn)
     window.addEventListener(COACH_TURN_STARTED_EVENT, onTurnStarted)
+    window.addEventListener(FOOD_LOG_CHANGED_EVENT, onFoodLogChanged)
     return () => {
       window.removeEventListener(COACH_CONTEXT_CHANGED_EVENT, onCoachTurn)
       window.removeEventListener(COACH_TURN_STARTED_EVENT, onTurnStarted)
+      window.removeEventListener(FOOD_LOG_CHANGED_EVENT, onFoodLogChanged)
     }
-  }, [refreshSuggestions, router])
+  }, [refreshSuggestions, restoreThread, router])
+
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView?.({ block: "nearest" })
@@ -177,13 +232,13 @@ export function NutritionCoachPanel() {
       setNotice(null)
       try {
         const { status, json } = await postJson<CoachResponse>("/api/nutrition/coach", body)
-        if (status === 401) return setNotice("Please sign in again to use the Nutrition Coach.")
+        if (status === 401) return setNotice("Please sign in again to use Dante.")
         if (!json.ok && !json.draft && !json.closest) return setNotice(json.message ?? json.error ?? "I couldn't do that right now.")
         const next = json.draft ?? json.closest
         if (json.message) setNotice(json.message)
         if (next) (onDraft ?? adopt)(next)
       } catch {
-        setNotice("I couldn't reach the Nutrition Coach. Please try again.")
+        setNotice("I couldn't reach Dante. Please try again.")
       } finally {
         setBusy(false)
       }
@@ -209,7 +264,7 @@ export function NutritionCoachPanel() {
         setPending(null)
         setSimilarWarning(null)
       } catch {
-        setNotice("I couldn't reach the Nutrition Coach. Please try again.")
+        setNotice("I couldn't reach Dante. Please try again.")
       } finally {
         setBusy(false)
       }
@@ -229,7 +284,7 @@ export function NutritionCoachPanel() {
     setBusy(true)
     setNotice(null)
     try {
-      const { json } = await postJson<{ ok: boolean; code?: string; message?: string; error?: string; pendingConfirmation?: { actionId: string; summary: string } }>("/api/nutrition/coach/log", { draft, mealType, acknowledgeSimilar })
+      const { json } = await postJson<{ ok: boolean; code?: string; message?: string; error?: string; pendingConfirmation?: { actionId: string; summary: string; expiresAt?: string } }>("/api/nutrition/coach/log", { draft, mealType, acknowledgeSimilar })
       if (json.code === "STALE_CONTEXT") {
         setDraft({ ...draft, status: "STALE_CONTEXT" })
         return setNotice(json.message ?? "Your nutrition target has changed since this meal was created.")
@@ -238,10 +293,10 @@ export function NutritionCoachPanel() {
       if (!json.ok || !json.pendingConfirmation) return setNotice(json.error ?? "I couldn't prepare that log.")
       setSimilarWarning(null)
       draftBeforeLog.current = draft
-      setPending({ actionId: json.pendingConfirmation.actionId, summary: json.pendingConfirmation.summary })
+      setPending({ actionId: json.pendingConfirmation.actionId, summary: json.pendingConfirmation.summary, expiresAt: json.pendingConfirmation.expiresAt })
       setDraft({ ...draft, status: "CONFIRMED" })
     } catch {
-      setNotice("I couldn't reach the Nutrition Coach. Nothing was logged — please try again.")
+      setNotice("I couldn't reach Dante. Nothing was logged — please try again.")
     } finally {
       setBusy(false)
     }
@@ -264,6 +319,9 @@ export function NutritionCoachPanel() {
         setNotice(intent === "cancel" ? "Cancelled — nothing was logged." : json.error ?? "That confirmation expired or failed. Nothing was logged.")
       }
       setPending(null)
+      // The chat's echoed pointer to this action is finished too: a later "log it" starts a NEW proposal instead of being
+      // told "that log was cancelled" (live, Dante unified run).
+      setConv((previous) => (previous.pendingLog?.actionId === pending.actionId ? { ...previous, pendingLog: null } : previous))
     } catch {
       setNotice("I couldn't confirm that log. Nothing new was saved — please try again.")
     } finally {
@@ -284,8 +342,13 @@ export function NutritionCoachPanel() {
     setTyping(typingLabel(message, conv.currentTopic))
     try {
       const active = draft && draft.status !== "LOGGED" ? draft : null
-      const recentMessages = [...chat, { role: "user" as const, text: message }].slice(-6)
-      const { status, json } = await postJson<{
+      const recentMessages = [...chat, { role: "user" as const, text: message }].slice(-6).map((turn) => ({ role: turn.role, text: turn.text.slice(0, 800) }))
+      // An action prepared with the "Log this meal" button is the same server action a typed "confirm" resolves.
+      const buttonLog: PendingLog | null =
+        pending && active && conv.pendingLog?.actionId !== pending.actionId
+          ? { stage: "READY_FOR_CONFIRMATION", draftId: active.id, mealName: active.name, fingerprint: draftIdentity(active), mealType, actionId: pending.actionId, expiresAt: pending.expiresAt ?? new Date(Date.now() + 10 * 60_000).toISOString() }
+          : null
+      const { status, json, proposal: mainProposal } = await postChat<{
         ok?: boolean
         reply?: string
         message?: string
@@ -296,9 +359,10 @@ export function NutritionCoachPanel() {
         conversation?: ConversationState
         structuredBlocks?: StructuredBlock[]
         followUpHints?: string[]
-      }>("/api/chatbot", { message, coachMode: "nutrition", activeDraft: active, selectedFoods: selected, conversation: { ...conv, recentMessages, priorUserTurns: chat.filter((turn) => turn.role === "user").map((turn) => turn.text.slice(0, 400)).slice(-20) } })
+        foodLogChanged?: boolean
+      }>({ message, coachMode: "nutrition", activeDraft: active, selectedFoods: selected, conversation: { ...conv, ...(buttonLog ? { pendingLog: buttonLog } : {}), recentMessages, priorUserTurns: chat.filter((turn) => turn.role === "user").map((turn) => turn.text.slice(0, 400)).slice(-20) } })
       const reply = json.reply ?? (status === 429 ? "I'm getting a lot of requests — please try again in a moment." : (json.message ?? json.error ?? "I couldn't answer that right now."))
-      setChat((previous) => [...previous, { role: "coach", text: reply, ...(json.structuredBlocks?.length ? { blocks: json.structuredBlocks } : {}) }])
+      setChat((previous) => [...previous, { role: "coach", text: reply, ...(json.structuredBlocks?.length ? { blocks: json.structuredBlocks } : {}), ...(mainProposal ? { proposal: mainProposal } : {}) }])
       setHints(json.followUpHints ?? [])
       if (json.conversation) {
         setConv(json.conversation)
@@ -315,12 +379,30 @@ export function NutritionCoachPanel() {
         setDraft(next)
         setPending(null)
       }
+      // Chat-driven logging: the card shows the SAME server action the chat holds, and a server-confirmed write re-reads totals.
+      const chatLog = json.conversation ? (json.conversation.pendingLog ?? null) : undefined
+      const shown = next ?? active
+      if (json.foodLogChanged) {
+        if (shown && (!chatLog || chatLog.draftId === shown.id)) setDraft({ ...shown, status: "LOGGED" })
+        setPending(null)
+        router.refresh()
+        void refreshSuggestions()
+      } else if (chatLog?.stage === "READY_FOR_CONFIRMATION" && chatLog.actionId && shown && chatLog.draftId === shown.id && chatLog.fingerprint === draftIdentity(shown)) {
+        if (shown.status !== "CONFIRMED") draftBeforeLog.current = shown
+        setPending({ actionId: chatLog.actionId, summary: `Log “${chatLog.mealName}”${chatLog.mealType ? ` as ${MEAL_TYPE_LABEL[chatLog.mealType].toLowerCase()}` : ""}`, expiresAt: chatLog.expiresAt })
+        if (chatLog.mealType) setMealType(chatLog.mealType)
+        setDraft({ ...shown, status: "CONFIRMED" })
+      } else if (chatLog !== undefined && pending && chatLog?.actionId !== pending.actionId && !next) {
+        // The chat ended that action (cancelled, failed, expired or superseded): the card's buttons must not offer it.
+        setPending(null)
+        if (active?.status === "CONFIRMED") setDraft(draftBeforeLog.current ?? { ...active, status: "DRAFT" })
+      }
       if (json.proposal && json.warnings?.length && active) {
         const [from, to] = findSwapPair(active, json.proposal)
         if (from && to) setProposal({ draft: json.proposal, warnings: json.warnings, from, to })
       }
     } catch {
-      setChat((previous) => [...previous, { role: "coach", text: "I couldn't reach the Nutrition Coach. Please try again." }])
+      setChat((previous) => [...previous, { role: "coach", text: "I couldn't reach Dante. Please try again." }])
     } finally {
       setTyping(null)
       setBusy(false)
@@ -329,12 +411,34 @@ export function NutritionCoachPanel() {
     }
   }
 
+  /** A proposal Dante's main pipeline made on this surface (e.g. a schedule change): the same server confirm as everywhere. */
+  const resolveProposal = async (index: number, intent: "confirm" | "cancel") => {
+    const proposal = chat[index]?.proposal
+    if (!proposal) return
+    setBusy(true)
+    let text: string
+    try {
+      const { status, json } = await postJson<{ ok?: boolean; error?: string; result?: { message?: unknown } }>("/api/dante/tools/confirm", { actionId: proposal.actionId, intent })
+      const outcome = resolveConfirmationOutcome(intent, { status, ok: json.ok })
+      text = outcome === "confirmed" ? (typeof json.result?.message === "string" ? json.result.message : "Done — saved.")
+        : outcome === "cancelled" ? "Rejected — nothing was changed."
+        : outcome === "failed" ? (json.error ?? "That didn't go through — nothing was changed.")
+        : "I couldn't tell whether that went through. Check Dante before trying again."
+      if (outcome === "confirmed") router.refresh()
+    } catch {
+      text = "I couldn't tell whether that went through. Check Dante before trying again."
+    } finally {
+      setBusy(false)
+    }
+    setChat((previous) => previous.map((message, i) => (i === index ? { ...message, resolved: text } : message)))
+  }
+
   const toggleFood = (id: string) => setSelected((previous) => (previous.includes(id) ? previous.filter((x) => x !== id) : previous.length >= 10 ? previous : [...previous, id]))
 
   const chipLabel = topicChip(conv.currentTopic, draft)
 
   return (
-    <section id="coach" className="scroll-mt-24 space-y-5" aria-label="Nutrition Coach">
+    <section id="coach" className="mf-touch-inputs scroll-mt-24 space-y-5" aria-label="Dante — nutrition">
       <div className="space-y-3 rounded-[20px] border border-mf-glass-border bg-mf-glass-surface p-4 sm:p-5">
         <NutritionCoachHeader busy={busy} />
         <NutritionContextStrip context={context} />
@@ -381,7 +485,23 @@ export function NutritionCoachPanel() {
         ) : (
           <ul className="max-h-[26rem] min-h-24 space-y-4 overflow-y-auto pr-1" aria-label="Conversation">
             {chat.map((message, index) => (
-              <NutritionMessage key={index} role={message.role} text={message.text} blocks={index === chat.length - 1 ? message.blocks : undefined} disabled={busy} onPick={(text) => void send(text)} />
+              <Fragment key={index}>
+                <NutritionMessage role={message.role} text={message.text} blocks={index === chat.length - 1 ? message.blocks : undefined} disabled={busy} onPick={(text) => void send(text)} />
+                {message.proposal ? (
+                  <li className="ml-10 rounded-xl border border-mf-glass-brand-border/60 bg-mf-glass-brand-soft px-3 py-2 text-xs text-mf-glass-text" aria-label="Proposed change">
+                    <p className="font-black uppercase tracking-wider text-mf-glass-brand">Proposed · not applied yet</p>
+                    <p className="mt-1">{message.proposal.details ? `${message.proposal.details.title}: ${message.proposal.details.current} → ${message.proposal.details.proposed}` : message.proposal.summary}</p>
+                    {message.resolved ? (
+                      <p role="status" className="mt-2 text-mf-glass-text-secondary">{message.resolved}</p>
+                    ) : (
+                      <div className="mt-2 flex gap-2">
+                        <PrimaryButton size="sm" disabled={busy} onClick={() => void resolveProposal(index, "confirm")}>Accept</PrimaryButton>
+                        <SecondaryButton size="sm" disabled={busy} onClick={() => void resolveProposal(index, "cancel")}>Reject</SecondaryButton>
+                      </div>
+                    )}
+                  </li>
+                ) : null}
+              </Fragment>
             ))}
             {typing ? <NutritionTypingState label={typing} /> : null}
             <li ref={chatEnd} aria-hidden="true" />
@@ -393,6 +513,13 @@ export function NutritionCoachPanel() {
         <NutritionComposer value={input} onChange={setInput} onSend={() => void send(input)} busy={busy} />
       </div>
 
+      {/* Meal-building tools: secondary to the chat on Today, so they start folded. Drafts they create show below either way. */}
+      <details className="group space-y-5 rounded-[20px] border border-mf-glass-border bg-white/[0.02]">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-[20px] px-4 text-sm font-bold text-mf-glass-text-secondary hover:text-mf-glass-text focus-visible:outline-none! focus-visible:ring-2 focus-visible:ring-mf-glass-brand [&::-webkit-details-marker]:hidden">
+          <span>Meal ideas &amp; cravings<span className="ml-2 font-normal text-mf-glass-text-muted">build a meal, makeover a craving, use what you have</span></span>
+          <ChevronDown className="size-4 shrink-0 transition group-open:rotate-180" aria-hidden="true" />
+        </summary>
+      <div className="space-y-5 px-3 pb-3 sm:px-4 sm:pb-4">
       <div className="grid gap-5 lg:grid-cols-2">
         {/* BUILD MY NEXT MEAL */}
         <div className={card}>
@@ -472,6 +599,8 @@ export function NutritionCoachPanel() {
           </ul>
         </div>
       ) : null}
+      </div>
+      </details>
 
       {/* ACTIVE MEAL DRAFT */}
       {draft && draftInBackground ? (

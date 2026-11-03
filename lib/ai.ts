@@ -67,6 +67,27 @@ export async function loadPoseDetector(): Promise<PoseDetector> {
   return detectorPromise;
 }
 
+/**
+ * MoveNet MultiPose Lightning (up to 6 people, bounding-box tracking ids) —
+ * SetVision's person check. Keypoints for rep analysis still come from the
+ * SinglePose detector above, whose output the engines were validated on.
+ *
+ * A NEW detector per clip (caller disposes it): tracker ids must start fresh for
+ * every video, and MoveNet's own reset() throws in MultiPose mode (it resets a
+ * keypoint filter that only exists for SinglePose). The model files are cached
+ * by the browser, so only the first load downloads them.
+ */
+export async function loadMultiPoseDetector(): Promise<PoseDetector> {
+  await loadPoseDetector(); // tf + WebGL backend ready
+  const poseDetection = await import("@tensorflow-models/pose-detection");
+  return poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+    modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
+    enableTracking: true,
+    enableSmoothing: false,
+    minPoseScore: 0.2,
+  });
+}
+
 export function calculateAngle(
   pointA: Point,
   pointB: Point,

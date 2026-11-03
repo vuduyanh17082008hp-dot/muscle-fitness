@@ -25,10 +25,11 @@ export function addDaysIso(dateIso: string, delta: number): string {
   return date.toISOString().slice(0, 10)
 }
 
-export function formatDateLabel(dateIso: string): string {
+/** `today` = the athlete's own date (profile timezone, from the server); the device date is only a fallback. */
+export function formatDateLabel(dateIso: string, today: string = todayIso()): string {
   const date = new Date(`${dateIso}T00:00:00.000Z`)
-  const isToday = dateIso === todayIso()
-  const isYesterday = dateIso === addDaysIso(todayIso(), -1)
+  const isToday = dateIso === today
+  const isYesterday = dateIso === addDaysIso(today, -1)
 
   if (isToday) return "Today"
   if (isYesterday) return "Yesterday"

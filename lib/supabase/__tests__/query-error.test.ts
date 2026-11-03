@@ -59,12 +59,27 @@ describe("nutrition user_preferences schema fallback", () => {
   it("falls back to base columns when the override columns are missing", async () => {
     const { client, prefSelects } = fakeSupabase([
       { data: null, error: MISSING_COLUMN, status: 400 },
+      { data: null, error: MISSING_COLUMN, status: 400 },
       { data: { cooking_ability: "basic" }, error: null, status: 200 },
     ])
     const ctx = await loadNutritionContext(client, "u1")
-    expect(prefSelects()).toHaveLength(2)
-    expect(prefSelects()[1]).not.toContain("activity_level_override")
+    expect(prefSelects()).toHaveLength(3)
+    expect(prefSelects()[0]).toContain("calorie_adjustment_kcal")
+    expect(prefSelects()[2]).not.toContain("activity_level_override")
     expect(ctx.cookingAbility).toBe("basic")
+    expect(ctx.calibration.available).toBe(false)
+  })
+
+  it("keeps the saved overrides when only the calibration columns are missing", async () => {
+    const { client, prefSelects } = fakeSupabase([
+      { data: null, error: MISSING_COLUMN, status: 400 },
+      { data: { activity_level_override: "light", cooking_ability: "basic" }, error: null, status: 200 },
+    ])
+    const ctx = await loadNutritionContext(client, "u1")
+    expect(prefSelects()).toHaveLength(2)
+    expect(prefSelects()[1]).toContain("activity_level_override")
+    expect(prefSelects()[1]).not.toContain("calorie_adjustment_kcal")
+    expect(ctx.calibration).toEqual({ available: false, adjustmentKcal: 0, reviewedAt: null })
   })
 
   it.each([

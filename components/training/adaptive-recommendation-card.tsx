@@ -95,13 +95,13 @@ export function AdaptiveRecommendationCard({
       ) : (
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-600">Last session</p>
+            <p className="text-xs font-black uppercase tracking-wider text-zinc-600">Last session</p>
             <p className="mt-1.5 text-lg font-black text-white">{lastWeight !== null ? `${lastWeight} kg` : "—"}</p>
             <p className="mt-0.5 text-xs text-zinc-500">{lastReps}</p>
           </div>
 
           <div>
-            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-600">Next session</p>
+            <p className="text-xs font-black uppercase tracking-wider text-zinc-600">Next session</p>
             <p className="mt-1.5 text-lg font-black text-white">{nextTargetLine}</p>
             <p className="mt-0.5 text-xs text-zinc-500">
               {adaptation.targetRepMin}–{adaptation.targetRepMax} reps
@@ -113,7 +113,7 @@ export function AdaptiveRecommendationCard({
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span
           className={cn(
-            "inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.08em]",
+            "inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-[0.08em]",
             accent.text,
             accent.border,
             accent.bg,
@@ -123,32 +123,32 @@ export function AdaptiveRecommendationCard({
         </span>
 
         {confidence === "low" ? (
-          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-600">
+          <span className="text-xs font-semibold uppercase tracking-[0.06em] text-zinc-600">
             {CONFIDENCE_LABEL[confidence]}
           </span>
         ) : null}
 
         {hasEvidence ? (
           <details className="group ml-auto">
-            <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[11px] font-bold uppercase tracking-[0.06em] text-zinc-500 transition-colors hover:text-zinc-300">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-bold uppercase tracking-[0.06em] text-zinc-500 transition-colors hover:text-zinc-300">
               Why this?
               <ChevronDown className="size-3 transition-transform duration-200 group-open:rotate-180" />
             </summary>
 
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5">
-                <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-zinc-600">Performance</p>
+                <p className="text-xs font-bold uppercase tracking-[0.1em] text-zinc-600">Performance</p>
                 <p className="mt-0.5 text-sm font-bold text-white">{lastReps}</p>
-                <p className="mt-0.5 text-[11px] text-zinc-500">
+                <p className="mt-0.5 text-xs text-zinc-500">
                   {adaptation.action === "INCREASE_LOAD" ? "Top of target range" : `Target ${adaptation.targetRepMin}–${adaptation.targetRepMax}`}
                 </p>
               </div>
 
               {recoveryScore !== null ? (
                 <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-2.5">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-zinc-600">Recovery</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.1em] text-zinc-600">Recovery</p>
                   <p className="mt-0.5 text-sm font-bold text-white">{recoveryScore}</p>
-                  <p className="mt-0.5 text-[11px] text-zinc-500">{recoveryStatusLabel ?? "—"}</p>
+                  <p className="mt-0.5 text-xs text-zinc-500">{recoveryStatusLabel ?? "—"}</p>
                 </div>
               ) : null}
             </div>
@@ -165,7 +165,7 @@ export function AdaptiveRecommendationCard({
 
             {history.length > 0 ? (
               <div className="mt-3 border-t border-white/[0.06] pt-2.5">
-                <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-zinc-600">Recent</p>
+                <p className="text-xs font-bold uppercase tracking-[0.1em] text-zinc-600">Recent</p>
                 <ul className="mt-1.5 space-y-1">
                   {history.map((entry) => (
                     <li key={entry.id} className="text-xs leading-5 text-zinc-500">

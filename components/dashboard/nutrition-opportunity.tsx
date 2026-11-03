@@ -5,7 +5,8 @@ import type { DailyMacroTotals } from "@/lib/nutrition/food-log/types";
 
 export type NutritionOpportunityProps = {
   plan: NutritionPlan | null;
-  totals: DailyMacroTotals;
+  /** Null when today's food log could not be read. */
+  totals: DailyMacroTotals | null;
 };
 
 const CRAVING_SHORTCUTS = [
@@ -18,6 +19,25 @@ const CRAVING_SHORTCUTS = [
 export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps) {
   const targetCalories = plan?.target.calories ?? null;
   const targetProtein = plan?.target.protein ?? null;
+
+  if (!totals) {
+    return (
+      <article className="rounded-2xl border border-white/10 bg-mf-glass-surface p-5 sm:p-6 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Utensils className="size-4 text-emerald-400" />
+          <h3 className="text-sm font-bold uppercase tracking-wider text-mf-glass-text">
+            Nutrition Opportunity
+          </h3>
+        </div>
+        <p role="status" className="mt-4 text-sm text-mf-glass-text-muted">
+          Today&apos;s food log couldn&apos;t be loaded, so remaining calories and protein are unknown.{" "}
+          <Link href="/dashboard/nutrition" className="font-semibold text-mf-glass-brand hover:underline">
+            Open Food Log to retry
+          </Link>
+        </p>
+      </article>
+    );
+  }
 
   const remainingCalories = targetCalories !== null ? Math.max(0, targetCalories - totals.calories) : null;
   const remainingProtein = targetProtein !== null ? Math.max(0, targetProtein - Math.round(totals.protein)) : null;
@@ -34,7 +54,7 @@ export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps
 
         <Link
           href="/dashboard/nutrition"
-          className="text-xs font-semibold text-mf-glass-brand hover:underline"
+          className="-my-3 inline-flex min-h-11 items-center text-xs font-semibold text-mf-glass-brand hover:underline"
         >
           View Food Log →
         </Link>
@@ -53,14 +73,14 @@ export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps
                 <p className="text-xl font-black text-mf-glass-text">
                   {remainingCalories.toLocaleString()}
                 </p>
-                <p className="text-[11px] text-mf-glass-text-muted">kcal remaining today</p>
+                <p className="text-xs text-mf-glass-text-muted">kcal remaining today</p>
               </>
             ) : (
               <>
                 <p className="text-xl font-black text-mf-glass-text">
                   {totals.calories.toLocaleString()}
                 </p>
-                <p className="text-[11px] text-mf-glass-text-muted">kcal logged (no target set)</p>
+                <p className="text-xs text-mf-glass-text-muted">kcal logged (no target set)</p>
               </>
             )}
           </div>
@@ -75,12 +95,12 @@ export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps
             {remainingProtein !== null ? (
               <>
                 <p className="text-xl font-black text-mf-glass-text">{remainingProtein}g</p>
-                <p className="text-[11px] text-mf-glass-text-muted">protein remaining</p>
+                <p className="text-xs text-mf-glass-text-muted">protein remaining</p>
               </>
             ) : (
               <>
                 <p className="text-xl font-black text-mf-glass-text">{Math.round(totals.protein)}g</p>
-                <p className="text-[11px] text-mf-glass-text-muted">protein logged</p>
+                <p className="text-xs text-mf-glass-text-muted">protein logged</p>
               </>
             )}
           </div>
@@ -89,16 +109,17 @@ export function NutritionOpportunity({ plan, totals }: NutritionOpportunityProps
 
       {/* Craving / Coach Entry Shortcuts */}
       <div className="mt-5 border-t border-white/5 pt-4">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-mf-glass-text-muted">
-          What sounds good? (Ask Coach)
+        <p className="text-xs font-bold uppercase tracking-wider text-mf-glass-text-muted">
+          What sounds good? Ask Dante
         </p>
 
         <div className="mt-2 flex flex-wrap gap-2">
           {CRAVING_SHORTCUTS.map((shortcut) => (
             <Link
               key={shortcut.label}
-              href={`/dashboard/nutrition?query=${encodeURIComponent(shortcut.query)}`}
-              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-mf-glass-text transition hover:border-white/20 hover:bg-white/[0.08]"
+              // Opens Dante with the question drafted (not sent). Nutrition never read a ?query= parameter.
+              href={`/dashboard/ai-coach?ask=${encodeURIComponent(shortcut.query)}`}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-mf-glass-text transition hover:border-white/20 hover:bg-white/[0.08]"
             >
               <span>{shortcut.label}</span>
               <ArrowRight className="size-3 text-zinc-500" />

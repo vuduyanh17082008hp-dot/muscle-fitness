@@ -50,17 +50,17 @@ export function DecisionCard<TDecision>({
 
   return (
     <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-mf-glass-dante" aria-hidden="true" />
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Dante recommendation
           </p>
         </div>
 
         <span
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]",
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-[0.12em]",
             confidenceStyle,
           )}
         >
@@ -81,7 +81,7 @@ export function DecisionCard<TDecision>({
         <div className="mt-5">
           <div className="flex items-center gap-2">
             <ListChecks className="size-3.5 text-mf-glass-text-muted" aria-hidden="true" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-mf-glass-text-muted">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
               Why
             </p>
           </div>
@@ -97,7 +97,7 @@ export function DecisionCard<TDecision>({
 
       {dataEntries.length > 0 ? (
         <div className="mt-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-mf-glass-text-muted">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Data used
           </p>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -106,7 +106,7 @@ export function DecisionCard<TDecision>({
                 key={key}
                 className="rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-2.5"
               >
-                <p className="text-[9px] uppercase tracking-[0.12em] text-mf-glass-text-muted">
+                <p className="text-xs uppercase tracking-[0.12em] text-mf-glass-text-muted">
                   {formatDataLabel(key)}
                 </p>
                 <p className="mt-0.5 text-sm font-bold text-mf-glass-text">
@@ -122,7 +122,7 @@ export function DecisionCard<TDecision>({
         <div className="mt-5">
           <div className="flex items-center gap-2">
             <BookOpen className="size-3.5 text-mf-glass-text-muted" aria-hidden="true" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-mf-glass-text-muted">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
               Sources
             </p>
           </div>
@@ -138,7 +138,7 @@ export function DecisionCard<TDecision>({
 
       {decision.limitations && decision.limitations.length > 0 ? (
         <div className="mt-5 rounded-xl border border-mf-glass-border bg-mf-glass-bg-deep p-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-mf-glass-text-muted">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
             Limitations
           </p>
           <ul className="mt-1.5 space-y-1">

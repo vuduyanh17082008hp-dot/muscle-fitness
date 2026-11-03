@@ -23,11 +23,17 @@ type EditableComponent = {
   per100g: { calories: number; protein: number; carbs: number; fat: number };
   included: boolean;
   idempotencyKey: string;
+  /** Server confirmed this row exists — locked, never resent. */
+  saved?: boolean;
+  saveError?: string;
 };
 
 type HawkerLensPanelProps = {
   mealType: MealType;
   onMealTypeChange: (mealType: MealType) => void;
+  /** Rows were written (fully or partly) — the tracker should re-read the day. */
+  onLogChanged: () => void;
+  /** Every included component is saved. */
   onSaved: () => void;
   onSwitchToPhotoEstimate: () => void;
   onClose: () => void;
@@ -42,6 +48,7 @@ function confidenceLabel(value: number): string {
 export function HawkerLensPanel({
   mealType,
   onMealTypeChange,
+  onLogChanged,
   onSaved,
   onSwitchToPhotoEstimate,
   onClose,
@@ -53,7 +60,9 @@ export function HawkerLensPanel({
   const [scanId, setScanId] = useState<string | null>(null);
   const [components, setComponents] = useState<EditableComponent[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const mealSelectId = useId();
+  const anySaved = components.some((c) => c.saved);
 
   async function handleFile(file: File) {
     setPhase("uploading");
@@ -129,10 +138,13 @@ export function HawkerLensPanel({
   async function handleConfirm() {
     if (!result || !result.dish) return;
 
-    const included = components.filter((c) => c.included);
+    // Only unsaved items are (re)sent, each under its original key, so a retry
+    // can never duplicate a row that already exists.
+    const included = components.filter((c) => c.included && !c.saved);
     if (included.length === 0) return;
 
     setSaving(true);
+    setSaveMessage(null);
 
     try {
       const response = await fetch("/api/hawkerlens/confirm", {
@@ -153,16 +165,41 @@ export function HawkerLensPanel({
       });
 
       const data = await response.json();
+      const results: Array<{ idempotencyKey: string; ok: boolean; error?: string }> = Array.isArray(data.results)
+        ? data.results
+        : [];
 
-      if (response.ok && data.ok) {
+      if (data.status === "complete") {
+        onLogChanged();
         onSaved();
+        return;
+      }
+
+      if (results.length === 0) {
+        setSaveMessage(data.error ?? "Could not save this meal. Nothing was added — try again.");
+        return;
+      }
+
+      const byKey = new Map(results.map((r) => [r.idempotencyKey, r]));
+      setComponents((current) =>
+        current.map((c) => {
+          const r = byKey.get(c.idempotencyKey);
+          if (!r) return c;
+          return r.ok ? { ...c, saved: true, saveError: undefined } : { ...c, saveError: r.error ?? "Not saved." };
+        }),
+      );
+
+      if (data.status === "partial") {
+        onLogChanged();
+        setSaveMessage("Partially saved — only the items marked Saved were added. Retry adds just the rest.");
       } else {
-        setStatusMessage(data.error ?? "Could not save this meal.");
-        setPhase("error");
+        setSaveMessage("Nothing was saved. Retry when ready — no duplicates will be created.");
       }
     } catch {
-      setStatusMessage("Could not save this meal.");
-      setPhase("error");
+      // The request may or may not have reached the server; keys are unchanged,
+      // so retrying is safe either way.
+      setSaveMessage("Network error — save status unknown. Retry is safe and won't duplicate items.");
+      onLogChanged();
     } finally {
       setSaving(false);
     }
@@ -247,7 +284,7 @@ export function HawkerLensPanel({
       {phase === "results" && result?.status === "ok" ? (
         <div className="flex flex-col gap-4">
           <label className="block">
-            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
               Meal
             </span>
             <select
@@ -266,7 +303,7 @@ export function HawkerLensPanel({
 
           {result.isDemo ? (
             <div className="rounded-2xl border border-sky-400/25 bg-sky-400/5 p-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-sky-300">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-sky-300">
                 Demo mode — not a real analysis
               </p>
               <p className="mt-1 text-xs leading-5 text-zinc-400">{result.message}</p>
@@ -274,7 +311,7 @@ export function HawkerLensPanel({
           ) : null}
 
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-400">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-400">
               {result.dish?.replace(/_/g, " ")}
             </p>
             <span className="text-xs text-zinc-500">
@@ -294,14 +331,23 @@ export function HawkerLensPanel({
                       <input
                         type="checkbox"
                         checked={component.included}
+                        disabled={component.saved}
                         onChange={() => toggleIncluded(index)}
                         className="size-4"
                       />
                       <span className="font-semibold capitalize text-white">{component.name}</span>
+                      {component.saved ? (
+                        <span className="text-xs font-bold text-emerald-400">Saved</span>
+                      ) : component.saveError ? (
+                        <span className="text-xs font-bold text-red-400">Not saved</span>
+                      ) : null}
                     </label>
                     <p className="mt-1 text-xs text-zinc-500">
                       Confidence: {confidenceLabel(component.confidence)}
                     </p>
+                    {component.saveError && !component.saved ? (
+                      <p className="mt-1 text-xs text-red-400">{component.saveError}</p>
+                    ) : null}
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1">
@@ -309,6 +355,7 @@ export function HawkerLensPanel({
                     <input
                       type="number"
                       value={component.grams}
+                      disabled={component.saved}
                       onChange={(event) => updateGrams(index, Number(event.target.value) || 0)}
                       className="h-9 w-16 rounded-lg border border-white/10 bg-black/30 px-2 text-center text-sm text-white"
                       aria-label={`Grams for ${component.name}`}
@@ -321,7 +368,7 @@ export function HawkerLensPanel({
           </ul>
 
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4">
-            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.12em] text-amber-400">
               Estimated calories
             </p>
             <p className="text-lg font-black text-white">{Math.round(totals.calories)} kcal</p>
@@ -335,15 +382,36 @@ export function HawkerLensPanel({
             </p>
           </div>
 
+          {saveMessage ? (
+            <p role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-xs leading-5 text-amber-200">
+              {saveMessage}
+            </p>
+          ) : null}
+
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={saving || result.isDemo || !components.some((c) => c.included)}
+            disabled={saving || result.isDemo || !components.some((c) => c.included && !c.saved)}
             title={result.isDemo ? "Demo results can't be logged — connect a vision model to analyze real photos." : undefined}
             className="min-h-12 rounded-xl bg-amber-500 text-sm font-black uppercase tracking-wide text-black hover:bg-amber-400 disabled:opacity-40"
           >
-            {saving ? "Saving…" : result.isDemo ? "Demo — logging disabled" : "Confirm & Add"}
+            {saving
+              ? "Saving…"
+              : result.isDemo
+                ? "Demo — logging disabled"
+                : saveMessage
+                  ? "Retry failed items"
+                  : "Confirm & Add"}
           </button>
+          {anySaved ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-h-11 rounded-xl border border-white/10 text-sm font-semibold text-zinc-300 hover:bg-white/5"
+            >
+              Done — keep saved items only
+            </button>
+          ) : null}
         </div>
       ) : null}
 

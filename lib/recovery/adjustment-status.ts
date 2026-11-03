@@ -15,8 +15,12 @@ import { proposalMutatesWorkout, type WorkoutAdjustmentProposal } from "@/lib/re
 export type AdjustmentChangeLine = { exercise: string; beforeSets: number | null; afterSets: number | null; skipped: boolean }
 export type TodayAdjustmentStatus =
   | { status: "APPLIED"; appliedAt: string; changes: AdjustmentChangeLine[]; reason: string | null }
-  | { status: "PENDING"; changes: AdjustmentChangeLine[]; reason: string | null }
+  | { status: "PENDING"; changes: AdjustmentChangeLine[]; reason: string | null; via?: "CHAT" }
   | { status: "NONE"; hasSession: boolean }
+
+/** MF-F2: proposals issued from a limitation the user reported in chat (lib/recovery/limitation-turn.ts). */
+export const isChatProposal = (proposal: Pick<WorkoutAdjustmentProposal, "safetyEvaluationRef">): boolean =>
+  proposal.safetyEvaluationRef.startsWith("limitation:")
 
 function changeLines(proposal: WorkoutAdjustmentProposal): AdjustmentChangeLine[] {
   return proposal.changes
@@ -63,6 +67,22 @@ export async function loadTodayAdjustmentStatus(args: {
 
   if (applied) return { status: "APPLIED", appliedAt: applied.applied_at, changes: proposal ? changeLines(proposal) : [], reason: proposal ? reasonOf(proposal) : null }
   if (proposal && proposal.subjectRef === args.userId && proposalMutatesWorkout(proposal)) {
+    // MF-F2: a chat proposal is pending only while its Confirm card is — once cancelled, superseded or expired it was not
+    // "suggested and waiting", it was declined.
+    if (isChatProposal(proposal)) {
+      const card = await args.supabase
+        .from("dante_tool_actions")
+        .select("id")
+        .eq("user_id", args.userId)
+        .eq("tool_name", "apply_workout_adjustment")
+        .eq("status", "pending")
+        .gt("expires_at", args.now.toISOString())
+        .eq("args->>proposalId", proposal.proposalId)
+        .limit(1)
+      if (card.error) return null
+      if ((card.data ?? []).length === 0) return { status: "NONE", hasSession: true }
+      return { status: "PENDING", changes: changeLines(proposal), reason: reasonOf(proposal), via: "CHAT" }
+    }
     return { status: "PENDING", changes: changeLines(proposal), reason: reasonOf(proposal) }
   }
   return { status: "NONE", hasSession: true }
@@ -92,14 +112,17 @@ export function renderAdjustmentStatusReply(status: TodayAdjustmentStatus | null
   if (status.status === "APPLIED") {
     const what = status.changes.length ? describe(status.changes, vi) : null
     return vi
-      ? `Buổi tập hôm nay đã được điều chỉnh vì bạn đã bấm Áp dụng đề xuất trên trang Phục hồi — mình không tự thay đổi.${what ? ` Thay đổi: ${what}.` : ""}${status.reason ? ` Lý do: ${status.reason}` : ""}`
-      : `Today's workout was adjusted because you applied my suggestion on the Recovery page — I didn't change it on my own.${what ? ` What changed: ${what}.` : ""}${status.reason ? ` Why: ${status.reason}` : ""}`
+      ? `Buổi tập hôm nay đã được điều chỉnh vì bạn đã xác nhận đề xuất của mình — mình không tự thay đổi.${what ? ` Thay đổi: ${what}.` : ""}${status.reason ? ` Lý do: ${status.reason}` : ""}`
+      : `Today's workout was adjusted because you confirmed my suggestion — I didn't change it on my own.${what ? ` What changed: ${what}.` : ""}${status.reason ? ` Why: ${status.reason}` : ""}`
   }
   if (status.status === "PENDING") {
     const what = describe(status.changes, vi)
+    const where = status.via === "CHAT"
+      ? vi ? "bấm Xác nhận trên đề xuất đó trong chat" : "tap Confirm on that suggestion in the chat"
+      : vi ? "bấm Áp dụng trên trang Phục hồi" : "tap Apply on the Recovery page"
     return vi
-      ? `Buổi tập hôm nay chưa bị thay đổi. Mình mới đề xuất (${what})${status.reason ? ` vì: ${status.reason}` : ""} — không có gì thay đổi cho đến khi bạn bấm Áp dụng trên trang Phục hồi.`
-      : `Today's workout hasn't been changed. I suggested an adjustment (${what})${status.reason ? ` because: ${status.reason}` : ""} — nothing changes until you tap Apply on the Recovery page.`
+      ? `Buổi tập hôm nay chưa bị thay đổi. Mình mới đề xuất (${what})${status.reason ? ` vì: ${status.reason}` : ""} — không có gì thay đổi cho đến khi bạn ${where}.`
+      : `Today's workout hasn't been changed. I suggested an adjustment (${what})${status.reason ? ` because: ${status.reason}` : ""} — nothing changes until you ${where}.`
   }
   if (!status.hasSession) {
     return vi

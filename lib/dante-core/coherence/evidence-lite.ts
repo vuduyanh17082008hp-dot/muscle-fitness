@@ -13,8 +13,10 @@ export type ClaimGroundingNeed =
   | "SAFETY_GUIDANCE"
   | "DIAGNOSTIC_OR_MEDICAL_CLAIM";
 
+// "You logged …" is not here: today's food log is in Dante's context and the Layer 6 verifier checks every intake figure
+// against it, so dropping it turned a verified "the last thing you logged was …" into "I don't have verified data".
 const VERIFIED_CLAIM =
-  /\byour recovery score is\b|\brecovery score is \d+\b|\byour readiness(?: score)? is\b|\byou (?:logged|have logged)\b|\byour (?:calories|kcal) are \d+/i;
+  /\byour recovery score is\b|\brecovery score is \d+\b|\byour readiness(?: score)? is\b|\byour (?:calories|kcal) are \d+/i;
 const USER_STATE =
   /\bbecause your recovery (?:has )?(?:dropped|is low)\b|\blower (?:today['’]?s )?volume because\b|\bgiven your (?:logged|recovery|sleep)\b/i;
 const DIAGNOSTIC =

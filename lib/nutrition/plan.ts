@@ -65,6 +65,12 @@ export type NutritionInput = {
   foodPreferences: string[]
   excludedFoods: string[]
   allergies: string[]
+  /**
+   * A calorie change the user ACCEPTED from a weight-trend calibration
+   * (user_preferences.calorie_adjustment_kcal). Applied on top of the
+   * estimated target; 0/absent = the pure estimate.
+   */
+  calorieAdjustmentKcal?: number
 }
 
 export type MacroTarget = {
@@ -117,6 +123,12 @@ export type NutritionPlan = {
   pal: number
   maintenanceCalories: number
   goalAdjustmentPercent: number
+  /** Estimated target before any accepted calibration (maintenance × goal, rounded, floored). */
+  estimatedTargetCalories: number
+  /** maintenance × goal %, in kcal/day (before rounding the target to 10 kcal). */
+  goalAdjustmentKcal: number
+  /** Accepted calibration applied on top of the estimate (0 = none). */
+  calorieAdjustmentKcal: number
   target: MacroTarget
   meals: Meal[]
   mealTotals: {
@@ -156,6 +168,26 @@ export const NUTRITION_GOAL_LABELS: Record<NutritionGoal, string> = {
   fat_loss: "Fat Loss",
   maintenance: "Maintenance",
   lean_bulk: "Lean Bulk",
+}
+
+/**
+ * Activity level = your WHOLE day's expenditure (job, walking AND
+ * training). It is not your training style: a runner who runs 3×30 min
+ * and sits all day is Lightly Active. The multiplier already includes
+ * exercise — nothing is added for workouts on top.
+ */
+export const ACTIVITY_LEVEL_DESCRIPTIONS: Record<ActivityLevel, string> = {
+  sedentary: "Desk job, little walking, little or no exercise.",
+  light: "Mostly seated, with some walking or light training 1–3 days a week.",
+  moderate: "On your feet part of the day, or moderate training 3–5 days a week.",
+  very_active: "Hard training 6–7 days a week, or regular training plus a physically demanding job.",
+  super_active: "Very hard daily training (e.g. twice a day or high endurance volume) plus a physical job.",
+}
+
+export const NUTRITION_GOAL_DESCRIPTIONS: Record<NutritionGoal, string> = {
+  fat_loss: "Target = estimated maintenance − 15% (a moderate deficit).",
+  maintenance: "Target = estimated maintenance. No surplus or deficit is added.",
+  lean_bulk: "Target = estimated maintenance + 7.5% (a small surplus).",
 }
 
 export const HEALTH_NOTE =
@@ -203,10 +235,44 @@ export function getPalMultiplier(activityLevel: ActivityLevel): number {
   return PAL_MULTIPLIERS[activityLevel]
 }
 
-const GOAL_ADJUSTMENT_PERCENT: Record<NutritionGoal, number> = {
+export const GOAL_ADJUSTMENT_PERCENT: Record<NutritionGoal, number> = {
   fat_loss: -0.15,
   maintenance: 0,
   lean_bulk: 0.075,
+}
+
+/** Lowest target the engine ever produces, with or without calibration. */
+export const MIN_TARGET_CALORIES = 1200
+
+/** Total accepted calibration is bounded; beyond this the estimate itself needs review. */
+export const MAX_CALIBRATION_ADJUSTMENT_KCAL = 1000
+
+/**
+ * Non-blocking hint when the chosen activity level looks out of line
+ * with the training volume actually stored on the profile. Uses only
+ * stored training days / session length — never training style, never
+ * invented steps or job data — and always leaves the choice with the
+ * user (a physical job can legitimately make anyone Very Active).
+ */
+export function activityConsistencyNote(
+  activityLevel: ActivityLevel,
+  volume: { daysPerWeek: number | null; sessionMinutes: number | null },
+): string | null {
+  const days = volume.daysPerWeek
+  if (days === null) return null
+  const weeklyMinutes = volume.sessionMinutes !== null ? days * volume.sessionMinutes : null
+  const stored = `Your profile lists ${days} training day${days === 1 ? "" : "s"} a week${volume.sessionMinutes !== null ? ` × ${volume.sessionMinutes} min` : ""}.`
+
+  if (activityLevel === "super_active" && (days <= 4 || (weeklyMinutes !== null && weeklyMinutes < 420))) {
+    return `${stored} Super Active (×1.9) usually means very hard daily training plus a physical job. If your day is mostly seated, Very or Moderately Active may fit better — keep Super Active if your work or daily life is genuinely that demanding.`
+  }
+  if (activityLevel === "very_active" && (days <= 3 || (weeklyMinutes !== null && weeklyMinutes < 240))) {
+    return `${stored} Very Active (×1.725) usually means hard training most days or a physically demanding job. If your day is mostly seated, Moderately or Lightly Active may fit better.`
+  }
+  if (activityLevel === "sedentary" && days >= 4 && (weeklyMinutes === null || weeklyMinutes >= 180)) {
+    return `${stored} Sedentary (×1.2) assumes little or no exercise — Lightly or Moderately Active may describe your week better.`
+  }
+  return null
 }
 
 /* =========================================================
@@ -263,18 +329,29 @@ export function calculateMacroTargets(input: NutritionInput): {
   bmr: number
   pal: number
   maintenanceCalories: number
+  estimatedTargetCalories: number
+  calorieAdjustmentKcal: number
   target: MacroTarget
 } {
   const bmr = calculateBMR(input)
+  // PAL comes from activity level only. Training style never changes
+  // energy (no workout bonus), so exercise is counted exactly once.
   const pal = getPalMultiplier(input.activityLevel)
   const maintenanceCalories = Math.round(bmr * pal)
 
   const adjustmentPercent = GOAL_ADJUSTMENT_PERCENT[input.goal]
 
-  const calories = Math.max(
-    1200,
+  const estimatedTargetCalories = Math.max(
+    MIN_TARGET_CALORIES,
     roundTo(maintenanceCalories * (1 + adjustmentPercent), 10),
   )
+
+  const rawAdjustment = Math.round(input.calorieAdjustmentKcal ?? 0)
+  const calorieAdjustmentKcal = Number.isFinite(rawAdjustment)
+    ? Math.max(-MAX_CALIBRATION_ADJUSTMENT_KCAL, Math.min(MAX_CALIBRATION_ADJUSTMENT_KCAL, rawAdjustment))
+    : 0
+
+  const calories = Math.max(MIN_TARGET_CALORIES, estimatedTargetCalories + calorieAdjustmentKcal)
 
   const proteinPerKg = PROTEIN_G_PER_KG[input.trainingMode][input.goal]
   const protein = Math.round(input.weightKg * proteinPerKg)
@@ -291,6 +368,15 @@ export function calculateMacroTargets(input: NutritionInput): {
     fatPerKg = Math.round((fat / input.weightKg) * 10) / 10
   }
 
+  // Infeasible budget (protein + fat alone exceed the target, e.g. a very
+  // heavy user at the calorie floor): give fat back down to its safety
+  // floor before carbs hit 0, so the macros still add up to the target.
+  if (calories - protein * 4 - fat * 9 < 0) {
+    const fatFloor = Math.ceil(Math.max(input.weightKg * MIN_FAT_G_PER_KG, minFatCalories / 9))
+    fat = Math.max(fatFloor, Math.floor((calories - protein * 4) / 9))
+    fatPerKg = Math.round((fat / input.weightKg) * 10) / 10
+  }
+
   const remainingCalories = calories - protein * 4 - fat * 9
   const carbs = Math.max(0, Math.round(remainingCalories / 4))
 
@@ -300,6 +386,8 @@ export function calculateMacroTargets(input: NutritionInput): {
     bmr,
     pal,
     maintenanceCalories,
+    estimatedTargetCalories,
+    calorieAdjustmentKcal,
     target: {
       calories,
       protein,
@@ -350,11 +438,11 @@ const TRAINING_NOTES: Record<TrainingMode, string[]> = {
 }
 
 export const CALIBRATION_NOTES: string[] = [
-  "The calculator is the starting point — your trend is the truth.",
-  "Track bodyweight first thing in the morning, under consistent conditions, for 14–21 days.",
-  "Compare your actual weight trend (not a single day's reading) against the direction your goal implies.",
-  "If the trend clearly diverges from your goal after 14–21 days, adjust calories gradually — small, deliberate steps rather than large swings.",
-  "Do not change your targets based on daily scale fluctuations; body weight moves with water, sodium and digestion day to day.",
+  "Your starting calorie target is an estimate. Track your bodyweight consistently for 1–2 weeks, then review the trend and adjust if needed.",
+  "Weigh yourself first thing in the morning, under the same conditions, on at least 4 days each week.",
+  "The review compares this week's average weight with last week's — never a single day's reading.",
+  "If the trend clearly diverges from your goal, change calories in small steps (about 250 kcal/day) and review the next trend before changing again.",
+  "Daily scale changes mostly reflect water, sodium and digestion — they are not a reason to change your target.",
 ]
 
 /* =========================================================
@@ -948,7 +1036,8 @@ function buildMeals(
 ========================================================= */
 
 export function buildNutritionPlan(input: NutritionInput): NutritionPlan {
-  const { bmr, pal, maintenanceCalories, target } = calculateMacroTargets(input)
+  const { bmr, pal, maintenanceCalories, estimatedTargetCalories, calorieAdjustmentKcal, target } =
+    calculateMacroTargets(input)
 
   const blockedTerms = [...input.allergies, ...input.excludedFoods].filter(
     (term) => term.trim().length > 0,
@@ -981,6 +1070,10 @@ export function buildNutritionPlan(input: NutritionInput): NutritionPlan {
     pal,
     maintenanceCalories,
     goalAdjustmentPercent: GOAL_ADJUSTMENT_PERCENT[input.goal],
+    estimatedTargetCalories,
+    // The goal's own change only; the 10-kcal rounding is not a "goal adjustment".
+    goalAdjustmentKcal: Math.round(maintenanceCalories * GOAL_ADJUSTMENT_PERCENT[input.goal]),
+    calorieAdjustmentKcal,
     target,
     meals,
     mealTotals,

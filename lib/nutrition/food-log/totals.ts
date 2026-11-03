@@ -75,3 +75,29 @@ export function groupByMeal(entries: FoodLogEntry[]): Record<MealType, FoodLogEn
 
   return grouped
 }
+
+/** "Whey Protein (1 scoop / 30 g)" — what was logged, with its portion. */
+export function describePortion(entry: FoodLogEntry): string {
+  return entry.servingName && entry.servingsConsumed
+    ? `${entry.foodName} (${entry.servingsConsumed} ${entry.servingName}${entry.servingsConsumed === 1 ? "" : "s"} / ${entry.quantityGrams} g)`
+    : `${entry.foodName} (${entry.quantityGrams} g)`
+}
+
+/** `rows[i]` is the log row behind `foods[i]`: its id is the entry's identity (a delete + re-add is a new id). */
+export type MealSummary = DailyMacroTotals & { meal: MealType; foods: string[]; rows: Array<{ id: string; food: string; calories: number; protein: number }> }
+
+/**
+ * Per-meal totals from each row's own meal_type — the meal the user picked when logging it, the same grouping the
+ * Nutrition page shows — never inferred from the clock. Only meals that have rows; a meal absent here has nothing logged.
+ * Each food carries its own row's calories/protein, so a per-item figure is the row's, never the meal total pinned on
+ * one item (live: "White Rice (400 g): 933 calories" was the whole snack).
+ */
+export function summarizeMeals(entries: FoodLogEntry[]): MealSummary[] {
+  const grouped = groupByMeal(entries)
+  return MEAL_TYPES.filter((meal) => grouped[meal].length > 0).map((meal) => ({
+    meal,
+    ...computeDailyTotals(grouped[meal]),
+    foods: grouped[meal].map((entry) => `${describePortion(entry)}: ${Math.round(entry.calories)} kcal, ${round1(entry.proteinG)} g protein`),
+    rows: grouped[meal].map((entry) => ({ id: entry.id, food: entry.foodName, calories: entry.calories, protein: entry.proteinG })),
+  }))
+}

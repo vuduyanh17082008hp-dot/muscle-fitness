@@ -64,7 +64,7 @@ describe("Gemma consumes the shared intelligence brief", () => {
     const prompt = briefPrompt()
     expect(prompt).toContain("KNOWLEDGE_STATE: CANONICAL_KNOWLEDGE_AVAILABLE")
     expect(prompt).toMatch(/low value \/ usually unnecessary here: BCAA \(redundant_with_adequate_complete_protein\)/)
-    expect(prompt).toMatch(/YOUR LENS \(Gemma\): dietary adequacy and food-first alternatives/)
+    expect(prompt).toMatch(/YOUR LENS \(nutrition side\): dietary adequacy and food-first alternatives/)
     expect(prompt).toMatch(/protein adequate: yes/)
     // the frozen nutrition rules are still in the same prompt
     expect(prompt).toMatch(/Use ONLY (?:the )?numbers (?:that appear )?in CONTEXT/)
@@ -145,9 +145,9 @@ describe("safety and authority on the Gemma surface", () => {
     expect(callOpenAiWithFallback).not.toHaveBeenCalled()
   })
 
-  it("a training decision is still Dante's: deferred before any model call", async () => {
-    const json = await chat("should I train to failure every set?")
-    expect(json.route).toBe("defer_to_dante")
-    expect(callOpenAiWithFallback).not.toHaveBeenCalled()
+  it("a training decision asked on the Nutrition page runs Dante's main pipeline (one AI coach), not the nutrition engine", async () => {
+    const response = await POST(new Request("http://localhost/api/chatbot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "should I train to failure every set?", coachMode: "nutrition" }) }))
+    // Not the nutrition engine's JSON envelope, and no referral (the main pipeline's own reply is live-verified).
+    expect(await response.text()).not.toMatch(/"coachMode":"nutrition"|ask Dante|Dante's call/i)
   })
 })

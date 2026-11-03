@@ -35,7 +35,7 @@ export default async function EditAccountPage() {
     readStatus.fitness === "error"
 
   return (
-    <main className="min-h-screen bg-mf-bg px-4 py-6 text-white sm:px-6 lg:px-8">
+    <main data-theme="paper" className="mf-touch-inputs min-h-screen bg-mf-bg px-4 py-6 text-white sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -48,7 +48,7 @@ export default async function EditAccountPage() {
             </Link>
 
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-500">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-500">
                 Account centre
               </p>
 

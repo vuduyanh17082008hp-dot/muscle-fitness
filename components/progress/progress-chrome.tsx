@@ -142,16 +142,9 @@ export function ProgressChrome() {
       <div className="pj-bg-base" aria-hidden="true" />
       <div className="pj-bg-grid" aria-hidden="true" />
       <div className="pj-bg-noise" aria-hidden="true" />
-      <div className="pj-aurora" aria-hidden="true">
-        <div className="pj-orb pj-orb-1" />
-        <div className="pj-orb pj-orb-2" />
-        <div className="pj-orb pj-orb-3" />
-      </div>
-      <canvas ref={canvasRef} className="pj-particles" aria-hidden="true" />
-      <div ref={spotRef} className="pj-spotlight" aria-hidden="true" />
+      {/* UX-R1.4: the glow orbs, particle canvas, cursor spotlight and custom cursor were decoration over data; their
+          refs stay unset, so the effects above skip them. Only the static background and scroll progress remain. */}
       <div ref={barRef} className="pj-scroll" aria-hidden="true" />
-      <div ref={ringRef} className="pj-cursor-ring" aria-hidden="true" />
-      <div ref={dotRef} className="pj-cursor-dot" aria-hidden="true" />
     </>
   )
 }

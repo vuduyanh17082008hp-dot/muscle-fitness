@@ -31,21 +31,28 @@ function formatPrescription(change: WorkoutChange, side: "before" | "after"): st
 
 export function RecoveryAdjustmentPanel({
   recoveryState,
-  insight,
   proposal,
   hasCheckin,
   localDate,
   proposalReady = true,
   alreadyApplied = false,
+  hold = null,
 }: {
   recoveryState: RecoveryState;
-  insight: string;
+  /** Kept for callers; the same text is the status card's explanation, so this panel no longer repeats it. */
+  insight?: string;
   proposal: WorkoutAdjustmentProposal;
   hasCheckin: boolean;
   localDate: string;
   proposalReady?: boolean;
   /** An adjustment to today's session was already applied (workout_mutation_records): never offer a second, stacked cut. */
   alreadyApplied?: boolean;
+  /**
+   * trainingHold(dailyDecision). The proposal itself is unchanged policy (it only ever reduces or rests), but its
+   * reason copy is written for a normal day ("keep the session"); while training is on hold it is framed as an
+   * optional lighter plan to review, never as a go-ahead.
+   */
+  hold?: "recovery" | "unverified" | null;
 }) {
   const router = useRouter();
   const titleId = useId();
@@ -58,7 +65,16 @@ export function RecoveryAdjustmentPanel({
   if (!hasCheckin) return null;
 
   const canAdjust = proposalReady && proposalMutatesWorkout(proposal);
-  const readiness = recoveryState.digest.status ?? recoveryState.digest.readiness;
+  const insufficient = recoveryState.digest.dataCompleteness === "INSUFFICIENT";
+  // The verdict and its explanation live in the status card above; this panel is only the session action.
+  if (!canAdjust && !applied && !insufficient) return null;
+  const reason = hold
+    ? "Training is still on hold today. If you train anyway, this version only reduces what's planned — it doesn't clear the session."
+    : proposal.changes.find((change) => change.action !== "KEEP")?.reasonDisplay ??
+      // MF-F2: the applied change may have come from a limitation confirmed in chat, not from this check-in.
+      (applied
+        ? "Today's session already carries a change you confirmed."
+        : "Today's check-in suggests a lighter version of your planned session.");
 
   async function apply() {
     setBusy(true);
@@ -87,21 +103,15 @@ export function RecoveryAdjustmentPanel({
 
   return (
     <section
-      className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8"
+      className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-5 sm:p-7"
       aria-labelledby={titleId}
     >
-      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
-        Recovery updated
-      </p>
-      <h2 id={titleId} className="mt-1 text-xl font-black text-mf-glass-text">
-        Today&apos;s readiness: {String(readiness).replaceAll("_", " ")}
+      <h2 id={titleId} className="text-lg font-black text-mf-glass-text">
+        {hold ? "Lighter plan to review" : "Today’s session"}
       </h2>
-      <p className="mt-3 text-sm leading-6 text-mf-glass-text-secondary">
-        <span className="font-semibold text-mf-glass-text">Dante: </span>
-        {insight}
-      </p>
+      <p className="mt-1 text-sm leading-6 text-mf-glass-text-muted">{reason}</p>
 
-      {recoveryState.digest.dataCompleteness === "INSUFFICIENT" ? (
+      {insufficient ? (
         <p className="mt-4 text-sm text-mf-glass-text-muted">
           Complete more of today&apos;s check-in before changing the session. Nothing was invented.
         </p>
@@ -117,7 +127,7 @@ export function RecoveryAdjustmentPanel({
             }}
             className="inline-flex min-h-11 items-center justify-center rounded-xl bg-mf-glass-brand px-5 py-3 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
           >
-            Adjust Today&apos;s Plan
+            {hold ? "Review lighter plan" : "Adjust Today’s Plan"}
           </button>
           <button
             type="button"
@@ -193,12 +203,14 @@ export function RecoveryAdjustmentPanel({
               ))}
             </ul>
             <div className="mt-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-text-muted">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
                 Why
               </p>
               <p className="mt-1 text-sm leading-6 text-mf-glass-text-secondary">
-                {proposal.changes.find((change) => change.action !== "KEEP")?.reasonDisplay ??
-                  "No structured change is warranted from today's check-in."}
+                {hold
+                  ? reason
+                  : proposal.changes.find((change) => change.action !== "KEEP")?.reasonDisplay ??
+                    "No structured change is warranted from today's check-in."}
               </p>
             </div>
             <div className="mt-6 flex flex-wrap gap-3">

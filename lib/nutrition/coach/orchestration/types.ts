@@ -318,6 +318,8 @@ export type PlanningExtras = {
   activeDraftItems?: Array<{ ingredientId: string; grams: number }> | null
   /** Shared food resolver results keyed by the planner's food text (local canonical or USDA). Computed before the sync tool run. */
   resolvedFoods?: Record<string, ResolvedFood>
+  /** The message refers back to a meal in today's food log (resolved against current rows): its state is always read. */
+  loggedMealReferent?: boolean
   /** The food the previous turn's tools resolved (echoed state, identity + basis only; numbers are always re-resolved). */
   foodReference?: { canonicalName: string; provider: "LOCAL_CANONICAL" | "USDA_FDC"; sourceId: string; basis: "raw" | "cooked" | "prepared" | "packaged" | "unknown"; base: string } | null
 }

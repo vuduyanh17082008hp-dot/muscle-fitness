@@ -48,11 +48,17 @@ export interface ResolveRequest {
    * inputs, so the same record is selected again and its basis is never re-asked or silently swapped. A stated `preparation` wins.
    */
   referenceBasis?: "raw" | "cooked";
+  /** Coating/skin the conversation established ("breaded" → coated, "skinless" → plain). Only read for fried foods. */
+  coating?: "coated" | "plain";
+  /** Restaurant the food comes from ("kfc"). A generic record then stands in for that brand's item: ESTIMATED, never official. */
+  brand?: string;
 }
 
 export interface ResolverDeps {
   searchLocal: (base: string) => LocalFoodHit | null;
   searchUsda: (query: string) => Promise<{ foods: FoodCandidate[]; configured: boolean }>;
+  /** Offline USDA copies prepared by `method` ("fried") for this base food. Optional: without it, USDA is the only source. */
+  searchPrepared?: (base: string, method: string) => FoodCandidate[];
   now?: () => number;
 }
 
@@ -72,7 +78,9 @@ export interface ResolvedFood {
   attribution?: string;
   /** Machine-readable reasons (selection, degradation, mismatch). No raw user text. */
   reasons: string[];
-  /** Present when raw vs cooked changes the answer materially and the user did not say which. */
-  clarification?: { field: "preparation"; options: string[] };
+  /** Present when raw vs cooked (or, for fried food, coating/skin) changes the answer materially and the user did not say which. */
+  clarification?: { field: "preparation" | "coating"; options: string[] };
+  /** The brand this generic record stands in for ("kfc"): the numbers are not that brand's official nutrition. */
+  genericFor?: string;
   diagnostics: FoodResolutionDiagnostics;
 }

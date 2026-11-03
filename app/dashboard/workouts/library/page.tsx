@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import { LOCAL_EXERCISE_LIBRARY } from "@/lib/workouts/exercise-library";
+import { EXERCISE_CATALOGUE } from "@/lib/workouts/exercise-library";
+import { loadExerciseFamiliarity } from "@/lib/training/load-exercise-familiarity";
+import { parseExperience } from "@/lib/training/exercise-substitution";
 import { toExerciseRecord } from "@/lib/workouts/providers/local-provider";
 import { parseMuscleParam } from "@/lib/workouts/library-params";
 import { ExerciseBrowser } from "@/app/dashboard/workouts/library/exercise-browser";
@@ -38,22 +40,23 @@ export default async function ExerciseLibraryPage({ searchParams }: ExerciseLibr
     redirect(`/login?next=${encodeURIComponent("/dashboard/workouts/library")}`);
   }
 
-  const { data: fitness } = await supabase
-    .from("fitness_profiles")
-    .select("available_equipment")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const [{ data: fitness }, familiarSlugs] = await Promise.all([
+    supabase.from("fitness_profiles").select("available_equipment, experience").eq("user_id", user.id).maybeSingle(),
+    loadExerciseFamiliarity(supabase, user.id).catch(() => []),
+  ]);
 
   const resolvedSearchParams = await searchParams;
   const initialMuscle = parseMuscleParam(resolvedSearchParams.muscle);
 
-  const records = LOCAL_EXERCISE_LIBRARY.map(toExerciseRecord);
+  const records = EXERCISE_CATALOGUE.map(toExerciseRecord);
 
   return (
     <ExerciseBrowser
       records={records}
       availableEquipment={fitness?.available_equipment ?? []}
       initialMuscle={initialMuscle}
+      experience={parseExperience(fitness?.experience)}
+      familiarSlugs={familiarSlugs}
     />
   );
 }

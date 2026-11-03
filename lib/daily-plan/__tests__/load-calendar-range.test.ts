@@ -9,6 +9,7 @@ type Session = {
   scheduled_for: string;
   duration_minutes: number;
   session_state: string;
+  workout_session_exercises?: Array<{ is_skipped: boolean }>;
 };
 
 function fakeSupabase(timezone: string | null, sessions: Session[] = []) {
@@ -105,5 +106,16 @@ describe("loadCalendarRange", () => {
     );
 
     expect(days.find((day) => day.date === "2026-10-01")?.actions).toHaveLength(1);
+  });
+
+  it("MF-F2: a not-started session whose every exercise is postponed (a confirmed rest day) shows as skipped", async () => {
+    const base = { user_id: "user-1", scheduled_for: "2026-10-06T10:00:00.000Z", duration_minutes: 45, session_state: "not_started" }
+    const client = fakeSupabase("Asia/Singapore", [
+      { ...base, id: "rested", name: "Lower Body", workout_session_exercises: [{ is_skipped: true }, { is_skipped: true }] },
+      { ...base, id: "trimmed", name: "Upper Body", workout_session_exercises: [{ is_skipped: true }, { is_skipped: false }] },
+    ]);
+    const actions = (await loadCalendarRange(client as never, "user-1", new Date("2026-10-06T12:00:00.000Z"))).flatMap((day) => day.actions);
+    expect(actions.find((action) => action.id === "workout-rested")).toMatchObject({ status: "skipped", subtitle: "Postponed" });
+    expect(actions.find((action) => action.id === "workout-trimmed")).toMatchObject({ status: "planned" });
   });
 });

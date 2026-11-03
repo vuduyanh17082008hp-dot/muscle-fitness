@@ -48,7 +48,7 @@ export function RecentActivityCard({ entries, now = new Date() }: { entries: Rec
                   <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-mf-glass-border bg-white/[0.02] text-mf-glass-text-muted">
                     <Icon className="size-3.5" aria-hidden="true" />
                   </span>
-                  <span className="text-[11px] text-mf-glass-text-muted">{formatRelative(entry.sortKey, now)}</span>
+                  <span className="text-xs text-mf-glass-text-muted">{formatRelative(entry.sortKey, now)}</span>
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-mf-glass-text">{entry.title}</p>

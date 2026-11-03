@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { lookupBarcode } from "@/lib/nutrition/food-data"
 import { normalizeBarcode } from "@/lib/nutrition/barcode"
+import { guardFoodLookup } from "@/lib/nutrition/food-data/lookup-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -17,6 +18,10 @@ export const dynamic = "force-dynamic"
  * and this route can never disagree on what a valid barcode is.
  */
 export async function GET(request: Request) {
+  // QA-05: signed-in callers only, at a bounded rate — these spend the server's provider quota.
+  const stop = await guardFoodLookup()
+  if (stop) return stop
+
   const url = new URL(request.url)
   const rawCode = (url.searchParams.get("code") ?? "").trim()
 
@@ -24,12 +29,20 @@ export async function GET(request: Request) {
 
   if (!normalized) {
     return NextResponse.json(
-      { ok: false, error: "Provide a valid EAN-13/EAN-8/UPC-A/UPC-E barcode with ?code=" },
+      { ok: false, status: "invalid_input", error: "That isn't a valid EAN-13/EAN-8/UPC-A/UPC-E barcode (check digit or length is wrong). Re-scan or re-type it." },
       { status: 400 },
     )
   }
 
-  const food = await lookupBarcode(normalized.code)
+  const { status, food } = await lookupBarcode(normalized.code)
 
-  return NextResponse.json({ ok: true, code: normalized.code, format: normalized.format, food })
+  if (status === "provider_timeout" || status === "provider_error") {
+    // An outage is not "product not found" — the client must not say it is.
+    return NextResponse.json(
+      { ok: false, status, code: normalized.code, error: "The product database didn't respond, so we couldn't check this barcode. Try again shortly." },
+      { status: 503 },
+    )
+  }
+
+  return NextResponse.json({ ok: true, status, code: normalized.code, format: normalized.format, food })
 }

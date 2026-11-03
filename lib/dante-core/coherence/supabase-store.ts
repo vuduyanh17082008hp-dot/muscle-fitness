@@ -21,16 +21,19 @@ type StateRow = {
 };
 
 /**
- * Phase 2 state store backed by `public.dante_coherence_state` (one row per user, RLS-scoped to the owner).
- * Writes are compare-and-swap on `state_version`, evaluated atomically inside a single statement.
+ * Phase 2 state store backed by `public.dante_coherence_state` (one row per user AND conversation, RLS-scoped to the
+ * owner — S0 D-04: a new chat never inherits another chat's language or safety episode). `threadId` null = the legacy
+ * threadless row. Writes are compare-and-swap on `state_version`, evaluated atomically inside a single statement.
  */
-export function createSupabaseCoherenceStore(supabase: SupabaseClient): CoherenceStateStore {
+export function createSupabaseCoherenceStore(supabase: SupabaseClient, threadId: string | null = null): CoherenceStateStore {
+  const threadKey = threadId ?? "";
   return {
     async load(userId): Promise<CoherenceLoadResult> {
       const { data, error } = await supabase
         .from(TABLE)
         .select("state, state_version, schema_version")
         .eq("user_id", userId)
+        .eq("thread_key", threadKey)
         .maybeSingle();
       if (error) return { status: "error", detail: error.message };
       if (!data) return { status: "empty" };
@@ -54,7 +57,7 @@ export function createSupabaseCoherenceStore(supabase: SupabaseClient): Coherenc
       };
 
       if (expectedVersion === null) {
-        const { error } = await supabase.from(TABLE).insert({ user_id: userId, ...payload });
+        const { error } = await supabase.from(TABLE).insert({ user_id: userId, thread_key: threadKey, ...payload });
         if (!error) return { ok: true };
         return error.code === UNIQUE_VIOLATION
           ? { ok: false, reason: "conflict" }
@@ -65,6 +68,7 @@ export function createSupabaseCoherenceStore(supabase: SupabaseClient): Coherenc
         .from(TABLE)
         .update(payload)
         .eq("user_id", userId)
+        .eq("thread_key", threadKey)
         .eq("state_version", expectedVersion)
         .select("state_version");
       if (error) return { ok: false, reason: "error", detail: error.message };

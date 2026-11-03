@@ -27,7 +27,7 @@ export function PerformanceGrid({ stats, className = "" }: PerformanceGridProps)
           key={stat.label}
           className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
         >
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
             {stat.label}
           </p>
           <p className="mt-1 text-xl font-black text-white">

@@ -35,7 +35,7 @@ const buttonVariants = cva(
     "disabled:opacity-50",
 
     "focus-visible:ring-2",
-    "focus-visible:ring-amber-500/50",
+    "focus-visible:ring-mf-focus",
     "focus-visible:ring-offset-2",
     "focus-visible:ring-offset-black",
 
@@ -49,35 +49,31 @@ const buttonVariants = cva(
       =================================================== */
 
       variant: {
+        // The one primary CTA treatment (semantic `action` token): flat, no glow.
         default: [
-          "bg-amber-500",
-          "text-black",
+          "bg-mf-action",
+          "text-mf-action-ink",
 
-          "hover:bg-amber-400",
+          "hover:bg-mf-action-hover",
 
           "active:translate-y-px",
         ].join(" "),
 
         primary: [
-          "bg-amber-500",
-          "text-black",
+          "bg-mf-action",
+          "text-mf-action-ink",
 
-          "shadow-sm",
-          "shadow-amber-500/10",
-
-          "hover:bg-amber-400",
-          "hover:shadow-md",
-          "hover:shadow-amber-500/15",
+          "hover:bg-mf-action-hover",
 
           "active:translate-y-px",
         ].join(" "),
 
         secondary: [
           "border",
-          "border-white/10",
+          "border-mf-glass-border-strong",
 
           "bg-white/5",
-          "text-white",
+          "text-mf-glass-text",
 
           "hover:border-white/20",
           "hover:bg-white/10",
@@ -151,14 +147,15 @@ const buttonVariants = cva(
       =================================================== */
 
       size: {
+        // Heights meet the 44px touch target (sm: 40px for dense inline rows).
         default: [
-          "h-10",
+          "h-11",
           "px-4",
           "py-2",
         ].join(" "),
 
         sm: [
-          "h-9",
+          "h-10",
           "rounded-[12px]",
           "px-3",
 
@@ -174,8 +171,8 @@ const buttonVariants = cva(
         ].join(" "),
 
         icon: [
-          "h-10",
-          "w-10",
+          "h-11",
+          "w-11",
           "p-0",
         ].join(" "),
       },

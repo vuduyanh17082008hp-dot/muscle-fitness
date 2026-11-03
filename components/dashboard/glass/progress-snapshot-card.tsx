@@ -9,7 +9,7 @@ function Sparkline({ values }: { values: Array<number | null> }) {
   const present = values.filter((value): value is number => value !== null);
 
   if (present.length < 2) {
-    return <p className="mt-2 text-[11px] text-mf-glass-text-muted">More history is needed to calculate a trend.</p>;
+    return <p className="mt-2 text-xs text-mf-glass-text-muted">More history is needed to calculate a trend.</p>;
   }
 
   const min = Math.min(...present);
@@ -47,9 +47,9 @@ function MiniTile({
 }) {
   return (
     <div className="rounded-xl border border-mf-glass-border bg-white/[0.015] p-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-mf-glass-text-muted">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-[0.1em] text-mf-glass-text-muted">{label}</p>
       <p className="mt-1 text-xl font-bold tabular-nums text-mf-glass-text">{value}</p>
-      {detail ? <p className="mt-0.5 text-[11px] text-mf-glass-text-muted">{detail}</p> : null}
+      {detail ? <p className="mt-0.5 text-xs text-mf-glass-text-muted">{detail}</p> : null}
       {children}
     </div>
   );
@@ -65,7 +65,7 @@ export function ProgressSnapshotCard({ snapshot }: { snapshot: DashboardProgress
         action={
           <Link
             href="/dashboard/progress"
-            className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-mf-glass-text-muted transition hover:text-mf-glass-text"
+            className="-my-3 inline-flex min-h-11 items-center gap-0.5 text-xs font-semibold text-mf-glass-text-muted transition hover:text-mf-glass-text"
           >
             Details
             <ChevronRight className="size-3" aria-hidden="true" />

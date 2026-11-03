@@ -1,13 +1,26 @@
+import type { trainingHold } from "@/lib/dante-core/daily-decision-engine"
 import type { RecoveryScoreResult, TrainingLoadSummary } from "@/lib/recovery/types"
+
+/** Recovery's line while the Daily Brief decision holds training (trainingHold): it never clears a session the Brief holds. */
+export const HELD_RECOVERY_RECOMMENDATION = {
+  recovery:
+    "Your check-in flagged pain or illness, so recovery comes before training today — don't push a planned session. See a medical professional if it persists or worsens.",
+  unverified:
+    "Today's pain/illness check-in couldn't be confirmed, so Dante isn't recommending a training session. Check in again before you train.",
+} as const
 
 /**
  * Deterministic, rule-based recommendation text. No LLM call — this is
  * the same explanation Dante will see and expand on, never invent.
+ * `hold` = trainingHold(dailyDecision): when set it wins over the score, exactly as on Today.
  */
 export function buildRecoveryRecommendation(
   result: RecoveryScoreResult,
   trainingLoad: TrainingLoadSummary,
+  hold: ReturnType<typeof trainingHold> = null,
 ): string {
+  if (hold) return HELD_RECOVERY_RECOMMENDATION[hold]
+
   if (result.score === null) {
     return "Complete today's check-in to get a personalised recommendation based on your sleep, stress, fatigue, soreness and readiness."
   }

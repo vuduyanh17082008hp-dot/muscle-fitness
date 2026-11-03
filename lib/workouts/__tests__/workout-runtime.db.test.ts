@@ -27,11 +27,22 @@ function run(sql: string): { ok: boolean; out: string; err: string } {
   return { ok: r.status === 0, out: r.stdout ?? "", err: r.stderr ?? "" }
 }
 
+// The built-in ids 25–63 are seeded by this migration (Muscle Intelligence 2.0 catalogue). A target without it is a stale
+// schema, not a regression: the shared default stack drifts behind feature branches (see scripts/test-db-stack.mjs) and
+// gave "expected 63 built-ins, got 24". Such a target is reported, never silently tested against.
+const CATALOGUE_MIGRATION = "20261101120000"
+
 const dbReady = (() => {
   const r = run(
-    "select count(*) from exercise_library where id::text like '10000000-0000-4000-8000-%';",
+    `select (select count(*) from exercise_library where id::text like '10000000-0000-4000-8000-%') || '|' || (select count(*) from supabase_migrations.schema_migrations where version = '${CATALOGUE_MIGRATION}');`,
   )
-  return r.ok && Number(r.out.trim()) > 0
+  if (!r.ok) return false
+  const [builtins, catalogue] = r.out.trim().split("|").map(Number)
+  if (builtins > 0 && catalogue === 0) {
+    console.warn(`[workout-runtime.db] SKIPPED: ${CONTAINER} lacks migration ${CATALOGUE_MIGRATION} (stale schema: ${builtins} built-ins, app has ${LOCAL_EXERCISE_LIBRARY.length}). Run \`node scripts/test-db-stack.mjs\` and use the env line it prints.`)
+    return false
+  }
+  return builtins > 0
 })()
 
 const q = (s: string) => `'${s.replace(/'/g, "''")}'`

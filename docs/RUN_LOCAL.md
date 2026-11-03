@@ -3,7 +3,7 @@
 ## Quick start
 
 ```bash
-cd "C:\Users\DUY ANH\OneDrive\Desktop\muscle-fitness"
+cd muscle-fitness   # your clone
 npm install
 npm run dev
 ```
@@ -41,6 +41,30 @@ npm run type-check
 npm run lint
 npm run build
 ```
+
+## Database tests (`*.db.test.ts`)
+
+These run SQL through `docker exec` against a local Supabase stack. Without
+`MF_TEST_*` they use `supabase_db_muscle-fitness-claude`, the one stack every
+worktree on the machine shares — it is usually behind your branch's
+migrations, and must not be migrated from a feature branch. Build a
+disposable stack from this checkout's migrations instead (local Docker only,
+ports 566xx, rebuilt from scratch on every run):
+
+```bash
+node scripts/test-db-stack.mjs        # prints the exact env line below
+MF_TEST_DB_CONTAINER=supabase_db_mf-test-db MF_TEST_AUTH_CONTAINER=supabase_auth_mf-test-db \
+  MF_TEST_API_URL=http://127.0.0.1:56631 MF_TEST_SUPABASE_URL=http://127.0.0.1:56631 npm test
+node scripts/test-db-stack.mjs stop   # remove it
+```
+
+Set all four `MF_TEST_*` vars or none: `test/db-target-guard.ts` (vitest
+globalSetup) fails the run on a partial selection or an unreachable stack,
+so the DB suites can't silently skip or mix one stack's DB with another's API.
+Plain `npm test` still uses the shared stack; when that stack is behind (e.g.
+missing `20261101120000_hypertrophy_catalogue.sql`), `workout-runtime.db`
+A/D and B fail and `training-hold.db` skips — an environment gap, not a
+product bug. Use the isolated command above for a full DB run.
 
 ## Test checklist
 

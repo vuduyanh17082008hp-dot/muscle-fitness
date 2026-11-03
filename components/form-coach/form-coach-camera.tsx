@@ -102,7 +102,7 @@ function QualityRow({ label, value }: { label: string; value: Quality | string }
       </span>
       <span
         className={cn(
-          "rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-wide",
+          "rounded-full border px-2.5 py-1 text-xs font-black uppercase tracking-wide",
           isQuality ? QUALITY_STYLES[value as Quality] : "border-white/10 bg-white/5 text-zinc-300",
         )}
       >
@@ -493,7 +493,7 @@ export function FormCoachCamera() {
 
         <aside className="space-y-4">
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-400">
+            <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-400">
               Form Coach — Beta
             </p>
             <h2 className="mt-1 text-2xl font-black text-white">
@@ -560,7 +560,7 @@ export function FormCoachCamera() {
                         : "border-white/10 bg-white/5 text-zinc-300",
                   )}
                 >
-                  <p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                  <p className="mb-1 text-xs font-black uppercase tracking-[0.12em] text-zinc-500">
                     Live Cue
                   </p>
                   &ldquo;{cue.message}&rdquo;
@@ -606,7 +606,7 @@ export function FormCoachCamera() {
 
       {sessionSummary ? (
         <div className="rounded-3xl border border-amber-400/20 bg-amber-400/[0.05] p-6 sm:p-8">
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-amber-400">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-400">
             Session Summary
           </p>
           <h3 className="mt-1 text-xl font-black text-white">

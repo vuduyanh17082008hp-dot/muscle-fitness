@@ -4,6 +4,7 @@ import { detectCravingKey } from "./craving"
 import type { DraftOp } from "./draft"
 import { followUpStateSchema } from "./followup"
 import { findIngredientByText, getIngredient } from "./ingredients"
+import { pendingLogSchema } from "./log-action"
 import type { ActiveMealDraft, CravingKey } from "./types"
 
 /**
@@ -87,7 +88,7 @@ const topicSchema = z.object({
 const presentedSnapshotSchema = z.object({
   responseId: z.string().max(40),
   owner: z.enum(["ENGINE", "CONVERSATION"]),
-  options: z.array(z.object({ index: z.number().int().min(1).max(5), entityId: z.string().max(100), label: z.string().max(200), sourceRef: z.string().max(80), provenance: z.literal("ASSISTANT_DISPLAYED_OPTION") })).min(2).max(5),
+  options: z.array(z.object({ index: z.number().int().min(1).max(8), entityId: z.string().max(100), label: z.string().max(200), sourceRef: z.string().max(80), provenance: z.literal("ASSISTANT_DISPLAYED_OPTION") })).min(2).max(8),
   createdAtServer: z.string().max(40),
   expiresAt: z.string().max(40),
 })
@@ -108,7 +109,8 @@ export const conversationInputSchema = z.object({
   currentTopic: topicSchema.nullish(),
   pendingMealBuild: z.object({ topic: z.string().max(80), approach: z.string().max(40).optional() }).nullish(),
   handoff: z.object({ offer: z.enum(OFFERABLE_OPS).nullable() }).nullish(),
-  recentMessages: z.array(z.object({ role: z.enum(["user", "coach"]), text: z.string().max(800) })).max(6).optional(),
+  // Context only, so a long earlier reply (e.g. Dante's training answer restored into the same thread) is clipped, never a 400.
+  recentMessages: z.array(z.object({ role: z.enum(["user", "coach"]), text: z.string().max(20_000).transform((text) => text.slice(0, 800)) })).max(6).optional(),
   /** H0 cluster A: the user's own earlier messages (newest last) for the context working set only — disclosures outlive the 6-message window. */
   priorUserTurns: z.array(z.string().max(400)).max(20).optional().catch(undefined),
   /** N1.5.6 ephemeral follow-up context (TTL-bound, server-validated, macros always recomputed). */
@@ -123,6 +125,10 @@ export const conversationInputSchema = z.object({
   pending: pendingClarificationSchema.nullish().catch(undefined),
   /** The food the last tool run resolved. Identity + basis only: a follow-up ("150 g of that") re-resolves it server-side, so no echoed number is ever used. */
   foodReference: z.object({ canonicalName: z.string().max(160), provider: z.enum(["LOCAL_CANONICAL", "USDA_FDC"]), sourceId: z.string().max(80), basis: z.enum(["raw", "cooked", "prepared", "packaged", "unknown"]), base: z.string().max(60) }).nullish().catch(undefined),
+  /** Today's food-log rows (id, meal, food name) when the last reply was written: what "it" could have meant. Identity only — numbers always come from the current rows. */
+  loggedRows: z.array(z.object({ id: z.string().max(64), meal: z.string().max(20), food: z.string().max(200) })).max(60).nullish().catch(undefined),
+  /** P0 chat-driven meal log: the chat's pointer to its server pending action (lib/nutrition/coach/log-action.ts). Malformed => ignored. */
+  pendingLog: pendingLogSchema.nullish().catch(undefined),
 })
 export type ConversationInput = z.infer<typeof conversationInputSchema>
 
@@ -270,7 +276,9 @@ export type Classification =
   | { intent: "FOOD_SUBSTITUTION"; topic: NutritionTopic }
 
 const RESET = /\b(?:forget|scrap|discard|ditch|cancel|clear)\b[^.?!]*\b(?:that|this|the)\b[^.?!]*\b(?:meal|bowl|recipe|draft|dish)\b|\bstart over\b|\bnever ?mind\b|\bforget (?:it|that)\b/i
-const LOG = /\blog\s+(?:this|that|it)\b(?!\s+(?:workout|session))|\blog the (?:active )?(?:meal|draft)\b|\bsave this meal\b/i
+/** A request to log the meal in view to TODAY's food log. "Add it to my meal plan" (no log verb) is not one. */
+export const LOG_REQUEST = /\blog\s+(?:this|that|it)\b(?!\s+(?:workout|session))|\blog the (?:active )?(?:meal|draft)\b|\bsave this meal\b|\badd (?:this|it|that|the (?:last |same )?meal(?: (?:we|you) (?:just )?(?:discussed|talked about|suggested|built|made))?)(?: meal)? to (?:my |today'?s )?(?:food )?(?:log|diary|tracker)\b|(?:ghi|lưu)(?: lại)?(?: vào nhật ký)? (?:món|bữa|cái) (?:này|đó|ấy)/iu
+export const isResetMessage = (message: string) => RESET.test(message.trim())
 const PREF_CRAVE = /^\s*(?:actually,?\s*)?i\s+(?:always|usually|often)\s+crav\w*\s+([a-z' -]{2,40}?)(?:\s+(?:at|in|every)\s+(?:the\s+)?(night|evening|morning|afternoon|day))?\s*[.!]*$/i
 const PREF_DISLIKE = /^\s*(?:actually,?\s*)?i\s+(?:really\s+)?(?:hate|dislike|can'?t stand|don'?t like|do not like|am not a fan of|'?m not a fan of)\s+([a-z' -]{2,40}?)\s*[.!]*$/i
 const PREF_LIKE = /^\s*(?:actually,?\s*)?i\s+(?:really\s+)?(?:love|like|enjoy|prefer)\s+([a-z' -]{2,40}?)\s*[.!]*$/i
@@ -298,7 +306,7 @@ export function classifyConversation(message: string, input: { reference: DraftR
   const text = message.trim()
 
   if (RESET.test(text)) return { intent: "RESET_CONTEXT" }
-  if (LOG.test(text)) return { intent: "LOG_MEAL" }
+  if (LOG_REQUEST.test(text)) return { intent: "LOG_MEAL" }
 
   const crave = text.match(PREF_CRAVE)
   if (crave) return { intent: "PREFERENCE_UPDATE", signals: [{ kind: "CRAVING_PATTERN", value: crave[1].trim(), strength: "EXPLICIT", scope: "SESSION", context: crave[2]?.toLowerCase() }] }
@@ -354,14 +362,16 @@ export { QUICK_ACTIONS } from "./quick-actions"
    MACRO PROVENANCE
 ========================================================= */
 
+// A number as written: "1,326" is 1326, not 326 (live: a correct "You've consumed 1,326 calories" was rejected).
+const AMOUNT = String.raw`(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)`
 const MACRO_NUMBER = [
-  /(\d+(?:\.\d+)?)\s*(?:k?cal(?:ories)?\b)/gi,
-  /(\d+(?:\.\d+)?)\s*(?:g|grams?)\s+(?:of\s+)?(?:protein|carbs?|carbohydrates?|fat)\b/gi,
-  /\b(?:protein|carbs?|carbohydrates?|fat)\s*(?:of|:|is|are)?\s*(?:about|around|~)?\s*(\d+(?:\.\d+)?)\s*g\b/gi,
+  new RegExp(String.raw`${AMOUNT}\s*(?:k?cal(?:ories)?\b)`, "gi"),
+  new RegExp(String.raw`${AMOUNT}\s*(?:g|grams?)\s+(?:of\s+)?(?:protein|carbs?|carbohydrates?|fat)\b`, "gi"),
+  new RegExp(String.raw`\b(?:protein|carbs?|carbohydrates?|fat)\s*(?:of|:|is|are)?\s*(?:about|around|~)?\s*${AMOUNT}\s*g\b`, "gi"),
 ]
 
 /** True when a model reply states an exact calorie/macro number that did not come from structured data or the user's own message. */
 export function hasUngroundedMacros(reply: string, allowed: Iterable<number>): boolean {
   const ok = new Set([...allowed].map((n) => Math.round(n)))
-  return MACRO_NUMBER.some((pattern) => [...reply.matchAll(pattern)].some((match) => !ok.has(Math.round(Number(match[1])))))
+  return MACRO_NUMBER.some((pattern) => [...reply.matchAll(pattern)].some((match) => !ok.has(Math.round(Number(match[1].replace(/,/g, ""))))))
 }

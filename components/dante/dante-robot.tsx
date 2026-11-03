@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
@@ -75,6 +76,8 @@ const SIZE_PX: Record<DanteRobotSize, number> = {
    TIMING HELPERS — deliberately non-mechanical
 ========================================================= */
 
+const subscribeNoop = () => () => {};
+
 function randomBetween(min: number, max: number) {
   return min + Math.random() * (max - min);
 }
@@ -137,7 +140,10 @@ function DanteRobotMascot({
   onClick,
 }: DanteRobotProps) {
   const uid = useId().replace(/[:]/g, "");
-  const reduceMotion = useReducedMotion();
+  // The server can't know the motion preference, so the hydration render uses the same branch as the
+  // server and reduced motion applies right after; otherwise the float layer's style mismatches.
+  const hydrated = useSyncExternalStore(subscribeNoop, () => true, () => false);
+  const reduceMotion = useReducedMotion() && hydrated;
   const px = SIZE_PX[size];
 
   const containerRef = useRef<HTMLDivElement | null>(null);

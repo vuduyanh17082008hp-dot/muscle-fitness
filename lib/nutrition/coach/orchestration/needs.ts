@@ -15,6 +15,17 @@ const PERSONAL_STATE = /(?<![\p{L}\p{N}])(?:my|mine|left|remaining|today|tonight
 const FIT_OFFER = /(?<![\p{L}\p{N}])fit(?:ting)?\b[^?]{0,60}\b(?:macros?|calories|left|remaining|budget|today)|(?:vừa|nhét|xếp)[^?]{0,40}(?:calo|macro|còn lại)/iu
 
 export const isPersonalStateQuestion = (message: string) => PERSONAL_STATE.test(message)
+// "What have I eaten today?", "calories I've had", "my last meal": the food log answers these, so state is always read.
+const LOGGED_INTAKE = /(?<![\p{L}\p{N}])(?:(?:have|did) i (?:eat|eaten|had|have|log(?:ged)?)|i(?:'ve| have) (?:eaten|had|logged)|i ate|my (?:last|latest|previous) meal|(?:eaten|logged|consumed) (?:today|so far))(?![\p{L}\p{N}])|đã ăn|ăn gì hôm nay/iu
+// "Total calories today?", "my calorie total so far": a running total of the day is the food log's sum even with no "eat" verb
+// (live: the planner asked "what foods have you logged today?" instead). A total the user NEEDS or aims for is a target, not this.
+const DAY_TOTAL = /(?<![\p{L}\p{N}])(?:total|tổng)(?![\p{L}\p{N}])[^?.!]{0,30}(?<![\p{L}\p{N}])(?:calories|calorie|kcal|protein|macros|carbs|fat|calo|đạm)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:calories|calorie|kcal|protein|macros|calo)(?![\p{L}\p{N}])[^?.!]{0,15}(?<![\p{L}\p{N}])(?:total|tổng)(?![\p{L}\p{N}])/iu
+const DAY_WINDOW = /(?<![\p{L}\p{N}])(?:today|so far|hôm nay|tới giờ|đến giờ)(?![\p{L}\p{N}])/iu
+const NOT_INTAKE = /(?<![\p{L}\p{N}])(?:need|should|target|goal|aim|allowed|budget|left|remaining|burn(?:ed|t)?|cần|mục tiêu|còn lại)(?![\p{L}\p{N}])/iu
+export const isLoggedIntakeQuestion = (message: string) => LOGGED_INTAKE.test(message) || (DAY_TOTAL.test(message) && DAY_WINDOW.test(message) && !NOT_INTAKE.test(message))
+// "Was that meal suitable for my goal?": the saved goal answers it, so it is read even outside a recommendation.
+const MY_GOAL = /(?<![\p{L}\p{N}])my goals?(?![\p{L}\p{N}])|mục tiêu của (?:tôi|mình)/iu
+export const namesOwnGoal = (message: string) => MY_GOAL.test(message)
 export const offerAsksForFit = (offer: string | null) => Boolean(offer && FIT_OFFER.test(offer))
 
 const CONTINUITY_TARGETS: ContinuationTarget[] = ["PRIOR_OFFER", "PENDING_CHOICE", "ACTIVE_MODIFICATION", "LAST_ASSISTANT_REFERENT", "ACTIVE_DRAFT", "PENDING_CLARIFICATION"]
@@ -57,12 +68,15 @@ export function decideNeeds(input: NeedInput): { toolNeed: ToolNeedDecision; con
 
   // Nutrition state (remaining/targets): exact calculations always; otherwise only for a personal state question.
   const plannerWantsState = need.needAthleteState && !continuity && personal
-  const needNutritionState = !idle && input.nutritionStateAvailable && (needMacroCalculation || plannerWantsState)
+  const loggedIntake = (message !== undefined && isLoggedIntakeQuestion(message)) || Boolean(extras.loggedMealReferent)
+  const ownGoal = message !== undefined && namesOwnGoal(message)
+  const needNutritionState = !idle && input.nutritionStateAvailable && (needMacroCalculation || plannerWantsState || loggedIntake || ownGoal)
+  if (loggedIntake && !needMacroCalculation && !plannerWantsState) reasons.push("logged_intake_question")
   if (need.needAthleteState && !continuity && !personal && !needMacroCalculation) reasons.push("general_question_no_state")
   if (needNutritionState && !needMacroCalculation) reasons.push("personal_state_question")
 
   // Goal / training context: only a personal recommendation, never a continuity turn or a plain number lookup.
-  const needGoalContext = !idle && needNutritionState && mode === "PROPOSE" && !continuity && need.needAthleteState && personal
+  const needGoalContext = !idle && needNutritionState && ((mode === "PROPOSE" && !continuity && need.needAthleteState && personal) || ownGoal)
   if (needGoalContext) reasons.push("goal_specific_recommendation")
 
   // Retrieval: optional support. Never for continuity, questions/redirects, or a plain exact-state lookup.

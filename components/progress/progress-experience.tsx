@@ -88,11 +88,11 @@ function Journey({ model }: { model: ProgressPageModel }) {
                 <circle cx="90" cy="90" r="92" fill="none" stroke="rgba(74,222,128,0.15)" strokeWidth="1" strokeDasharray="1 8" />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-[10px] uppercase tracking-[0.25em]" style={{ color: "var(--text-dim)" }}>Streak</div>
+                <div className="text-xs uppercase tracking-[0.12em]" style={{ color: "var(--text-dim)" }}>Streak</div>
                 <div className="text-4xl font-bold tracking-tight">
                   <AnimatedNumber value={journey.currentStreak} />
                 </div>
-                <div className="mt-1 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                <div className="mt-1 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
                   <span className="flame" aria-hidden="true">🔥</span> days
                 </div>
               </div>
@@ -107,7 +107,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
             </h1>
             <p className="mt-3 text-[16px] leading-relaxed" style={{ color: "var(--text-muted)" }}>{model.sentence}</p>
             <div className="mt-5 flex flex-wrap items-center gap-2">
-              <span className="mr-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>This week</span>
+              <span className="mr-2 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>This week</span>
               {model.weekDots.map((dot) => (
                 <span key={dot.date} className={`week-dot ${dot.kind}`} title={dot.title}>{dot.label}</span>
               ))}
@@ -120,22 +120,22 @@ function Journey({ model }: { model: ProgressPageModel }) {
           </div>
 
           <div className="space-y-3 md:col-span-3">
-            <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.5)" }}>
+            <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Level</span>
-                <span className="mono text-[11px] text-[#4ade80]">LVL {level.level}</span>
+                <span className="text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Level</span>
+                <span className="mono text-xs text-[var(--accent)]">LVL {level.level}</span>
               </div>
               <div className="mb-2 text-sm font-semibold">{level.title}</div>
               <div className="level-bar"><div className="level-bar-fill" data-w={level.progressPercent} /></div>
-              <div className="mt-2 text-[10px]" style={{ color: "var(--text-dim)" }}>
+              <div className="mt-2 text-xs" style={{ color: "var(--text-dim)" }}>
                 {level.currentXp} / {level.nextLevelXp} XP to LVL {Math.min(5, level.level + 1)}
               </div>
             </article>
             {model.next ? (
-              <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.5)" }}>
-                <div className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Next milestone</div>
+              <article className="card-spot rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
+                <div className="mb-2 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Next milestone</div>
                 <div className="text-sm font-semibold">
-                  {model.next.title} → <span className="text-[#4ade80]">{model.next.current}/{model.next.target}</span>
+                  {model.next.title} → <span className="text-[var(--accent)]">{model.next.current}/{model.next.target}</span>
                 </div>
                 <div className="mt-2 h-1 overflow-hidden rounded-full" style={{ background: "rgba(74,222,128,0.1)" }}>
                   <div className="level-bar-fill" data-w={Math.min(100, (model.next.current / model.next.target) * 100)} />
@@ -151,15 +151,15 @@ function Journey({ model }: { model: ProgressPageModel }) {
           {model.insights.map((insight) => (
             <article key={insight.id} className="glass flex items-center gap-3 rounded-2xl p-4">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl" style={{ background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.25)" }}>
-                {insight.id === "best_day" ? <Zap className="h-5 w-5 text-[#4ade80]" /> : null}
-                {insight.id === "most_missed" ? <AlertTriangle className="h-5 w-5 text-[#fbbf24]" /> : null}
-                {insight.id === "avg_session" ? <Clock className="h-5 w-5 text-[#22d3ee]" /> : null}
-                {insight.id === "trend" ? <TrendingUp className="h-5 w-5 text-[#a78bfa]" /> : null}
+                {insight.id === "best_day" ? <Zap className="h-5 w-5 text-[var(--accent)]" /> : null}
+                {insight.id === "most_missed" ? <AlertTriangle className="h-5 w-5 text-[var(--accent-warm)]" /> : null}
+                {insight.id === "avg_session" ? <Clock className="h-5 w-5 text-[var(--accent-2)]" /> : null}
+                {insight.id === "trend" ? <TrendingUp className="h-5 w-5 text-[var(--accent-3)]" /> : null}
               </div>
               <div className="min-w-0">
-                <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{insight.label}</div>
+                <div className="text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{insight.label}</div>
                 <div className="truncate text-sm font-semibold">{insight.value}</div>
-                <div className={`text-[10px] ${insight.tone === "good" ? "delta-up" : ""}`}>{insight.detail}</div>
+                <div className={`text-xs ${insight.tone === "good" ? "delta-up" : ""}`}>{insight.detail}</div>
               </div>
             </article>
           ))}
@@ -175,7 +175,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
           </div>
         </div>
         <div className="flex gap-4">
-          <div className="mono flex flex-col justify-around py-1 text-[9px]" style={{ color: "var(--text-dim)" }}>
+          <div className="mono flex flex-col justify-around py-1 text-xs" style={{ color: "var(--text-dim)" }}>
             {WEEKDAYS.map((day) => <span key={day}>{day}</span>)}
           </div>
           <div className="heatmap flex-1" role="img" aria-label="Twelve-week consistency heatmap">
@@ -230,7 +230,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
         <section className="glass card-spot rounded-3xl p-6 reveal md:p-7">
           <span className="s-title">Muscle volume</span>
           <h3 className="mt-2 text-xl font-bold tracking-tight">Focus balance</h3>
-          <p className="mt-1 text-[11px]" style={{ color: "var(--text-dim)" }}>Last 30 days · relative allocation</p>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>Last 30 days · relative allocation</p>
           {model.muscle ? <MuscleRadar muscle={model.muscle} /> : (
             <p className="mt-6 text-[16px]" style={{ color: "var(--text-muted)" }}>More logged sessions are needed before muscle-focus balance can be estimated.</p>
           )}
@@ -245,7 +245,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
           </div>
           <div className="flex items-center gap-3 text-sm">
             <span style={{ color: "var(--text-muted)" }}>
-              <span className="font-semibold text-[#4ade80]">{model.catalog.filter((item) => item.unlocked).length}</span> of {model.catalog.length}
+              <span className="font-semibold text-[var(--accent)]">{model.catalog.filter((item) => item.unlocked).length}</span> of {model.catalog.length}
             </span>
             <div className="h-1.5 w-24 overflow-hidden rounded-full" style={{ background: "rgba(74,222,128,0.1)" }}>
               <div className="level-bar-fill" data-w={model.catalog.length ? Math.round((model.catalog.filter((item) => item.unlocked).length / model.catalog.length) * 100) : 0} />
@@ -265,7 +265,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
             <span className="s-title">Personal records</span>
             <h2 className="mt-2 text-2xl font-bold tracking-tight">Lifetime bests</h2>
           </div>
-          <span className="mono rounded-md px-2.5 py-1 text-xs" style={{ background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>
+          <span className="mono rounded-md px-2.5 py-1 text-xs" style={{ background: "rgba(74,222,128,0.1)", color: "var(--accent)", border: "1px solid rgba(74,222,128,0.25)" }}>
             {model.personalRecords.length} lift{model.personalRecords.length === 1 ? "" : "s"} tracked
           </span>
         </div>
@@ -275,13 +275,13 @@ function Journey({ model }: { model: ProgressPageModel }) {
               <article key={record.exerciseId} className="pr-row grid items-center gap-3 border-b py-3 md:grid-cols-12" style={{ borderColor: "var(--border)" }}>
                 <div className="md:col-span-5">
                   <div className="text-sm font-semibold">{record.exerciseName}</div>
-                  <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>{record.metric}</div>
+                  <div className="text-xs" style={{ color: "var(--text-dim)" }}>{record.metric}</div>
                 </div>
                 <div className="mono text-sm md:col-span-2" style={{ color: "var(--text-muted)" }}>{record.achievedAt}</div>
                 <div className="mono text-sm line-through md:col-span-2" style={{ color: "var(--text-dim)" }}>
                   {record.previousKg !== null ? `${record.previousKg} kg` : "—"}
                 </div>
-                <div className="mono text-lg font-bold text-[#4ade80] md:col-span-2">{record.currentKg} kg</div>
+                <div className="mono text-lg font-bold text-[var(--accent)] md:col-span-2">{record.currentKg} kg</div>
                 <div className="delta-up text-right text-xs font-semibold md:col-span-1">
                   {record.deltaKg !== null ? `+${record.deltaKg}` : ""}
                 </div>
@@ -310,7 +310,7 @@ function Journey({ model }: { model: ProgressPageModel }) {
           <p className="mt-4" style={{ color: "var(--text-muted)" }}>Nutrition history couldn&apos;t be loaded.</p>
         ) : model.nutrition.available ? (
           <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-            {model.nutrition.rings.map((ring, index) => <MacroCard key={ring.label} {...ring} color={["#4ade80", "#22d3ee", "#a78bfa", "#fbbf24"][index]} />)}
+            {model.nutrition.rings.map((ring, index) => <MacroCard key={ring.label} {...ring} color={["var(--accent)", "var(--accent-2)", "var(--accent-3)", "var(--accent-warm)"][index]} />)}
           </div>
         ) : (
           <p className="mt-4 text-[16px]" style={{ color: "var(--text-muted)" }}>No food logged today yet.</p>
@@ -338,8 +338,8 @@ function Journey({ model }: { model: ProgressPageModel }) {
           <div className="dante-avatar grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-lg font-bold text-[#04121a]">D</div>
           <div className="flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--text-muted)" }}>Dante</span>
-              <span className="mono rounded-md px-2 py-0.5 text-[10px]" style={{ background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>
+              <span className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--text-muted)" }}>Dante</span>
+              <span className="mono rounded-md px-2 py-0.5 text-xs" style={{ background: "rgba(74,222,128,0.1)", color: "var(--accent)", border: "1px solid rgba(74,222,128,0.25)" }}>
                 Week {journey.currentWeek} snapshot
               </span>
             </div>
@@ -377,12 +377,12 @@ function EmptyState() {
 
 function MiniStat({ label, value, hint, up }: { label: string; value: string; hint: string; up?: boolean }) {
   return (
-    <div className="card-spot rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.5)" }}>
-      <div className="mb-1 text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
-      <div className={`text-xl font-bold ${label === "Adherence" ? "text-[#4ade80]" : ""}`}>
+    <div className="card-spot rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
+      <div className="mb-1 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
+      <div className={`text-xl font-bold ${label === "Adherence" ? "text-[var(--accent)]" : ""}`}>
         <AnimatedNumber value={value} />
       </div>
-      <div className={`mt-0.5 text-[10px] ${up ? "delta-up" : ""}`} style={up ? undefined : { color: "var(--text-dim)" }}>{hint}</div>
+      <div className={`mt-0.5 text-xs ${up ? "delta-up" : ""}`} style={up ? undefined : { color: "var(--text-dim)" }}>{hint}</div>
     </div>
   )
 }
@@ -410,7 +410,7 @@ function MuscleRadar({ muscle }: { muscle: NonNullable<ProgressPageModel["muscle
               return <circle key={group.label} cx={Math.cos(angle) * group.share * r} cy={Math.sin(angle) * group.share * r} r="3" />
             })}
           </g>
-          <g fontSize="9" fill="#7f95ad" fontFamily="JetBrains Mono" textAnchor="middle">
+          <g fontSize="11" fill="#7f95ad" textAnchor="middle">
             {muscle.groups.map((group, index) => {
               const angle = -Math.PI / 2 + (index * 2 * Math.PI) / muscle.groups.length
               return <text key={group.label} x={Math.cos(angle) * 102} y={Math.sin(angle) * 102}>{group.label.toUpperCase()}</text>
@@ -418,14 +418,14 @@ function MuscleRadar({ muscle }: { muscle: NonNullable<ProgressPageModel["muscle
           </g>
         </svg>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
         <div className="flex justify-between rounded-lg border px-2 py-1.5" style={{ borderColor: "var(--border)" }}>
           <span style={{ color: "var(--text-muted)" }}>Most trained</span>
-          <span className="font-semibold text-[#4ade80]">{muscle.mostTrained}</span>
+          <span className="font-semibold text-[var(--accent)]">{muscle.mostTrained}</span>
         </div>
         <div className="flex justify-between rounded-lg border px-2 py-1.5" style={{ borderColor: "var(--border)" }}>
           <span style={{ color: "var(--text-muted)" }}>Least trained</span>
-          <span className="font-semibold text-[#fbbf24]">{muscle.leastTrained}</span>
+          <span className="font-semibold text-[var(--accent-warm)]">{muscle.leastTrained}</span>
         </div>
         <div className="flex justify-between rounded-lg border px-2 py-1.5" style={{ borderColor: "var(--border)" }}>
           <span style={{ color: "var(--text-muted)" }}>Balance</span>
@@ -441,11 +441,11 @@ function MilestoneBadge({ item }: { item: ProgressPageModel["catalog"][number] }
   return (
     <button type="button" data-ms className={`ms-badge flex flex-col items-center text-center ${item.unlocked ? "unlocked" : "locked"}`} onClick={() => setOpen((value) => !value)}>
       <div className="ms-icon mb-2 grid h-14 w-14 place-items-center rounded-2xl" style={{ background: item.unlocked ? "rgba(74,222,128,0.1)" : "rgba(80,100,120,0.1)", border: `1px solid ${item.unlocked ? "rgba(74,222,128,0.3)" : "var(--border)"}` }}>
-        {item.unlocked ? <Award className="h-6 w-6 text-[#4ade80]" /> : <Lock className="h-6 w-6" style={{ color: "var(--text-dim)" }} />}
+        {item.unlocked ? <Award className="h-6 w-6 text-[var(--accent)]" /> : <Lock className="h-6 w-6" style={{ color: "var(--text-dim)" }} />}
       </div>
-      <div className="text-[11px] font-semibold">{item.title}</div>
-      <div className="mono text-[10px]" style={{ color: "var(--text-dim)" }}>{item.unlocked ? item.unlocked.achievedAt.slice(0, 10) : "Locked"}</div>
-      {open ? <p className="mt-2 text-[10px]" style={{ color: "var(--text-muted)" }}>{item.unlocked?.displayData.description ?? item.description}</p> : null}
+      <div className="text-xs font-semibold">{item.title}</div>
+      <div className="mono text-xs" style={{ color: "var(--text-dim)" }}>{item.unlocked ? item.unlocked.achievedAt.slice(0, 10) : "Locked"}</div>
+      {open ? <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.unlocked?.displayData.description ?? item.description}</p> : null}
     </button>
   )
 }
@@ -453,17 +453,17 @@ function MilestoneBadge({ item }: { item: ProgressPageModel["catalog"][number] }
 function CompareCard({ item }: { item: ProgressComparison }) {
   const path = sparkPath(item.series ?? [item.thenValue, item.nowValue])
   return (
-    <article className="card-spot rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.4)" }}>
-      <div className="mb-3 text-[11px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{item.label}</div>
+    <article className="card-spot rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
+      <div className="mb-3 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{item.label}</div>
       <div className="flex items-baseline gap-4">
         <div>
-          <div className="text-[10px] uppercase" style={{ color: "var(--text-dim)" }}>{item.thenLabel}</div>
+          <div className="text-xs uppercase" style={{ color: "var(--text-dim)" }}>{item.thenLabel}</div>
           <div className="text-3xl font-bold" style={{ color: "var(--text-dim)" }}>{item.thenValue}{item.unit ?? ""}</div>
         </div>
-        <span aria-hidden="true" className="text-[#4ade80]">→</span>
+        <span aria-hidden="true" className="text-[var(--accent)]">→</span>
         <div>
-          <div className="text-[10px] uppercase" style={{ color: "var(--text-dim)" }}>{item.nowLabel}</div>
-          <div className="glow-green text-3xl font-bold text-[#4ade80]">{item.nowValue}{item.unit ?? ""}</div>
+          <div className="text-xs uppercase" style={{ color: "var(--text-dim)" }}>{item.nowLabel}</div>
+          <div className="glow-green text-3xl font-bold text-[var(--accent)]">{item.nowValue}{item.unit ?? ""}</div>
         </div>
       </div>
       <svg viewBox="0 0 200 40" className="mt-4 h-10 w-full" preserveAspectRatio="none" aria-hidden="true">
@@ -482,18 +482,18 @@ function MacroCard({ label, consumed, target, unit, color }: { label: string; co
   const pct = target && target > 0 ? Math.min(100, Math.round((consumed / target) * 100)) : 0
   const dash = (pct / 100) * 163
   return (
-    <article className="card-spot flex items-center gap-4 rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.4)" }}>
+    <article className="card-spot flex items-center gap-4 rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
       <div className="relative h-16 w-16 shrink-0">
         <svg viewBox="0 0 60 60" className="h-full w-full" style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
           <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(74,222,128,0.12)" strokeWidth="5" />
           <circle cx="30" cy="30" r="26" fill="none" stroke={color} strokeWidth="5" strokeDasharray={`${dash} 200`} strokeLinecap="round" />
         </svg>
-        <div className="absolute inset-0 grid place-items-center font-mono text-[11px] font-bold" style={{ color }}>{pct}%</div>
+        <div className="absolute inset-0 grid place-items-center font-mono text-xs font-bold" style={{ color }}>{pct}%</div>
       </div>
       <div>
-        <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
+        <div className="text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
         <div className="text-2xl font-bold"><AnimatedNumber value={consumed} /></div>
-        <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{target !== null ? `of ${target} ${unit}` : unit}</div>
+        <div className="text-xs" style={{ color: "var(--text-muted)" }}>{target !== null ? `of ${target} ${unit}` : unit}</div>
       </div>
     </article>
   )
@@ -501,13 +501,13 @@ function MacroCard({ label, consumed, target, unit, color }: { label: string; co
 
 function BodyTile({ label, value, unit, note }: { label: string; value: string; unit?: string; note?: string }) {
   return (
-    <article className="card-spot rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "rgba(10,22,34,0.4)" }}>
-      <div className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-3xl font-bold tracking-tight">{value}</span>
+    <article className="card-spot rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-2)" }}>
+      <div className="mb-2 text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>{label}</div>
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-1">
+        <span className="min-w-0 break-words text-2xl font-bold tracking-tight sm:text-3xl">{value}</span>
         {unit ? <span className="text-sm" style={{ color: "var(--text-muted)" }}>{unit}</span> : null}
       </div>
-      {note ? <div className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>{note}</div> : null}
+      {note ? <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{note}</div> : null}
     </article>
   )
 }

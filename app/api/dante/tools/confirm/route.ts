@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
-import { confirmPendingAction, cancelPendingAction } from "@/lib/dante-core/tools/pending-actions";
+import { confirmPendingAction, cancelPendingAction, modifyPendingAction } from "@/lib/dante-core/tools/pending-actions";
 import { resolveUserTimeZone } from "@/lib/training/load-today-session";
 
 export const runtime = "nodejs";
@@ -18,10 +18,11 @@ export const dynamic = "force-dynamic";
  * of the table's own RLS policies.
  */
 
-const requestSchema = z.object({
-  actionId: z.string().uuid(),
-  intent: z.enum(["confirm", "cancel"]),
-});
+const requestSchema = z.union([
+  z.object({ actionId: z.string().uuid(), intent: z.enum(["confirm", "cancel"]) }),
+  // MF-S1: one edited number → a revalidated replacement proposal (never an execution).
+  z.object({ actionId: z.string().uuid(), intent: z.literal("modify"), value: z.number().finite() }),
+]);
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -56,6 +57,10 @@ export async function POST(request: Request) {
     }
 
     const timezone = await resolveUserTimeZone(supabase, user.id);
+    if (parsed.data.intent === "modify") {
+      const result = await modifyPendingAction(supabase, { supabase, userId: user.id, now: new Date(), timezone, cache: new Map() }, parsed.data.actionId, parsed.data.value);
+      return NextResponse.json(result, { status: result.ok ? 200 : result.status === "not_found" ? 404 : 422 });
+    }
     const result = await confirmPendingAction(
       supabase,
       { supabase, userId: user.id, now: new Date(), timezone, cache: new Map() },

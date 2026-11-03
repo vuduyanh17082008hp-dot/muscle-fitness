@@ -24,10 +24,21 @@ export default async function DashboardLayout({
    * Unauthenticated users are redirected to login by requireUser
    * (and by the session proxy before this layout runs).
    */
-  await requireCompletedOnboarding()
+  const { supabase, userId } = await requireCompletedOnboarding()
+
+  // The Train tab reads "Active" only for a session the athlete really has open.
+  // A failed read just leaves it as "Train" — navigation, never a training go-ahead.
+  const { data: activeSession } = await supabase
+    .from('workout_sessions')
+    .select('id')
+    .eq('user_id', userId)
+    .in('session_state', ['in_progress', 'paused'])
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
   return (
-    <DashboardShell>
+    <DashboardShell activeSessionId={(activeSession as { id: string } | null)?.id ?? null}>
       {children}
     </DashboardShell>
   )

@@ -200,7 +200,7 @@ export function LoginForm({
               setEmail(event.target.value)
             }
             placeholder="you@example.com"
-            className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-white outline-none transition placeholder:text-zinc-600 hover:border-white/20 focus:border-orange-400/70 focus:ring-4 focus:ring-orange-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-white outline-none transition placeholder:text-zinc-600 hover:border-white/20 focus:border-mf-brand/70 focus:ring-4 focus:ring-mf-brand/10 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
 
@@ -215,7 +215,7 @@ export function LoginForm({
 
             <Link
               href="/forgot-password"
-              className="text-xs font-bold text-orange-400 transition hover:text-orange-300"
+              className="text-xs font-bold text-mf-brand transition hover:text-mf-brand-hover"
             >
               Forgot password?
             </Link>
@@ -233,14 +233,14 @@ export function LoginForm({
               setPassword(event.target.value)
             }
             placeholder="Enter your password"
-            className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-white outline-none transition placeholder:text-zinc-600 hover:border-white/20 focus:border-orange-400/70 focus:ring-4 focus:ring-orange-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-white outline-none transition placeholder:text-zinc-600 hover:border-white/20 focus:border-mf-brand/70 focus:ring-4 focus:ring-mf-brand/10 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
 
         <button
           type="submit"
           disabled={disabled || !hydrated}
-          className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-orange-500 px-4 text-sm font-black uppercase tracking-[0.12em] text-black transition hover:bg-orange-400 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-mf-brand px-4 text-sm font-black uppercase tracking-[0.12em] text-mf-brand-ink transition hover:bg-mf-brand-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending === "email" ? (
             <>
@@ -256,7 +256,7 @@ export function LoginForm({
       <div className="my-6 flex items-center gap-3">
         <span className="h-px flex-1 bg-white/10" />
 
-        <span className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">
+        <span className="text-xs font-black uppercase tracking-[0.12em] text-zinc-600">
           or continue with
         </span>
 
@@ -302,7 +302,7 @@ export function LoginForm({
         New to Muscle Fitness?{" "}
         <Link
           href="/register"
-          className="font-black text-orange-400 transition hover:text-orange-300"
+          className="font-black text-mf-brand transition hover:text-mf-brand-hover"
         >
           Create account
         </Link>

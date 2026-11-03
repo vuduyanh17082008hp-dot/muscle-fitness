@@ -89,7 +89,7 @@ export function LoadingScreen({
           <p
             className="
               mt-7 text-xs font-bold
-              uppercase tracking-[0.22em]
+              uppercase tracking-[0.12em]
               text-[var(--color-accent-light)]
             "
           >

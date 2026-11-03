@@ -3,7 +3,9 @@ import { z } from "zod"
 
 import { createClient } from "@/lib/supabase/server"
 import { createRecoveryAdminClient } from "@/lib/supabase/admin"
+import { currentTrainingHold } from "@/lib/dante-core/server/training-hold-guard"
 import { applyErrorMessage, applyWorkoutAdjustment } from "@/lib/recovery/apply-proposal"
+import { isChatProposal } from "@/lib/recovery/adjustment-status"
 import {
   createSupabaseCanonicalCommit,
   createSupabaseMutationStore,
@@ -50,12 +52,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid adjustment confirmation." }, { status: 400 })
   }
 
+  // MF-F2: a chat proposal is applied only through its own Confirm card (apply_workout_adjustment, CAS-claimed) — a
+  // cancelled or superseded one must not stay appliable here by id.
+  const store = createSupabaseProposalStore(admin)
   const result = await applyWorkoutAdjustment({
     actorUserId: user.id,
+    // QA-02: safety is re-validated when the change is applied, not only when it was proposed.
+    trainingHold: await currentTrainingHold(supabase, user.id),
     proposalId: parsed.data.proposalId,
     sessions: createSupabaseSessionWriter(supabase),
     mutations: createSupabaseMutationStore(supabase),
-    proposals: createSupabaseProposalStore(admin),
+    proposals: { ...store, load: async (id, uid) => { const proposal = await store.load(id, uid); return proposal && isChatProposal(proposal) ? null : proposal } },
     commit: createSupabaseCanonicalCommit(admin),
   })
 

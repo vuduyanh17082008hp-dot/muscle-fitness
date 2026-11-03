@@ -629,7 +629,7 @@ export default async function OnboardingPage({
   ======================================================= */
 
   return (
-    <main className="min-h-screen bg-mf-bg px-4 py-10 text-white sm:px-6 lg:px-8">
+    <main data-theme="paper" className="min-h-screen bg-mf-bg px-4 py-10 text-white sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
         {/* =================================================
             EDIT MODE HEADER
@@ -638,7 +638,7 @@ export default async function OnboardingPage({
         {isEditMode && (
           <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-amber-500">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-500">
                 Edit Profile
               </p>
 

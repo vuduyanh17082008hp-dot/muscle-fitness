@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { searchFood, type FoodSearchCategory } from "@/lib/nutrition/food-data"
+import { MIN_QUERY_LENGTH, searchFood, type FoodSearchCategory } from "@/lib/nutrition/food-data"
+import { guardFoodLookup } from "@/lib/nutrition/food-data/lookup-guard"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,6 +22,10 @@ function parseCategory(value: string | null): FoodSearchCategory {
  * User-Agent to the caller.
  */
 export async function GET(request: Request) {
+  // QA-05: signed-in callers only, at a bounded rate — these spend the server's provider quota.
+  const stop = await guardFoodLookup()
+  if (stop) return stop
+
   const url = new URL(request.url)
 
   const query = (url.searchParams.get("q") ?? url.searchParams.get("query") ?? "").trim()
@@ -40,7 +45,15 @@ export async function GET(request: Request) {
     )
   }
 
-  const result = await searchFood(query, category)
+  if (query.length < MIN_QUERY_LENGTH) {
+    return NextResponse.json(
+      { ok: false, status: "invalid_input", error: `Type at least ${MIN_QUERY_LENGTH} characters.` },
+      { status: 400 },
+    )
+  }
+
+  // `request` stays in scope for the whole await, so its abort signal stays live (see H0 WP1 Request.signal note).
+  const result = await searchFood(query, category, { signal: request.signal })
 
   return NextResponse.json({
     ok: true,

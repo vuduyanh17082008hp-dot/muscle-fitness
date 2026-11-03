@@ -88,10 +88,67 @@ export type NormalizedFood = {
 
 export type FoodSearchCategory = "raw" | "packaged" | "any"
 
+/** Shorter text matches almost everything and only spends provider quota (shared by the search box and route). */
+export const MIN_QUERY_LENGTH = 2
+
+/**
+ * What one external provider actually did. "no_match" is only ever claimed
+ * when the provider answered; a timeout or error says nothing about whether
+ * the food exists. "rejected" = the provider refused our request (HTTP 4xx other
+ * than 429) — also not "no such food", and never retried.
+ */
+export type ProviderStatus = "results" | "no_match" | "timeout" | "error" | "rejected" | "unconfigured"
+
+/** Overall outcome of the external providers for one search or barcode lookup. */
+export type FoodSearchStatus = "results" | "no_match" | "provider_timeout" | "provider_error" | "invalid_input"
+
+export type ProviderOutcome<T> = { status: ProviderStatus; value: T }
+
+export function classifyProviderError(error: unknown): "timeout" | "error" | "rejected" {
+  const { name, kind } = (error ?? {}) as { name?: unknown; kind?: unknown }
+  if (kind === "http_4xx") return "rejected"
+  return kind === "timeout" || name === "TimeoutError" || name === "AbortError" ? "timeout" : "error"
+}
+
 export type FoodSearchResult = {
   foods: NormalizedFood[]
   source: FoodSource
   /** True when an external API call could not be made or failed and a fallback was used instead. */
   usedFallback: boolean
   warning?: string
+  /** External-provider outcome; with usedFallback, `foods` are local data, not provider results. */
+  status: FoodSearchStatus
+  providers: Partial<Record<"usda" | "open-food-facts", ProviderStatus>>
+  /** A provider that was tried failed, so `foods` may be missing better matches (even when status is "results"). */
+  partial: boolean
+}
+
+/**
+ * How the search panel reads a /api/nutrition/foods/search answer. A provider that failed OR isn't
+ * configured never searched, so an empty answer is "couldn't search everything", never "no matches".
+ */
+export function readFoodSearchResponse(
+  data: Partial<Pick<FoodSearchResult, "foods" | "warning" | "providers" | "partial">> & { status?: string },
+): { state: "results" | "empty" | "error"; notice: { text: string; degraded: boolean } | null } {
+  const hasFoods = (data.foods?.length ?? 0) > 0
+  // A failed provider already makes the server say partial + "results may be incomplete" / "isn't a confirmed no match".
+  const failed = data.partial === true || data.status === "provider_timeout" || data.status === "provider_error"
+  const unconfigured = Object.entries(data.providers ?? {})
+    .filter(([, status]) => status === "unconfigured")
+    .map(([provider]) => (provider === "usda" ? "USDA" : "Open Food Facts"))
+  const degraded = failed || unconfigured.length > 0
+
+  let text = data.warning ?? ""
+  if (unconfigured.length > 0) {
+    // The server only names providers that failed; one that isn't configured is a gap too.
+    const gap = `${unconfigured.join(" and ")} isn't set up here${
+      failed ? "." : hasFoods ? ", so results may be incomplete." : `, so this isn't a confirmed "no match".`
+    }`
+    text = text ? `${text} ${gap}` : gap
+  }
+
+  return {
+    state: hasFoods ? "results" : degraded ? "error" : "empty",
+    notice: text ? { text, degraded } : null,
+  }
 }

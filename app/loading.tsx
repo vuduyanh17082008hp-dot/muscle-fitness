@@ -6,17 +6,17 @@ export default function RootLoading() {
         aria-live="polite"
         className="w-full max-w-md rounded-[28px] border border-white/10 bg-mf-surface px-8 py-12 text-center shadow-2xl shadow-black"
       >
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-amber-500/20 bg-amber-500/[0.06]">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-mf-brand/20 bg-mf-brand/[0.06]">
           <div className="relative h-10 w-10">
             <div className="absolute inset-0 rounded-full border-2 border-white/10" />
 
-            <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-r-amber-500 border-t-amber-500" />
+            <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-r-mf-brand border-t-mf-brand" />
 
-            <div className="absolute inset-[10px] animate-pulse rounded-full bg-amber-500/30" />
+            <div className="absolute inset-[10px] animate-pulse rounded-full bg-mf-brand/30" />
           </div>
         </div>
 
-        <p className="mt-6 text-xs font-black uppercase tracking-[0.3em] text-amber-500">
+        <p className="mt-6 text-xs font-black uppercase tracking-[0.3em] text-mf-brand">
           Muscle Fitness
         </p>
 
@@ -28,10 +28,17 @@ export default function RootLoading() {
           Preparing your data and interface.
         </p>
 
+        {/* Streamed pages (every auth form but /login) never swap in without JavaScript. */}
+        <noscript>
+          <p className="mt-6 rounded-2xl border border-sky-400/20 bg-sky-500/10 px-4 py-3 text-sm leading-6 text-sky-200">
+            This page needs JavaScript. Enable it in your browser and reload the page.
+          </p>
+        </noscript>
+
         <div className="mx-auto mt-7 flex max-w-xs gap-2">
-          <div className="h-1 flex-1 animate-pulse rounded-full bg-amber-500" />
-          <div className="h-1 flex-1 animate-pulse rounded-full bg-amber-500/50 [animation-delay:150ms]" />
-          <div className="h-1 flex-1 animate-pulse rounded-full bg-amber-500/20 [animation-delay:300ms]" />
+          <div className="h-1 flex-1 animate-pulse rounded-full bg-mf-brand" />
+          <div className="h-1 flex-1 animate-pulse rounded-full bg-mf-brand/50 [animation-delay:150ms]" />
+          <div className="h-1 flex-1 animate-pulse rounded-full bg-mf-brand/20 [animation-delay:300ms]" />
         </div>
 
         <span className="sr-only">

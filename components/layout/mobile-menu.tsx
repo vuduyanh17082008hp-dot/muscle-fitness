@@ -416,7 +416,7 @@ export function MobileMenu({
 
                 uppercase
 
-                tracking-[0.16em]
+                tracking-[0.12em]
 
                 text-(--color-text-muted)
               "

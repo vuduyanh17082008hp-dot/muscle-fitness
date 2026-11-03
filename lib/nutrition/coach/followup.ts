@@ -19,6 +19,9 @@ import type { ActiveMealDraft, DraftItem, MacroTotals } from "./types"
    TYPES + WIRE SCHEMAS (state is client-echoed, so everything is re-validated)
 ========================================================= */
 
+/** Most meal options one list may show / one "option N" may select (multi-meal discovery: "lots of choices" = 8). */
+export const MAX_OPTIONS = 8
+
 export const FOLLOW_UP_INTENTS = [
   "SHOW_INGREDIENTS", "SHOW_MACROS", "SHOW_PORTIONS", "EXPLAIN_RECOMMENDATION",
   "SELECT_PREVIOUS_OPTION", "COMPARE_PREVIOUS_OPTIONS",
@@ -29,7 +32,7 @@ export const FOLLOW_UP_INTENTS = [
 ] as const
 export type NutritionFollowUpIntent = (typeof FOLLOW_UP_INTENTS)[number]
 
-export const MODIFIERS = ["cheaper", "more_protein", "lower_calories", "more_filling", "faster", "tastier"] as const
+export const MODIFIERS = ["cheaper", "more_protein", "lower_calories", "lower_fat", "more_filling", "faster", "tastier"] as const
 export type Modifier = (typeof MODIFIERS)[number]
 
 export type ResponseMode = "READ_ONLY" | "EXPLAIN" | "PROPOSE_MODIFICATION" | "CLARIFY" | "NEW_TOPIC"
@@ -40,7 +43,7 @@ export const referentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("MEAL_DRAFT"), id: idString, name: z.string().max(120) }),
   z.object({ type: z.literal("MEAL_RESULT"), id: idString, name: z.string().max(120) }),
   z.object({ type: z.literal("FOOD"), name: z.string().max(80) }),
-  z.object({ type: z.literal("OPTION_SET"), optionIds: z.array(idString).max(6) }),
+  z.object({ type: z.literal("OPTION_SET"), optionIds: z.array(idString).max(MAX_OPTIONS) }),
   z.object({ type: z.literal("GENERAL_TOPIC"), topic: z.string().max(80) }),
 ])
 export type ConversationReferent = z.infer<typeof referentSchema>
@@ -61,7 +64,7 @@ export const mealResultSchema = z.object({
 export type MealResultState = z.infer<typeof mealResultSchema>
 
 export const pendingChoiceSchema = z.object({
-  options: z.array(z.object({ id: idString, label: z.string().max(120) })).min(1).max(6),
+  options: z.array(z.object({ id: idString, label: z.string().max(120) })).min(1).max(MAX_OPTIONS),
   createdAt: isoString,
   expiresAt: isoString,
 })
@@ -72,7 +75,7 @@ const argsSchema = z.object({
   foodText: z.string().max(40).optional(),
   toText: z.string().max(40).optional(),
   fromText: z.string().max(40).optional(),
-  optionIndex: z.number().int().min(1).max(6).optional(),
+  optionIndex: z.number().int().min(1).max(MAX_OPTIONS).optional(),
   nameText: z.string().max(40).optional(),
   dietary: z.string().max(20).optional(),
   factor: z.number().positive().max(4).optional(),
@@ -112,7 +115,7 @@ export type MealModificationProposal = {
 
 export const followUpStateSchema = z.object({
   context: z.object({ createdAt: isoString, lastActiveAt: isoString, turnCount: z.number().int().min(0).max(100), expiresAt: isoString }),
-  meals: z.array(mealResultSchema).max(5),
+  meals: z.array(mealResultSchema).max(MAX_OPTIONS + 1),
   referent: referentSchema.nullable(),
   previousReferent: referentSchema.nullish(),
   candidateReferents: z.array(referentSchema).max(6),
@@ -120,6 +123,8 @@ export const followUpStateSchema = z.object({
   clarification: clarificationSchema.nullable(),
   pendingProposal: mealModificationProposalSchema.nullable(),
   lastResolved: z.object({ intent: z.enum(FOLLOW_UP_INTENTS), args: argsSchema }).nullish(),
+  /** Recipes (composition keys) every list of the current discovery has shown, so "more options" never repeats one. */
+  shownKeys: z.array(z.string().max(200)).max(48).nullish(),
 })
 export type FollowUpState = z.infer<typeof followUpStateSchema>
 
@@ -139,7 +144,7 @@ export type FollowUpResolution = {
 }
 
 export type StructuredBlock =
-  | { type: "INGREDIENT_LIST"; mealName: string; items: Array<{ name: string; grams: number }> }
+  | { type: "INGREDIENT_LIST"; mealName: string; items: Array<{ name: string; grams: number; basis?: string }> }
   | { type: "MACRO_SUMMARY"; mealName: string; macros: MacroTotals; confidence: string; mealId?: string; calculationId?: string }
   | { type: "OPTION_LIST"; options: Array<{ id: string; label: string; calories: number; protein: number }> }
   | { type: "MEAL_COMPARISON"; rows: Array<{ id: string; label: string; calories: number; protein: number; carbs: number; fat: number }> }
@@ -197,6 +202,8 @@ export type StatePatch = {
   clarification?: ClarificationRequest | null
   pendingProposal?: PendingProposal | null
   lastResolved?: FollowUpState["lastResolved"]
+  /** Replaces the discovery's shown cores (a discovery turn sends the full set; other turns carry it). */
+  shownKeys?: string[]
 }
 
 const referentId = (r: ConversationReferent | null | undefined) => (r && (r.type === "MEAL_DRAFT" || r.type === "MEAL_RESULT") ? r.id : null)
@@ -205,7 +212,7 @@ const referentId = (r: ConversationReferent | null | undefined) => (r && (r.type
 export function nextFollowUpState(prev: FollowUpState | null | undefined, patch: StatePatch, now: Date): FollowUpState | null {
   if (patch.reset) return null
   const base = isFollowUpLive(prev, now) ? prev : null
-  const meals = [...(patch.upsertMeals ?? []), ...(base?.meals ?? [])].filter((meal, index, all) => all.findIndex((o) => o.id === meal.id) === index).slice(0, 4)
+  const meals = [...(patch.upsertMeals ?? []), ...(base?.meals ?? [])].filter((meal, index, all) => all.findIndex((o) => o.id === meal.id) === index).slice(0, MAX_OPTIONS + 1)
   const referent = patch.referent !== undefined ? patch.referent : (base?.referent ?? null)
   const candidates = patch.candidateReferents ?? (patch.referent !== undefined ? [] : (base?.candidateReferents ?? []))
   const presentedOptions = patch.presentedOptions !== undefined ? patch.presentedOptions : (base?.presentedOptions && alive(base.presentedOptions.expiresAt, now) ? base.presentedOptions : null)
@@ -216,7 +223,9 @@ export function nextFollowUpState(prev: FollowUpState | null | undefined, patch:
   const meaningful = meals.length > 0 || referent || candidates.length > 0 || presentedOptions || clarification || pendingProposal
   if (!meaningful) return null
   const fresh = patch.newReferent || !base
+  const shownKeys = (patch.shownKeys ?? base?.shownKeys ?? []).slice(0, 48)
   return {
+    ...(shownKeys.length ? { shownKeys } : {}),
     context: {
       createdAt: fresh ? now.toISOString() : base!.context.createdAt,
       lastActiveAt: now.toISOString(),
@@ -304,9 +313,9 @@ const NOT_A_PORTION_FOOD = /\b(?:should|per|day|week|do|did|can|i|eat|need|have|
 const PORTIONS_ALL = /^(?:portions?|portion sizes?|how much of (?:each|everything)|amounts?|quantities)$/
 const SAUCE = /^(?:what|which) (?:sauce|seasoning|dressing|flavou?ring)(?: (?:is|are) (?:in|with) (?:it|this))?$/
 const WHY = /^(?:why(?: (?:this|that|it))?(?: one| meal| bowl| pick| choice)?|why (?:did you|do you|would you) (?:pick|choose|suggest|recommend|give me) (?:this|that|it)(?: one)?|(?:explain|justify) (?:this|that|it|your (?:pick|choice))|what makes (?:this|it) good)$/
-const ORDINALS: Record<string, number> = { first: 1, "1st": 1, one: 1, second: 2, "2nd": 2, two: 2, third: 3, "3rd": 3, three: 3, fourth: 4, "4th": 4, four: 4 }
-const SELECT_ORD = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with|prefer|let'?s (?:do|go with|take))\s+)?(?:the )?(first|second|third|fourth|1st|2nd|3rd|4th)(?: one| option| meal| choice)?(?: please)?$/
-const SELECT_NUM = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with)\s+)?(?:option|number|no\.?|#|choice) ?([1-4])(?: please)?$|^([1-4])$/
+const ORDINALS: Record<string, number> = { first: 1, "1st": 1, one: 1, second: 2, "2nd": 2, two: 2, third: 3, "3rd": 3, three: 3, fourth: 4, "4th": 4, four: 4, fifth: 5, "5th": 5, five: 5, sixth: 6, "6th": 6, six: 6, seventh: 7, "7th": 7, seven: 7, eighth: 8, "8th": 8, eight: 8 }
+const SELECT_ORD = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with|prefer|let'?s (?:do|go with|take))\s+)?(?:the )?(first|second|third|fourth|fifth|sixth|seventh|eighth|1st|2nd|3rd|4th|5th|6th|7th|8th)(?: one| option| meal| choice)?(?: please)?$/
+const SELECT_NUM = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with)\s+)?(?:option|number|no\.?|#|choice) ?([1-8])(?: please)?$|^([1-8])$/
 const SELECT_NAME = /^(?:(?:i(?:'ll| will)? )?(?:take|want|pick|choose|go with)\s+)?(?:the )?([a-z][a-z &-]{1,24}?) (?:one|option|meal|bowl|plate)$/
 const DEMONSTRATIVE = /^(?:i(?:'ll| will)? (?:take|want|pick|choose|go with) )?(?:that|this|the) one$|^(?:that|this) (?:one|meal|bowl|option)$/
 const COMPARE = /^(?:compare(?: them| these| those| both| the options| the meals)?|which (?:one )?is (?:better|healthier|higher in protein|lighter)|what(?:'s| is) the difference)$/
@@ -318,7 +327,14 @@ const MODIFY: Array<[RegExp, Modifier]> = [
   [/^(?:something |a |an )?(?:more filling|fill(?:ing)?er|more satisfying|bulkier)(?: version| option)?$/, "more_filling"],
   [/^(?:something |a |an )?(?:faster|quicker)(?: version| option)?$/, "faster"],
   [/^(?:something |a |an )?(?:tastier|more flavou?rful|more flavou?r)(?: version| option)?$/, "tastier"],
+  [/^(?:something |a |an )?(?:less fat|lower[- ]fat|low[- ]fat|leaner|lower in fat)(?: version| option| one)?$/, "lower_fat"],
 ]
+
+/**
+ * "make the second one lower in fat" / "can you make option 2 cheaper": a modifier aimed at one option of the list on screen.
+ * The option index resolves against presentedOptions (resolveTarget), never against the model's reordered meal list.
+ */
+const OPTION_MODIFY = /^(?:(?:can|could) you )?(?:make|change|turn) (?:the )?(?:(first|second|third|fourth|fifth|sixth|seventh|eighth|1st|2nd|3rd|4th|5th|6th|7th|8th)(?: one| option| meal)?|(?:option|number|#) ?([1-8])) (?:a bit |slightly )?(.+)$/
 
 const SUBST_INSTEAD = /^(?:(?:can|could|may) (?:i|we) )?(?:use|try|swap in|put|do|have) ([a-z][a-z ]{1,28}?) instead(?: of (?:the )?([a-z][a-z ]{1,28}))?$/
 const SUBST_REPLACE = /^(?:(?:can|could) (?:i|we) )?(?:replace|substitute|swap)(?: the)? ([a-z][a-z ]{1,28}?)(?: (?:with|for|by) ([a-z][a-z ]{1,28}))?$/
@@ -362,6 +378,13 @@ export function classifyFollowUp(t: string): Fast | null {
   if (num) return fast("SELECT_PREVIOUS_OPTION", { optionIndex: Number(num[1] ?? num[2]) })
   if (DEMONSTRATIVE.test(t)) return fast("SELECT_PREVIOUS_OPTION", { demonstrative: true })
   for (const [pattern, modifier] of MODIFY) if (pattern.test(t)) return fast("MODIFY_PREVIOUS_RESULT", { modifier })
+  const aimed = t.match(OPTION_MODIFY)
+  if (aimed) {
+    const tail = aimed[3].replace(/^in /, "").trim()
+    const modifier = MODIFY.find(([pattern]) => pattern.test(tail) || pattern.test(tail.replace(/^lower in /, "lower ")))?.[1]
+    const optionIndex = aimed[1] ? ORDINALS[aimed[1]] : Number(aimed[2])
+    if (modifier && optionIndex) return fast("MODIFY_PREVIOUS_RESULT", { modifier, optionIndex })
+  }
   const dietary = t.match(DIETARY)
   if (dietary) return fast("APPLY_DIETARY_CONSTRAINT", { dietary: dietary[1] })
   const instead = t.match(SUBST_INSTEAD)
@@ -390,7 +413,7 @@ export function classifyFollowUp(t: string): Fast | null {
 
 const NEW_TOPIC_WANT = /^(?:actually|wait|hold on|hmm+|ok(?:ay)?|no|nah)[ ,]+(?:i )?(?:want|feel like|'?d (?:like|rather have)|am craving|crave)\s+(.+)$|^(?:i )?(?:'?d rather (?:have|eat)|feel like|how about|what about|let'?s (?:have|do|try|eat)|can we (?:do|try|have)|i changed my mind[, ]+(?:i )?want)\s+(.+)$/
 const NEW_TOPIC_PHRASE = /\b(?:forget (?:that|it|this)|different meal|something (?:else|different)|change of plans|changed my mind|let'?s do something else|try something (?:else|different|new)|not feeling (?:that|this|it)|something new)\b/
-const NOT_A_FOOD_HINT = /^(?:(?:the |its )?(?:macros?|ingredients?|calories|protein|carbs|fat|nutrition|portions?)\b|cheaper\b|lighter\b|tastier\b|faster\b|quicker\b|healthier\b|spicier\b|sweeter\b|saltier\b|\w+ing\b|to\b|it\b|this\b|that\b|more\b|less\b|some(?:thing)?\b|any(?:thing)?\b|a (?:bit|little|lot)\b|extra\b|fewer\b|the (?:same|original|first|second|third|other)\b|another\b|one\b|lots\b)/
+const NOT_A_FOOD_HINT = /^(?:(?:the |its )?(?:macros?|ingredients?|calories|protein|carbs|fat|nutrition|portions?)\b|cheaper\b|lighter\b|tastier\b|faster\b|quicker\b|healthier\b|spicier\b|sweeter\b|saltier\b|\w+ing\b|to\b|it\b|this\b|that\b|more\b|less\b|some(?:thing)?\b|any(?:thing)?\b|a (?:bit|little|lot)\b|extra\b|fewer\b|the (?:same|original|first|second|third|other)\b|another\b|one\b|lots\b|my\b)/
 
 export type NewTopic = { hint?: string; food?: string }
 
@@ -427,6 +450,12 @@ export function matchMeals(nameText: string, meals: MealResultState[]): MealResu
     const pool = new Set([...words(meal.name), ...meal.items.flatMap((item) => words(getIngredient(item.ingredientId)?.shortName ?? ""))].map(stem))
     return wanted.every((word) => pool.has(word))
   })
+}
+
+/** True when the message names something that tells this meal apart ("the tuna one", "the wrap"): a distinguishing name word. */
+export function mentionsMeal(message: string, meal: MealResultState): boolean {
+  const said = new Set(words(message).map(stem))
+  return words(meal.name).filter((word) => !NAME_STOP.has(word) && !NAME_GENERIC.has(word) && word.length >= 3).map(stem).some((word) => said.has(word))
 }
 
 export type TargetResolution =
@@ -537,7 +566,9 @@ export function resolveTurn(input: TurnInput): TurnResolution {
   }
 
   const meals = knownMeals(live, input.activeDraft)
-  const fastHit = input.legacyHandles ? null : classifyFollowUp(t)
+  // The legacy draft editor only ever edits the ACTIVE draft: a modifier aimed at another option on screen stays here.
+  const classified = classifyFollowUp(t)
+  const fastHit = input.legacyHandles && !classified?.args.optionIndex ? null : classified
 
   // A correction is its own thing even when it begins with "actually".
   if (!(fastHit?.intent === "REVERT_TO_ORIGINAL" || fastHit?.intent === "CORRECT_PREVIOUS_RESOLUTION")) {

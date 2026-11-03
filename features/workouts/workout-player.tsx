@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -14,8 +15,10 @@ import {
 
 import {
   AlertCircle,
+  ArrowLeftRight,
   Check,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   Dumbbell,
   History,
@@ -25,7 +28,6 @@ import {
   RefreshCcw,
   SkipForward,
   TimerReset,
-  Trophy,
 } from "lucide-react";
 
 import {
@@ -34,12 +36,26 @@ import {
   saveWorkoutSetAction,
   skipSessionExerciseAction,
 } from "@/app/dashboard/workouts/actions";
+import { ExerciseAlternativesSheet } from "@/components/training/exercise-alternatives";
+import { findCatalogueExercise } from "@/lib/training/exercise-substitution";
+import { restRemaining } from "@/lib/training/rest-timer";
+import { formatSessionClock } from "@/lib/training/session-time";
+
+import {
+  requiresExplicitLoad,
+  setSaveMessage,
+  suggestSetValues,
+  type SetSuggestion,
+} from "./calculations";
 
 import type {
+  WorkoutAlternativeContext,
   WorkoutPlayerExercise,
   WorkoutPlayerSet,
   WorkoutReplacementOption,
 } from "./types";
+
+type SetField = "weightKg" | "reps" | "rir" | "rpe";
 
 /* =========================================================
    TYPES
@@ -55,6 +71,10 @@ type Props = {
   startedAt:
     string | null;
 
+  /** The athlete's profile time zone — the completed page formats in it too. */
+  timeZone:
+    string;
+
   allowSubstitution:
     boolean;
 
@@ -63,6 +83,9 @@ type Props = {
 
   replacementOptions:
     WorkoutReplacementOption[];
+
+  alternativeContext?:
+    WorkoutAlternativeContext;
 };
 
 /* =========================================================
@@ -129,8 +152,8 @@ function nullableNumber(
    keeps the typed values on screen and in storage; they are re-sent
    on reconnect and on the next load. The receiver is an update by
    set id, so a repeated delivery has one logical effect (at-least-
-   once delivery, effectively-once result). "Set saved." is shown
-   only for a server-confirmed write.
+   once delivery, effectively-once result). Success feedback is shown
+   only for a server-confirmed write, and only for the newest one.
    ponytail: last write wins against the server row; per-set version
    checks if multi-device editing of one session ever matters.
 ========================================================= */
@@ -157,6 +180,49 @@ function writePendingSets(sessionId: string, pending: Record<string, PendingSet>
   }
 }
 
+/* =========================================================
+   DRAFT CARRY (exercise replacement)
+
+   Replacing an exercise refreshes the page, and the player is keyed
+   on its exercise list, so it remounts with server values only. The
+   values the athlete typed but hadn't logged yet (other exercises'
+   sets, edited logged sets, session RPE and notes) ride along in
+   sessionStorage for that one remount and are restored by set id.
+   Never sent anywhere; ignored after two minutes.
+========================================================= */
+
+type DraftCarry = {
+  savedAt: number
+  sets: Record<string, Pick<WorkoutPlayerSet, "weightKg" | "reps" | "rir" | "rpe">>
+  touched: string[]
+  dirty: string[]
+  sessionRpe: number | null
+  sessionNotes: string
+}
+
+const draftKey = (sessionId: string) => `mf:workout-draft:${sessionId}`
+const DRAFT_CARRY_MAX_AGE_MS = 2 * 60 * 1000
+
+function writeDraftCarry(sessionId: string, carry: Omit<DraftCarry, "savedAt">) {
+  try {
+    window.sessionStorage.setItem(draftKey(sessionId), JSON.stringify({ ...carry, savedAt: Date.now() }))
+  } catch {
+    // Storage unavailable: the replacement still works, only unlogged typing is lost (as before).
+  }
+}
+
+function takeDraftCarry(sessionId: string): DraftCarry | null {
+  try {
+    const raw = window.sessionStorage.getItem(draftKey(sessionId))
+    if (!raw) return null
+    window.sessionStorage.removeItem(draftKey(sessionId))
+    const carry = JSON.parse(raw) as DraftCarry
+    return Date.now() - carry.savedAt <= DRAFT_CARRY_MAX_AGE_MS ? carry : null
+  } catch {
+    return null
+  }
+}
+
 const OFFLINE_SET_MESSAGE =
   "You're offline — this set isn't saved yet. It's kept on this device and will be sent when you're back online."
 const OFFLINE_ACTION_MESSAGE = "You're offline — that didn't go through, and nothing was changed. Try again when you're back online."
@@ -169,10 +235,18 @@ export function WorkoutPlayer({
   sessionId,
   sessionName,
   startedAt,
+  timeZone,
   allowSubstitution,
   initialExercises,
   replacementOptions,
+  alternativeContext,
 }: Props) {
+  const [
+    alternativesFor,
+    setAlternativesFor,
+  ] =
+    useState<WorkoutPlayerExercise | null>(null);
+
   const router =
     useRouter();
 
@@ -203,6 +277,9 @@ export function WorkoutPlayer({
     setTimerRunning,
   ] =
     useState(false);
+
+  // When the running rest ends (epoch ms); null while paused or idle.
+  const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
 
   const [
     sessionRpe,
@@ -237,6 +314,23 @@ export function WorkoutPlayer({
     setPendingSetIds,
   ] =
     useState<string[]>([]);
+
+  // Exercise focus: one expanded exercise; the rest collapse to a summary. All typed values live in `exercises`,
+  // so switching never loses them. Opens on the first exercise that still has an unlogged set.
+  const [openExerciseId, setOpenExerciseId] = useState<string | null>(
+    () =>
+      (initialExercises.find((exercise) => !exercise.isSkipped && exercise.sets.some((set) => !set.completed)) ??
+        initialExercises[0])?.id ?? null,
+  );
+  // `${setId}:${field}` the athlete has typed in. A touched field never shows a carry-forward hint again, even when
+  // cleared, so a suggestion can't replace an intentional change.
+  const [touchedFields, setTouchedFields] = useState<ReadonlySet<string>>(() => new Set());
+  // Logged sets edited since their last save: their action becomes "Save" instead of "Undo".
+  const [dirtySetIds, setDirtySetIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [savingSetId, setSavingSetId] = useState<string | null>(null);
+  const finishDialogRef = useRef<HTMLDialogElement>(null);
+  // Only the newest set write may report success, so a slow earlier save can't overwrite newer feedback.
+  const latestSaveRef = useRef(0);
 
   /** Sends every stored pending set once, in order; stops at the first network failure (still offline). */
   const syncPendingSets = useCallback(async () => {
@@ -273,11 +367,26 @@ export function WorkoutPlayer({
 
   // Restore unsynced sets typed earlier on this device (refresh, closed tab), try to send them, and retry on reconnect.
   useEffect(() => {
+    // Typing carried over an exercise replacement first; pending (logged-but-unsynced) sets below win over it.
+    const carry = takeDraftCarry(sessionId);
+    if (carry) {
+      // One-time restore from sessionStorage after hydration, like the pending sets below.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExercises((current) =>
+        current.map((exercise) => ({
+          ...exercise,
+          sets: exercise.sets.map((set) => (carry.sets[set.id] ? { ...set, ...carry.sets[set.id] } : set)),
+        })),
+      );
+      setTouchedFields(new Set(carry.touched));
+      setDirtySetIds(new Set(carry.dirty));
+      setSessionRpe(carry.sessionRpe);
+      setSessionNotes(carry.sessionNotes);
+    }
     const pending = readPendingSets(sessionId);
     const ids = Object.keys(pending);
     if (ids.length > 0) {
       // One-time sync from an external store (localStorage) after hydration; a lazy initial state would mismatch SSR.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExercises((current) =>
         current.map((exercise) => ({
           ...exercise,
@@ -317,30 +426,24 @@ export function WorkoutPlayer({
       return;
     }
 
-    const timer =
-      window.setInterval(
-        () => {
-          setRestSeconds(
-            (
-              current,
-            ) =>
-              Math.max(
-                0,
-                current -
-                  1,
-              ),
-          );
-        },
-        1000,
-      );
+    if (restEndsAt === null) {
+      return;
+    }
+
+    // Timestamp-based: each tick (and the return from a backgrounded tab, where
+    // intervals are throttled) recomputes from the end time, so it never drifts.
+    const tick = () => setRestSeconds(restRemaining(restEndsAt, Date.now()));
+    tick();
+    const timer = window.setInterval(tick, 250);
+    document.addEventListener("visibilitychange", tick);
 
     return () => {
-      window.clearInterval(
-        timer,
-      );
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
     };
   }, [
     timerActive,
+    restEndsAt,
   ]);
 
   /* =======================================================
@@ -458,12 +561,21 @@ export function WorkoutPlayer({
 
     completed:
       boolean,
+
+    // Carry-forward values the athlete accepted by logging (only fills fields left empty).
+    values: Partial<Pick<WorkoutPlayerSet, "weightKg" | "reps">> = {},
   ) {
     const nextSet = {
       ...set,
 
+      ...values,
+
       completed,
     };
+
+    // Rest starts on logging a set, not on saving an edit to an already-logged one.
+    const startsRest =
+      completed && !set.completed;
 
     if (
       completed &&
@@ -483,6 +595,13 @@ export function WorkoutPlayer({
       return;
     }
 
+    // A blank weight on a loaded lift would be stored as zero volume; ask instead of guessing.
+    if (completed && nextSet.weightKg === null && requiresExplicitLoad(exercise.equipment)) {
+      setIsError(true);
+      setMessage(`Enter the weight in kg for ${exercise.name} before logging the set.`);
+      return;
+    }
+
     updateSetLocally(
       exercise.id,
       set.id,
@@ -494,10 +613,16 @@ export function WorkoutPlayer({
       null,
     );
 
+    setSavingSetId(
+      set.id,
+    );
+
     // Durable before the network: a dropped connection can no longer lose what was typed.
     const pending = readPendingSets(sessionId);
     pending[nextSet.id] = { exerciseId: exercise.id, weightKg: nextSet.weightKg, reps: nextSet.reps, rir: nextSet.rir, rpe: nextSet.rpe, completed: nextSet.completed };
     writePendingSets(sessionId, pending);
+
+    const saveToken = ++latestSaveRef.current;
 
     startTransition(
       async () => {
@@ -532,6 +657,7 @@ export function WorkoutPlayer({
             );
         } catch {
           // Network failure: keep the values on screen and in the pending store; they sync on reconnect.
+          setSavingSetId(null);
           setPendingSetIds(Object.keys(readPendingSets(sessionId)));
           setIsError(true);
           setMessage(OFFLINE_SET_MESSAGE);
@@ -542,6 +668,7 @@ export function WorkoutPlayer({
         delete stillPending[nextSet.id];
         writePendingSets(sessionId, stillPending);
         setPendingSetIds(Object.keys(stillPending));
+        setSavingSetId(null);
 
         if (
           !result.success
@@ -564,24 +691,34 @@ export function WorkoutPlayer({
           return;
         }
 
+        setDirtySetIds((current) => {
+          const next = new Set(current);
+          next.delete(nextSet.id);
+          return next;
+        });
+
         if (
-          completed
+          startsRest
         ) {
           setRestSeconds(
             exercise.restSeconds,
           );
+
+          setRestEndsAt(Date.now() + exercise.restSeconds * 1000);
 
           setTimerRunning(
             true,
           );
         }
 
+        if (saveToken !== latestSaveRef.current) return;
+
         setIsError(
           false,
         );
 
         setMessage(
-          "Set saved.",
+          setSaveMessage(set.completed, nextSet.completed),
         );
       },
     );
@@ -684,24 +821,22 @@ export function WorkoutPlayer({
      REPLACE
   ======================================================= */
 
-  function replaceExercise(
+  async function replaceExercise(
     exercise:
       WorkoutPlayerExercise,
 
     replacementExerciseId:
       string,
-  ) {
+  ): Promise<{ success: boolean; message: string }> {
     if (
       !replacementExerciseId ||
       replacementExerciseId ===
         exercise.exerciseId
     ) {
-      return;
+      return { success: false, message: "That's the exercise you already have." };
     }
 
-    startTransition(
-      async () => {
-        const result =
+    const result =
           await replaceSessionExerciseAction(
             {
               sessionId,
@@ -724,7 +859,7 @@ export function WorkoutPlayer({
             result.message,
           );
 
-          return;
+          return { success: false, message: result.message };
         }
 
         setIsError(
@@ -736,9 +871,25 @@ export function WorkoutPlayer({
             "Exercise replaced.",
         );
 
+        // The refresh remounts the player: keep what was typed in the other exercises (the replaced one starts fresh).
+        const editedSetIds = new Set([...touchedFields].map((key) => key.split(":")[0]));
+        writeDraftCarry(sessionId, {
+          sets: Object.fromEntries(
+            exercises
+              .filter((other) => other.id !== exercise.id)
+              .flatMap((other) => other.sets)
+              .filter((set) => editedSetIds.has(set.id))
+              .map((set) => [set.id, { weightKg: set.weightKg, reps: set.reps, rir: set.rir, rpe: set.rpe }]),
+          ),
+          touched: [...touchedFields].filter((key) => !exercise.sets.some((set) => key.startsWith(`${set.id}:`))),
+          dirty: [...dirtySetIds].filter((id) => !exercise.sets.some((set) => set.id === id)),
+          sessionRpe,
+          sessionNotes,
+        });
+
         router.refresh();
-      },
-    );
+
+        return { success: true, message: result.message ?? "Exercise replaced." };
   }
 
   /* =======================================================
@@ -784,685 +935,456 @@ export function WorkoutPlayer({
   }
 
   /* =======================================================
+     EDIT / FOCUS / FINISH CONFIRMATION
+  ======================================================= */
+
+  function editSet(
+    exercise: WorkoutPlayerExercise,
+    set: WorkoutPlayerSet,
+    field: SetField,
+    value: number | null,
+  ) {
+    setTouchedFields((current) => new Set(current).add(`${set.id}:${field}`));
+    if (set.completed) setDirtySetIds((current) => new Set(current).add(set.id));
+    updateSetLocally(exercise.id, set.id, (current) => ({ ...current, [field]: value }));
+  }
+
+  function openExercise(exerciseId: string | null) {
+    setOpenExerciseId(exerciseId);
+    if (!exerciseId) return;
+    // After the collapse/expand re-layout; scroll-mt keeps the card below the sticky header and timer.
+    window.requestAnimationFrame(() =>
+      document.getElementById(`exercise-${exerciseId}`)?.scrollIntoView({ block: "start" }),
+    );
+  }
+
+  /** Fewer logged than planned sets → ask first. Unlogged sets are never marked complete either way. */
+  function requestFinish() {
+    if (progress.completed < progress.total) finishDialogRef.current?.showModal();
+    else finishWorkout();
+  }
+
+  const restStatus =
+    timerActive
+      ? "Resting"
+      : timerRunning
+        ? "Rest done — next set"
+        : restSeconds > 0
+          ? "Paused"
+          : "Log a set to start";
+
+  // Success notes clear themselves so the sticky area shrinks back; errors stay until the next action.
+  useEffect(() => {
+    if (!message || isError) return;
+    const timeout = window.setTimeout(() => setMessage(null), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [message, isError]);
+
+  /* =======================================================
      UI
   ======================================================= */
 
   return (
-    <div className="space-y-6 pb-52 lg:pb-32">
+    <div className="mx-auto max-w-3xl space-y-2 pb-40 sm:space-y-4 lg:pb-28">
       {/* ===================================================
           HEADER
       =================================================== */}
 
-      <header className="rounded-3xl border border-white/10 bg-linear-to-br from-[#b58a52]/15 via-zinc-950 to-black p-5 shadow-2xl shadow-black/40 sm:p-7">
-        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-[#d7b47f]">
-              <Dumbbell className="size-4" />
+      <header className="rounded-2xl border-2 border-mf-glass-text bg-mf-surface px-4 py-3 sm:p-5">
+        <div className="flex flex-wrap items-center gap-x-2 text-xs font-bold uppercase tracking-[0.12em] text-amber-400">
+          <Dumbbell aria-hidden="true" className="size-4" />
+          <span><span className="max-sm:hidden">Workout </span>in progress</span>
+          <span className="whitespace-nowrap font-semibold normal-case tracking-normal text-mf-text-muted">
+            · Started{" "}
+            {formatSessionClock(startedAt, timeZone) ?? "now"}
+          </span>
+        </div>
 
-              Workout in progress
-            </div>
+        <h1 className="mt-0.5 font-heading text-2xl font-black tracking-tight text-white sm:mt-1 sm:text-4xl">
+          {sessionName}
+        </h1>
 
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
-              {
-                sessionName
-              }
-            </h1>
-
-            <p className="mt-2 text-sm text-zinc-500">
-              Started{" "}
-
-              {startedAt
-                ? new Date(
-                    startedAt,
-                  ).toLocaleTimeString(
-                    [],
-                    {
-                      hour:
-                        "2-digit",
-
-                      minute:
-                        "2-digit",
-                    },
-                  )
-                : "now"}
-            </p>
+        <div className="mt-2 flex items-center gap-3 sm:mt-3">
+          <div
+            role="progressbar"
+            aria-label="Sets logged"
+            aria-valuemin={0}
+            aria-valuemax={progress.total}
+            aria-valuenow={progress.completed}
+            className="h-3 flex-1 overflow-hidden rounded-full border border-mf-glass-text bg-mf-glass-bg"
+          >
+            <div
+              className="h-full bg-mf-glass-brand transition-all duration-300"
+              style={{ width: `${progress.percent}%` }}
+            />
           </div>
 
-          <div className="min-w-64 rounded-2xl border border-white/10 bg-black/30 p-4">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-semibold text-zinc-400">
-                Session progress
-              </span>
-
-              <span className="font-black text-white">
-                {
-                  progress.completed
-                }
-                /
-                {
-                  progress.total
-                }
-              </span>
-            </div>
-
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
-              <div
-                className="h-full rounded-full bg-[#b58a52] transition-all duration-300"
-                style={{
-                  width:
-                    `${progress.percent}%`,
-                }}
-              />
-            </div>
-
-            <p className="mt-2 text-right text-xs font-bold text-[#d7b47f]">
-              {
-                progress.percent
-              }
-              %
-            </p>
-          </div>
+          <span className="text-sm font-black tabular-nums text-white">
+            {`${progress.completed}/${progress.total}`}
+          </span>
         </div>
       </header>
 
       {/* ===================================================
-          TIMER
+          REST TIMER + FEEDBACK — sticky below the mobile shell
+          header (sticky top-0, h-16, z-30) so it never slides
+          under it; top-4 on desktop where that header is hidden.
       =================================================== */}
 
-      <section className="sticky top-3 z-20 rounded-2xl border border-white/10 bg-black/90 p-3 shadow-2xl shadow-black backdrop-blur-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-[#b58a52]/10 p-2.5 text-[#d7b47f]">
-              <Clock3 className="size-5" />
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-600">
-                Rest timer
-              </p>
-
-              <p className="text-2xl font-black tabular-nums text-white">
-                {
-                  formatTimer(
-                    restSeconds,
-                  )
-                }
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                setTimerRunning(
-                  (
-                    current,
-                  ) =>
-                    restSeconds >
-                    0
-                      ? !current
-                      : false,
-                )
-              }
-              disabled={
-                restSeconds <=
-                0
-              }
-              aria-label={
-                timerActive
-                  ? "Pause rest timer"
-                  : "Start rest timer"
-              }
-              className="rounded-xl border border-white/10 p-3 text-zinc-300 transition hover:bg-white/5 disabled:opacity-30"
-            >
-              {timerActive ? (
-                <Pause className="size-5" />
-              ) : (
-                <Play className="size-5" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setRestSeconds(
-                  0,
-                );
-
-                setTimerRunning(
-                  false,
-                );
-              }}
-              aria-label="Reset rest timer"
-              className="rounded-xl border border-white/10 p-3 text-zinc-300 transition hover:bg-white/5"
-            >
-              <TimerReset className="size-5" />
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ===================================================
-          MESSAGE
-      =================================================== */}
-
-      {pendingSetIds.length > 0 ? (
-        <p className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-sm font-semibold text-amber-200">
-          {pendingSetIds.length === 1 ? "1 set" : `${pendingSetIds.length} sets`} not synced yet — kept on this device.
-        </p>
-      ) : null}
-
-      {message ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className={`flex items-center gap-3 rounded-2xl border p-4 ${
-            isError
-              ? "border-red-400/20 bg-red-400/10 text-red-200"
-              : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
-          }`}
+      <div className="sticky top-[4.5rem] z-20 space-y-2 lg:top-4">
+        <section
+          aria-label="Rest timer"
+          className="flex items-center gap-2 rounded-2xl border-2 border-mf-glass-text bg-mf-surface-elevated/95 px-3 py-1.5 shadow-[var(--shadow-card)] backdrop-blur-xl"
         >
-          {isError ? (
-            <AlertCircle className="size-5 shrink-0" />
-          ) : (
-            <CheckCircle2 className="size-5 shrink-0" />
-          )}
+          <Clock3 aria-hidden="true" className={`size-5 shrink-0 max-sm:hidden ${timerActive ? "text-amber-400" : "text-mf-text-muted"}`} />
 
-          <p className="text-sm font-semibold">
-            {
-              message
-            }
+          {/* One line: label, time and status side by side, so the timer costs one row of height on a phone. */}
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-mf-text-muted">Rest</span>
+              <span className="font-heading text-2xl font-black leading-none tabular-nums text-white sm:text-3xl">
+                {formatTimer(restSeconds)}
+              </span>
+              {/* Idle hint ("Log a set to start") wraps to two lines on a 320px phone: kept for screen readers only there. */}
+              <span aria-live="polite" className={`text-xs font-semibold text-mf-text-muted ${restSeconds === 0 && !timerActive ? "max-sm:sr-only" : ""}`}>
+                {restStatus}
+              </span>
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (restSeconds <= 0) return;
+              if (timerActive) {
+                // Pause keeps what is left; resume restarts the clock from it.
+                setRestEndsAt(null);
+                setTimerRunning(false);
+              } else {
+                setRestEndsAt(Date.now() + restSeconds * 1000);
+                setTimerRunning(true);
+              }
+            }}
+            disabled={restSeconds <= 0}
+            aria-label={timerActive ? "Pause rest timer" : "Start rest timer"}
+            className="grid size-11 shrink-0 place-items-center rounded-md border border-mf-glass-border-strong text-zinc-200 transition hover:bg-white/5 disabled:opacity-30"
+          >
+            {timerActive ? <Pause className="size-5" /> : <Play className="size-5" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setRestSeconds((current) => current + 30);
+              if (timerActive && restEndsAt !== null) setRestEndsAt(restEndsAt + 30_000);
+            }}
+            aria-label="Add 30 seconds of rest"
+            className="grid h-11 shrink-0 place-items-center rounded-md border border-mf-glass-border-strong px-2 text-sm font-bold tabular-nums text-zinc-200 transition hover:bg-white/5"
+          >
+            +30s
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setRestSeconds(0);
+              setRestEndsAt(null);
+              setTimerRunning(false);
+            }}
+            aria-label="Reset rest timer"
+            className="grid size-11 shrink-0 place-items-center rounded-md border border-mf-glass-border-strong text-zinc-200 transition hover:bg-white/5"
+          >
+            <TimerReset className="size-5" />
+          </button>
+        </section>
+
+        {pendingSetIds.length > 0 ? (
+          <p className="rounded-xl border border-amber-400/20 bg-amber-950/90 px-3 py-2 text-sm font-semibold text-amber-200">
+            {pendingSetIds.length === 1 ? "1 set" : `${pendingSetIds.length} sets`} not synced yet — kept on this device.
           </p>
-        </div>
-      ) : null}
+        ) : null}
+
+        {message ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`flex items-center gap-2 rounded-xl border px-3 py-2 backdrop-blur-xl ${
+              isError
+                ? "border-red-400/25 bg-red-950/90 text-red-200"
+                : "border-emerald-400/25 bg-emerald-950/90 text-emerald-200"
+            }`}
+          >
+            {isError ? <AlertCircle className="size-4 shrink-0" /> : <CheckCircle2 className="size-4 shrink-0" />}
+            <p className="text-sm font-semibold">{message}</p>
+          </div>
+        ) : null}
+      </div>
 
       {/* ===================================================
-          EXERCISES
+          EXERCISES — one expanded, the rest summarised
       =================================================== */}
 
-      {exercises.map(
-        (
-          exercise,
-          exerciseIndex,
-        ) => {
-          const previousSets =
-            exercise.previous
-              ?.sets ??
-            [];
+      {exercises.map((exercise, exerciseIndex) => {
+        const isOpen = exercise.id === openExerciseId;
+        const loggedSets = exercise.sets.filter((set) => set.completed).length;
+        const allLogged = exercise.sets.length > 0 && loggedSets === exercise.sets.length;
+        const showRpe = exercise.targetRpe !== null || exercise.sets.some((set) => set.rpe !== null);
+        // kg gets the most room ("102.5" at 16px must fit at 320px); RIR/RPE are one or two characters.
+        const columns = showRpe
+          ? "grid-cols-[1.25rem_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_3.25rem]"
+          : "grid-cols-[1.25rem_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_3.25rem]";
+        const nextExercise = [...exercises.slice(exerciseIndex + 1), ...exercises.slice(0, exerciseIndex)].find(
+          (item) => !item.isSkipped && item.sets.some((set) => !set.completed),
+        );
+        const panelId = `exercise-panel-${exercise.id}`;
 
-          return (
-            <section
-              key={
-                exercise.id
-              }
-              className={`overflow-hidden rounded-3xl border bg-zinc-950/80 shadow-xl shadow-black/20 ${
-                exercise.isSkipped
-                  ? "border-zinc-800 opacity-60"
-                  : "border-white/10"
-              }`}
-            >
-              <div className="border-b border-white/10 p-5 sm:p-6">
-                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#b58a52]">
-                      Exercise{" "}
-                      {
-                        exerciseIndex +
-                        1
-                      }
-                    </p>
+        return (
+          <section
+            key={exercise.id}
+            id={`exercise-${exercise.id}`}
+            className={`scroll-mt-40 overflow-hidden rounded-2xl bg-mf-surface ${
+              isOpen ? "border-2 border-mf-glass-text" : "border border-mf-glass-border"
+            } ${exercise.isSkipped ? "opacity-70" : ""}`}
+          >
+            <h2>
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls={panelId}
+                onClick={() => openExercise(isOpen ? null : exercise.id)}
+                className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`grid size-8 shrink-0 place-items-center rounded-full text-sm font-black ${
+                    allLogged
+                      ? "bg-emerald-400/15 text-emerald-300"
+                      : isOpen
+                        ? "bg-mf-glass-text text-mf-glass-bg"
+                        : "bg-white/5 text-mf-text-muted"
+                  }`}
+                >
+                  {allLogged ? <Check className="size-4" /> : exerciseIndex + 1}
+                </span>
 
-                    <h2 className="mt-2 text-2xl font-black text-white">
-                      {
-                        exercise.name
-                      }
-                    </h2>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-heading text-lg font-black uppercase leading-tight text-white sm:text-xl">{exercise.name}</span>
+                  <span className="block text-xs text-mf-text-muted">
+                    {exercise.isSkipped
+                      ? "Skipped"
+                      : `${loggedSets}/${exercise.sets.length} sets · ${exercise.repMin}–${exercise.repMax} reps · RIR ${exercise.targetRir ?? 2} · Rest ${exercise.restSeconds}s`}
+                  </span>
+                </span>
 
-                    <p className="mt-2 text-sm text-zinc-500">
-                      {
-                        exercise.targetSets
-                      }{" "}
-                      sets •{" "}
-                      {
-                        exercise.repMin
-                      }
-                      –
-                      {
-                        exercise.repMax
-                      }{" "}
-                      reps • RIR{" "}
-                      {
-                        exercise.targetRir ??
-                        2
-                      }{" "}
-                      • Rest{" "}
-                      {
-                        exercise.restSeconds
-                      }
-                      s
-                    </p>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`size-5 shrink-0 text-mf-text-muted transition-transform ${isOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+            </h2>
 
-                    {exercise.notes ? (
-                      <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">
-                        {
-                          exercise.notes
-                        }
+            {isOpen ? (
+              <div id={panelId} className="border-t border-white/10 px-2 pb-3 pt-2 sm:px-4">
+                {!exercise.isSkipped ? (
+                  <>
+                    <div
+                      aria-hidden="true"
+                      className={`grid ${columns} gap-1.5 px-1 pb-1 text-xs font-bold uppercase tracking-[0.08em] text-mf-text-muted`}
+                    >
+                      <span className="text-center">Set</span>
+                      <span className="text-center">kg</span>
+                      <span className="text-center">Reps</span>
+                      <span className="text-center">RIR</span>
+                      {showRpe ? <span className="text-center">RPE</span> : null}
+                      <span />
+                    </div>
+
+                    <ol className="space-y-1.5">
+                      {exercise.sets.map((set, setIndex) => {
+                        const suggestion = set.completed ? null : suggestSetValues(exercise, setIndex);
+                        const hint = (field: "weightKg" | "reps") =>
+                          set[field] === null && !touchedFields.has(`${set.id}:${field}`)
+                            ? (suggestion?.[field] ?? null)
+                            : null;
+                        const weightHint = hint("weightKg");
+                        const repsHint = hint("reps");
+                        const hintId = weightHint !== null || repsHint !== null ? `hint-${set.id}` : undefined;
+                        const isDirty = dirtySetIds.has(set.id);
+                        const isSaving = savingSetId === set.id;
+                        const label = `set ${set.setNumber} of ${exercise.name}`;
+                        const field = (name: SetField, text: string, step: number, placeholder: number | null) => (
+                          <SetInput
+                            label={`Set ${set.setNumber} ${text}`}
+                            value={set[name]}
+                            step={step}
+                            inputMode={name === "reps" ? "numeric" : "decimal"}
+                            placeholder={placeholder}
+                            describedBy={hintId}
+                            onChange={(value) => editSet(exercise, set, name, value)}
+                          />
+                        );
+
+                        return (
+                          <li key={set.id}>
+                            <div
+                              className={`grid ${columns} items-center gap-1.5 rounded-md border p-1 ${
+                                set.completed
+                                  ? "border-mf-glass-text bg-mf-glass-bg"
+                                  : "border-mf-glass-border bg-mf-glass-surface"
+                              }`}
+                            >
+                              {set.completed ? (
+                                <span
+                                  title="Logged"
+                                  className="mx-auto grid size-6 place-items-center rounded-sm bg-mf-glass-text text-mf-glass-bg"
+                                >
+                                  <Check aria-hidden="true" className="size-4" />
+                                  <span className="sr-only">Set {set.setNumber} logged</span>
+                                </span>
+                              ) : (
+                                <span className="text-center font-heading text-lg font-black tabular-nums text-white">{set.setNumber}</span>
+                              )}
+                              {field("weightKg", "weight (kg)", 0.5, weightHint)}
+                              {field("reps", "reps", 1, repsHint)}
+                              {field("rir", "RIR", 0.5, null)}
+                              {showRpe ? field("rpe", "RPE", 0.5, null) : null}
+
+                              <button
+                                type="button"
+                                disabled={isPending}
+                                onClick={() =>
+                                  set.completed && !isDirty
+                                    ? saveSet(exercise, set, false)
+                                    : saveSet(exercise, set, true, {
+                                        weightKg: set.weightKg ?? weightHint,
+                                        reps: set.reps ?? repsHint,
+                                      })
+                                }
+                                aria-label={`${set.completed ? (isDirty ? "Save changes to" : "Undo") : "Log"} ${label}`}
+                                className={`flex h-12 min-w-0 flex-col items-center justify-center rounded-md text-xs font-black uppercase tracking-wide transition disabled:opacity-50 ${
+                                  set.completed && !isDirty
+                                    ? "border border-mf-glass-border-strong bg-mf-glass-surface text-mf-glass-text-secondary"
+                                    : set.completed
+                                      ? "border-2 border-amber-400 text-amber-300"
+                                      : "border-2 border-mf-glass-text bg-mf-glass-brand text-mf-glass-brand-ink hover:bg-mf-glass-brand-hover"
+                                }`}
+                              >
+                                {isSaving ? (
+                                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                                ) : set.completed && !isDirty ? (
+                                  <>
+                                    <Check aria-hidden="true" className="size-4" />
+                                    Undo
+                                  </>
+                                ) : set.completed ? (
+                                  "Save"
+                                ) : (
+                                  "Log"
+                                )}
+                              </button>
+                            </div>
+
+                            {hintId && suggestion ? (
+                              <p id={hintId} className="px-2 pt-0.5 text-xs text-mf-text-muted">
+                                {suggestionLabel(suggestion)} — not logged yet
+                              </p>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ol>
+
+                    {/* Below the rows so the first input stays near the top; the hints above already carry these numbers. */}
+                    {exercise.previous ? (
+                      <p className="flex items-start gap-2 px-2 pt-2 text-xs text-mf-text-muted">
+                        <History aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+                        <span suppressHydrationWarning>
+                          Last time
+                          {exercise.previous.performed_at
+                            ? ` (${new Date(exercise.previous.performed_at).toLocaleDateString()})`
+                            : ""}
+                          :{" "}
+                          {exercise.previous.sets
+                            .map((set) =>
+                              `${set.weightKg === null ? "" : `${set.weightKg} kg × `}${set.reps ?? "–"}${set.rir !== null ? ` @ ${set.rir} RIR` : ""}`,
+                            )
+                            .join(" · ")}
+                        </span>
                       </p>
                     ) : null}
-                  </div>
 
+                    {exercise.notes ? (
+                      <p className="px-2 pt-2 text-sm leading-6 text-mf-text-muted">{exercise.notes}</p>
+                    ) : null}
+
+                    {allLogged && nextExercise ? (
+                      <button
+                        type="button"
+                        onClick={() => openExercise(nextExercise.id)}
+                        className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl border border-amber-400/40 px-4 text-sm font-bold text-amber-300 transition hover:bg-amber-400/10"
+                      >
+                        Next: {nextExercise.name}
+                      </button>
+                    ) : null}
+                  </>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap items-center gap-2 px-1">
                   <button
                     type="button"
-                    onClick={() =>
-                      skipExercise(
-                        exercise,
-                      )
-                    }
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-bold text-zinc-400 transition hover:bg-white/5"
+                    onClick={() => skipExercise(exercise)}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-bold text-zinc-300 transition hover:bg-white/5"
                   >
-                    {exercise.isSkipped ? (
-                      <RefreshCcw className="size-4" />
-                    ) : (
-                      <SkipForward className="size-4" />
-                    )}
-
-                    {exercise.isSkipped
-                      ? "Restore"
-                      : "Skip"}
+                    {exercise.isSkipped ? <RefreshCcw aria-hidden="true" className="size-4" /> : <SkipForward aria-hidden="true" className="size-4" />}
+                    {exercise.isSkipped ? "Restore" : "Skip"}
                   </button>
-                </div>
 
-                {allowSubstitution ? (
-                  <label className="mt-5 block max-w-xl space-y-2">
-                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-600">
-                      Replace exercise
-                    </span>
-
-                    <select
-                      defaultValue=""
-                      disabled={
-                        isPending
-                      }
-                      onChange={
-                        (
-                          event,
-                        ) => {
-                          replaceExercise(
-                            exercise,
-                            event
-                              .target
-                              .value,
-                          );
-
-                          event.target.value =
-                            "";
-                        }
-                      }
-                      className="h-11 w-full rounded-xl border border-white/10 bg-black/40 px-3 text-sm text-zinc-300 outline-none focus:border-[#b58a52]/70"
+                  {findCatalogueExercise({ slug: exercise.slug, name: exercise.name }) ? (
+                    <button
+                      type="button"
+                      onClick={() => setAlternativesFor(exercise)}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-bold text-zinc-300 transition hover:bg-white/5"
                     >
-                      <option value="">
-                        Choose replacement...
-                      </option>
-
-                      {replacementOptions
-                        .filter(
-                          (
-                            option,
-                          ) =>
-                            option.id !==
-                              exercise.exerciseId &&
-                            option.primaryMuscle ===
-                              exercise.primaryMuscle,
-                        )
-                        .map(
-                          (
-                            option,
-                          ) => (
-                            <option
-                              key={
-                                option.id
-                              }
-                              value={
-                                option.id
-                              }
-                            >
-                              {
-                                option.name
-                              }{" "}
-                              —{" "}
-                              {
-                                option.equipment
-                              }
-                            </option>
-                          ),
-                        )}
-                    </select>
-                  </label>
-                ) : null}
-              </div>
-
-              {!exercise.isSkipped ? (
-                <div className="p-4 sm:p-6">
-                  {exercise.previous ? (
-                    <div className="mb-5 rounded-2xl border border-[#b58a52]/15 bg-[#b58a52]/5 p-4">
-                      <div className="flex items-center gap-2 text-sm font-black text-[#d7b47f]">
-                        <History className="size-4" />
-
-                        Previous performance
-                      </div>
-
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {new Date(
-                          exercise.previous
-                            .performed_at,
-                        ).toLocaleDateString()}
-                      </p>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {previousSets.map(
-                          (
-                            set,
-                          ) => (
-                            <span
-                              key={
-                                set.setNumber
-                              }
-                              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs font-semibold text-zinc-300"
-                            >
-                              Set{" "}
-                              {
-                                set.setNumber
-                              }
-                              :{" "}
-                              {
-                                set.weightKg ??
-                                0
-                              }
-                              kg ×{" "}
-                              {
-                                set.reps ??
-                                0
-                              }
-
-                              {set.rir !==
-                              null
-                                ? ` @ ${set.rir} RIR`
-                                : ""}
-                            </span>
-                          ),
-                        )}
-                      </div>
-                    </div>
+                      <ArrowLeftRight aria-hidden="true" className="size-4" />
+                      Find alternative
+                    </button>
                   ) : null}
-
-                  <div className="hidden grid-cols-[60px_1fr_1fr_1fr_1fr_52px] gap-3 px-3 pb-2 text-xs font-bold uppercase tracking-[0.14em] text-zinc-600 sm:grid">
-                    <span>
-                      Set
-                    </span>
-
-                    <span>
-                      Weight
-                    </span>
-
-                    <span>
-                      Reps
-                    </span>
-
-                    <span>
-                      RIR
-                    </span>
-
-                    <span>
-                      RPE
-                    </span>
-
-                    <span />
-                  </div>
-
-                  <div className="space-y-3">
-                    {exercise.sets.map(
-                      (
-                        set,
-                      ) => (
-                        <div
-                          key={
-                            set.id
-                          }
-                          className={`grid gap-3 rounded-2xl border p-3 sm:grid-cols-[60px_1fr_1fr_1fr_1fr_52px] sm:items-center ${
-                            set.completed
-                              ? "border-emerald-400/20 bg-emerald-400/5"
-                              : "border-white/10 bg-black/30"
-                          }`}
-                        >
-                          <div className="flex h-11 items-center justify-center rounded-xl bg-white/5 font-black text-white">
-                            {
-                              set.setNumber
-                            }
-                          </div>
-
-                          <SetInput
-                            label="Weight kg"
-                            value={
-                              set.weightKg
-                            }
-                            step={
-                              0.5
-                            }
-                            onChange={
-                              (
-                                value,
-                              ) =>
-                                updateSetLocally(
-                                  exercise.id,
-                                  set.id,
-                                  (
-                                    current,
-                                  ) => ({
-                                    ...current,
-
-                                    weightKg:
-                                      value,
-                                  }),
-                                )
-                            }
-                          />
-
-                          <SetInput
-                            label="Reps"
-                            value={
-                              set.reps
-                            }
-                            step={
-                              1
-                            }
-                            onChange={
-                              (
-                                value,
-                              ) =>
-                                updateSetLocally(
-                                  exercise.id,
-                                  set.id,
-                                  (
-                                    current,
-                                  ) => ({
-                                    ...current,
-
-                                    reps:
-                                      value,
-                                  }),
-                                )
-                            }
-                          />
-
-                          <SetInput
-                            label="RIR"
-                            value={
-                              set.rir
-                            }
-                            step={
-                              0.5
-                            }
-                            onChange={
-                              (
-                                value,
-                              ) =>
-                                updateSetLocally(
-                                  exercise.id,
-                                  set.id,
-                                  (
-                                    current,
-                                  ) => ({
-                                    ...current,
-
-                                    rir:
-                                      value,
-                                  }),
-                                )
-                            }
-                          />
-
-                          <SetInput
-                            label="RPE"
-                            value={
-                              set.rpe
-                            }
-                            step={
-                              0.5
-                            }
-                            onChange={
-                              (
-                                value,
-                              ) =>
-                                updateSetLocally(
-                                  exercise.id,
-                                  set.id,
-                                  (
-                                    current,
-                                  ) => ({
-                                    ...current,
-
-                                    rpe:
-                                      value,
-                                  }),
-                                )
-                            }
-                          />
-
-                          <button
-                            type="button"
-                            disabled={
-                              isPending
-                            }
-                            onClick={() =>
-                              saveSet(
-                                exercise,
-                                set,
-                                !set.completed,
-                              )
-                            }
-                            aria-label={`${set.completed ? "Mark not done" : "Complete"} set ${set.setNumber} of ${exercise.name}`}
-                            aria-pressed={set.completed}
-                            className={`flex h-11 items-center justify-center rounded-xl border transition ${
-                              set.completed
-                                ? "border-emerald-400/30 bg-emerald-400/15 text-emerald-200"
-                                : "border-white/10 text-zinc-500 hover:border-[#b58a52]/40 hover:bg-[#b58a52]/10 hover:text-[#d7b47f]"
-                            }`}
-                          >
-                            {set.completed ? (
-                              <Check className="size-5" />
-                            ) : (
-                              <span className="size-4 rounded border border-current" />
-                            )}
-                          </button>
-                        </div>
-                      ),
-                    )}
-                  </div>
                 </div>
-              ) : null}
-            </section>
-          );
-        },
-      )}
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
 
       {/* ===================================================
           SESSION REVIEW
       =================================================== */}
 
-      <section className="rounded-3xl border border-white/10 bg-zinc-950/80 p-5 sm:p-7">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-[#b58a52]/10 p-2.5 text-[#d7b47f]">
-            <Trophy className="size-5" />
-          </div>
+      <section className="rounded-2xl border border-white/10 bg-mf-surface p-4 sm:p-5">
+        <h2 className="text-base font-black text-white">Session review</h2>
 
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#b58a52]">
-              Session review
-            </p>
-
-            <h2 className="text-xl font-black text-white">
-              Finish strong
-            </h2>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-5 md:grid-cols-[200px_1fr]">
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-zinc-400">
-              Session RPE
-            </span>
-
+        <div className="mt-3 grid gap-3 md:grid-cols-[200px_1fr]">
+          <label className="space-y-1">
+            <span className="text-sm font-semibold text-mf-text-muted">Session RPE</span>
             <input
               type="number"
-              min={
-                1
-              }
-              max={
-                10
-              }
-              step={
-                0.5
-              }
-              value={
-                sessionRpe ??
-                ""
-              }
-              onChange={
-                (
-                  event,
-                ) =>
-                  setSessionRpe(
-                    nullableNumber(
-                      event.target
-                        .value,
-                    ),
-                  )
-              }
-              className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-3 text-white outline-none focus:border-[#b58a52]/70"
+              inputMode="decimal"
+              min={1}
+              max={10}
+              step={0.5}
+              value={sessionRpe ?? ""}
+              onChange={(event) => setSessionRpe(nullableNumber(event.target.value))}
+              className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-3 text-base! text-white outline-none focus:border-amber-400/70"
               placeholder="1–10"
             />
           </label>
 
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-zinc-400">
-              Session notes
-            </span>
-
+          <label className="space-y-1">
+            <span className="text-sm font-semibold text-mf-text-muted">Session notes</span>
             <textarea
-              value={
-                sessionNotes
-              }
-              onChange={
-                (
-                  event,
-                ) =>
-                  setSessionNotes(
-                    event.target
-                      .value,
-                  )
-              }
-              className="min-h-24 w-full rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-[#b58a52]/70"
+              value={sessionNotes}
+              onChange={(event) => setSessionNotes(event.target.value)}
+              className="min-h-24 w-full rounded-xl border border-white/10 bg-black/40 p-3 text-base! text-white outline-none placeholder:text-zinc-600 focus:border-amber-400/70"
               placeholder="Energy, technique, pain, performance or adjustments..."
             />
           </label>
@@ -1473,51 +1395,98 @@ export function WorkoutPlayer({
           COMPLETE BAR
       =================================================== */}
 
-      {/* Above the mobile bottom nav (same offset as the shell's floating layers); flush to the bottom on desktop. */}
-      <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-30 border-t border-white/10 bg-black/90 p-3 pr-20 backdrop-blur-xl lg:bottom-0 lg:left-64 lg:pr-3">
+      {/* Above the mobile bottom nav; on desktop flush to the bottom, right of the sidebar (w-72) and clear of the floating-controls gutter (pr-24 = FAB column + 16px gap).
+          Always shown: hiding it while an input had focus made it reappear under the finger on the blur that a Log tap
+          causes. Set inputs carry scroll-mb-40 instead, so focus-scrolling stops above it. */}
+      <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-30 border-t border-white/10 bg-mf-bg/95 px-3 py-2 backdrop-blur-xl sm:py-3 lg:bottom-0 lg:left-72 lg:pr-24">
         <div className="mx-auto flex max-w-6xl items-center gap-3">
-          <div className="hidden min-w-40 sm:block">
-            <p className="text-xs text-zinc-500">
-              Completed sets
-            </p>
-
-            <p className="font-black text-white">
-              {
-                progress.completed
-              }
-              /
-              {
-                progress.total
-              }
-            </p>
-          </div>
+          <p className="shrink-0 text-sm text-mf-text-muted">
+            <span className="font-black tabular-nums text-white">{`${progress.completed}/${progress.total}`}</span> sets
+          </p>
 
           <button
             type="button"
-            disabled={
-              isPending ||
-              progress.completed ===
-                0
-            }
-            onClick={
-              finishWorkout
-            }
-            className="flex h-13 flex-1 items-center justify-center gap-2 rounded-xl bg-[#b58a52] px-6 font-black text-black transition hover:bg-[#c9a16c] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isPending || progress.completed === 0}
+            onClick={requestFinish}
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-md border-2 border-mf-glass-text bg-mf-action px-4 font-heading text-lg font-bold uppercase tracking-[0.06em] text-mf-action-ink transition hover:bg-mf-action-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPending ? (
-              <LoaderCircle className="size-5 animate-spin" />
-            ) : (
-              <CheckCircle2 className="size-5" />
-            )}
-
-            {isPending
-              ? "Saving workout..."
-              : "Complete workout"}
+            {isPending ? <LoaderCircle className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}
+            {isPending ? "Saving workout..." : "Complete workout"}
           </button>
         </div>
       </div>
+
+      <dialog
+        ref={finishDialogRef}
+        aria-labelledby="finish-dialog-title"
+        className="m-auto w-[min(24rem,calc(100vw-2rem))] rounded-2xl border-2 border-mf-glass-text bg-mf-surface-elevated p-5 text-white backdrop:bg-black/70"
+      >
+        <h2 id="finish-dialog-title" className="font-heading text-2xl font-black uppercase leading-tight">
+          You logged {progress.completed} of {progress.total} sets. Finish this workout?
+        </h2>
+        <p className="mt-2 text-sm text-mf-text-muted">Sets you didn&apos;t log stay unlogged.</p>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
+          <button
+            type="button"
+            autoFocus
+            onClick={() => finishDialogRef.current?.close()}
+            className="min-h-12 flex-1 rounded-md border-2 border-mf-glass-text bg-mf-glass-brand px-4 font-black text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover"
+          >
+            Continue Workout
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              finishDialogRef.current?.close();
+              finishWorkout();
+            }}
+            className="min-h-12 flex-1 rounded-md border border-mf-glass-border-strong px-4 font-bold text-zinc-200 transition hover:bg-white/5"
+          >
+            Finish Anyway
+          </button>
+        </div>
+      </dialog>
+
+      {alternativesFor ? (
+        <ExerciseAlternativesSheet
+          open
+          onOpenChange={(next) => {
+            if (!next) setAlternativesFor(null);
+          }}
+          exercise={findCatalogueExercise({ slug: alternativesFor.slug, name: alternativesFor.name })!}
+          experience={alternativeContext?.experience ?? null}
+          familiarSlugs={alternativeContext?.familiarSlugs ?? []}
+          hold={alternativeContext?.hold ?? false}
+          initialReason="machine_occupied"
+          apply={{
+            resolveId: (slug) =>
+              replacementOptions.find((option) => option.slug === slug && option.id !== alternativesFor.exerciseId)?.id ?? null,
+            blockedReason: !allowSubstitution
+              ? "This plan doesn't allow swapping exercises — use the alternative as a reference."
+              : alternativesFor.sets.some((set) => set.completed)
+                ? "You've logged sets on this exercise, so it stays as it is. Use the alternative as a reference, or skip the rest."
+                : null,
+            onApply: async (_item, exerciseId) => {
+              const result = await replaceExercise(alternativesFor, exerciseId);
+              if (result.success) setAlternativesFor(null);
+              return result;
+            },
+          }}
+        />
+      ) : null}
     </div>
   );
+}
+
+function suggestionLabel(suggestion: SetSuggestion) {
+  switch (suggestion.source.kind) {
+    case "set":
+      return `Suggested from set ${suggestion.source.setNumber}`;
+    case "history":
+      return "Suggested from last session";
+    case "target":
+      return "Planned reps";
+  }
 }
 
 /* =========================================================
@@ -1525,62 +1494,31 @@ export function WorkoutPlayer({
 ========================================================= */
 
 type SetInputProps = {
-  label:
-    string;
-
-  value:
-    number | null;
-
-  step:
-    number;
-
-  onChange:
-    (
-      value:
-        number | null,
-    ) => void;
+  label: string;
+  value: number | null;
+  step: number;
+  inputMode: "numeric" | "decimal";
+  /** Carry-forward hint, shown as a placeholder — never a value until the set is logged. */
+  placeholder: number | null;
+  describedBy?: string;
+  onChange: (value: number | null) => void;
 };
 
-function SetInput({
-  label,
-  value,
-  step,
-  onChange,
-}: SetInputProps) {
+function SetInput({ label, value, step, inputMode, placeholder, describedBy, onChange }: SetInputProps) {
   return (
-    <label className="space-y-1">
-      <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-600 sm:hidden">
-        {
-          label
-        }
-      </span>
-
-      <input
-        type="number"
-        aria-label={label}
-        min={
-          0
-        }
-        step={
-          step
-        }
-        value={
-          value ??
-          ""
-        }
-        onChange={
-          (
-            event,
-          ) =>
-            onChange(
-              nullableNumber(
-                event.target
-                  .value,
-              ),
-            )
-        }
-        className="h-11 w-full rounded-xl border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none focus:border-[#b58a52]/70"
-      />
-    </label>
+    <input
+      type="number"
+      data-set-input=""
+      inputMode={inputMode}
+      enterKeyHint="next"
+      aria-label={label}
+      aria-describedby={describedBy}
+      min={0}
+      step={step}
+      value={value ?? ""}
+      placeholder={placeholder === null ? "–" : String(placeholder)}
+      onChange={(event) => onChange(nullableNumber(event.target.value))}
+      className="h-12 w-full min-w-0 scroll-mb-40 scroll-mt-40 rounded-md border border-white/10 bg-black/40 px-1 text-center text-base! font-semibold tabular-nums text-white outline-none [appearance:textfield] placeholder:font-normal placeholder:italic placeholder:text-mf-text-muted/70 focus:border-amber-400/70 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+    />
   );
 }

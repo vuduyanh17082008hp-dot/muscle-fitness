@@ -73,11 +73,12 @@ export function deadliftFrame(depthFraction: number): PoseFrame {
 export function benchFrame(depthFraction: number): PoseFrame {
   const shoulder = point(0.3, 0.5);
   const hip = point(0.9, 0.5); // near-horizontal shoulder-hip line -> ~90 deg inclination
-  // Elbow is a fixed pivot; the wrist swings from directly opposite
-  // the shoulder (elbow angle ~180deg, arm straight/locked out) to a
-  // bent position (elbow angle well under 80deg, bar at chest).
-  const elbow = point(0.6, 0.5);
-  const wrist = point(0.9 - depthFraction * 0.5, 0.5 + depthFraction * 0.3);
+  // Lying press: the upper arm points straight up from the chest (perpendicular
+  // to the torso), and the forearm folds from straight (elbow angle 180deg,
+  // locked out) to 70deg (bar at chest).
+  const elbow = point(0.3, 0.3);
+  const fold = (depthFraction * 110 * Math.PI) / 180;
+  const wrist = point(elbow.x - Math.sin(fold) * 0.2, elbow.y - Math.cos(fold) * 0.2);
 
   return {
     left_shoulder: shoulder,

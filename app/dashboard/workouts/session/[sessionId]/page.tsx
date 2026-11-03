@@ -28,7 +28,14 @@ import type { RecoveryStatusInput, TrainingLoadStateInput } from "@/lib/training
 import type { TraceableDecision } from "@/lib/dante-core/types";
 import { AdaptiveRecommendationCard } from "@/components/training/adaptive-recommendation-card";
 import { WorkoutPlayer } from "@/features/workouts/workout-player";
-import { startWorkoutAction } from "@/app/dashboard/workouts/actions";
+import { resolveUserTimeZone } from "@/lib/training/load-today-session";
+import { formatSessionDateTime } from "@/lib/training/session-time";
+import { loadDailyDecision } from "@/lib/dante-core/server/load-daily-decision";
+import { loadPreviousPerformance } from "@/lib/training/load-previous-performance";
+import { loadExerciseFamiliarity } from "@/lib/training/load-exercise-familiarity";
+import { parseExperience } from "@/lib/training/exercise-substitution";
+import { EXERCISE_CATALOGUE } from "@/lib/workouts/exercise-library";
+import { ScheduleConflictNote, TrainingHoldNotice, WorkoutStartButton } from "@/components/training/workout-start-control";
 import type {
   WorkoutPlayerExercise,
   WorkoutReplacementOption,
@@ -56,28 +63,6 @@ type SessionPageProps = {
     sessionId: string;
   }>;
 };
-
-function formatDateTime(
-  value: string | null,
-): string {
-  if (!value) {
-    return "Not recorded";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Invalid date";
-  }
-
-  return new Intl.DateTimeFormat("en-SG", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
 
 function formatDuration(seconds: number): string {
   if (seconds <= 0) {
@@ -150,7 +135,7 @@ function getStateClasses(
 ): string {
   switch (state) {
     case "in_progress":
-      return "border-orange-500/30 bg-orange-500/10 text-orange-300";
+      return "border-mf-training/30 bg-mf-training/10 text-mf-training";
 
     case "paused":
       return "border-amber-500/30 bg-amber-500/10 text-amber-300";
@@ -227,6 +212,8 @@ export default async function WorkoutSessionPage({
 
   const session: WorkoutSession =
     sessionData;
+
+  const timeZone = await resolveUserTimeZone(supabase, user.id);
 
   const {
     data: sessionExercisesData,
@@ -308,6 +295,22 @@ export default async function WorkoutSessionPage({
       ? `/dashboard/workouts/plans/${session.workout_plan_id}`
       : "/dashboard/workouts";
 
+  // A direct link here must not bypass the Daily Brief's safety decision: while it holds training (pain/illness, or an
+  // unconfirmed check-in) a planned session offers no Start, and an in-progress one shows the hold above the logger.
+  // Finished sessions are history and need no decision.
+  const trainable =
+    session.session_state === "in_progress" ||
+    session.session_state === "not_started" ||
+    session.session_state === null;
+  const daily = trainable ? await loadDailyDecision(supabase, user.id) : null;
+  const hold = daily?.hold ?? null;
+  // Today's not-started session on a plan REST day: the same "needs review" reading as the Today hero (F-03B / H).
+  const scheduleConflict =
+    daily?.todaySession?.id === session.id && daily.todaySessionStatus === "conflict";
+  const holdNotice = hold ? (
+    <TrainingHoldNotice hold={hold} secondary={{ label: "Review plan", href: backHref }} />
+  ) : null;
+
   /* =========================================================
      ACTIVE SESSION — the one interactive logger (WorkoutPlayer).
      Only `in_progress` is active: it is the only state
@@ -327,7 +330,7 @@ export default async function WorkoutSessionPage({
       exerciseIds.length > 0
         ? await supabase
             .from("exercise_library")
-            .select("id, name, primary_muscle, equipment")
+            .select("id, slug, name, primary_muscle, equipment")
             .in("id", exerciseIds)
         : { data: [] };
 
@@ -346,36 +349,37 @@ export default async function WorkoutSessionPage({
     const allowSubstitution =
       plan?.allow_client_substitution === true;
 
-    const muscles = [
-      ...new Set(
-        (libraryRows ?? []).map((row) => row.primary_muscle),
-      ),
-    ];
-
-    const { data: replacementRows } =
-      allowSubstitution && muscles.length > 0
-        ? await supabase
-            .from("exercise_library")
-            .select("id, name, primary_muscle, equipment")
-            .eq("is_active", true)
-            .in("primary_muscle", muscles)
-            .order("name", { ascending: true })
-            .limit(300)
-        : { data: [] };
+    // Find Alternative: the recommendation catalogue is static; only its slugs that
+    // exist as PUBLIC rows here can be applied (RLS and the replace mutation still
+    // authorize every write). A failed lookup degrades to review-only alternatives.
+    const [{ data: catalogueRows }, familiarSlugs, { data: fitness }] = await Promise.all([
+      supabase
+        .from("exercise_library")
+        .select("id, slug, name, primary_muscle, equipment")
+        .is("owner_id", null)
+        .eq("is_active", true)
+        .in("slug", EXERCISE_CATALOGUE.map((item) => item.slug ?? "").filter(Boolean)),
+      loadExerciseFamiliarity(supabase, user.id).catch(() => []),
+      supabase.from("fitness_profiles").select("experience").eq("user_id", user.id).maybeSingle(),
+    ]);
 
     const replacementOptions: WorkoutReplacementOption[] = (
-      replacementRows ?? []
+      catalogueRows ?? []
     ).map((row) => ({
       id: row.id,
+      slug: row.slug,
       name: row.name,
-      primaryMuscle: row.primary_muscle,
-      equipment: row.equipment,
+      primaryMuscle: row.primary_muscle ?? "",
+      equipment: row.equipment ?? "",
     }));
+
+    const previousByExercise = await loadPreviousPerformance(supabase, user.id, exerciseIds);
 
     const playerExercises: WorkoutPlayerExercise[] =
       exercisesWithSets.map((exercise) => ({
         id: exercise.id,
         exerciseId: exercise.exercise_id,
+        slug: libraryById.get(exercise.exercise_id)?.slug ?? null,
         name: exercise.display_name,
         primaryMuscle:
           libraryById.get(exercise.exercise_id)?.primary_muscle ?? "",
@@ -402,24 +406,25 @@ export default async function WorkoutSessionPage({
           rpe: set.rpe === null ? null : Number(set.rpe),
           completed: set.completed,
         })),
-        // ponytail: previous-performance panel is not loaded yet; add a
-        // last-completed-session lookup per exercise_id when wanted.
-        previous: null,
+        previous: previousByExercise.get(exercise.exercise_id) ?? null,
       }));
 
     return (
-      <main className="min-h-screen bg-mf-bg px-4 py-8 text-white sm:px-6 lg:px-10">
+      <main className="min-h-screen bg-mf-bg px-4 pb-4 pt-2 text-white sm:py-8 sm:px-6 lg:px-10">
         <div className="mx-auto max-w-7xl">
+          {/* 44px tap target without adding layout height (the first set input must clear the fold at 320×640). */}
           <Link
             href={backHref}
-            className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 transition hover:text-white"
+            className="-my-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-mf-glass-text-muted transition hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
 
             Back to workout
           </Link>
 
-          <div className="mt-8">
+          {holdNotice ? <div className="mt-8">{holdNotice}</div> : null}
+
+          <div className="mt-3 sm:mt-8">
             {/* Keyed on the exercise ids so a replaced exercise
                 remounts the player with the refreshed server data. */}
             <WorkoutPlayer
@@ -427,9 +432,15 @@ export default async function WorkoutSessionPage({
               sessionId={session.id}
               sessionName={session.name}
               startedAt={session.started_at}
+              timeZone={timeZone}
               allowSubstitution={allowSubstitution}
               initialExercises={playerExercises}
               replacementOptions={replacementOptions}
+              alternativeContext={{
+                experience: parseExperience(fitness?.experience),
+                familiarSlugs,
+                hold: hold !== null,
+              }}
             />
           </div>
         </div>
@@ -547,22 +558,21 @@ export default async function WorkoutSessionPage({
         >
           <ArrowLeft className="h-4 w-4" />
 
-          Back to workout
+          {session.workout_plan_id ? "Back to plan" : "Back to training"}
         </Link>
 
-        <header className="relative mt-8 overflow-hidden rounded-[32px] border border-white/10 bg-mf-surface p-6 sm:p-8">
-          <div className="pointer-events-none absolute right-[-180px] top-[-220px] h-[520px] w-[520px] rounded-full bg-orange-500/[0.08] blur-[140px]" />
+        <header className="relative mt-6 overflow-hidden rounded-[28px] border border-white/10 bg-mf-surface p-6 sm:p-8">
 
           <div className="relative">
             <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-start">
               <div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-xs font-black uppercase tracking-[0.28em] text-orange-400">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-mf-training">
                     Workout session
                   </p>
 
                   <span
-                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${getStateClasses(
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${getStateClasses(
                       session.session_state,
                     )}`}
                   >
@@ -576,36 +586,44 @@ export default async function WorkoutSessionPage({
                   </span>
                 </div>
 
-                <h1 className="mt-5 text-4xl font-black tracking-[-0.045em] sm:text-5xl">
-                  Training Session
+                <h1 className="mt-4 text-4xl font-black sm:text-5xl">
+                  {session.name || session.title || "Training session"}
                 </h1>
 
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-500">
-                  Track your working sets,
-                  repetitions, load, RIR and total
-                  training volume.
+                <p className="mt-3 max-w-2xl text-base leading-7 text-zinc-400">
+                  {session.session_state === "completed"
+                    ? "The sets, load and volume you logged in this session."
+                    : "Track your working sets, repetitions, load, RIR and total training volume."}
                 </p>
+
+                {session.session_state === "completed" ? (
+                  <Link
+                    href={`/dashboard/training-intelligence?session=${session.id}`}
+                    className="mt-4 inline-flex min-h-11 items-center rounded-md border border-mf-glass-border-strong px-4 text-sm font-bold text-mf-glass-text transition hover:bg-mf-glass-hover"
+                  >
+                    See muscles trained
+                  </Link>
+                ) : null}
               </div>
 
               {/* A planned session starts here, keeping its own (possibly adjusted) prescription — start_workout
                   begins this row rather than cloning the plan template. */}
               {(session.session_state === "not_started" || session.session_state === null) && session.workout_day_id ? (
-                <form action={startWorkoutAction}>
-                  <input type="hidden" name="workout_day_id" value={session.workout_day_id} />
-                  <button
-                    type="submit"
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 text-sm font-black uppercase tracking-[0.12em] text-black transition hover:bg-amber-300"
-                  >
-                    <PlayCircle aria-hidden="true" className="h-5 w-5" />
-                    Start workout
-                  </button>
-                </form>
+                <WorkoutStartButton workoutDayId={session.workout_day_id} hold={hold} size="lg" />
               ) : null}
             </div>
           </div>
         </header>
 
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {holdNotice ? <div className="mt-6">{holdNotice}</div> : null}
+
+        {!hold && scheduleConflict ? (
+          <div className="mt-6">
+            <ScheduleConflictNote />
+          </div>
+        ) : null}
+
+        <section className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           <MetricCard
             icon={
               <Dumbbell className="h-5 w-5" />
@@ -646,15 +664,17 @@ export default async function WorkoutSessionPage({
         <section className="mt-6 grid gap-4 lg:grid-cols-2">
           <InfoCard
             label="Started"
-            value={formatDateTime(
+            value={formatSessionDateTime(
               session.started_at,
+              timeZone,
             )}
           />
 
           <InfoCard
             label="Completed"
-            value={formatDateTime(
+            value={formatSessionDateTime(
               session.completed_at,
+              timeZone,
             )}
           />
         </section>
@@ -662,7 +682,7 @@ export default async function WorkoutSessionPage({
         <section className="mt-10">
           <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.26em] text-orange-400">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-mf-training">
                 Exercise progress
               </p>
 
@@ -671,7 +691,7 @@ export default async function WorkoutSessionPage({
               </h2>
             </div>
 
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-zinc-400">
               {exercisesWithSets.length}{" "}
               exercises
             </p>
@@ -711,6 +731,7 @@ export default async function WorkoutSessionPage({
                     recoveryStatusLabel={recoveryStatusLabel}
                     recoveryStatusCode={recoveryStatusCode}
                     trainingLoadState={trainingLoadState}
+                    sessionDone={session.session_state === "completed"}
                   />
                 ),
               )}
@@ -734,16 +755,16 @@ function MetricCard({
   value,
 }: MetricCardProps) {
   return (
-    <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-orange-500/20 bg-orange-500/10 text-orange-400">
+    <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-mf-training/25 bg-mf-training/10 text-mf-training">
         {icon}
       </div>
 
-      <p className="mt-5 text-xs font-black uppercase tracking-wider text-zinc-600">
+      <p className="mt-3 text-sm font-semibold text-zinc-400">
         {label}
       </p>
 
-      <p className="mt-2 text-xl font-black">
+      <p className="mt-1 text-xl font-black tabular-nums">
         {value}
       </p>
     </article>
@@ -761,7 +782,7 @@ function InfoCard({
 }: InfoCardProps) {
   return (
     <article className="rounded-2xl border border-white/10 bg-black/20 px-5 py-4">
-      <p className="text-xs font-black uppercase tracking-wider text-zinc-600">
+      <p className="text-sm font-semibold text-zinc-400">
         {label}
       </p>
 
@@ -780,6 +801,8 @@ type SessionExerciseCardProps = {
   recoveryStatusLabel: string | null;
   recoveryStatusCode: RecoveryStatusInput;
   trainingLoadState: TrainingLoadStateInput;
+  /** Finished session: an unlogged set was not done, not "pending". */
+  sessionDone: boolean;
 };
 
 function SessionExerciseCard({
@@ -790,6 +813,7 @@ function SessionExerciseCard({
   recoveryStatusLabel,
   recoveryStatusCode,
   trainingLoadState,
+  sessionDone,
 }: SessionExerciseCardProps) {
   const completedSetCount =
     exercise.sets.filter(
@@ -807,7 +831,7 @@ function SessionExerciseCard({
       <header className="border-b border-white/10 p-5 sm:p-6">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
           <div className="flex items-start gap-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-orange-500/20 bg-orange-500/10 font-black text-orange-300">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-mf-training/25 bg-mf-training/10 font-black text-mf-training">
               {exercise.exercise_order}
             </span>
 
@@ -818,13 +842,13 @@ function SessionExerciseCard({
                 </h3>
 
                 {exercise.is_skipped ? (
-                  <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                  <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-bold text-zinc-400">
                     Skipped
                   </span>
                 ) : null}
               </div>
 
-              <p className="mt-2 text-xs leading-6 text-zinc-600">
+              <p className="mt-1 text-sm leading-6 text-zinc-400">
                 {exercise.target_sets} sets ·{" "}
                 {exercise.target_rep_min}–
                 {exercise.target_rep_max} reps ·{" "}
@@ -845,8 +869,8 @@ function SessionExerciseCard({
               {exercise.target_sets}
             </p>
 
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600">
-              Sets complete
+            <p className="mt-1 text-xs font-semibold text-zinc-400">
+              Sets done
             </p>
           </div>
         </div>
@@ -888,7 +912,7 @@ function SessionExerciseCard({
                         {set.weight_kg !== null ? `${set.weight_kg} kg` : "Bodyweight"}{" "}
                         <span className="text-zinc-500">×</span> {set.reps ?? "—"} reps
                       </p>
-                      <p className="text-[11px] text-zinc-500">
+                      <p className="text-xs text-zinc-400">
                         {set.rir !== null ? `RIR ${set.rir}` : "Target effort"}
                       </p>
                     </div>
@@ -903,7 +927,7 @@ function SessionExerciseCard({
                     ) : (
                       <span className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-zinc-400">
                         <Gauge className="size-4" />
-                        Pending
+                        {sessionDone ? "Not logged" : "Pending"}
                       </span>
                     )}
                   </div>
@@ -915,7 +939,7 @@ function SessionExerciseCard({
             <div className="hidden overflow-x-auto sm:block">
               <table className="w-full min-w-[620px] border-separate border-spacing-y-2">
                 <thead>
-                  <tr className="text-left text-[10px] font-black uppercase tracking-wider text-zinc-600">
+                  <tr className="text-left text-xs font-semibold text-zinc-400">
                     <th className="px-4 py-2">Set</th>
                     <th className="px-4 py-2">Weight</th>
                     <th className="px-4 py-2">Reps</th>
@@ -957,7 +981,7 @@ function SessionExerciseCard({
                         ) : (
                           <span className="inline-flex items-center gap-2 text-zinc-600">
                             <Gauge className="h-4 w-4" />
-                            Pending
+                            {sessionDone ? "Not logged" : "Pending"}
                           </span>
                         )}
                       </td>

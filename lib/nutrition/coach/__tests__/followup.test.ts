@@ -80,7 +80,7 @@ describe("explicit new-topic detection (layer 1) — and its false-positive rate
     for (const message of ["forget that, something else", "I changed my mind", "let's do something else", "different meal please", "actually I want something lighter"]) expect(detectExplicitNewTopic(message), message).not.toBeNull()
   })
   it("newTopicFalsePositiveRate is 0 on messages that stay on the same meal", () => {
-    const stay = ["actually I want more protein", "what about adding rice", "how about cheaper", "I want it cheaper", "what about the second one", "let's make it lighter", "actually keep the original", "no, I meant the chicken bowl", "I want to see the ingredients", "what about the macros"]
+    const stay = ["actually I want more protein", "what about adding rice", "how about cheaper", "I want it cheaper", "what about the second one", "let's make it lighter", "actually keep the original", "no, I meant the chicken bowl", "I want to see the ingredients", "what about the macros", "What about my last meal?", "how about my breakfast?"]
     const falsePositives = stay.filter((message) => detectExplicitNewTopic(message))
     expect(falsePositives).toEqual([])
   })

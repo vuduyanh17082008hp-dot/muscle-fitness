@@ -45,7 +45,7 @@ export function DanteCard({ decision, narrative }: DanteCardProps) {
 
       {decision.why.length > 0 ? (
         <details className="group mt-3">
-          <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-mf-glass-dante">
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-bold uppercase tracking-[0.08em] text-mf-glass-dante">
             Why This?
             <ChevronDown className="size-3 transition group-open:rotate-180" aria-hidden="true" />
           </summary>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BookOpen } from "lucide-react";
 
 import {
@@ -10,7 +11,7 @@ export function RecoveryKnowledgeHub() {
     <article className="rounded-3xl border border-mf-glass-border bg-mf-glass-surface p-6 sm:p-8">
       <div className="flex items-center gap-2">
         <BookOpen className="size-4 text-mf-glass-dante" aria-hidden="true" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mf-glass-text-muted">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-text-muted">
           Recovery Knowledge Hub
         </p>
       </div>
@@ -29,7 +30,7 @@ export function RecoveryKnowledgeHub() {
 
           return (
             <div key={category}>
-              <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-mf-glass-brand/80">
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-mf-glass-brand/80">
                 {category}
               </p>
 
@@ -39,15 +40,15 @@ export function RecoveryKnowledgeHub() {
                     key={topic.id}
                     className="group rounded-2xl border border-mf-glass-border bg-mf-glass-bg-deep p-4 open:border-mf-glass-brand-border"
                   >
-                    <summary className="cursor-pointer list-none text-sm font-bold text-mf-glass-text marker:content-none">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center text-sm font-bold text-mf-glass-text marker:content-none">
                       {topic.title}
                     </summary>
 
-                    <p className="mt-2 text-xs leading-5 text-mf-glass-text-muted">
+                    <p className="mt-2 text-sm leading-6 text-mf-glass-text-muted">
                       {topic.whyItMatters}
                     </p>
 
-                    <p className="mt-2 text-xs leading-5 text-mf-glass-text-muted">
+                    <p className="mt-2 text-sm leading-6 text-mf-glass-text-muted">
                       <span className="font-semibold text-mf-glass-text-secondary">
                         Training impact:{" "}
                       </span>
@@ -58,7 +59,7 @@ export function RecoveryKnowledgeHub() {
                       {topic.practicalActions.map((action) => (
                         <li
                           key={action}
-                          className="flex gap-2 text-xs leading-5 text-mf-glass-text-muted"
+                          className="flex gap-2 text-sm leading-6 text-mf-glass-text-muted"
                         >
                           <span className="text-mf-glass-brand">•</span>
                           {action}
@@ -66,17 +67,13 @@ export function RecoveryKnowledgeHub() {
                       ))}
                     </ul>
 
-                    <p className="mt-3 text-[11px] leading-4 text-mf-glass-text-muted">
-                      Evidence: ask Dante below for current PubMed / Europe
-                      PMC / MedlinePlus sources on this topic.
-                    </p>
-
-                    <a
-                      href="#dante-recovery-coach"
-                      className="mt-3 inline-flex text-xs font-bold text-mf-glass-dante hover:text-mf-glass-brand"
+                    {/* Opens the real Dante chat with the question drafted, never sent automatically. */}
+                    <Link
+                      href={`/dashboard/ai-coach?ask=${encodeURIComponent(`How does ${topic.title.toLowerCase()} apply to my training right now?`)}`}
+                      className="mt-2 inline-flex min-h-11 items-center text-sm font-bold text-mf-glass-dante hover:text-mf-glass-brand"
                     >
-                      Ask Dante →
-                    </a>
+                      Ask Dante about this →
+                    </Link>
                   </details>
                 ))}
               </div>

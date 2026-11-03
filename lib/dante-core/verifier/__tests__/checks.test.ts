@@ -6,6 +6,7 @@ import {
   checkSafetyAdherence,
 } from "@/lib/dante-core/verifier/checks";
 import type { VerifierInput } from "@/lib/dante-core/verifier/types";
+import { buildKnownFactsFromContext } from "@/lib/dante-core/verifier/known-facts-from-context";
 
 function baseInput(overrides: Partial<VerifierInput> = {}): VerifierInput {
   return {
@@ -150,5 +151,55 @@ describe("checkCitationMismatch", () => {
   it("passes plain advice with no evidence language regardless of sources", () => {
     const findings = checkCitationMismatch(baseInput({ replyText: "Try adding an extra set next week.", availableSources: [] }));
     expect(findings).toEqual([]);
+  });
+});
+
+// Nutrition acceptance 2026-10-23: replies observed live from gpt-4o-mini against a real food log
+// (consumed 1335 kcal / 95.4 g protein, target 3220 kcal / 156 g → remaining 1885 kcal / 60.6 g).
+describe("today's intake claims (live acceptance repros)", () => {
+  const consumedCue = /\b(?:consumed|logged|eaten|ate|so far|intake (?:today|so far)|you'?ve had|have had)\b/i;
+  const remainingCue = /\b(?:remaining|left|to go)\b/i;
+  const facts = [
+    { label: "calories", value: 1335, cue: consumedCue },
+    { label: "protein", value: 95.4, cue: consumedCue },
+    { label: "calories", value: 1885, cue: remainingCue },
+    { label: "protein", value: 60.6, cue: remainingCue },
+  ];
+  const verify = (replyText: string, knownFacts: VerifierInput["knownFacts"] = facts) => [
+    ...checkDeterministicValueMutation(baseInput({ replyText, knownFacts })),
+    ...checkInventedAthleteMetric(baseInput({ replyText, knownFacts })),
+  ];
+
+  it("a correct total written with a thousands separator is not a mismatch", () => {
+    expect(verify("You have consumed a total of 1,335 calories today.")).toEqual([]);
+    expect(verify("You've consumed 1,335 calories today, so 1,885 calories remain... you have 1,885 calories left.")).toEqual([]);
+  });
+
+  it("consumed protein stated as remaining protein is flagged", () => {
+    expect(verify("You have 95.4 grams of protein remaining for today based on your current nutrition plan.")).not.toEqual([]);
+    expect(verify("You have 95.4 grams of protein left to reach your daily target of 156 grams.")).not.toEqual([]);
+  });
+
+  it("the correct remaining protein passes", () => {
+    expect(verify("You have 61 grams of protein remaining for today.")).toEqual([]);
+  });
+
+  it("an intake total with filler words is an invented metric when the food log is unavailable", () => {
+    expect(verify("You have consumed a total of 3,146 calories today.", [])).not.toEqual([]);
+    expect(verify("You have consumed a total of **3,146 calories** so far today.", [])).not.toEqual([]);
+  });
+
+  it("food log unavailable: any figure worded as today's intake is blocked, however it is phrased", () => {
+    const unavailable = buildKnownFactsFromContext({ recovery: null, todayFoodLog: { available: false, note: "Food log unavailable." } });
+    for (const replyText of [
+      "Your total calorie intake today is 3,126 calories, which includes breakfast: 920 calories.",
+      "Your calorie intake today is 2,126 calories.",
+      "You have consumed a total of **3,146 calories** so far today.",
+    ]) expect(verify(replyText, unavailable)).not.toEqual([]);
+    expect(verify("I can't read your food log right now, so I don't know what you've eaten today. Your target is 3,220 calories.", unavailable)).toEqual([]);
+  });
+
+  it("markdown emphasis does not hide a wrong remaining figure", () => {
+    expect(verify("You have **95.4 grams of protein** remaining today.")).not.toEqual([]);
   });
 });

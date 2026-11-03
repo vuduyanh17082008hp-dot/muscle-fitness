@@ -109,7 +109,7 @@ export default function WorkoutSystemDocumentationPage() {
       <section className="mx-auto max-w-7xl px-6 py-20 sm:px-8 lg:px-12">
         <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-500">
+            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-amber-500">
               How it works
             </p>
 
@@ -154,7 +154,7 @@ export default function WorkoutSystemDocumentationPage() {
       <section className="border-y border-white/10 bg-white/[0.02]">
         <div className="mx-auto max-w-7xl px-6 py-20 sm:px-8 lg:px-12">
           <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-500">
+            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-amber-500">
               Core features
             </p>
 
@@ -190,7 +190,7 @@ export default function WorkoutSystemDocumentationPage() {
       <section className="mx-auto max-w-7xl px-6 py-20 sm:px-8 lg:px-12">
         <div className="overflow-hidden rounded-3xl border border-amber-500/20 bg-gradient-to-br from-amber-500/15 via-neutral-900 to-neutral-950 p-8 sm:p-12">
           <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-500">
+            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-amber-500">
               Dedication. Determination. Drive. Discipline.
             </p>
 

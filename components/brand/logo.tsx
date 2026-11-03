@@ -81,8 +81,8 @@ export function Logo({
         <span
           className="
             mt-1 block
-            text-[0.62rem] font-bold
-            tracking-[0.42em]
+            text-xs font-bold
+            tracking-[0.3em]
             text-[var(--mf-brand)]
           "
         >
@@ -90,7 +90,7 @@ export function Logo({
         </span>
 
         {tagline ? (
-          <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+          <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
             {tagline}
           </span>
         ) : null}

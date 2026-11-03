@@ -44,7 +44,7 @@ export type DanteFoodResolver = (req: ResolveRequest) => Promise<ResolvedFood>;
 const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "n/a" : String(Math.round(n * 10) / 10));
 
 function foodFacts(label: string, r: ResolvedFood, grams: number | null): string | null {
-  if (r.status === "AMBIGUOUS") return `food_fact: ${label} — raw vs cooked changes the numbers materially and the user did not say which; do not state macros, ask one short question if it matters.`;
+  if (r.status === "AMBIGUOUS") return `food_fact: ${label} — ${r.clarification?.options.join(" vs ") ?? "raw vs cooked"} changes the numbers materially and the user did not say which; do not state macros, ask one short question if it matters.`;
   const p = r.per100g;
   if (r.status === "UNRESOLVED" || !p) return `food_fact: ${label} — no verified nutrition data available; do not invent numbers.`;
   const src = r.source === "USDA_FDC" ? "USDA FoodData Central" : "app curated table";
@@ -114,7 +114,7 @@ export async function buildDanteQueryContext(
   if (frame.ambiguity.present) body.push(`unresolved: ${frame.ambiguity.fields.join(", ")} — ask only if the answer changes; otherwise state the assumption.`);
   body.push(...stateLines, ...readinessLines, ...lines);
   if (frame.deferToGemma || frame.crossCoachRelevance === "MATERIAL" || frame.crossCoachRelevance === "CRITICAL") {
-    body.push("boundary: do NOT write a meal plan or prescribe a nutrition plan. If a material nutrition adjustment is needed, say the nutrition coach (Gemma) is the right place to build it. Nutrition facts above are for reasoning about training only.");
+    body.push("boundary: do NOT write a meal plan or prescribe a nutrition plan. If a material nutrition adjustment is needed, offer to build it with your meal builder (the user can ask you for meals in this chat). Nutrition facts above are for reasoning about training only.");
   }
   if (retrieval.thinking === "DEEP") body.push("depth: consider competing explanations and say what evidence is missing; do not present one cause as certain.");
   return { frame, retrieval, block: body.join("\n") };

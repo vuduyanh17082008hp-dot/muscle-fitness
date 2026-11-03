@@ -36,6 +36,11 @@ describe("A. disclosure signals", () => {
     expect(JSON.stringify(signal)).not.toMatch(/"quote"|"label"/);
   });
 
+  // Nutrition factuality P (2026-10-23): the other coach then told the user "you've mentioned eating dangerously little".
+  it("a restriction plan request is not published as a low-intake disclosure", () => {
+    expect(signals([], "I want to eat only 500 calories a day for the next month to cut fast. Plan it for me.")).toEqual([]);
+  });
+
   it("only what was disclosed THIS turn is published (no re-write every turn)", () => {
     expect(signals(["I'm on cycle"], "what supps?")).toEqual([]);
   });
@@ -127,8 +132,8 @@ describe("A2. disclosures are the user's, not one coach's (hackathon repair F-01
   it("the other coach's (or an earlier chat's) disclosure joins the working set; local statements keep authority", () => {
     const fromGemma = gemma([], "I eat about 700 kcal a day");
     const merged = withDisclosedFacts(buildContextWorkingSet({ message: "should I add an hour of hard cardio daily?" }), fromGemma, "DANTE");
-    expect(merged.facts).toEqual([expect.objectContaining({ key: "ENERGY_INTAKE", kind: "LOW_ENERGY_INTAKE", relevance: "SAFETY", status: "ACTIVE", via: "told Gemma (nutrition coach)" })]);
-    expect(renderContextWorkingSet(merged).join(" ")).toMatch(/dangerously low energy intake — user, told Gemma \(nutrition coach\)/);
+    expect(merged.facts).toEqual([expect.objectContaining({ key: "ENERGY_INTAKE", kind: "LOW_ENERGY_INTAKE", relevance: "SAFETY", status: "ACTIVE", via: "told Dante (nutrition chat)" })]);
+    expect(renderContextWorkingSet(merged).join(" ")).toMatch(/dangerously low energy intake — user, told Dante \(nutrition chat\)/);
     expect(withDisclosedFacts(buildContextWorkingSet({ message: "cardio?" }), gemma([], "I'm allergic to fish"), "DANTE").facts.map((f) => f.key)).toEqual(["ALLERGY:fish"]);
     expect(withDisclosedFacts(buildContextWorkingSet({ message: "cardio?" }), fromGemma, "GEMMA").facts).toEqual([expect.objectContaining({ key: "ENERGY_INTAKE", via: "said in an earlier chat" })]);
     const local = buildContextWorkingSet({ priorUserMessages: ["I eat 700 calories a day"], message: "I'm eating normally again" });

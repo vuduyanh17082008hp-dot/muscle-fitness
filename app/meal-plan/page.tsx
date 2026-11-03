@@ -1670,7 +1670,7 @@ export default function MealPlanPage() {
           />
 
           <div>
-            <p className="text-sm font-bold uppercase tracking-[0.18em] text-white/90">
+            <p className="text-sm font-bold uppercase tracking-[0.12em] text-white/90">
               Need help with your saved nutrition?
             </p>
             <p className="mt-1 text-sm text-white/55">

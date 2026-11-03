@@ -14,6 +14,7 @@ function rep(overrides: Partial<CompletedRep> = {}): CompletedRep {
   return {
     repNumber: 1,
     topAtMs: 0,
+    startObserved: true,
     bottomAtMs: 1000,
     ascentStartAtMs: 1200,
     ascentEndAtMs: 2000,
@@ -21,6 +22,7 @@ function rep(overrides: Partial<CompletedRep> = {}): CompletedRep {
     maxAngleDeg: 160,
     bottomBarProxy: null,
     bottomFrame: null,
+    deepestFrame: null,
     barProxyTrack: [],
     ...overrides,
   };
@@ -30,19 +32,19 @@ describe("computeRepRom", () => {
   it("returns 100% when observed range exactly matches the reference range", () => {
     const config = getExerciseConfig("squat"); // referenceRangeDeg: 70
     const result = computeRepRom(rep({ minAngleDeg: 90, maxAngleDeg: 160 }), config);
-    expect(result.romPercent).toBe(100);
+    expect(result!.romPercent).toBe(100);
   });
 
   it("does not clamp above 100% for a lifter with more range than the reference", () => {
     const config = getExerciseConfig("squat");
     const result = computeRepRom(rep({ minAngleDeg: 70, maxAngleDeg: 160 }), config);
-    expect(result.romPercent).toBeGreaterThan(100);
+    expect(result!.romPercent).toBeGreaterThan(100);
   });
 
   it("reports a lower percentage for a shallow rep", () => {
     const config = getExerciseConfig("squat");
     const result = computeRepRom(rep({ minAngleDeg: 130, maxAngleDeg: 160 }), config);
-    expect(result.romPercent).toBeLessThan(50);
+    expect(result!.romPercent).toBeLessThan(50);
   });
 });
 

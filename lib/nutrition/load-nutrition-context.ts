@@ -2,7 +2,7 @@ import "server-only"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { buildNutritionPlan, type NutritionPlan } from "@/lib/nutrition/plan"
+import { buildNutritionPlan, type NutritionGoal, type NutritionPlan } from "@/lib/nutrition/plan"
 import { loadDisclosedAllergens } from "@/lib/nutrition/coach/disclosed-allergens"
 import {
   getCanonicalNutritionTargets,
@@ -36,6 +36,15 @@ export type NutritionContext = {
     trainingMode: DbTrainingModeOverride | null
     goal: DbNutritionGoalOverride | null
   }
+  /** What "Use onboarding goal" currently resolves to. */
+  onboardingGoal: NutritionGoal
+  /** Stored training days / session length (null = not on the profile). */
+  trainingVolume: { daysPerWeek: number | null; sessionMinutes: number | null }
+  /**
+   * Accepted weight-trend calibration. `available` is false when the
+   * calibration migration is not applied in this environment.
+   */
+  calibration: { available: boolean; adjustmentKcal: number; reviewedAt: string | null }
   /** From user_preferences.weekly_food_budget — null when never set. */
   weeklyFoodBudgetSgd: number | null
   cookingAbility: string | null
@@ -71,6 +80,16 @@ const PREFERENCES_COLUMNS_FALLBACK = `
   meal_prep_frequency
 `
 
+/** supabase/migrations/20261102170000_nutrition_calorie_calibration.sql */
+const PREFERENCES_COLUMNS_WITH_CALIBRATION = `${PREFERENCES_COLUMNS_WITH_NUTRITION_INTELLIGENCE},
+  calorie_adjustment_kcal,
+  calorie_calibration_reviewed_at
+`
+
+type PreferencesRowWithCalibration =
+  | (NonNullable<RawPreferencesRow> & { calorie_calibration_reviewed_at?: string | null })
+  | null
+
 /**
  * The nutrition-intelligence override columns (activity_level_override /
  * training_mode_override / nutrition_goal_override) ship via
@@ -81,6 +100,30 @@ const PREFERENCES_COLUMNS_FALLBACK = `
  * fields as unset.
  */
 async function loadPreferencesRow(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{ row: PreferencesRowWithCalibration; failed: boolean; calibrationAvailable: boolean }> {
+  const calibrated = await supabase
+    .from("user_preferences")
+    .select(PREFERENCES_COLUMNS_WITH_CALIBRATION)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (!calibrated.error) {
+    return { row: calibrated.data as PreferencesRowWithCalibration, failed: false, calibrationAvailable: true }
+  }
+
+  // Calibration migration not applied here: keep the override columns.
+  const disposition = classifyQueryError(calibrated.error, calibrated.status)
+  if (disposition !== "SCHEMA_MISMATCH") {
+    console.warn("[NUTRITION] Unable to load user_preferences:", disposition)
+    return { row: null, failed: true, calibrationAvailable: false }
+  }
+
+  return { ...(await loadPreferencesRowWithoutCalibration(supabase, userId)), calibrationAvailable: false }
+}
+
+async function loadPreferencesRowWithoutCalibration(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<{ row: RawPreferencesRow; failed: boolean }> {
@@ -204,6 +247,13 @@ export async function loadNutritionContext(
     estimatedFields,
     missingRequiredFields,
     overrides,
+    onboardingGoal: mapped.onboardingGoal,
+    trainingVolume: mapped.trainingVolume,
+    calibration: {
+      available: preferencesRead.calibrationAvailable,
+      adjustmentKcal: plan?.calorieAdjustmentKcal ?? 0,
+      reviewedAt: preferences?.calorie_calibration_reviewed_at ?? null,
+    },
     weeklyFoodBudgetSgd:
       weeklyFoodBudgetSgd !== null && Number.isFinite(weeklyFoodBudgetSgd)
         ? weeklyFoodBudgetSgd
