@@ -219,7 +219,7 @@ describe.skipIf(!dbReady)("Dante conversations are owner-only, admins included",
   })
 
   it("TRUNCATE (which ignores RLS) is not granted to clients", () => {
-    for (const t of ["ai_messages", "ai_threads"]) {
+    for (const t of ["ai_messages", "ai_threads", "profiles", "user_roles"]) {
       const r = asUser(normal, `truncate public.${t} cascade;`)
       expect(r.ok, t).toBe(false)
       expect(r.err, t).toMatch(/permission denied/)

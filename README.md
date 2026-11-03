@@ -202,16 +202,21 @@ node scripts/test-db-stack.mjs stop
 
 More: [docs/RUN_LOCAL.md](docs/RUN_LOCAL.md).
 
-## Release verification (S4-B)
+## Release verification (post-hackathon, 2026-11-03)
 
 Engineering checks on the release source:
 
-- Type-check, lint and production build pass (lint: 0 errors, a few tracked
-  low-risk warnings).
-- Full Vitest suite, including the database suites on a disposable stack:
-  433 files, 6,194 tests passing (40 opt-in live-provider files skipped).
+- Type-check, lint and production build pass (lint: 0 errors, tracked
+  low-risk warnings only).
+- Full Vitest suite: 432 files, 6,206 tests passing; 43 files skipped
+  (opt-in live-provider suites, and database suites when no local stack runs).
+- Hosted database: workout start/finish, Recovery apply, account save,
+  SetVision multi-exercise saves and the security closure (server-owned roles,
+  owner-only conversations, server-only tool-action finalization) were checked
+  with rolled-back probes run as an ordinary signed-in user.
 - One Day, One Thread, meal confirmation and safety holds were checked live
-  on a local stack with real OpenAI calls.
+  on a local stack with real OpenAI calls. Signed-in journeys on the
+  production URL have not been re-run since this release.
 
 These are engineering tests, not a clinical or user study.
 
@@ -236,6 +241,10 @@ These are engineering tests, not a clinical or user study.
 - `/admin/login` is the business-portal login (a naming collision with the
   platform `/admin`). `/dashboard/ai-coach` keeps its historical URL for
   the Dante page.
+- **Muscle mappings:** only some catalogue exercises have explicit
+  muscle-contribution rows. The rest derive load from the exercise's primary
+  and secondary muscles and are tagged `fallback`; no coefficients are
+  invented.
 - Dante gives general fitness guidance, not medical advice.
 
 ## Deployment
@@ -249,7 +258,12 @@ The app deploys to Vercel as a standard Next.js project (`vercel.json`:
 2. Production builds reject a loopback (`http://127.0.0.1`) Supabase URL by
    design.
 3. Apply pending migrations to the production database only after a backup and
-   review. The app expects every migration in `supabase/migrations/`.
+   review. The app expects every migration in `supabase/migrations/`. The
+   hosted project was built from an older schema and caught up through
+   reviewed, out-of-band migrations whose history versions differ from the
+   repo file names (`20261103120000_prod_schema_parity_hotfix.sql` documents
+   the compatibility layer). Compare the live schema, not just migration
+   history, before running `supabase db push` against it.
 4. Deploy to a preview first, verify sign-in, a food log, a Dante turn and a
    workout start, then promote.
 5. Roll back by promoting the previous production deployment in Vercel.
