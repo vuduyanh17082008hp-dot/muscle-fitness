@@ -1,9 +1,12 @@
-# Nutrition Coach V1
+# Dante nutrition engine (formerly "Nutrition Coach V1")
 
 Macro-constrained meal & craving optimizer embedded in `/dashboard/nutrition`
-(`components/nutrition/coach/`). A specialist next to Dante, not a second AI
-platform: same auth, same shared rate limiter, same OpenAI provider, same
-pending-action confirmation, same food-log service.
+(`components/nutrition/coach/`). It is Dante's nutrition engine, not a second
+assistant: users only ever talk to Dante. `/api/chatbot` routes meal and
+food-lookup turns here (internal codename "Gemma"). Same auth, same shared
+rate limiter, same OpenAI provider, same pending-action confirmation, same
+food-log service. The "Nutrition Coach" names below are historical module
+names.
 
 ## Architecture
 

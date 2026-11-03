@@ -3,7 +3,7 @@
 ## Quick start
 
 ```bash
-cd "C:\Users\DUY ANH\OneDrive\Desktop\muscle-fitness"
+cd muscle-fitness   # your clone
 npm install
 npm run dev
 ```
