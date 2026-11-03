@@ -7,8 +7,21 @@ import {
   type CameraView,
 } from "@/lib/setvision/exercise-classifier";
 import { confidentPoint, getExerciseConfig, sideAngle, type ExerciseConfig, type Side } from "@/lib/setvision/exercise-config";
-import { averageTorsoLength, estimateTorsoLength } from "@/lib/setvision/normalization";
+import { averageTorsoLength } from "@/lib/setvision/normalization";
 import { checkPersonAttribution, classifySceneChanges, credible } from "@/lib/setvision/person-check";
+import {
+  assessableLength,
+  describeBoundaries,
+  findBoundaries,
+  IDENTITY_BREAKING,
+  MIN_SEGMENT_MS,
+  partition,
+  sanitizeFrames,
+  spanLabel,
+  trackJumpSpans,
+  type Boundary,
+  type Segment,
+} from "@/lib/setvision/segments";
 import type { ReviewScope } from "@/lib/setvision/visual-review";
 import { createRepStateMachine } from "@/lib/setvision/rep-state-machine";
 import { computeAllRepRom } from "@/lib/setvision/rom";
@@ -20,6 +33,7 @@ import type {
   ExerciseClassification,
   MovementEvent,
   PoseFrame,
+  SegmentReport,
   SetVisionAnalysis,
   SetVisionExerciseId,
   TimedPoseFrame,
@@ -240,38 +254,12 @@ function excludePickupOutliers(reps: CompletedRep[], limitations: string[]): Com
   return reps;
 }
 
-/** Hip-centre move between neighbouring samples, in the tracked body's own torso lengths, that no real lift produces. */
-const TRACK_JUMP_TORSO_LENGTHS = 1.5;
-const TRACK_JUMP_MAX_GAP_MS = 400;
-
 /**
- * Timestamps where the single-person tracker's body teleported between two
- * close samples — the detector switched to another person (or a bystander /
- * occlusion pulled it away). MoveNet SinglePose reports ONE body per frame
- * and cannot count people, so this jump is the only wrong-person evidence
- * the uploaded-video path has.
+ * Timestamps where the single-person tracker's body teleported between two close samples (see
+ * segments.ts::trackJumpSpans — the jump is a segment boundary, never a reason to drop the whole clip).
  */
-// ponytail: catches identity switches, not a second person the tracker never latched onto; a MultiPose person count is the upgrade.
 export function findTrackJumps(frames: TimedPoseFrame[]): number[] {
-  const jumps: number[] = [];
-  let prev: { t: number; x: number; y: number; torso: number } | null = null;
-  for (const { timestampMs, frame } of frames) {
-    const hips = [confidentPoint(frame, "left_hip"), confidentPoint(frame, "right_hip")].filter((p) => p !== null);
-    const torso = estimateTorsoLength(frame);
-    if (hips.length === 0 || !torso) continue;
-    const cur = {
-      t: timestampMs,
-      x: hips.reduce((s, p) => s + p.x, 0) / hips.length,
-      y: hips.reduce((s, p) => s + p.y, 0) / hips.length,
-      torso,
-    };
-    if (prev && cur.t - prev.t <= TRACK_JUMP_MAX_GAP_MS) {
-      const moved = Math.hypot(cur.x - prev.x, cur.y - prev.y) / Math.max(prev.torso, cur.torso);
-      if (moved > TRACK_JUMP_TORSO_LENGTHS) jumps.push(cur.t);
-    }
-    prev = cur;
-  }
-  return jumps;
+  return trackJumpSpans(frames).map((b) => b.endMs);
 }
 
 /** Frames that never went through the MultiPose person check (old recorded fixtures only). */
@@ -329,7 +317,42 @@ export const MIN_SUBJECT_SHARE = 0.3;
  * frame is sent: a full review; a LIMITED one (camera moved but one consistent person; or only part
  * of a body in view and no sign of anyone else); or a refusal with the reason.
  */
-export function aiReviewScope(frames: TimedPoseFrame[]): { scope: ReviewScope; limitations: string[] } | { refuse: string } {
+export type AiReviewDecision =
+  | {
+      scope: ReviewScope;
+      limitations: string[];
+      /** When the clip has identity-breaking boundaries: the ONE part the stills must come from. */
+      window?: { startMs: number; endMs: number; frames: TimedPoseFrame[] };
+    }
+  | { refuse: string };
+
+export function aiReviewScope(frames: TimedPoseFrame[]): AiReviewDecision {
+  const { frames: clean } = sanitizeFrames(frames);
+  // Only boundaries that can change WHO is in view split the AI review; camera motion inside a part keeps the
+  // existing limited "camera_moved" review.
+  const breaks = findBoundaries(clean).filter((b) => IDENTITY_BREAKING.has(b.kind));
+  if (breaks.length === 0) return wholeClipReviewScope(clean);
+  const parts = partition(clean, breaks)
+    .filter(assessableLength)
+    .map((part) => ({ part, decision: wholeClipReviewScope(part.frames) }))
+    .filter((x): x is { part: Segment; decision: Exclude<AiReviewDecision, { refuse: string }> } => !("refuse" in x.decision))
+    .sort((a, b) => b.part.endMs - b.part.startMs - (a.part.endMs - a.part.startMs));
+  const where = describeBoundaries(breaks);
+  if (parts.length === 0) {
+    return { refuse: `The video breaks at ${where}, and no part between those breaks could be attributed to one person on its own, so nothing was sent to the AI. Upload one continuous recording with only you in view.` };
+  }
+  const { part, decision } = parts[0];
+  return {
+    ...decision,
+    limitations: [
+      `The video breaks at ${where}. Only ${spanLabel(part.startMs, part.endMs)} was reviewed: the longest part that could be attributed to one person. Other parts were not sent, and nothing says they show the same athlete.`,
+      ...decision.limitations,
+    ],
+    window: { startMs: part.startMs, endMs: part.endMs, frames: part.frames },
+  };
+}
+
+function wholeClipReviewScope(frames: TimedPoseFrame[]): AiReviewDecision {
   const gate = subjectGate(frames);
   if (gate.verdict === "refuse") return { refuse: gate.reason };
   const onePerson = frames.filter((f) => (f.people ?? []).filter(credible).length === 1).length;
@@ -365,10 +388,100 @@ export function analyzeFrameSequence(
     ]);
   }
 
-  const gate = subjectGate(frames);
-  if (gate.verdict !== "ok") {
-    return emptyAnalysis(exercise, classification, [gate.reason], gate.reason);
+  const { frames: clean, dropped } = sanitizeFrames(frames);
+  const droppedNote = dropped > 0 ? [`${dropped} unreadable or out-of-order video frame(s) were skipped.`] : [];
+  const boundaries = findBoundaries(clean);
+  if (boundaries.length === 0) {
+    const single = analyzeSegment(clean, exercise, classification, options);
+    return droppedNote.length ? { ...single, limitations: unique([...single.limitations, ...droppedNote]) } : single;
   }
+  return analyzeSegments(clean, boundaries, exercise, classification, options, droppedNote);
+}
+
+const unique = (items: string[]) => [...new Set(items)].slice(0, 50);
+
+type SegmentOptions = {
+  metersPerTorsoLength?: number | null;
+  /** The part began at an untrusted boundary: a movement already under way then started on the other side of it. */
+  openedByBoundary?: boolean;
+};
+
+/**
+ * Each part between untrusted boundaries is analysed on its own (fresh rep state, side, tempo, range, torso
+ * scale, and its own person check). The headline is the ONE validated part with the most reps; the others are
+ * listed, never added in: SetVision can't confirm that two parts show the same athlete.
+ */
+// ponytail: parts linked only by camera motion with the same tracker id could be combined; kept separate until identity evidence is calibrated.
+function analyzeSegments(
+  frames: TimedPoseFrame[],
+  boundaries: Boundary[],
+  exercise: SetVisionExerciseId,
+  classification: ExerciseClassification,
+  options: SegmentOptions,
+  droppedNote: string[],
+): SetVisionAnalysis {
+  const clipMs = Math.max(1, frames[frames.length - 1].timestampMs - frames[0].timestampMs);
+  const parts = partition(frames, boundaries).map((segment) => {
+    const durationMs = segment.endMs - segment.startMs;
+    if (!assessableLength(segment)) {
+      return { segment, analysis: null as SetVisionAnalysis | null, reason: `Too short to assess on its own (${(durationMs / 1000).toFixed(1)} s; needs at least ${MIN_SEGMENT_MS / 1000} s).` as string | null };
+    }
+    const analysis = analyzeSegment(segment.frames, exercise, classification, { ...options, openedByBoundary: segment.after !== null });
+    const reason = analysis.abstainReason ?? (analysis.reps === 0 ? "No complete rep was measured in this part." : null);
+    return { segment, analysis, reason };
+  });
+
+  const valid = parts.filter((p) => p.analysis !== null && p.reason === null);
+  const primary = [...valid].sort(
+    (a, b) =>
+      b.analysis!.reps - a.analysis!.reps ||
+      b.analysis!.confidence - a.analysis!.confidence ||
+      b.segment.endMs - b.segment.startMs - (a.segment.endMs - a.segment.startMs),
+  )[0];
+
+  const reports: SegmentReport[] = parts.map((p) => ({
+    startMs: p.segment.startMs,
+    endMs: p.segment.endMs,
+    openedBy: p.segment.after?.kind ?? null,
+    status: p.reason === null ? "analyzed" : "not_assessable",
+    reps: p.reason === null ? p.analysis!.reps : 0,
+    quality: p.reason === null ? p.analysis!.confidence : 0,
+    coverage: Math.min(1, Math.max(0, (p.segment.endMs - p.segment.startMs) / clipMs)),
+    reason: p.reason,
+    primary: p === primary,
+  }));
+
+  const where = describeBoundaries(boundaries);
+  if (!primary) {
+    const why = unique(parts.map((p) => p.reason as string)).slice(0, 3).join(" ");
+    const reason = `Not assessable: the video breaks at ${where}, and no part between those breaks met the evidence requirements on its own. ${why}`;
+    return { ...emptyAnalysis(exercise, classification, unique([reason, ...droppedNote]), reason), segments: reports };
+  }
+
+  const others = valid.length - 1;
+  const note =
+    parts.length === 1
+      ? `Frames during ${where} were left out; the rest (${spanLabel(primary.segment.startMs, primary.segment.endMs)}) was analysed as one continuous part.`
+      : `This video has ${parts.length} parts, separated by ${where}. Each part was analysed on its own and no rep was counted across a break. These results are from ${spanLabel(primary.segment.startMs, primary.segment.endMs)}, the part with the most measured reps${
+          others > 0 ? `; ${others} other analysable part(s) are listed separately and not added in, because SetVision can't confirm they show the same athlete` : ""
+        }.`;
+  return {
+    ...primary.analysis!,
+    limitations: unique([note, ...primary.analysis!.limitations, ...droppedNote]),
+    segments: reports,
+  };
+}
+
+/** The single-continuous-part engine (the former whole-clip analysis, with the person check scoped to the part). */
+function analyzeSegment(
+  frames: TimedPoseFrame[],
+  exercise: SetVisionExerciseId,
+  classification: ExerciseClassification,
+  options: SegmentOptions,
+): SetVisionAnalysis {
+  const person = checkPersonAttribution(frames);
+  if ("reason" in person) return emptyAnalysis(exercise, classification, [person.reason], person.reason);
+  const gate = { limitations: person.verdict === "not_run" ? [PERSON_CHECK_NOT_RUN] : person.limitations };
 
   const config = getExerciseConfig(exercise);
   const poseFrames = frames.map((f) => f.frame);
@@ -408,7 +521,14 @@ export function analyzeFrameSequence(
 
   const limitations: string[] = [];
   const excluded: MovementEvent[] = [];
-  let completedReps = exercise === "squat" ? excludePickupOutliers(detectedReps, limitations) : detectedReps;
+  // Never count a rep that crosses an untrusted boundary: after one, a rep whose start wasn't observed began before the break.
+  const crossing = options.openedByBoundary ? detectedReps.filter((rep) => !rep.startObserved) : [];
+  if (crossing.length > 0) {
+    crossing.forEach((rep) => excluded.push({ kind: "excluded", startMs: rep.bottomAtMs, endMs: rep.ascentEndAtMs }));
+    limitations.push(`${crossing.length} movement(s) already under way when this part began were not counted: they started before the break.`);
+  }
+  const ownReps = crossing.length > 0 ? detectedReps.filter((rep) => rep.startObserved).map((rep, i) => ({ ...rep, repNumber: i + 1 })) : detectedReps;
+  let completedReps = exercise === "squat" ? excludePickupOutliers(ownReps, limitations) : ownReps;
 
   if (side && config.position && completedReps.length > 0) {
     const verdicts = completedReps.map((rep) => repPosition(frames, rep, config, side));

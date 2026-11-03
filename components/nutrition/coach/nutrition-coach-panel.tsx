@@ -13,7 +13,7 @@ import { draftIdentity, type PendingLog } from "@/lib/nutrition/coach/log-action
 import { QUICK_ACTIONS } from "@/lib/nutrition/coach/quick-actions"
 import type { ActiveMealDraft, ContextSnapshot, CravingKey, MealDraftHistoryItem } from "@/lib/nutrition/coach/types"
 import { MEAL_TYPE_LABEL, MEAL_TYPES, type MealType } from "@/lib/nutrition/food-log/types"
-import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT, FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event"
+import { announceFoodLogChanged, COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT, FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event"
 import { readLastThread, rememberThread, todaysThread } from "@/lib/dante-core/active-thread"
 import { parseChatStreamChunk, resolveConfirmationOutcome, type ChatStreamPendingConfirmation, type DanteNutritionTurn } from "@/lib/dante-core/chat-stream-protocol"
 
@@ -310,8 +310,10 @@ export function NutritionCoachPanel() {
       if (intent === "confirm" && json.ok) {
         setDraft({ ...draft, status: "LOGGED" })
         setNotice("Logged — today's totals are updated.")
-        // Server-rendered totals (food log, dashboard cards) and this panel's remaining macros re-read the new row.
+        // Server-rendered totals (food log, dashboard cards) and this panel's remaining macros re-read the new row; the
+        // Fuel tracker re-reads its entries (its client state never resets on router.refresh()).
         router.refresh()
+        announceFoodLogChanged("dante")
         void refreshSuggestions()
       } else {
         const before = draftBeforeLog.current ?? { ...draft, status: "DRAFT" as const }
@@ -386,6 +388,7 @@ export function NutritionCoachPanel() {
         if (shown && (!chatLog || chatLog.draftId === shown.id)) setDraft({ ...shown, status: "LOGGED" })
         setPending(null)
         router.refresh()
+        announceFoodLogChanged("dante")
         void refreshSuggestions()
       } else if (chatLog?.stage === "READY_FOR_CONFIRMATION" && chatLog.actionId && shown && chatLog.draftId === shown.id && chatLog.fingerprint === draftIdentity(shown)) {
         if (shown.status !== "CONFIRMED") draftBeforeLog.current = shown
@@ -424,7 +427,10 @@ export function NutritionCoachPanel() {
         : outcome === "cancelled" ? "Rejected — nothing was changed."
         : outcome === "failed" ? (json.error ?? "That didn't go through — nothing was changed.")
         : "I couldn't tell whether that went through. Check Dante before trying again."
-      if (outcome === "confirmed") router.refresh()
+      if (outcome === "confirmed") {
+        router.refresh()
+        announceFoodLogChanged("dante")
+      }
     } catch {
       text = "I couldn't tell whether that went through. Check Dante before trying again."
     } finally {
@@ -639,7 +645,7 @@ export function NutritionCoachPanel() {
               <div role="alertdialog" aria-label="Confirm food log" className="mt-3 text-sm text-mf-glass-text-secondary">
                 <p>{pending.summary}</p>
                 <div className="mt-3 flex gap-2">
-                  <PrimaryButton size="sm" disabled={busy} onClick={() => void resolveLog("confirm")}>Confirm</PrimaryButton>
+                  <PrimaryButton size="sm" disabled={busy} onClick={() => void resolveLog("confirm")}>{busy ? "Saving…" : "Confirm & Save"}</PrimaryButton>
                   <SecondaryButton size="sm" disabled={busy} onClick={() => void resolveLog("cancel")}>Cancel</SecondaryButton>
                 </div>
               </div>

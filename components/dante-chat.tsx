@@ -34,7 +34,7 @@ import {
   isDanteRateLimitedMessage,
 } from "@/lib/dante-chat-http-error";
 import type { DanteInsight } from "@/lib/dante-core/insight";
-import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT, FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event";
+import { announceFoodLogChanged, COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT } from "@/lib/coach-context-event";
 import {
   parseChatStreamChunk,
   resolveAbortedContent,
@@ -501,7 +501,7 @@ function PendingConfirmationPanel({
         onClick={onConfirm}
         className="min-h-11 rounded-md border border-mf-glass-text bg-mf-glass-brand px-4 text-sm font-semibold text-mf-glass-brand-ink transition hover:bg-mf-glass-brand-hover disabled:opacity-50"
       >
-        Confirm
+        {isBusy ? "Saving…" : pendingConfirmation.toolName === "log_meal_draft" || pendingConfirmation.toolName === "log_food" ? "Confirm & Save" : "Confirm"}
       </button>
 
       <button
@@ -973,7 +973,7 @@ export default function DanteChat({
         if (doneEvent) {
           const finalEvent = doneEvent;
           // The meal state itself is held by the server per thread (One Day, One Thread); a write refreshes food-log views.
-          if (finalEvent.nutrition?.foodLogChanged) window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT));
+          if (finalEvent.nutrition?.foodLogChanged) announceFoodLogChanged("dante");
 
           updateStreamingMessage(assistantId, (message) => {
             // QA-08: a finished reply with no text and nothing to confirm would render as a silent blank — say so instead
@@ -1106,7 +1106,7 @@ export default function DanteChat({
       if (resolution === "confirmed" && todayContext) router.refresh();
       // A confirmed write refreshes food-log views (the server re-validates the thread's pending log on the next turn).
       if (resolution === "confirmed") {
-        window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT));
+        announceFoodLogChanged("dante");
         window.dispatchEvent(new Event(COACH_CONTEXT_CHANGED_EVENT));
       }
     } catch (error) {

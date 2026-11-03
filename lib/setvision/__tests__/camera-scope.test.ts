@@ -32,11 +32,14 @@ describe("blend residual: a dissolve is a mix of two shots, motion is not", () =
 describe("scene changes are classified, and only camera motion is spared for the AI review", () => {
   const spanRun = (blend: number) => scan(30, (i) => (i >= 10 && i <= 12 ? { span: 0.7, blend } : {}));
 
-  it("a big 1 s change that is a mix of two shots is a dissolve (edit) → refused everywhere", () => {
+  it("a big 1 s change that is a mix of two shots is a dissolve (edit): the whole clip is refused, the AI sees only one part", () => {
     const frames = spanRun(0.05);
     expect(classifySceneChanges(frames)).toMatchObject({ dissolves: [1000], cameraMoves: [] });
     expect(subjectGate(frames).verdict).toBe("refuse");
-    expect(aiReviewScope(frames)).toHaveProperty("refuse");
+    // Before the fade: 0–1.0 s (too short). After it: 2.6–5.8 s, one person → reviewed alone, never combined.
+    const decision = aiReviewScope(frames);
+    expect(decision).toMatchObject({ scope: "full", window: { startMs: 2600, endMs: 5800 } });
+    expect("limitations" in decision && decision.limitations[0]).toMatch(/fade between shots at 1\.0 s.*Only 2\.6 s–5\.8 s was reviewed.*nothing says they show the same athlete/);
   });
 
   it("a big 1 s change that isn't a mix is camera motion → tracking refused, limited AI review allowed for one consistent person", () => {

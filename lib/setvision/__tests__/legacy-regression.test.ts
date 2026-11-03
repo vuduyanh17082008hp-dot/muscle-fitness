@@ -245,7 +245,9 @@ describe("legacy SetVision rep phases", () => {
     const result = analyzeFrameSequence([...before, ...lost, ...after], { exercise: "squat" });
     expect(result.reps).toBe(1);
     expect(result.perRep.tempo[0].descentStartMs!).toBeGreaterThan(5000);
-    expect(result.limitations.join(" ")).toMatch(/Tracking was lost/);
+    // A 2 s loss is a segment boundary: the rep in progress before it is never finished on the other side.
+    expect(result.limitations.join(" ")).toMatch(/athlete leaving view or being hidden/);
+    expect(result.segments?.find((s) => s.primary)?.startMs).toBeGreaterThanOrEqual(3700);
   });
 
   it("reports cross-rep consistency as unavailable for a single rep", () => {

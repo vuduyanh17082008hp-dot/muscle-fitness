@@ -238,6 +238,28 @@ export type SetVisionAnalysis = {
   measuredSide?: "left" | "right" | null;
   /** Movements that were seen but not counted as completed reps (partial range, tracking lost). */
   events?: MovementEvent[];
+  /**
+   * Present when the clip had untrusted boundaries (cut, fade, camera move, track jump, identity change,
+   * tracking loss, frame gap): each independently assessed part. The headline numbers are from the ONE
+   * `primary` part; other parts are never added in. Not persisted (saves keep the headline only).
+   */
+  segments?: SegmentReport[];
+};
+
+export type SegmentReport = {
+  startMs: number;
+  endMs: number;
+  /** What opened this part (null for the first). */
+  openedBy: "cut" | "fade" | "camera_move" | "track_jump" | "identity_change" | "tracking_loss" | "frame_gap" | null;
+  status: "analyzed" | "not_assessable";
+  reps: number;
+  /** The same uncalibrated quality heuristic as `confidence`, for this part alone. */
+  quality: number;
+  /** Share of the clip's duration this part covers, in [0, 1]. */
+  coverage: number;
+  /** Why it wasn't assessable (null when analysed). */
+  reason: string | null;
+  primary: boolean;
 };
 
 /**

@@ -177,7 +177,9 @@ describe("Nutrition Coach totals follow the tracker's food log", () => {
   it("the tracker announces every entries change and the coach panel re-reads its server context on it", () => {
     const tracker = read("components/nutrition/nutrition-tracker.tsx");
     const panel = read("components/nutrition/coach/nutrition-coach-panel.tsx");
-    expect(tracker).toMatch(/window\.dispatchEvent\(new Event\(FOOD_LOG_CHANGED_EVENT\)\)\s*\n\s*\}, \[entries\]\)/);
+    expect(tracker).toMatch(/announceFoodLogChanged\("tracker"\)\s*\n\s*\}, \[entries\]\)/);
+    // ...and a Dante-confirmed log (any non-tracker announcement) makes the tracker re-read the server's day.
+    expect(tracker).toMatch(/foodLogChangeSource\(event\) === "tracker"\) return[\s\S]*?reloadLog\(\)/);
     expect(panel).toMatch(/addEventListener\(FOOD_LOG_CHANGED_EVENT, onFoodLogChanged\)/);
     expect(panel).toMatch(/const onFoodLogChanged = \(\) => void refreshSuggestions\(\)/);
     // only the newest re-read may set the remaining macros

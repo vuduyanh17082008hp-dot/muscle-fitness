@@ -2,6 +2,7 @@ import { Activity, Gauge, Timer, TrendingDown, Waves } from "lucide-react";
 
 import { EXERCISE_CONFIGS } from "@/lib/setvision/exercise-config";
 import { ENGINE_CAPABILITY, SOURCE_TEXT, type ExerciseSource } from "@/lib/setvision/exercise-selection";
+import { BOUNDARY_TEXT } from "@/lib/setvision/segments";
 import type { MovementEvent, SetVisionAnalysis } from "@/lib/setvision/types";
 import { cn } from "@/lib/utils";
 
@@ -182,8 +183,8 @@ export function SetVisionResultsPanel({
 
       {abstained ? (
         <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-3 text-sm leading-6 text-zinc-200" data-testid="sv-abstained">
-          Unsupported input for this exercise: {analysis.abstainReason} No reps, tempo or range are reported. You can still
-          mark the reps yourself below.
+          {analysis.segments ? analysis.abstainReason : `Unsupported input for this exercise: ${analysis.abstainReason}`} No reps, tempo or range are
+          reported. You can still mark the reps yourself below.
         </p>
       ) : null}
 
@@ -332,6 +333,27 @@ export function SetVisionResultsPanel({
             {events.map((e, i) => (
               <li key={i}>
                 <TimestampButton ms={e.startMs} onSeek={onSeek} />–<TimestampButton ms={e.endMs} onSeek={onSeek} /> · {EVENT_TEXT[e.kind]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {analysis.segments && analysis.segments.length > 0 ? (
+        <div className="mt-6 border-t border-white/[0.06] pt-4" data-testid="sv-segments">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">Video parts — each assessed on its own</p>
+          <ul className="mt-2 space-y-1.5 text-xs leading-5 text-zinc-400">
+            {analysis.segments.map((part) => (
+              <li key={part.startMs} className={cn("flex flex-wrap items-baseline gap-x-2", part.primary && "text-zinc-200")} data-testid="sv-segment">
+                <TimestampButton ms={part.startMs} onSeek={onSeek} />
+                <span>– {(part.endMs / 1000).toFixed(1)} s</span>
+                {part.openedBy ? <span className="text-zinc-600">after {BOUNDARY_TEXT[part.openedBy]}</span> : null}
+                <span className="font-semibold">
+                  {part.status === "analyzed"
+                    ? `${part.reps} rep${part.reps === 1 ? "" : "s"} · quality ${qualityBand(part.quality).toLowerCase()}${part.primary ? " · shown above" : " · not added in"}`
+                    : "Not assessable"}
+                </span>
+                {part.reason ? <span className="w-full text-zinc-600">{part.reason}</span> : null}
               </li>
             ))}
           </ul>

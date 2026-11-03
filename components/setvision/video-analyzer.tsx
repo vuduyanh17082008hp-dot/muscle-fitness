@@ -196,7 +196,10 @@ export function VideoAnalyzer() {
         }
         setVisual({ key, value: { status: "loading", phase: "AI is reviewing stills from your video…" } });
         // Stills at the movement's turning points (start/end of each rep), topped up evenly — same 6–12 budget.
-        const { times } = phaseTimes(subject, element.duration * 1000);
+        // A clip with breaks is reviewed from ONE trusted part only: every still comes from inside its window.
+        const { times } = decision.window
+          ? phaseTimes(decision.window.frames, decision.window.endMs - decision.window.startMs, decision.window.startMs)
+          : phaseTimes(subject, element.duration * 1000);
         prepared = { key, stills: await sampleStills(element, times), scope: decision.scope, checks: decision.limitations };
         preparedRef.current = prepared;
       }
@@ -534,11 +537,14 @@ export function VideoAnalyzer() {
           status={visualState.review.status}
           observations={visualState.review.observations}
           note={[
-            visualState.review.limitation?.replace(/([^.!?])$/, "$1."),
+            visualState.review.limitation && visualState.review.limitation === analysis?.abstainReason
+              ? "Same reason as the tracked result below."
+              : visualState.review.limitation?.replace(/([^.!?])$/, "$1."),
             visualState.review.frameCount === 0
               ? "Checked on your device — nothing was sent to the AI."
               : `AI looked at ${visualState.review.frameCount} stills (camera view not verified) — qualitative only, no reps or measurements.`,
-            ...(visualState.checks ?? []),
+            // Notes the tracked result below already shows are not repeated here.
+            ...(visualState.checks ?? []).filter((check) => !(analysis?.limitations ?? []).includes(check) && check !== analysis?.abstainReason),
           ]
             .filter(Boolean)
             .join(" ")}

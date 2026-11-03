@@ -23,11 +23,12 @@ describe("wrong-person guard (track jumps)", () => {
     expect(findTrackJumps([body(0, 100), body(1000, 400)])).toEqual([]);
   });
 
-  it("abstains with no reps and a re-record instruction when the track jumps", () => {
+  it("a track jump is a segment boundary: with no assessable part on either side → Not assessable, no reps", () => {
     const result = analyzeFrameSequence([body(0, 100), body(100, 400)], { exercise: "squat" });
     expect(result.reps).toBe(0);
     expect(result.confidence).toBe(0);
-    expect(result.abstainReason).toMatch(/0\.1 s.*Re-record with only you in view/);
+    expect(result.abstainReason).toMatch(/^Not assessable: .*tracked body jumping across the frame at 0\.1 s/);
     expect(result.limitations).toEqual([result.abstainReason]);
+    expect(result.segments?.map((s) => s.status)).toEqual(["not_assessable", "not_assessable"]);
   });
 });
