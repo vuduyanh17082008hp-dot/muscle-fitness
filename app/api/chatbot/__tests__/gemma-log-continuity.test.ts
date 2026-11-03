@@ -177,6 +177,25 @@ describe("P0 — suggested meal → log → meal type → confirm", () => {
     expect(yes.conversation.pendingLog.stage).toBe("VERIFIED")
   })
 
+  it("dinner named in an earlier turn is not asked again: 'log it' goes straight to the Confirm card", async () => {
+    const s = session()
+    const built = await s.say("I have tuna and bread. Build me a high protein meal for dinner")
+    expect(built.mealDraft?.name).toBeTruthy()
+    const ask = await s.say("log it")
+    expect(ask.conversation.pendingLog).toMatchObject({ stage: "READY_FOR_CONFIRMATION", mealType: "dinner" })
+    expect(ask.reply).not.toMatch(/which meal|breakfast, lunch/i)
+    expect(logged).toHaveLength(0) // still nothing saved before the confirmation
+    await s.say("confirm")
+    expect(logged).toHaveLength(1)
+    expect(logged[0].mealType).toBe("dinner")
+  })
+
+  it("no meal named anywhere → still asks for the meal type", async () => {
+    const { s } = await suggested()
+    const ask = await s.say("log it")
+    expect(ask.conversation.pendingLog).toMatchObject({ stage: "AWAITING_REQUIRED_INPUT", missing: "mealType" })
+  })
+
   it("cancel rejects the pending action and writes nothing", async () => {
     const { s } = await suggested()
     await s.say("log this for lunch")

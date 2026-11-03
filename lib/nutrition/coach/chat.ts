@@ -91,7 +91,7 @@ import { COACH_INGREDIENT_IDS, getIngredient } from "./ingredients"
 import { totalsFor } from "./macros"
 import { buildNextMeal, chooseMyFood } from "./service"
 import { draftInputSchema, rehydrateDraft, type ConstraintOverrides } from "./schema"
-import { isLive, type LogActionStage, type PendingLog } from "./log-action"
+import { isLive, mealTypeIn, type LogActionStage, type PendingLog } from "./log-action"
 import { handleLogTurn } from "./log-turn"
 import type { ActiveMealDraft, CoachContext } from "./types"
 
@@ -1171,7 +1171,10 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   // P0 chat-driven meal log: a live pending log (or a new "log this") is resolved before any follow-up / model path, so a
   // typed "lunch" or "confirm" can never fall through to a re-voiced recommendation. Writes only via the pending-action CAS.
   const competingProposal = !conversationOwnsFocus && Boolean(state.followUp?.pendingProposal) && isFollowUpLive(state.followUp ?? null, now)
-  const logTurn = await handleLogTurn({ supabase, userId, message, now, budget: turnBudget, ctx, draft, pending: state.pendingLog, competingProposal, candidate })
+  // "I had chicken rice for dinner" → "log it": the slot the user already named in the last two turns isn't asked for again
+  // (the proposal card still shows it and still needs Confirm, so a wrong guess is never a silent write).
+  const rememberedMealType = recent.filter((turn) => turn.role === "user").slice(-3).reverse().map((turn) => mealTypeIn(turn.text)).find(Boolean) ?? null
+  const logTurn = await handleLogTurn({ supabase, userId, message, now, budget: turnBudget, ctx, draft, pending: state.pendingLog, competingProposal, candidate, rememberedMealType })
   if (logTurn) {
     const note = unappliedChange && logTurn.pendingLog?.stage !== "VERIFIED" ? "The change I proposed for it wasn't applied, so this is the meal as shown. " : ""
     return respond("LOG_MEAL", "log_action", `${note}${logTurn.reply}`, {

@@ -30,7 +30,7 @@ import { computeDailyTotals, compareToTargets, groupByMeal } from "@/lib/nutriti
 import { addDaysIso, formatDateLabel } from "@/lib/nutrition/date-utils"
 import { suggestMealType } from "@/components/nutrition/meal-type"
 import type { FoodHistoryItem } from "@/lib/nutrition/food-log/history"
-import { FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event"
+import { announceFoodLogChanged, FOOD_LOG_CHANGED_EVENT, foodLogChangeSource } from "@/lib/coach-context-event"
 
 type NutritionTrackerProps = {
   initialEntries: FoodLogEntry[]
@@ -88,7 +88,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
       entriesMounted.current = true
       return
     }
-    window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT))
+    announceFoodLogChanged("tracker")
   }, [entries])
 
   const totals = useMemo(() => computeDailyTotals(entries), [entries])
@@ -165,6 +165,18 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     setNextActionRefreshKey((key) => key + 1)
     loadRecentFoods()
   }, [loadRecentFoods])
+
+  // Dante (chat or card) confirmed a log: the server row is the truth, so re-read it. Any read already in flight started
+  // before that write and is discarded (classifyDayRead). The tracker's own announcements are ignored — no reload loop.
+  useEffect(() => {
+    const onExternalChange = (event: Event) => {
+      if (foodLogChangeSource(event) === "tracker") return
+      writeCount.current += 1
+      reloadLog()
+    }
+    window.addEventListener(FOOD_LOG_CHANGED_EVENT, onExternalChange)
+    return () => window.removeEventListener(FOOD_LOG_CHANGED_EVENT, onExternalChange)
+  }, [reloadLog])
 
   function forgetPending(keys: Set<string>) {
     setUnconfirmed((current) => current.filter((item) => !keys.has(item.key)))

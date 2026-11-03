@@ -106,6 +106,6 @@ describe("Food log rows", () => {
   it("a serving edit keeps its serving name; the tracker still announces every log change", () => {
     const tracker = read("components/nutrition/nutrition-tracker.tsx");
     expect(tracker).toContain("{ quantityGrams: grams, servingName: serving.name, servingsConsumed: amount }");
-    expect(tracker).toMatch(/window\.dispatchEvent\(new Event\(FOOD_LOG_CHANGED_EVENT\)\)/);
+    expect(tracker).toMatch(/announceFoodLogChanged\("tracker"\)/);
   });
 });

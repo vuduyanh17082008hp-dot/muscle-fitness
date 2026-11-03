@@ -49,6 +49,8 @@ type Input = {
   competingProposal: boolean
   /** "log option 3": the option picked from the list on screen (already resolved by the caller). */
   candidate?: ActiveMealDraft | null
+  /** A meal slot the user named in the last turns ("…for dinner"), used when this message names none. */
+  rememberedMealType?: MealType | null
 }
 
 const PROPOSE_WAIT_MS = 8_000
@@ -275,7 +277,8 @@ export async function handleLogTurn(input: Input): Promise<LogTurnResult | null>
     if (pending?.stage === "UNKNOWN_OUTCOME") return resolveHandled(pending)
     if (!draft) return null // nothing to log: the existing "no active meal draft" reply answers
     await supersede(pending)
-    return named ? propose(draft, named) : askMealType(draft)
+    const slot = named ?? input.rememberedMealType ?? null
+    return slot ? propose(draft, slot) : askMealType(draft)
   }
   if (!pending) return null
 
