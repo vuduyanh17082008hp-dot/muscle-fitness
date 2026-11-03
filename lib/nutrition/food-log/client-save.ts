@@ -31,7 +31,8 @@ export async function postFoodLog(body: { idempotencyKey: string }, fetchImpl: F
 
   const data = await response.json().catch(() => null)
   if (response.ok && data?.ok && data.entry) return { status: "saved", entry: data.entry as FoodLogEntry }
-  if (REJECTED_BEFORE_WRITE.has(response.status) && data?.ok === false) {
+  // notWritten: the server saw the database reject the insert (rolled back) — a confirmed failure.
+  if (data?.ok === false && (REJECTED_BEFORE_WRITE.has(response.status) || data.notWritten === true)) {
     return { status: "failed", error: data.error ?? "Unable to save this food." }
   }
   return { status: "unknown", error: UNCONFIRMED_SAVE_MESSAGE }
@@ -67,12 +68,13 @@ export async function saveFoodLogWithReconcile(
 }
 
 /**
- * Age after which a still-unconfirmed save is shown as stale. A LABEL only:
- * a timed-out function doesn't roll back a write already handed to Postgres,
- * and absence of a row never proves "not written". A key leaves the pending
- * list only when its row is read back.
+ * Age after which a still-unconfirmed save is stale: longer than a request can
+ * still be in flight (Vercel's 300 s function limit plus the database statement
+ * timeout). A stale key whose readback SUCCEEDS and finds no row is "not found":
+ * shown separately, and the user may dismiss it. It is never dropped
+ * automatically — a row that shows up later still settles it as saved.
  */
-export const PENDING_STALE_MS = 5 * 60_000
+export const PENDING_STALE_MS = 10 * 60_000
 
 export function isStalePending(sentAt: number, now = Date.now()): boolean {
   return now - sentAt > PENDING_STALE_MS
@@ -80,16 +82,22 @@ export function isStalePending(sentAt: number, now = Date.now()): boolean {
 
 /**
  * Read-only re-check of pending keys by their ORIGINAL key — never re-sends a
- * write. `saved` holds only keys whose row was read back; every other key
- * stays pending. `checkFailed` means at least one readback itself failed.
+ * write. `saved` holds only keys whose row was read back. `notFound` holds
+ * stale keys whose readback succeeded with no row (a failed readback never
+ * counts). Both of those and every other key stay in storage until the caller
+ * forgets them. `checkFailed` means at least one readback itself failed.
  */
 export async function recheckPendingSaves(
-  pending: Array<{ key: string }>,
+  pending: Array<{ key: string; sentAt: number }>,
   fetchImpl: FetchLike = fetch,
-): Promise<{ saved: Set<string>; checkFailed: boolean }> {
+  now = Date.now(),
+): Promise<{ saved: Set<string>; notFound: Set<string>; checkFailed: boolean }> {
   const checks = await Promise.all(pending.map((item) => lookupFoodLogByKey(item.key, fetchImpl)))
   return {
     saved: new Set(pending.filter((_, index) => checks[index]?.entry).map((item) => item.key)),
+    notFound: new Set(
+      pending.filter((item, index) => checks[index] !== null && checks[index]?.entry === null && isStalePending(item.sentAt, now)).map((item) => item.key),
+    ),
     checkFailed: checks.some((check) => check === null),
   }
 }
@@ -145,12 +153,17 @@ export async function reconcileDayPendingSaves(
   logDate: string,
   fetchImpl: FetchLike = fetch,
   storage = browserSession(),
-): Promise<{ unresolved: PendingSave[]; savedAny: boolean; checkFailed: boolean }> {
+): Promise<{ unresolved: PendingSave[]; notFound: PendingSave[]; savedAny: boolean; checkFailed: boolean }> {
   const day = readPendingSaves(userId, storage).filter((p) => p.logDate === logDate)
-  if (day.length === 0) return { unresolved: [], savedAny: false, checkFailed: false }
-  const { saved, checkFailed } = await recheckPendingSaves(day, fetchImpl)
+  if (day.length === 0) return { unresolved: [], notFound: [], savedAny: false, checkFailed: false }
+  const { saved, notFound, checkFailed } = await recheckPendingSaves(day, fetchImpl)
   if (saved.size > 0) forgetPendingSaves(userId, saved, storage)
-  return { unresolved: day.filter((p) => !saved.has(p.key)), savedAny: saved.size > 0, checkFailed }
+  return {
+    unresolved: day.filter((p) => !saved.has(p.key) && !notFound.has(p.key)),
+    notFound: day.filter((p) => notFound.has(p.key)),
+    savedAny: saved.size > 0,
+    checkFailed,
+  }
 }
 
 type Keyed = { idempotencyKey?: string }

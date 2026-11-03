@@ -138,7 +138,8 @@ export async function POST(request: Request) {
   const result = await createFoodLog(supabase, user.id, parsed.data)
 
   if (!result.success) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: result.status ?? 500 })
+    // notWritten: the database rejected the insert, so the client may treat it as a confirmed failure, not "unknown".
+    return NextResponse.json({ ok: false, error: result.error, notWritten: result.notWritten === true }, { status: result.status ?? 500 })
   }
 
   return NextResponse.json({ ok: true, entry: result.data })

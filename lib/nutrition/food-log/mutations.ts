@@ -58,7 +58,7 @@ export type CreateFoodLogInput = {
 
 export type MutationResult<T> =
   | { success: true; data: T }
-  | { success: false; error: string; status?: 400 | 404 | 500 }
+  | { success: false; error: string; status?: 400 | 404 | 500; notWritten?: true }
 
 export async function createFoodLog(
   supabase: SupabaseClient,
@@ -120,7 +120,7 @@ export async function createFoodLog(
     idempotency_key: idempotencyKey,
   }
 
-  const { data, error } = input.finalizeActionId
+  const { data, error, status } = input.finalizeActionId
     ? // service-role only RPC; userId is the session-derived identity from the calling route
         await createSupabaseAdminClient().rpc("finalize_food_log_action", { p_action_id: input.finalizeActionId, p_user_id: userId, p_row: row })
     : await supabase.from("food_logs").insert(row).select(FOOD_LOG_SELECT).single()
@@ -132,7 +132,11 @@ export async function createFoodLog(
 
   if (error || !data) {
     if (error) console.error("[FOOD LOG] createFoodLog failed:", error.message)
-    return { success: false, error: "Nutrition data couldn't be saved. Please try again.", status: 500 }
+    // PostgREST answered 4xx (e.g. PGRST204 missing column, RLS, check violation): the single-statement
+    // transaction rolled back, so nothing was written. 23505 means a row with this key EXISTS — never "not written".
+    // Status 0 (fetch failed / aborted) or 5xx stays unknown: the write may have run.
+    const notWritten = Boolean(error) && status >= 400 && status < 500 && error?.code !== "23505"
+    return { success: false, error: "Nutrition data couldn't be saved. Please try again.", status: 500, ...(notWritten ? { notWritten: true as const } : {}) }
   }
 
   const savedEntry = mapFoodLogRow(data as FoodLogRow)
