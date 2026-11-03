@@ -7,9 +7,8 @@ import type { JointName, PoseObservation, Side } from "@/lib/setvision/squat-p0"
  * Browser-only glue for SetVision P0: decoding probe, seeking, and the
  * MediaPipe Pose Landmarker. Nothing here interprets movement.
  *
- * @mediapipe/tasks-vision is resolved from node_modules at 0.10.17 (pinned
- * transitively by @react-three/drei; not yet a direct dependency — see
- * docs/setvision.md P0). The WASM runtime must match the JS bundle version
+ * @mediapipe/tasks-vision is a direct dependency pinned exactly at 0.10.17
+ * (package.json). The WASM runtime must match the JS bundle version
  * exactly, so the CDN path is pinned to the same version. Only the runtime
  * and model are downloaded; no video frame or landmark leaves the device.
  */

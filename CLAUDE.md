@@ -219,8 +219,8 @@ catalogue is manual review (`exercise-selection.ts::CATALOGUE_COVERAGE`).
 Every exercise can be reviewed, corrected and saved. **No real accuracy
 numbers exist yet** — see docs/setvision.md before ever quoting one.
 Persistence needs `supabase/migrations/20260916090000_setvision.sql` and
-`20261102090000_setvision_multi_exercise.sql` applied (not done
-automatically — review before running).
+`20261102090000_setvision_multi_exercise.sql` applied (hosted: applied
+2026-11-03; any other database: review before running).
 
 SetVision **P0** (`lib/setvision/squat-p0/`, `/dashboard/workouts/setvision/squat`)
 is a separate MediaPipe-based spike: bodyweight squat, side view, ≤ 30 s,

@@ -699,11 +699,8 @@ frameWidth, frameHeight, poseCount, landmarks }`. Timestamps are media time
 MediaPipe normalized image coordinates; all angles are 2D image-plane angles
 in pixel space — not 3D joint angles. `z`/world landmarks are unused.
 
-**Dependency.** `@mediapipe/tasks-vision@0.10.17` is resolved from
-node_modules, where it is pinned exactly by `@react-three/drei`. It is **not
-yet a direct dependency** because package.json / package-lock.json carry
-unowned uncommitted changes; declare it directly (exact `0.10.17`) once those
-are resolved. The WASM runtime is loaded from jsDelivr at the same pinned
+**Dependency.** `@mediapipe/tasks-vision` is a direct dependency pinned
+exactly at `0.10.17` in package.json. The WASM runtime is loaded from jsDelivr at the same pinned
 version and the `pose_landmarker_full` model from Google's model bucket. Only
 those two downloads leave the browser; video frames and landmarks never do.
 Nothing is persisted, no workout/database write exists, Dante is not involved.
