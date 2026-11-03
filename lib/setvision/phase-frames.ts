@@ -64,9 +64,10 @@ function mainAxis(rows: number[][]): number[] {
  * Times (ms) for the review stills: turning points first (at most `count - 2`, the most prominent),
  * then evenly spaced times that keep ≥ MIN_GAP_MS from those already chosen. Sorted.
  */
-export function phaseTimes(frames: TimedPoseFrame[], durationMs: number): { times: number[]; turningPoints: number } {
+export function phaseTimes(frames: TimedPoseFrame[], durationMs: number, startMs = 0): { times: number[]; turningPoints: number } {
   const count = stillCount(durationMs);
-  const even = evenTimes(durationMs, count);
+  // `startMs` + `durationMs` = the trusted segment the stills must come from (the whole clip by default).
+  const even = evenTimes(durationMs, count).map((t) => t + startMs);
   // Use the keypoints that are tracked in most frames, so a seated/partial view still has an axis.
   const keys = KEYS.filter((k) => frames.filter((f) => (f.frame[k]?.score ?? 0) >= MIN_SCORE).length >= frames.length * 0.7);
   const usable = keys.length >= 4 ? frames.map((f) => ({ t: f.timestampMs, x: features(f.frame, keys) })).filter((r): r is { t: number; x: number[] } => r.x !== null) : [];

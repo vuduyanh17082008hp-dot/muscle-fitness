@@ -106,6 +106,17 @@ export type SceneChanges = {
 };
 
 export function classifySceneChanges(frames: TimedPoseFrame[]): SceneChanges {
+  const spans = sceneChangeSpans(frames);
+  // A cut is dated at the first new sample; a gradual change at where it began (~1 s back).
+  const of = (kind: SceneChangeSpan["kind"]) => spans.filter((s) => s.kind === kind).map((s) => (kind === "cut" ? s.endMs : s.startMs));
+  return { cuts: of("cut"), dissolves: of("dissolve"), cameraMoves: of("camera_move") };
+}
+
+/** One scene change with its extent: a cut is the instant between two samples; a dissolve / camera move spans its run. */
+export type SceneChangeSpan = { kind: "cut" | "dissolve" | "camera_move"; startMs: number; endMs: number };
+
+export function sceneChangeSpans(frames: TimedPoseFrame[]): SceneChangeSpan[] {
+  const spans: SceneChangeSpan[] = [];
   const cuts: number[] = [];
   frames.forEach((f, i) => {
     const d = f.scene?.diff;
@@ -116,13 +127,14 @@ export function classifySceneChanges(frames: TimedPoseFrame[]): SceneChanges {
       .map((g) => g.scene!.diff as number)
       .sort((a, b) => a - b);
     const med = around.length ? around[Math.floor(around.length / 2)] : 0;
-    if (d >= CUT_RATIO * Math.max(med, 1)) cuts.push(f.timestampMs);
+    if (d >= CUT_RATIO * Math.max(med, 1)) {
+      cuts.push(f.timestampMs);
+      spans.push({ kind: "cut", startMs: frames[i - 1].timestampMs, endMs: f.timestampMs });
+    }
   });
 
   // Gradual changes: each run of samples over SPAN_CHANGED, dated ~1 s back (where it began). A run is a
   // dissolve if any of its samples is a near-perfect mix of two shots — or if the mix wasn't measured (old data).
-  const dissolves: number[] = [];
-  const cameraMoves: number[] = [];
   const over = (g?: TimedPoseFrame) => (g?.scene?.span ?? 0) >= SPAN_CHANGED;
   for (let i = 0; i < frames.length; i += 1) {
     if (!over(frames[i]) || over(frames[i - 1])) continue;
@@ -132,9 +144,39 @@ export function classifySceneChanges(frames: TimedPoseFrame[]): SceneChanges {
     const start = Math.max(0, frames[i].timestampMs - 1000);
     if (cuts.some((c) => Math.abs(c - start) <= 1500)) continue;
     const mixed = run.some((g) => g.scene?.blend == null || g.scene.blend < DISSOLVE_BLEND);
-    (mixed ? dissolves : cameraMoves).push(start);
+    // The changed run itself is untrusted; the first sample after it is the new, settled picture.
+    const endMs = frames[end + 1]?.timestampMs ?? frames[end].timestampMs + 1;
+    spans.push({ kind: mixed ? "dissolve" : "camera_move", startMs: start, endMs });
   }
-  return { cuts, dissolves, cameraMoves };
+  return spans.sort((a, b) => a.startMs - b.startMs);
+}
+
+/**
+ * When the lone credible person's tracker id changed to a NEW identity: the first sample of each new id's run of
+ * ≥ MIN_RUN (same rule as checkPersonAttribution's identity_changed verdict). Empty when no person check ran.
+ */
+// A switch back to an earlier id (A → B → A) is a change too: the B stretch is someone (or something) else.
+export function identityChangeTimes(frames: TimedPoseFrame[]): number[] {
+  let confirmed: number | null = null;
+  const changes: number[] = [];
+  let prevId: number | null = null;
+  let streak = 0;
+  let streakStartMs = 0;
+  for (const f of frames) {
+    const p = (f.people ?? []).filter(credible);
+    const id = p.length === 1 ? p[0].id : null;
+    if (id !== null && id === prevId) streak += 1;
+    else {
+      streak = id !== null ? 1 : 0;
+      streakStartMs = f.timestampMs;
+    }
+    prevId = id;
+    if (id !== null && streak === MIN_RUN && id !== confirmed) {
+      if (confirmed !== null) changes.push(streakStartMs);
+      confirmed = id;
+    }
+  }
+  return changes;
 }
 
 /** Every scene change of any kind, sorted (kept for callers that only need "did the picture change?"). */
