@@ -166,6 +166,21 @@ export async function reconcileDayPendingSaves(
   }
 }
 
+/**
+ * What one GET of the day's log may do to the view. `startedAtWrite` /
+ * `currentWrite` count confirmed writes in this tab: a read that started
+ * before a later write is stale (it can miss that write) and is re-read,
+ * never applied. A failed read is "unavailable" — never an empty, verified day.
+ */
+export function classifyDayRead<T>(
+  read: { ok: true; entries: T[] } | { ok: false },
+  startedAtWrite: number,
+  currentWrite: number,
+): { kind: "stale" } | { kind: "loaded"; entries: T[] } | { kind: "unavailable" } {
+  if (startedAtWrite !== currentWrite) return { kind: "stale" }
+  return read.ok ? { kind: "loaded", entries: read.entries } : { kind: "unavailable" }
+}
+
 type Keyed = { idempotencyKey?: string }
 
 /** What a multi-item save actually did — never collapsed into one success flag. */

@@ -8,6 +8,7 @@ import {
   recheckPendingSaves,
   writePendingSaves,
   forgetPendingSaves,
+  classifyDayRead,
   describeMultiOutcome,
   isCompleteOutcome,
   lookupFoodLogByKey,
@@ -348,6 +349,54 @@ describe("stale pending saves after a database rejection (production 2026-11-03)
     const again = await saveFoodLogWithReconcile(food(KEY_A), server.fetchImpl)
     expect(again).toMatchObject({ status: "saved", entry: { id: "row-1" } })
     expect(server.rowsFor(KEY_A)).toBe(1)
+  })
+})
+
+describe("P0 2026-11-03: four historical pending saves, 503 readbacks, day reads", () => {
+  const memoryStorage = () => {
+    const data = new Map<string, string>()
+    return {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+      removeItem: (k: string) => void data.delete(k),
+    } as unknown as Storage
+  }
+  // Asia/Singapore "today" as the server resolves it (UTC is still 2026-11-02 before 16:00Z).
+  const SG_DAY = "2026-11-03"
+  const keys = ["a", "b", "c", "d"].map((c) => `${c.repeat(8)}-0000-4000-8000-000000000000`)
+  const sentAt = Date.UTC(2026, 10, 3, 1, 40) // the 01:40Z PGRST204 failures
+  const now = Date.UTC(2026, 10, 3, 3, 30)
+
+  it("four historical pending saves with no rows → all notFound (dismissable), none dropped, no POST", async () => {
+    const server = fakeServer()
+    const storage = memoryStorage()
+    writePendingSaves("user-1", keys.map((key) => ({ key, logDate: SG_DAY, sentAt })), storage)
+    const { saved, notFound, checkFailed } = await recheckPendingSaves(keys.map((key) => ({ key, sentAt })), server.fetchImpl, now)
+    expect(saved.size).toBe(0)
+    expect([...notFound].sort()).toEqual([...keys].sort())
+    expect(checkFailed).toBe(false)
+    expect(readPendingSaves("user-1", storage)).toHaveLength(4) // the user, not the check, removes them
+    expect(server.posts()).toBe(0)
+  })
+
+  it("readback answering 503 is a failed check, never notFound", async () => {
+    const fetch503 = async () => new Response(JSON.stringify({ ok: false, error: "Food log is temporarily unavailable." }), { status: 503 })
+    expect(await lookupFoodLogByKey(keys[0], fetch503)).toBeNull()
+    const result = await recheckPendingSaves([{ key: keys[0], sentAt }], fetch503, now)
+    expect(result).toMatchObject({ checkFailed: true })
+    expect(result.notFound.size).toBe(0)
+  })
+
+  it("a day read that started before a confirmed save is stale — never replaces the newer entries", () => {
+    expect(classifyDayRead({ ok: true, entries: [] }, 0, 1)).toEqual({ kind: "stale" })
+    expect(classifyDayRead({ ok: true, entries: [{ id: "x" }] }, 1, 1)).toEqual({ kind: "loaded", entries: [{ id: "x" }] })
+  })
+
+  it("443 kcal confirmed, then a failed reload → unavailable, not a verified 0", () => {
+    const outcome = classifyDayRead<{ calories: number }>({ ok: false }, 3, 3)
+    expect(outcome).toEqual({ kind: "unavailable" })
+    // an empty day that DID load is a real 0
+    expect(classifyDayRead({ ok: true, entries: [] }, 3, 3)).toEqual({ kind: "loaded", entries: [] })
   })
 })
 

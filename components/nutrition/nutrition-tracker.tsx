@@ -9,6 +9,7 @@ import {
   isStalePending,
   readPendingSaves,
   recheckPendingSaves,
+  classifyDayRead,
   saveFoodLogWithReconcile,
   writePendingSaves,
   type SaveItemResult,
@@ -60,6 +61,8 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const submittingRef = useRef(false)
+  // Writes this tab may have committed (save/edit/delete); a day read started before one is stale.
+  const writeCount = useRef(0)
   const [error, setError] = useState<string | null>(null)
 
   const [recentFoods, setRecentFoods] = useState<FoodHistoryItem[]>([])
@@ -115,6 +118,21 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     }
 
     let cancelled = false
+    const startedAtWrite = writeCount.current
+
+    const apply = (read: { ok: true; entries: FoodLogEntry[] } | { ok: false }, failure: string) => {
+      const outcome = classifyDayRead(read, startedAtWrite, writeCount.current)
+      if (outcome.kind === "stale") {
+        setReloadKey((key) => key + 1) // a save/edit/delete landed mid-read: re-read instead of rolling it back
+      } else if (outcome.kind === "loaded") {
+        setEntries(outcome.entries)
+        setLogUnavailable(false)
+      } else {
+        setEntries([])
+        setLogUnavailable(true)
+        setError(failure)
+      }
+    }
 
     const load = async () => {
       setLoadingDate(true)
@@ -126,20 +144,9 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
 
         if (cancelled) return
 
-        if (response.ok && data.ok) {
-          setEntries(data.entries ?? [])
-          setLogUnavailable(false)
-        } else {
-          setEntries([])
-          setLogUnavailable(true)
-          setError(data.error ?? "Unable to load this day's food log.")
-        }
+        apply(response.ok && data.ok ? { ok: true, entries: data.entries ?? [] } : { ok: false }, data.error ?? "Unable to load this day's food log.")
       } catch {
-        if (!cancelled) {
-          setEntries([])
-          setLogUnavailable(true)
-          setError("Network error — unable to load this day's food log.")
-        }
+        if (!cancelled) apply({ ok: false }, "Network error — unable to load this day's food log.")
       } finally {
         if (!cancelled) setLoadingDate(false)
       }
@@ -171,6 +178,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
     writePendingSaves(userId, [...readPendingSaves(userId).filter((p) => p.key !== idempotencyKey), { key: idempotencyKey, logDate: initialDate, sentAt }])
     const result = await saveFoodLogWithReconcile({ ...food, idempotencyKey })
 
+    if (result.status !== "failed") writeCount.current += 1 // "unknown" may have committed too
     if (result.status === "saved") {
       const entry = result.entry
       // An idempotent replay returns the row that was already saved — never show it twice.
@@ -309,6 +317,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
         return
       }
 
+      writeCount.current += 1
       setEntries((current) => current.map((entry) => (entry.id === id ? (data.entry as FoodLogEntry) : entry)))
       setEditingId(null)
     } catch {
@@ -331,6 +340,7 @@ export function NutritionTracker({ initialEntries, target, initialDate, initialU
         return
       }
 
+      writeCount.current += 1
       setEntries((current) => current.filter((entry) => entry.id !== id))
       setConfirmingDeleteId(null)
       setNextActionRefreshKey((key) => key + 1)
