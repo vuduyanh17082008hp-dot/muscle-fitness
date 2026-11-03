@@ -28,6 +28,8 @@ describe("S4-A accuracy fixes (live defects 2026-11-03)", () => {
     const plain = usda("Rice, white, medium-grain, cooked, unenriched")
     expect(photoMatchRank("Cooked rice", "boiled", plain)).toBeLessThan(photoMatchRank("Cooked rice", "boiled", noodles))
     expect(photoMatchRank("Rice noodles", "boiled", noodles)).toBe(0)
+    // Live S4-B: "cooked rice" defaulted to "Wild rice, cooked".
+    expect(photoMatchRank("cooked rice", "boiled", plain)).toBeLessThan(photoMatchRank("cooked rice", "boiled", usda("Wild rice, cooked")))
   })
 
   it("'with realistic portions' is a request qualifier, not an unknown food", () => {

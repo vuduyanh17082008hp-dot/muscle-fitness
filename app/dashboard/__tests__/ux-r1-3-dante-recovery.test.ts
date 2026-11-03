@@ -149,8 +149,10 @@ describe("Dante chat surface", () => {
 
   it("returns to the conversation this tab last had open, and marks where reopened history ends", () => {
     const chat = read("components/dante-chat.tsx");
-    expect(chat).toContain('const LAST_THREAD_KEY = "mf.dante.lastThread"');
-    expect(chat).toContain("fromUrl ?? (remembered === null ? list[0]?.id ?? null : remembered || null)");
+    // One Day, One Thread: the tab's active thread is shared with the Nutrition page chat; with nothing remembered,
+    // only today's most recent conversation reopens (never an older day's).
+    expect(read("lib/dante-core/active-thread.ts")).toContain('export const LAST_THREAD_KEY = "mf.dante.lastThread"');
+    expect(chat).toContain("fromUrl ?? (remembered === null ? todaysThread(list) : remembered || null)");
     expect(chat).toContain("Earlier conversation · figures above were current");
   });
 

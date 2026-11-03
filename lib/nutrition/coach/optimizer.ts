@@ -69,7 +69,7 @@ export type ScoredCandidate = {
 }
 
 /** Options for a multi-meal discovery: how many alternatives, which foods every option must contain, and which recipes (composition keys) were already shown. */
-export type DiscoveryOptions = { alternatives?: number; requireIds?: string[]; avoidKeys?: ReadonlySet<string> }
+export type DiscoveryOptions = { alternatives?: number; requireIds?: string[]; avoidKeys?: ReadonlySet<string>; /** The meal slot's natural family ("breakfast" → yogurt_bowl): ranked first when it fits. */ preferFamily?: string }
 
 /** Identity of a meal = its ingredient set (portions aside). Two options with the same set are the same recipe. */
 export const compositionKey = (items: Array<{ ingredientId: string }>) => [...new Set(items.map((item) => item.ingredientId))].sort().join("+")
@@ -180,7 +180,10 @@ function nameDistinct(list: ScoredCandidate[], shownCores: ReadonlySet<string> =
 
 function resolveBuild(candidates: ScoredCandidate[], constraints: MealConstraints, options: DiscoveryOptions = {}): BuildResult {
   if (candidates.length === 0) return { status: "NO_CANDIDATE", reason: "No allowed ingredients are left after your allergies, exclusions and available foods." }
-  const ranked = rank(candidates)
+  // Meal context (live S4-B: "high-protein breakfast" → a tuna bread bowl): the slot's natural family leads whenever it breaks no
+  // hard constraint, even if it falls a little short of a soft target — the draft states that shortfall instead of hiding it.
+  const preferred = (c: ScoredCandidate) => c.family === options.preferFamily && !c.violations.some((v) => v.tier === "hard")
+  const ranked = options.preferFamily ? [...rank(candidates.filter(preferred)), ...rank(candidates.filter((c) => !preferred(c)))] : rank(candidates)
   // "More options": the best NEW meal leads; already-shown recipes are never offered again.
   const avoid = options.avoidKeys
   const shownCores = new Set([...(avoid ?? [])].map(coreOfKey))

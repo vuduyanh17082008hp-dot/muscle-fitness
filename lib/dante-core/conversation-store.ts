@@ -8,6 +8,7 @@ import {
   parseChatStreamChunk,
   type ChatStreamDoneEvent,
   type ChatStreamPendingConfirmation,
+  type DanteNutritionTurn,
 } from "@/lib/dante-core/chat-stream-protocol";
 import { TURN_DEADLINE_MS } from "@/lib/dante-core/turn-budget";
 import { pendingDetails } from "@/lib/dante-core/tools/pending-actions";
@@ -27,6 +28,8 @@ export type AssistantMetadata = {
   insight?: ChatStreamDoneEvent["insight"];
   sources?: ChatStreamDoneEvent["sources"];
   pendingConfirmation?: ChatStreamPendingConfirmation | null;
+  /** One Day, One Thread: the meal state a nutrition-capability turn left (server-made), read back by the next turn on ANY surface. */
+  nutrition?: DanteNutritionTurn["state"] | null;
   error?: string;
 };
 
@@ -279,7 +282,7 @@ export function persistChatStream(
             outcome = {
               status: "complete",
               content: text,
-              metadata: { insight: event.insight, sources: event.sources, pendingConfirmation: event.pendingConfirmation },
+              metadata: { insight: event.insight, sources: event.sources, pendingConfirmation: event.pendingConfirmation, ...(event.nutrition ? { nutrition: event.nutrition.state } : {}) },
             };
           } else if (event.type === "error" && !outcome) {
             outcome = { status: "error", content: text, metadata: { error: event.error } };
@@ -371,6 +374,8 @@ export type StoredDanteMessage = {
   sources: AssistantMetadata["sources"];
   pendingConfirmation: ChatStreamPendingConfirmation | null;
   confirmationResolution: ActionResolution;
+  /** The meal state this reply left, when the nutrition capability answered it. */
+  nutrition: DanteNutritionTurn["state"] | null;
 };
 
 /** null = no such thread for this user (missing or someone else's — indistinguishable on purpose). */
@@ -429,6 +434,31 @@ export async function loadDanteThread(supabase: SupabaseClient, userId: string, 
       sources: meta.sources ?? [],
       pendingConfirmation: pending,
       confirmationResolution: pending ? actionResolution(actions.get(pending.actionId)) : null,
+      nutrition: meta.nutrition ?? null,
     };
   });
+}
+
+/**
+ * The meal state the thread's most recent nutrition turn left (newest finished assistant rows only; the user's own rows).
+ * Training / recovery turns in between carry no state, so they never erase it; the engine's own TTLs decide what is
+ * still live. null = no nutrition turn in this thread (or a storage failure: the caller then has no carried state).
+ */
+export async function loadThreadNutritionState(supabase: SupabaseClient, userId: string, threadId: string): Promise<DanteNutritionTurn["state"] | null> {
+  if (!UUID.test(threadId)) return null;
+  const { data, error } = await supabase
+    .from("ai_messages")
+    .select("metadata")
+    .eq("thread_id", threadId)
+    .eq("user_id", userId)
+    .eq("role", "assistant")
+    .eq("status", "complete")
+    .order("created_at", { ascending: false })
+    .limit(12);
+  if (error) return null;
+  for (const row of data ?? []) {
+    const meta = (row.metadata ?? {}) as AssistantMetadata;
+    if (meta.nutrition !== undefined) return meta.nutrition ?? null;
+  }
+  return null;
 }

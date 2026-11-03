@@ -1,7 +1,7 @@
 import { compareToOriginal } from "./claims"
 import { suggestAdditions, suggestProteinIceCreamThickener } from "./gaps"
 import { getIngredient, requireIngredient } from "./ingredients"
-import { assessConfidence, cookMinutesFor, priceFor, roundGrams, scaleItems, totalsFor, validateMeal } from "./macros"
+import { assessConfidence, cookMinutesFor, priceFor, roundGrams, scaleItems, servingGrams, totalsFor, validateMeal } from "./macros"
 import { buildFromSelection, guardedPool, mealName } from "./optimizer"
 import type {
   ActiveMealDraft,
@@ -244,7 +244,7 @@ function swapItems(items: DraftItem[], fromId: string, toId: string): DraftItem[
   const grams = from ? from.grams : target.typicalGrams
   const without = items.filter((item) => item.ingredientId !== fromId && item.ingredientId !== toId)
   const position = items.findIndex((item) => item.ingredientId === fromId)
-  const next: DraftItem = { ingredientId: toId, grams: roundGrams(target, grams) }
+  const next: DraftItem = { ingredientId: toId, grams: servingGrams(target, grams) }
   without.splice(position < 0 ? without.length : Math.min(position, without.length), 0, next)
   return without
 }
@@ -368,7 +368,17 @@ export function applyDraftOp(ctx: CoachContext, draft: ActiveMealDraft, op: Draf
     case "more_protein": {
       const protein = draft.nutrition.protein
       const scaled = scaleItems(items, { mode: "PROTEIN_ADJUST", targetProtein: protein + 10 })
-      return ok("More protein", scaled, undefined, { scalingMode: "PROTEIN_ADJUST" })
+      if (totalsFor(scaled).protein >= protein + 5) return ok("More protein", scaled, undefined, { scalingMode: "PROTEIN_ADJUST" })
+      // The protein is already a full serving: add a second lean source of the same kind (dairy with a yogurt bowl,
+      // savoury with a savoury bowl, no powder in a plate) at a realistic amount — never one oversized portion.
+      const main = items.map((i) => requireIngredient(i.ingredientId)).find((i) => i.role === "protein")
+      const sameKind = (i: (typeof pool)[number]) => !main || (i.tags.includes("dairy") === main.tags.includes("dairy") && i.tags.includes("powder") === main.tags.includes("powder"))
+      const extra = pool
+        .filter((i) => i.role === "protein" && !items.some((x) => x.ingredientId === i.id) && sameKind(i))
+        .sort((a, b) => b.proteinPer100g / b.caloriesPer100g - a.proteinPer100g / a.caloriesPer100g)[0]
+      if (!extra) return keep("The protein here is already a full serving, and there's no other suitable lean protein I can add without making the meal unrealistic.")
+      const grams = servingGrams(extra, Math.max(extra.minGrams, (10 / extra.proteinPer100g) * 100))
+      return ok(`More protein: + ${extra.shortName}`, [...items, { ingredientId: extra.id, grams }], `The main protein was already a full serving, so I added ${grams} g ${extra.shortName} — about ${Math.round((extra.proteinPer100g * grams) / 100)} g more protein.`)
     }
 
     case "more_carbs": {
@@ -396,8 +406,15 @@ export function applyDraftOp(ctx: CoachContext, draft: ActiveMealDraft, op: Draf
       const fatText = (next: DraftItem[]) => `fat ${Math.round(totalsFor(items).fat)} g → ${Math.round(totalsFor(next).fat)} g`
       if (leaner) {
         const grams = from.role === "protein" ? (fattiest.grams * from.proteinPer100g) / Math.max(1, leaner.proteinPer100g) : (fattiest.grams * from.caloriesPer100g) / Math.max(1, leaner.caloriesPer100g)
-        const swapped = swapItems(items, from.id, leaner.id).map((i) => (i.ingredientId === leaner.id ? { ...i, grams: roundGrams(leaner, grams) } : i))
-        return ok(`Lower fat: ${from.shortName} → ${leaner.shortName}`, swapped, `Swapped ${from.shortName} for ${leaner.shortName} — ${fatText(swapped)}.`)
+        // A swap stops at the new food's typical portion: matching the old calories with one bigger food is how 110 g of wrap
+        // became 390 g of potato. Keep the normal serving and say what it costs.
+        const portion = servingGrams(leaner, Math.min(grams, leaner.typicalGrams))
+        const swapped = swapItems(items, from.id, leaner.id).map((i) => (i.ingredientId === leaner.id ? { ...i, grams: portion } : i))
+        const capped = portion < roundGrams(leaner, grams)
+        const before = totalsFor(items)
+        const after = totalsFor(swapped)
+        const tradeOff = capped ? ` I kept ${leaner.shortName} to a normal serving (${portion} g) rather than matching the old ${from.role === "protein" ? "protein" : "calories"}, so it's now ${Math.round(after.calories)} kcal and ${Math.round(after.protein)} g protein (was ${Math.round(before.calories)} kcal, ${Math.round(before.protein)} g).` : ""
+        return ok(`Lower fat: ${from.shortName} → ${leaner.shortName}`, swapped, `Swapped ${from.shortName} for ${leaner.shortName} — ${fatText(swapped)}.${tradeOff}`)
       }
       const trimmed = items.map((i) => (i.ingredientId === from.id ? { ...i, grams: roundGrams(from, i.grams * 0.75) } : i))
       return ok(`Lower fat: less ${from.shortName}`, trimmed, `Cut ${from.shortName} by about a quarter — ${fatText(trimmed)}.`)
@@ -413,7 +430,7 @@ export function applyDraftOp(ctx: CoachContext, draft: ActiveMealDraft, op: Draf
         .sort((a, b) => perProtein(a) - perProtein(b))[0]
       if (!cheaper) return keep(`${from.shortName} is already the cheapest protein I can use here.`)
       const grams = (current.grams * from.proteinPer100g) / cheaper.proteinPer100g
-      const swapped = swapItems(items, from.id, cheaper.id).map((i) => (i.ingredientId === cheaper.id ? { ...i, grams: roundGrams(cheaper, grams) } : i))
+      const swapped = swapItems(items, from.id, cheaper.id).map((i) => (i.ingredientId === cheaper.id ? { ...i, grams: servingGrams(cheaper, grams) } : i))
       return ok(`Cheaper: ${from.shortName} → ${cheaper.shortName}`, swapped, `Swapped ${from.shortName} for ${cheaper.shortName} at matching protein — about S$${priceFor(swapped).toFixed(2)} (estimate).`)
     }
 
@@ -425,7 +442,7 @@ export function applyDraftOp(ctx: CoachContext, draft: ActiveMealDraft, op: Draf
         .sort((a, b) => a.cookMinutes - b.cookMinutes || Math.abs(a.caloriesPer100g - from.caloriesPer100g) - Math.abs(b.caloriesPer100g - from.caloriesPer100g))[0]
       if (!quicker || from.cookMinutes <= 5) return keep("This is already about as quick as I can make it with verified ingredients.")
       const grams = (slowest.grams * from.caloriesPer100g) / quicker.caloriesPer100g
-      const swapped = swapItems(items, from.id, quicker.id).map((i) => (i.ingredientId === quicker.id ? { ...i, grams: roundGrams(quicker, grams) } : i))
+      const swapped = swapItems(items, from.id, quicker.id).map((i) => (i.ingredientId === quicker.id ? { ...i, grams: servingGrams(quicker, grams) } : i))
       return ok(`Faster: ${from.shortName} → ${quicker.shortName}`, swapped)
     }
 
@@ -434,7 +451,7 @@ export function applyDraftOp(ctx: CoachContext, draft: ActiveMealDraft, op: Draf
       const existing = items.find((i) => requireIngredient(i.ingredientId).role === "volume")
       if (existing) {
         const ingredient = requireIngredient(existing.ingredientId)
-        const grams = roundGrams(ingredient, existing.grams * 1.5)
+        const grams = servingGrams(ingredient, existing.grams * 1.5)
         if (grams === existing.grams) return keep("The volume is already at its practical maximum.")
         return ok(`More ${ingredient.shortName}`, items.map((i) => (i === existing ? { ...i, grams } : i)), `Added more ${ingredient.shortName} for volume — only a few extra calories.`)
       }

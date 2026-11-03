@@ -262,7 +262,16 @@ export async function handleLogTurn(input: Input): Promise<LogTurnResult | null>
   // 1. An explicit log request ("log this", "log it for lunch", "ghi món này").
   if (asksLog) {
     // "log it" answering our own "confirm?" is the confirmation, as long as nothing about the meal changed.
-    if (pending?.stage === "READY_FOR_CONFIRMATION" && (!named || named === pending.mealType) && (!draft || (draft.id === pending.draftId && draftIdentity(draft) === pending.fingerprint))) return confirm(pending)
+    if (pending?.stage === "READY_FOR_CONFIRMATION" && (!named || named === pending.mealType) && (!draft || (draft.id === pending.draftId && draftIdentity(draft) === pending.fingerprint))) {
+      // Cancelled with the card's button (the chat state still points at it, now held per thread on the server): a NEW
+      // "log it" is a new request, never "that log was cancelled". An executed one still answers "already logged".
+      const status = await boundedDependency(budget, "log_status", () => readPendingActionStatus(supabase, userId, pending.actionId!))
+      if (draft && status.status === "OK" && status.value?.status === "cancelled") {
+        const slot = named ?? pending.mealType
+        return slot ? propose(draft, slot) : askMealType(draft)
+      }
+      return confirm(pending)
+    }
     if (pending?.stage === "UNKNOWN_OUTCOME") return resolveHandled(pending)
     if (!draft) return null // nothing to log: the existing "no active meal draft" reply answers
     await supersede(pending)

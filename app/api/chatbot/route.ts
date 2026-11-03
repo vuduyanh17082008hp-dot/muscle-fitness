@@ -61,7 +61,7 @@ import {
   updateNof1Experiment,
 } from "@/lib/dante-core/nof1-engine";
 import { createPendingAction } from "@/lib/dante-core/tools/pending-actions";
-import { danteNutritionState, danteTurnContinuesNutrition, getCoachMode, handleNutritionCoachChat, isVietnameseMealDiscovery, nutritionTurnForMainPipeline } from "@/lib/nutrition/coach/chat";
+import { danteNutritionState, danteTurnContinuesNutrition, getCoachMode, handleNutritionCoachChat, isVietnameseMealDiscovery, nutritionStateIsLive, nutritionTurnForMainPipeline } from "@/lib/nutrition/coach/chat";
 import { resolveCasualControlFlow } from "@/lib/dante-core/casual-intent";
 import { decideDanteLanguage, buildDanteLanguageInstruction, type DanteLanguageDecision } from "@/lib/dante-language";
 import { answerShoulderSide } from "@/lib/dante-core/coherence/corrections";
@@ -164,7 +164,7 @@ import { runDanteAgentTurn } from "@/lib/dante-core/tools/orchestrate";
 import { guardActionResponse, buildSuggestedWorkoutChangeReply, isWorkoutMutationRequest, needsTrainingCountClarification, proposalLanguage, resolveActionStatus, trainingCountClarification } from "@/lib/dante-core/tools/action-response-guard";
 import { logToolEvent } from "@/lib/dante-core/tools/observability";
 import { createChatStreamResponse } from "@/lib/dante-core/chat-stream-protocol";
-import { beginDanteTurn, finalizeDanteTurn, persistChatStream, readTurnIds, type DanteTurn } from "@/lib/dante-core/conversation-store";
+import { beginDanteTurn, finalizeDanteTurn, loadThreadNutritionState, persistChatStream, readTurnIds, type DanteTurn } from "@/lib/dante-core/conversation-store";
 import {
   emitConvergedSingleShot as emitConvergedCore,
   extractCausalTargetFromText,
@@ -4242,6 +4242,12 @@ export async function GET() {
   });
 }
 
+/** What the nutrition engine (handleNutritionCoachChat) answers, as far as the router reads it. */
+type NutritionEngineJson = {
+  ok?: boolean; reply?: string; error?: string; structuredBlocks?: StructuredBlock[]; followUpHints?: string[];
+  mealDraft?: ActiveMealDraft | null; conversation?: Record<string, unknown> & { pendingLog?: PendingLog | null; deactivateDraft?: boolean }; foodLogChanged?: boolean;
+};
+
 /* =========================================================
    POST
 ========================================================= */
@@ -4251,16 +4257,17 @@ export async function GET() {
 export async function POST(
   request: Request,
 ) {
-  const persisted: { turn?: DanteTurn; saved?: boolean; supabase?: Awaited<ReturnType<typeof createClient>> } = {};
+  const persisted: { turn?: DanteTurn; saved?: boolean; finalized?: boolean; supabase?: Awaited<ReturnType<typeof createClient>> } = {};
   const response = await handleChatbotPost(request, persisted);
   const { turn, supabase } = persisted;
-  if (!turn || !supabase) return response;
+  // A turn that finalized its own history row (the Nutrition page's JSON reply) is already persisted.
+  if (!turn || !supabase || persisted.finalized) return response;
   return persistChatStream(response, (outcome) => finalizeDanteTurn(supabase, turn, outcome, persisted.saved ?? false), turn.threadId);
 }
 
 async function handleChatbotPost(
   request: Request,
-  persisted: { turn?: DanteTurn; saved?: boolean; supabase?: Awaited<ReturnType<typeof createClient>> },
+  persisted: { turn?: DanteTurn; saved?: boolean; finalized?: boolean; supabase?: Awaited<ReturnType<typeof createClient>> },
 ) {
   // H0 WP1: the ONE authoritative deadline for this turn, started at request arrival. Client disconnect aborts it too.
   const budget = createTurnBudget(request);
@@ -4381,10 +4388,9 @@ async function handleChatbotPost(
     ----------------------------------------------------- */
 
     // ONE AI COACH: the Nutrition page chat is Dante. A training / recovery question asked there runs the main pipeline
-    // below (streamed, persisted like any Dante turn) instead of the nutrition engine's old "ask Dante" referral.
-    if (getCoachMode(body) === "nutrition" && !nutritionTurnForMainPipeline(body)) {
-      return await handleNutritionCoachChat({ supabase, userId: user.id, body, budget });
-    }
+    // below (streamed, persisted like any Dante turn) instead of the nutrition engine's old "ask Dante" referral. A
+    // nutrition turn from that page is answered after the history step below, so it lands in the same thread.
+    const nutritionSurfaceTurn = getCoachMode(body) === "nutrition" && !nutritionTurnForMainPipeline(body);
 
     const userMessage =
       getUserMessage(
@@ -4445,6 +4451,54 @@ async function handleChatbotPost(
           { role: "user", content: userMessage, createdAt: new Date(historyStartedAt).toISOString() },
         ],
       };
+    }
+
+    /* -----------------------------------------------------
+       ONE DAY, ONE THREAD — the meal state (option list, draft, pending log) the thread's last nutrition turn left is read
+       back from the thread on the server, so a meal picked on the Nutrition page is "that" on the Dante page and vice
+       versa. Never from another user's thread (owner-filtered read; beginDanteTurn already 404s a foreign thread id).
+    ----------------------------------------------------- */
+    const threadNutritionRead = persisted.turn
+      ? await boundedDependency(budget, "nutrition_state", () => loadThreadNutritionState(supabase, user.id, persisted.turn!.threadId))
+      : null;
+    const threadNutrition = threadNutritionRead?.status === "OK" ? threadNutritionRead.value : null;
+
+    /** Runs Dante's nutrition capability once; returns the engine reply plus the effective state to persist and echo. */
+    const runNutritionEngine = async (engineBody: Record<string, unknown>, fallbackDraft: unknown) => {
+      const answered = await handleNutritionCoachChat({ supabase, userId: user.id, body: engineBody, budget });
+      const json = (await answered.json().catch(() => null)) as NutritionEngineJson | null;
+      const ok = Boolean(json?.ok && typeof json.reply === "string");
+      const pendingLog = json?.conversation?.pendingLog;
+      const pendingConfirmation = ok && pendingLog?.stage === "READY_FOR_CONFIRMATION" && pendingLog.actionId
+        ? { actionId: pendingLog.actionId, toolName: "log_meal_draft", summary: `Log “${pendingLog.mealName}”${pendingLog.mealType ? ` as ${MEAL_TYPE_LABEL[pendingLog.mealType].toLowerCase()}` : ""}` }
+        : null;
+      // No draft in the reply = the draft is unchanged, unless the turn logged it or ended it.
+      const ended = Boolean(json?.foodLogChanged) || json?.conversation?.deactivateDraft === true;
+      const state = ok ? { activeDraft: (json!.mealDraft ?? (ended ? null : fallbackDraft ?? null)) as ActiveMealDraft | null, conversation: json!.conversation ?? null } : null;
+      return { answered, json, ok, pendingConfirmation, state };
+    };
+
+    if (nutritionSurfaceTurn && isRecord(body)) {
+      // The page's own state wins while it is live; a freshly opened page continues the thread's meal instead.
+      const pageState = danteNutritionState({ nutrition: { activeDraft: body.activeDraft ?? null, conversation: body.conversation ?? null } });
+      const fromThread = !nutritionStateIsLive(pageState) && nutritionStateIsLive(threadNutrition) ? threadNutrition : null;
+      const pageConversation = isRecord(body.conversation) ? body.conversation : {};
+      const engineBody = fromThread
+        ? { ...body, activeDraft: fromThread.activeDraft ?? null, conversation: { ...(fromThread.conversation ?? {}), recentMessages: pageConversation.recentMessages, priorUserTurns: pageConversation.priorUserTurns } }
+        : body;
+      const run = await runNutritionEngine(engineBody, fromThread ? fromThread.activeDraft : (isRecord(body.activeDraft) ? body.activeDraft : null));
+      if (persisted.turn && run.json) {
+        persisted.saved = await finalizeDanteTurn(supabase, persisted.turn, run.ok
+          ? { status: "complete", content: run.json.reply ?? "", metadata: { pendingConfirmation: run.pendingConfirmation, nutrition: run.state } }
+          : { status: "error", content: "", metadata: { error: run.json.error ?? "nutrition_failed" } }, persisted.saved ?? false);
+        persisted.finalized = true;
+      }
+      const headers = new Headers(run.answered.headers);
+      headers.delete("content-length");
+      if (persisted.turn) headers.set("X-Dante-Thread-Id", persisted.turn.threadId);
+      // The page reads the same engine JSON as before, plus the state it may have continued from the thread.
+      const payload = run.json ? { ...run.json, ...(fromThread ? { continuedFromThread: { activeDraft: fromThread.activeDraft ?? null } } : {}) } : { ok: false, error: "I couldn't work on that meal right now. Nothing was changed or logged." };
+      return Response.json(payload, { status: run.answered.status, headers });
     }
 
     // Decided once per request, from the real client message — never
@@ -4548,8 +4602,13 @@ async function handleChatbotPost(
 
     // Response language is a session property: the persisted, reducer-resolved language wins over a per-message
     // guess, so the provider prompt, the deterministic branches and the Phase 2 surface all speak one language.
+    // ...except when the user plainly switched: a substantive message in a detected language — a question of 4+ words, or
+    // 8+ words — is followed (live S4-B: an English "I feel sick and feverish today, should I still train?" was answered in
+    // Vietnamese because the thread had been Vietnamese). Acknowledgements ("ok", "sure, sounds good to me") keep the session's.
+    const messageWords = userMessage.trim().split(/\s+/).length;
+    const switchedLanguage = languageDecision.source === "message" && ((messageWords >= 4 && /\?\s*$/.test(userMessage.trim())) || messageWords >= 8);
     const sessionLanguageDecision: DanteLanguageDecision =
-      languageControl.responseLanguage !== "MATCH_USER" || coherencePrepared.language === languageDecision.language
+      languageControl.responseLanguage !== "MATCH_USER" || coherencePrepared.language === languageDecision.language || switchedLanguage
         ? languageDecision
         : {
             language: coherencePrepared.language,
@@ -5560,7 +5619,8 @@ async function handleChatbotPost(
        state. Dante never improvises a meal and never refers the user to another assistant. A meal log comes back as
        Dante's ordinary pendingConfirmation card (same /api/dante/tools/confirm CAS write), never a silent write.
     ----------------------------------------------------- */
-    const carriedNutrition = danteNutritionState(body);
+    const clientNutrition = danteNutritionState(body);
+    const carriedNutrition = nutritionStateIsLive(clientNutrition) ? clientNutrition : threadNutrition;
     const runNutritionCapability = async (): Promise<Response> => {
       const priorTurns = (isRecord(body) && Array.isArray((body as { messages?: unknown }).messages) ? ((body as { messages: unknown[] }).messages) : [])
         .flatMap((entry) => (isRecord(entry) && typeof entry.content === "string" && entry.role === "user" ? [entry.content.slice(0, 800)] : []));
@@ -5571,16 +5631,8 @@ async function handleChatbotPost(
         activeDraft: carriedNutrition?.activeDraft ?? null,
         conversation: { ...(carriedNutrition?.conversation ?? {}), recentMessages, priorUserTurns: priorTurns.map((text) => text.slice(0, 400)).slice(-20) },
       };
-      const answered = await handleNutritionCoachChat({ supabase, userId: user.id, body: nutritionBody, budget });
-      const json = (await answered.json().catch(() => null)) as {
-        ok?: boolean; reply?: string; error?: string; structuredBlocks?: StructuredBlock[]; followUpHints?: string[];
-        mealDraft?: ActiveMealDraft | null; conversation?: Record<string, unknown> & { pendingLog?: PendingLog | null }; foodLogChanged?: boolean;
-      } | null;
-      const ok = Boolean(json?.ok && typeof json.reply === "string");
+      const { answered, json, ok, pendingConfirmation, state } = await runNutritionEngine(nutritionBody, carriedNutrition?.activeDraft ?? null);
       const pendingLog = json?.conversation?.pendingLog;
-      const pendingConfirmation = ok && pendingLog?.stage === "READY_FOR_CONFIRMATION" && pendingLog.actionId
-        ? { actionId: pendingLog.actionId, toolName: "log_meal_draft", summary: `Log “${pendingLog.mealName}”${pendingLog.mealType ? ` as ${MEAL_TYPE_LABEL[pendingLog.mealType].toLowerCase()}` : ""}` }
-        : null;
       const reply = ok ? json!.reply! : (json?.error ?? "I couldn't work on that meal right now. Nothing was changed or logged — please try again.");
       return createChatStreamResponse(async (emit) => {
         emit({ type: "delta", text: reply });
@@ -5593,7 +5645,7 @@ async function handleChatbotPost(
           pendingConfirmation,
           toolTraceSummary: [`nutrition:status=${answered.status};ok=${ok};log=${pendingLog?.stage ?? "none"};changed=${Boolean(json?.foodLogChanged)}`],
           nutrition: ok
-            ? { blocks: json!.structuredBlocks ?? [], hints: json!.followUpHints ?? [], state: { activeDraft: json!.mealDraft ?? null, conversation: json!.conversation ?? null }, foodLogChanged: Boolean(json!.foodLogChanged) }
+            ? { blocks: json!.structuredBlocks ?? [], hints: json!.followUpHints ?? [], state: state!, foodLogChanged: Boolean(json!.foodLogChanged) }
             : null,
         });
       });

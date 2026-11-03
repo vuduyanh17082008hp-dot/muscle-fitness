@@ -109,7 +109,8 @@ export const conversationInputSchema = z.object({
   currentTopic: topicSchema.nullish(),
   pendingMealBuild: z.object({ topic: z.string().max(80), approach: z.string().max(40).optional() }).nullish(),
   handoff: z.object({ offer: z.enum(OFFERABLE_OPS).nullable() }).nullish(),
-  recentMessages: z.array(z.object({ role: z.enum(["user", "coach"]), text: z.string().max(800) })).max(6).optional(),
+  // Context only, so a long earlier reply (e.g. Dante's training answer restored into the same thread) is clipped, never a 400.
+  recentMessages: z.array(z.object({ role: z.enum(["user", "coach"]), text: z.string().max(20_000).transform((text) => text.slice(0, 800)) })).max(6).optional(),
   /** H0 cluster A: the user's own earlier messages (newest last) for the context working set only — disclosures outlive the 6-message window. */
   priorUserTurns: z.array(z.string().max(400)).max(20).optional().catch(undefined),
   /** N1.5.6 ephemeral follow-up context (TTL-bound, server-validated, macros always recomputed). */

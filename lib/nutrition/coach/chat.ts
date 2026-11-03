@@ -707,6 +707,8 @@ const LOG_OPTION = /\b(?:log|add|track|save|record)\s+(?:the\s+)?(?:option|numbe
 /** A request verb for meals ("give me", "suggest", "show me"…); "what meals are high in protein?" is a question, not one. */
 const DISCOVERY_VERB = /\b(?:give|suggest|show|build|make|recommend|list|find|get|need|want|any)\b/i
 /** Vietnamese request verbs ("cho mình 3 món…", "gợi ý vài món…"): JS \b is ASCII-only, so letter lookarounds. */
+/** A message written in Vietnamese (diacritics): the engine answers its templates in Vietnamese. */
+const VI_TEXT = /[ăâđêôơưàáạảãèéẹẻẽìíịỉĩòóọỏõùúụủũỳýỵỷỹ]/i
 const DISCOVERY_VERB_VI = /(?<![\p{L}])(?:cho (?:mình|tôi|tao|em|anh|chị)|gợi ý|đề xuất|tư vấn|giới thiệu|muốn ăn|nên ăn)(?![\p{L}])/iu
 const PROTEIN_PRIORITY_VI = /(?:nhiều|giàu|cao|thêm) (?:đạm|protein)/iu
 const ORDINAL_INDEX: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8 }
@@ -1081,7 +1083,8 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
     const priorShown = input.more ? [...(liveFollowUp?.shownKeys ?? []), ...shownMeals.map((meal) => compositionKey(meal.items))] : []
     const avoidKeys = input.more ? new Set(priorShown) : undefined
     // A singular request keeps the original single-meal ranking (recommendation + 2 alternatives); discovery asks for N distinct.
-    const discovery = count !== null || input.more ? { alternatives: Math.max(4, (count ?? 3) - 1), avoidKeys } : {}
+    const slotPreference = /\bbreakfast\b|(?<![\p{L}])(?:bữa sáng|ăn sáng)(?![\p{L}])/iu.test(message) ? { preferFamily: "yogurt_bowl" } : {}
+    const discovery = count !== null || input.more ? { alternatives: Math.max(4, (count ?? 3) - 1), avoidKeys, ...slotPreference } : slotPreference
     // A multi-meal request never anchors on a stale food selection: it uses only the foods named now (or carried by "more").
     const legacySelection = count === null && !input.more ? (input.foodIds.length > 0 ? input.foodIds : (selectedFoods ?? [])).filter((id) => !excludedIds.includes(id)) : []
     let result =
@@ -1100,12 +1103,19 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
     const rendered = presented?.choice.options.length ?? 1
     const withText = include.length ? ` with ${include.map((id) => getIngredient(id)!.shortName.toLowerCase()).join(" and ")}` : ""
     const withoutText = exclusionTerms.length ? ` and no ${exclusionTerms.join(" or ")}` : ""
+    const vi = VI_TEXT.test(message)
     const intro =
-      count !== null || input.more
+      (count !== null || input.more) && vi
+        ? `Đây là ${rendered} món khác nhau${input.more ? " bạn chưa xem" : ""}. Món 1 đã mở thành bản nháp mới${draft ? "; bản nháp trước của bạn không bị thay đổi" : ""}. `
+        : count !== null || input.more
         ? `Here ${rendered === 1 ? "is 1 meal" : `are ${rendered} distinct meals`}${withText}${withoutText}${input.more ? " you haven't seen yet" : ""} — each one's portions and macros are computed from its ingredients. Option 1 is open as a new draft${draft ? "; your earlier draft wasn't changed" : ""}. `
         : ""
     const shortfall = count !== null && rendered < count ? ` You asked for ${count}; these are all the distinct meals the verified foods allow${withText}${withoutText} right now, so I didn't pad the list.` : ""
-    const engineReply = `${result.message}${whyLines(result.draft, ctx)}`
+    // Vietnamese request → Vietnamese engine copy (live: "gợi ý cho mình 3 món…" got an English reply). Numbers are the draft's own.
+    const viCeiling = result.draft.constraints.calorieCeiling
+    const engineReply = vi
+      ? `${result.draft.name}: khoảng ${Math.round(result.draft.nutrition.calories)} kcal và ${Math.round(result.draft.nutrition.protein)} g protein${viCeiling !== null && result.draft.constraints.calorieCeilingSource === "context" && ctx.snapshot.caloriesRemaining > viCeiling + 50 ? ` — tính cho một bữa (tối đa ${Math.round(viCeiling)} kcal), không phải toàn bộ ${Math.round(ctx.snapshot.caloriesRemaining)} kcal còn lại trong ngày` : ""}. Khẩu phần và macro được tính từ nguyên liệu, không do AI đoán.`
+      : `${result.message}${whyLines(result.draft, ctx)}`
     // The engine owns ingredients and numbers; a named cuisine/texture only shapes how the draft is presented.
     const buildNeed = decideMealBuildKnowledgeNeed(message)
     const modelReply = buildNeed.needed
@@ -1232,6 +1242,15 @@ export async function handleNutritionCoachChat({ supabase, userId, body, now = n
   }
 
   const respondExec = (exec: FollowUpExec, resolved: TurnResolution, viaModel = false): Response => {
+    const ingredientBlock = exec.blocks.find((block) => block.type === "INGREDIENT_LIST")
+    if (exec.route === "followup_ingredients" && ingredientBlock?.type === "INGREDIENT_LIST" && VI_TEXT.test(message)) {
+      const basis: Record<string, string> = { raw: "sống", cooked: "đã nấu", "as eaten": "khi ăn" }
+      exec = { ...exec, reply: `${ingredientBlock.mealName} — ${ingredientBlock.items.map((item) => `${item.name} ${item.grams} g${item.basis ? ` (${basis[item.basis] ?? item.basis})` : ""}`).join(", ")}. Mỗi khối lượng là theo trạng thái mà số liệu được tính (sống, đã nấu hoặc khi ăn), nên hãy cân đúng trạng thái đó.` }
+    }
+    if (exec.route === "followup_select" && exec.mealDraft && VI_TEXT.test(message)) {
+      const n = exec.mealDraft.nutrition
+      exec = { ...exec, reply: `Chọn ${exec.mealDraft.name} — khoảng ${Math.round(n.calories)} kcal, ${Math.round(n.protein)} g protein, ${Math.round(n.carbs)} g carb và ${Math.round(n.fat)} g chất béo. Bạn muốn xem nguyên liệu hay chỉnh gì không?` }
+    }
     meta.resolution = resolved.kind === "follow_up" ? resolved.resolution : meta.resolution
     meta.viaModel = viaModel
     const referent = exec.patch.referent ?? (resolved.kind === "follow_up" ? resolved.resolution.referent : null)

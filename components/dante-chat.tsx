@@ -46,6 +46,7 @@ import {
   type DanteNutritionTurn,
 } from "@/lib/dante-core/chat-stream-protocol";
 import { NutritionBlocks, NutritionQuickActions } from "@/components/nutrition/coach/coach-chat-ui";
+import { readLastThread, rememberThread, todaysThread } from "@/lib/dante-core/active-thread";
 import type { StoredDanteMessage } from "@/lib/dante-core/conversation-store";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { DanteVoiceInput } from "@/components/dante-voice-input";
@@ -165,24 +166,6 @@ export type DanteChatProps = {
 };
 
 /** The conversation this tab last had open ("" = a new, unsaved chat), so returning to Dante reopens it. */
-const LAST_THREAD_KEY = "mf.dante.lastThread";
-
-function readLastThread(): string | null {
-  try {
-    return window.sessionStorage.getItem(LAST_THREAD_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function rememberThread(id: string | null) {
-  try {
-    window.sessionStorage.setItem(LAST_THREAD_KEY, id ?? "");
-  } catch {
-    // storage blocked — restore falls back to the most recent conversation
-  }
-}
-
 function formatAsOf(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "earlier";
@@ -577,8 +560,6 @@ export default function DanteChat({
   const [isRestoring, setIsRestoring] = useState(restoreHistory);
   // Once the user has sent something, a late restore must never replace that conversation.
   const sendStartedRef = useRef(false);
-  // The nutrition state this conversation echoes to the server (meal list, draft, pending log). Server re-validates it every turn.
-  const nutritionRef = useRef<DanteNutritionTurn["state"] | null>(null);
   // Engine option buttons and suggested replies act only on the newest reply: an older list is no longer the one on screen.
   const lastAssistantId = [...messages].reverse().find((message) => message.role === "assistant")?.id;
 
@@ -708,7 +689,6 @@ export default function DanteChat({
     // Only the automatic mount restore yields to a send already in progress; a picked conversation always opens.
     if (isMountRestore && sendStartedRef.current) return true;
     const stored = data.messages ?? [];
-    nutritionRef.current = null;
     setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }, ...stored.map(fromStoredMessage)]);
     setRestored(stored.length > 0 ? { count: stored.length, asOf: stored[stored.length - 1].createdAt } : null);
     setThreadId(id);
@@ -719,7 +699,6 @@ export default function DanteChat({
 
   function startNewConversation() {
     abortControllerRef.current?.abort();
-    nutritionRef.current = null;
     setMessages([{ id: "welcome", role: "assistant", content: welcomeMessage }]);
     setRestored(null);
     setThreadId(null);
@@ -760,9 +739,10 @@ export default function DanteChat({
         return;
       }
       const list = await refreshThreads();
-      // URL first, then the conversation this tab last had open ("" = it was on a new chat), then the most recent one.
+      // URL first, then the conversation this tab last had open ("" = it was on a new chat), then today's most recent one
+      // (One Day, One Thread: an older day's conversation is never reopened by default).
       const remembered = readLastThread();
-      const target = fromUrl ?? (remembered === null ? list[0]?.id ?? null : remembered || null);
+      const target = fromUrl ?? (remembered === null ? todaysThread(list) : remembered || null);
       if (!cancelled && target && !sendStartedRef.current && !(await openThread(target, true))) syncThreadUrl(null);
     }
     void restore()
@@ -858,7 +838,9 @@ export default function DanteChat({
     }
 
     sendStartedRef.current = true;
-    const activeThreadId = threadId ?? crypto.randomUUID();
+    // One Day, One Thread: a chat that opened before another Dante surface (e.g. the Nutrition page) started today's thread
+    // joins that thread instead of starting a parallel one — unless this tab chose "New chat" ("" remembered).
+    const activeThreadId = threadId ?? (restoreHistory ? readLastThread() || crypto.randomUUID() : crypto.randomUUID());
     if (!threadId) {
       setThreadId(activeThreadId);
       syncThreadUrl(activeThreadId);
@@ -928,7 +910,6 @@ export default function DanteChat({
                 },
               ].slice(-20),
               ...contextPayload,
-              ...(nutritionRef.current ? { nutrition: nutritionRef.current } : {}),
               threadId: activeThreadId,
               clientMessageId: turnId,
             }),
@@ -991,14 +972,8 @@ export default function DanteChat({
 
         if (doneEvent) {
           const finalEvent = doneEvent;
-          if (finalEvent.nutrition) {
-            const turn = finalEvent.nutrition;
-            const previous = nutritionRef.current;
-            // No draft in the reply = the draft is unchanged, unless the server ended it (topic reset / logged).
-            const ended = turn.foodLogChanged || turn.state.conversation?.deactivateDraft === true;
-            nutritionRef.current = { activeDraft: turn.state.activeDraft ?? (ended ? null : previous?.activeDraft ?? null), conversation: turn.state.conversation };
-            if (turn.foodLogChanged) window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT));
-          }
+          // The meal state itself is held by the server per thread (One Day, One Thread); a write refreshes food-log views.
+          if (finalEvent.nutrition?.foodLogChanged) window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT));
 
           updateStreamingMessage(assistantId, (message) => {
             // QA-08: a finished reply with no text and nothing to confirm would render as a silent blank — say so instead
@@ -1129,10 +1104,7 @@ export default function DanteChat({
 
       // A confirmed write changed athlete data: re-render the server-built Today context (chat state is kept).
       if (resolution === "confirmed" && todayContext) router.refresh();
-      // A resolved meal log ends the chat's pending log; a confirmed one also ends the draft and refreshes food-log views.
-      if ((resolution === "confirmed" || resolution === "cancelled") && nutritionRef.current?.conversation && (nutritionRef.current.conversation as { pendingLog?: { actionId?: string } | null }).pendingLog?.actionId === actionId) {
-        nutritionRef.current = { activeDraft: resolution === "confirmed" ? null : nutritionRef.current.activeDraft, conversation: { ...nutritionRef.current.conversation, pendingLog: null } };
-      }
+      // A confirmed write refreshes food-log views (the server re-validates the thread's pending log on the next turn).
       if (resolution === "confirmed") {
         window.dispatchEvent(new Event(FOOD_LOG_CHANGED_EVENT));
         window.dispatchEvent(new Event(COACH_CONTEXT_CHANGED_EVENT));

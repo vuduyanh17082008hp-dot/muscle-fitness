@@ -75,10 +75,15 @@ internal codename of Dante's nutrition engine (`lib/nutrition/coach/`, `coachMod
 "nutrition"`, `GEMMA` ids in `lib/intelligence/`); never put it (or "Nutrition Coach")
 in user-facing copy or model prompts, and never write "ask Gemma / ask Dante" referrals.
 `/api/chatbot` is the domain router: on the Dante chat, meal/food-lookup turns and
-follow-ups on live nutrition state (`body.nutrition`, see `danteTurnContinuesNutrition`)
-run the nutrition engine and come back as `done.nutrition` + a `log_meal_draft`
+follow-ups on live nutrition state (see `danteTurnContinuesNutrition`) run the
+nutrition engine and come back as `done.nutrition` + a `log_meal_draft`
 `pendingConfirmation` card; on the Nutrition page chat (also Dante),
 `nutritionTurnForMainPipeline` sends training/recovery turns to the main pipeline.
+**One Day, One Thread:** every Dante surface writes to the tab's active thread
+(`lib/dante-core/active-thread.ts`, sessionStorage; fallback = today's latest thread
+only; "New chat" starts a fresh one). The meal state lives server-side in the thread
+(`ai_messages.metadata.nutrition`, read by `loadThreadNutritionState`), so "log that"
+on any surface sees the meal picked on another. Don't add a client-side meal copy.
 
 Dante must only receive **structured, deterministic context**, never raw
 database dumps. `lib/athlete-state/build-athlete-state.ts::buildAthleteState()`

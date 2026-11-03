@@ -62,6 +62,25 @@ function clampGrams(ingredient: CoachIngredient, grams: number): number {
   return Math.min(ingredient.maxGrams, Math.max(ingredient.minGrams, grams))
 }
 
+/**
+ * The largest serving the ENGINE chooses on its own for a main component (protein / carb / vegetable): 1.5 × its typical
+ * portion, inside the catalogue bound. The bound (maxGrams) is what a user may type; it was never a realistic serving, and
+ * auto-scaling / calorie-matched swaps pushed single foods to it (live: 390 g potato, 370 g cottage cheese). Flavourings,
+ * fats and bases keep their own bounds. A meal that can't reach a target within this stays smaller and says so.
+ */
+export const SERVING_STRETCH = 1.5
+export function servingMax(ingredient: CoachIngredient): number {
+  if (ingredient.role !== "protein" && ingredient.role !== "carb" && ingredient.role !== "volume") return ingredient.maxGrams
+  return Math.max(ingredient.minGrams, Math.min(ingredient.maxGrams, Math.round(ingredient.typicalGrams * SERVING_STRETCH)))
+}
+
+/** roundGrams for an engine-chosen amount: never above a realistic serving. */
+export function servingGrams(ingredient: CoachIngredient, grams: number): number {
+  return roundGrams(ingredient, Math.min(grams, servingMax(ingredient)))
+}
+
+const clampServing = (ingredient: CoachIngredient, grams: number) => Math.min(servingMax(ingredient), Math.max(ingredient.minGrams, grams))
+
 /** Practical kitchen rounding: 5 g steps for foods, 1 g (or 0.5 g) for flavor items. */
 export function roundGrams(ingredient: CoachIngredient, grams: number): number {
   const clamped = clampGrams(ingredient, grams)
@@ -86,7 +105,7 @@ function adjustGroup(
     const free = items.filter((item) => {
       if (!inGroup(item)) return false
       const ingredient = requireIngredient(item.ingredientId)
-      return remaining > 0 ? item.grams < ingredient.maxGrams - 1e-6 : item.grams > ingredient.minGrams + 1e-6
+      return remaining > 0 ? item.grams < servingMax(ingredient) - 1e-6 : item.grams > ingredient.minGrams + 1e-6
     })
     const base = free.reduce((sum, item) => sum + metric(item), 0)
     if (base <= 0) break
@@ -95,7 +114,7 @@ function adjustGroup(
     for (const item of free) {
       const ingredient = requireIngredient(item.ingredientId)
       const before = metric(item)
-      item.grams = clampGrams(ingredient, item.grams * multiplier)
+      item.grams = clampServing(ingredient, item.grams * multiplier)
       applied += metric(item) - before
     }
     remaining -= applied
@@ -135,7 +154,7 @@ export function scaleItems(source: DraftItem[], request: ScaleRequest): DraftIte
     case "PROPORTIONAL": {
       if (target !== null && calories() > 0) {
         const multiplier = target / calories()
-        for (const item of items) item.grams = clampGrams(requireIngredient(item.ingredientId), item.grams * multiplier)
+        for (const item of items) item.grams = clampServing(requireIngredient(item.ingredientId), item.grams * multiplier)
       }
       break
     }

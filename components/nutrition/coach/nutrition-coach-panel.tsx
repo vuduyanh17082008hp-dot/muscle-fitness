@@ -14,7 +14,8 @@ import { QUICK_ACTIONS } from "@/lib/nutrition/coach/quick-actions"
 import type { ActiveMealDraft, ContextSnapshot, CravingKey, MealDraftHistoryItem } from "@/lib/nutrition/coach/types"
 import { MEAL_TYPE_LABEL, MEAL_TYPES, type MealType } from "@/lib/nutrition/food-log/types"
 import { COACH_CONTEXT_CHANGED_EVENT, COACH_TURN_STARTED_EVENT, FOOD_LOG_CHANGED_EVENT } from "@/lib/coach-context-event"
-import { parseChatStreamChunk, resolveConfirmationOutcome, type ChatStreamPendingConfirmation } from "@/lib/dante-core/chat-stream-protocol"
+import { readLastThread, rememberThread, todaysThread } from "@/lib/dante-core/active-thread"
+import { parseChatStreamChunk, resolveConfirmationOutcome, type ChatStreamPendingConfirmation, type DanteNutritionTurn } from "@/lib/dante-core/chat-stream-protocol"
 
 import { MealDraftCard } from "./meal-draft-card"
 import {
@@ -74,8 +75,11 @@ function defaultMealType(): MealType {
 }
 
 /** One chat turn. Dante's nutrition capability answers JSON; a training / recovery turn runs Dante's main pipeline and streams NDJSON. */
-async function postChat<T>(body: unknown): Promise<{ status: number; json: T; proposal: ChatStreamPendingConfirmation | null }> {
-  const response = await fetch("/api/chatbot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+async function postChat<T>(body: Record<string, unknown>): Promise<{ status: number; json: T; proposal: ChatStreamPendingConfirmation | null }> {
+  // One Day, One Thread: the same conversation the Dante page and floating panel write to (a "New chat" there starts a new one).
+  const threadId = readLastThread() || crypto.randomUUID()
+  rememberThread(threadId)
+  const response = await fetch("/api/chatbot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, threadId, clientMessageId: crypto.randomUUID() }) })
   if (!(response.headers.get("Content-Type") ?? "").includes("ndjson")) return { status: response.status, json: (await response.json().catch(() => ({}))) as T, proposal: null }
   const { events } = parseChatStreamChunk("", `${await response.text()}\n`)
   const text = events.flatMap((event) => (event.type === "delta" ? [event.text] : [])).join("")
@@ -151,11 +155,37 @@ export function NutritionCoachPanel() {
     setSuggestionsStale(false)
   }, [])
 
+  /**
+   * Continue today's Dante thread (One Day, One Thread): the last few turns, and the meal list / draft / pending log the
+   * server stored with its last nutrition reply — so a meal picked on the Dante page is still "this" here. A chat the user
+   * already started on this page is never overwritten.
+   */
+  const restoreThread = useCallback(async () => {
+    try {
+      const remembered = readLastThread()
+      if (remembered === "") return // "New chat" was chosen in this tab
+      const id = remembered ?? todaysThread(((await (await fetch("/api/dante/conversations")).json()) as { threads?: Array<{ id: string; updatedAt: string }> }).threads ?? [])
+      if (!id) return
+      const response = await fetch(`/api/dante/conversations?id=${encodeURIComponent(id)}`)
+      if (!response.ok) return
+      rememberThread(id)
+      const { messages = [] } = (await response.json()) as { messages?: Array<{ role: "user" | "assistant"; content: string; status: string; nutrition?: DanteNutritionTurn["state"] | null }> }
+      const shown = messages.filter((message) => message.status === "complete" && message.content.trim()).slice(-6)
+      const state = [...messages].reverse().find((message) => message.nutrition)?.nutrition ?? null
+      setChat((current) => (current.length ? current : shown.map((message) => ({ role: message.role === "user" ? ("user" as const) : ("coach" as const), text: message.content }))))
+      if (state?.conversation) setConv((current) => (current.followUp || current.pendingLog ? current : { ...current, ...(state.conversation as Partial<ConversationState>) }))
+      if (state?.activeDraft && "nutrition" in state.activeDraft && state.activeDraft.status !== "LOGGED") setDraft((current) => current ?? state.activeDraft)
+    } catch {
+      // History unavailable: the page still works; the server continues the thread's meal state on the next turn.
+    }
+  }, [])
+
   useEffect(() => {
     // Meal type follows the viewer's clock, so it is set after hydration (as before), once the first load settles.
     void (async () => {
       await refreshSuggestions()
       setMealType(defaultMealType())
+      await restoreThread()
     })()
     // After a coach turn the server-rendered plan / budget sections re-render too (they read the same safety context).
     const onCoachTurn = () => {
@@ -173,7 +203,8 @@ export function NutritionCoachPanel() {
       window.removeEventListener(COACH_TURN_STARTED_EVENT, onTurnStarted)
       window.removeEventListener(FOOD_LOG_CHANGED_EVENT, onFoodLogChanged)
     }
-  }, [refreshSuggestions, router])
+  }, [refreshSuggestions, restoreThread, router])
+
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView?.({ block: "nearest" })
@@ -311,7 +342,7 @@ export function NutritionCoachPanel() {
     setTyping(typingLabel(message, conv.currentTopic))
     try {
       const active = draft && draft.status !== "LOGGED" ? draft : null
-      const recentMessages = [...chat, { role: "user" as const, text: message }].slice(-6)
+      const recentMessages = [...chat, { role: "user" as const, text: message }].slice(-6).map((turn) => ({ role: turn.role, text: turn.text.slice(0, 800) }))
       // An action prepared with the "Log this meal" button is the same server action a typed "confirm" resolves.
       const buttonLog: PendingLog | null =
         pending && active && conv.pendingLog?.actionId !== pending.actionId
